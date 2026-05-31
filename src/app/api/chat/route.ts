@@ -104,7 +104,9 @@ export async function POST(req: NextRequest) {
     let upsell_items: string[] = []
 
     // Extract [SUGGESTIONS:...]
-    const suggestMatch = rawReply.match(/\[SUGGESTIONS:(\{.*?\})\]/s)
+    const suggestMatch = rawReply.match(
+  /\[SUGGESTIONS:([\s\S]*?)\]/
+)
     if (suggestMatch) {
       try {
         const parsed = JSON.parse(suggestMatch[1])
