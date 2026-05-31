@@ -1,6 +1,7 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Playfair_Display, JetBrains_Mono } from 'next/font/google'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 
 const dmSans = DM_Sans({
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-[#0a0a0a] text-white antialiased overscroll-none">
         {children}
+        <SpeedInsights />
       </body>
     </html>
   )
