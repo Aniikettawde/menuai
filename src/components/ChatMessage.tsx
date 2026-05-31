@@ -15,7 +15,7 @@ function renderMarkdown(text: string): string {
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/^[•\-]\s(.+)$/gm, '<li>$1</li>')
     .replace(/<\/li>\n<li>/g, '</li><li>')
-    .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+    .replace(/(<li>[\s\S]*<\/li>)/, '<ul>$1</ul>')
     .split('\n\n').map(p => p.startsWith('<ul>') ? p : `<p>${p}</p>`).join('')
 }
 
