@@ -2,7 +2,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { Restaurant, MenuCategory, MenuItem, ChatMessage } from '@/types'
-import { nanoid } from './nanoid'
+import { nanoid } from '@/lib/nanoid'
 
 interface AppStore {
   // Data
