@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
         const parsed = JSON.parse(suggestMatch[1])
         suggestions = parsed.items ?? []
       } catch {}
-      rawReply = rawReply.replace(/\[SUGGESTIONS:.*?\]/s, '').trim()
+      rawReply = rawReply.replace(/\[SUGGESTIONS:[\s\S]*?\]/, '').trim()
     }
 
     // Extract [ITEMS:...]
