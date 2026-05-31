@@ -19,12 +19,12 @@ export function RatingModal() {
     setLoading(true)
     try {
       const supabase = getSupabaseBrowser()
-      await supabase.from('ratings').insert({
-        restaurant_id: restaurant.id,
-        session_id: sessionId,
-        score: selected,
-        comment: comment.trim() || null,
-      })
+      await supabase.from('ratings').insert([{
+  restaurant_id: restaurant.id,
+  session_id: sessionId,
+  score: selected,
+  comment: comment.trim() || null,
+}] as any)
       await track(restaurant.id, 'rating_submitted', {
         metadata: { score: selected }
       })
