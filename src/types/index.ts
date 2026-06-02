@@ -64,6 +64,38 @@ export interface MenuItemCustomization {
 // CHAT / AI TYPES
 // ============================================================
 
+export interface MenuItemAIContext {
+  name: string
+  description?: string
+  price?: number
+  is_veg?: boolean
+  is_bestseller?: boolean
+  is_special?: boolean
+  tags?: string[]
+  allergens?: string[]
+  prep_time_minutes?: number
+  calories?: number
+  spice_level?: string
+  taste_profile?: string[]
+  best_with?: string[]
+  chef_note?: string
+  course_type?: string
+}
+
+export interface ChatRequest {
+  message: string
+  history: { role: MessageRole; content: string }[]
+  restaurant_id: string
+  session_id: string
+  menu_context: {
+    categories: string[]
+    bestsellers: string[]
+    available_items: string[]
+    restaurant_name?: string
+    menu_items?: MenuItemAIContext[]
+  }
+}
+
 export type MessageRole = 'user' | 'assistant'
 
 /**

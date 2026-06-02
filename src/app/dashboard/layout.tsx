@@ -1,33 +1,32 @@
+// =====================================================
+// FILE: DashboardLayout.tsx
+// =====================================================
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import type { User } from '@supabase/supabase-js'
 import {
-  LogOut,
+  BarChart3,
+  CreditCard,
   Home,
+  LogOut,
+  QrCode,
   Store,
   UtensilsCrossed,
-  BarChart3,
-  QrCode,
-  CreditCard,
-  ChevronRight,
-  Menu,
-  X,
-  Sparkles,
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import { TrialBanner } from '@/components/billing/TrialBanner'
-import type { User } from '@supabase/supabase-js'
 
 const NAV = [
-  { href: '/dashboard', label: 'Overview', icon: Home },
+  { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/dashboard/restaurant', label: 'Restaurant', icon: Store },
   { href: '/dashboard/menu', label: 'Menu', icon: UtensilsCrossed },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/dashboard/qr', label: 'QR Code', icon: QrCode },
+  { href: '/dashboard/qr', label: 'QR', icon: QrCode },
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
-]
+] as const
 
 const BARE_PAGES = ['/dashboard/login', '/dashboard/onboarding']
 
@@ -38,25 +37,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const [user, setUser] = useState<User | null>(null)
   const [checked, setChecked] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [navFlash, setNavFlash] = useState(false)
-  const [prevPath, setPrevPath] = useState(pathname)
 
   const isBarePage = BARE_PAGES.includes(pathname)
 
-  function isActive(href: string) {
-    return pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
-  }
+  const activePage = useMemo(
+    () => NAV.find((n) => pathname === n.href || (n.href !== '/dashboard' && pathname.startsWith(n.href))),
+    [pathname],
+  )
 
-  useEffect(() => {
-    if (pathname !== prevPath) {
-      setPrevPath(pathname)
-      setSidebarOpen(false)
-      setNavFlash(true)
-      const t = setTimeout(() => setNavFlash(false), 450)
-      return () => clearTimeout(t)
-    }
-  }, [pathname, prevPath])
+  const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
 
   useEffect(() => {
     if (isBarePage) {
@@ -69,7 +58,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     async function checkSession() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-
         if (!mounted) return
 
         if (!session) {
@@ -109,225 +97,142 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [isBarePage, router, supabase])
 
-  if (isBarePage) return <>{children}</>
-
-  if (!checked) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#09090b] text-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
-          <p className="text-sm text-zinc-400">Loading dashboard…</p>
-        </div>
-      </div>
-    )
-  }
-
   async function handleSignOut() {
     await supabase.auth.signOut()
     setUser(null)
     router.push('/dashboard/login')
   }
 
-  const userInitial = user?.email?.[0]?.toUpperCase() ?? '?'
-  const activePage = NAV.find((n) => isActive(n.href))
+  if (isBarePage) return <>{children}</>
 
-  const SidebarContent = () => (
-    <div className="flex h-full flex-col bg-zinc-950/90 backdrop-blur-xl">
-      <div className="flex h-20 shrink-0 items-center gap-3 border-b border-white/5 px-5">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-400 shadow-lg shadow-orange-500/20">
-          <UtensilsCrossed size={18} className="text-white" />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold tracking-tight text-white">dinerr.in</p>
-          <p className="truncate text-xs text-zinc-500">Restaurant dashboard</p>
-        </div>
-        <button
-          onClick={() => setSidebarOpen(false)}
-          className="ml-auto flex h-8 w-8 items-center justify-center rounded-xl text-zinc-500 transition hover:bg-white/5 hover:text-zinc-200 lg:hidden"
-          aria-label="Close menu"
-        >
-          <X size={16} />
-        </button>
-      </div>
-
-      <div className="border-b border-white/5 px-4 py-4">
-        <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
-          <div className="flex items-center gap-2 text-xs font-medium text-orange-300">
-            <Sparkles size={14} />
-            Quick control center
+  if (!checked) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#0a0a0a] text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative h-12 w-12">
+            <div className="absolute inset-0 rounded-full border-2 border-orange-500/20" />
+            <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-orange-500" />
+            <div className="absolute inset-2 flex items-center justify-center rounded-full bg-orange-500/10">
+              <UtensilsCrossed size={14} className="text-orange-400" />
+            </div>
           </div>
-          <p className="mt-2 text-sm text-zinc-300">
-            Manage your menu, QR flow, reservations, and analytics from one place.
-          </p>
+          <p className="text-xs font-medium tracking-widest text-zinc-600 uppercase">Loading</p>
         </div>
       </div>
+    )
+  }
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-600">
-          Navigation
-        </p>
+  const userInitial = user?.email?.[0]?.toUpperCase() ?? '?'
 
-        <div className="space-y-1">
+  return (
+    <div className="min-h-dvh overflow-x-hidden bg-[#0a0a0a] text-white">
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-orange-600/8 blur-[120px]" />
+        <div className="absolute top-1/2 -right-40 h-80 w-80 rounded-full bg-amber-500/6 blur-[100px]" />
+        <div className="absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-orange-500/5 blur-[80px]" />
+      </div>
+
+      {/* Desktop top header */}
+      <header className="hidden lg:flex sticky top-0 z-40 h-16 items-center border-b border-white/[0.06] bg-[#0a0a0a]/90 backdrop-blur-2xl">
+        <div className="flex w-full items-center justify-between gap-4 px-6">
+          <Link href="/dashboard" className="flex items-center gap-3 shrink-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-lg shadow-orange-500/25">
+              <UtensilsCrossed size={16} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold tracking-tight text-white">dinerr.in</p>
+              <p className="text-[10px] text-zinc-600 font-medium tracking-wider uppercase">Dashboard</p>
+            </div>
+          </Link>
+
+          <nav className="flex min-w-0 flex-1 items-center justify-center gap-2 xl:gap-3">
+            {NAV.map(({ href, label, icon: Icon }) => {
+              const active = isActive(href)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition whitespace-nowrap ${
+                    active
+                      ? 'bg-orange-500/15 text-white border border-orange-500/20'
+                      : 'border border-transparent text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200'
+                  }`}
+                >
+                  <Icon size={15} className={active ? 'text-orange-400' : 'text-zinc-500'} />
+                  <span>{label}</span>
+                </Link>
+              )
+            })}
+          </nav>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-medium text-zinc-400">Live command center</span>
+            </div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 text-[11px] font-bold text-white shadow-md shadow-orange-500/20">
+              {userInitial}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile top bar */}
+      <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-[#0a0a0a]/95 backdrop-blur-2xl lg:hidden">
+        <div className="flex h-14 items-center justify-between gap-3 px-4">
+          <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-500">
+              <UtensilsCrossed size={13} className="text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold tracking-tight text-white">{activePage?.label ?? 'Dashboard'}</p>
+              <p className="truncate text-[10px] leading-none text-zinc-600">dinerr.in</p>
+            </div>
+          </Link>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-2.5 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] font-semibold text-emerald-400 tracking-wide">Live</span>
+            </div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 text-[11px] font-bold text-white shadow-md shadow-orange-500/20">
+              {userInitial}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="relative z-10 px-4 pt-4 pb-[92px] sm:px-5 sm:pt-5 lg:px-8 lg:pt-6 lg:pb-10">
+        <div className="mx-auto w-full max-w-6xl">
+          <TrialBanner />
+          {children}
+        </div>
+      </main>
+
+      {/* Mobile bottom bar */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-[#0b0b0b]/96 backdrop-blur-2xl lg:hidden">
+        <div className="grid grid-cols-6 px-2 py-2 safe-area-pb">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = isActive(href)
-
             return (
               <Link
                 key={href}
                 href={href}
-                className={`group relative flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all duration-200 ${
-                  active
-                    ? 'bg-orange-500/10 text-orange-300 ring-1 ring-orange-500/15'
-                    : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-200'
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-medium transition ${
+                  active ? 'text-orange-400' : 'text-zinc-500'
                 }`}
               >
-                {active && (
-                  <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-orange-500" />
-                )}
-                <Icon
-                  size={17}
-                  className={active ? 'text-orange-300' : 'text-zinc-600 transition group-hover:text-zinc-300'}
-                />
-                <span className="flex-1">{label}</span>
-                {active && <ChevronRight size={14} className="text-orange-400/60" />}
+                <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${active ? 'bg-orange-500/12' : 'bg-white/[0.03]'}`}>
+                  <Icon size={16} className={active ? 'text-orange-400' : 'text-zinc-500'} />
+                </div>
+                <span className="leading-none">{label}</span>
               </Link>
             )
           })}
         </div>
       </nav>
-
-      <div className="shrink-0 border-t border-white/5 p-4">
-        <div className="rounded-2xl border border-white/5 bg-white/5 p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-400 text-xs font-bold text-white">
-              {userInitial}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-zinc-200">
-                {user?.email ?? 'Restaurant owner'}
-              </p>
-              <p className="text-xs text-zinc-500">Owner</p>
-            </div>
-          </div>
-        </div>
-
-        <button
-          onClick={handleSignOut}
-          className="mt-3 flex w-full items-center gap-2 rounded-2xl px-3 py-3 text-sm text-zinc-500 transition hover:bg-white/5 hover:text-red-400"
-        >
-          <LogOut size={15} />
-          Sign out
-        </button>
-      </div>
-    </div>
-  )
-
-  return (
-    <div className="min-h-screen bg-[#09090b] text-white">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.10),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(251,191,36,0.08),transparent_25%)]" />
-
-      <div
-        className={`fixed left-0 right-0 top-0 z-[80] h-[2px] origin-left bg-gradient-to-r from-orange-500 via-amber-400 to-orange-300 transition-all duration-500 ${
-          navFlash ? 'scale-x-100 opacity-100' : 'scale-x-0 opacity-0'
-        }`}
-      />
-
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-80 border-r border-white/5 bg-zinc-950/90 lg:block">
-        <SidebarContent />
-      </aside>
-
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-80 border-r border-white/5 bg-zinc-950/95 transition-transform duration-300 lg:hidden ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <SidebarContent />
-      </aside>
-
-      <div className="lg:pl-80">
-        <TrialBanner />
-
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/5 bg-[#09090b]/90 px-4 backdrop-blur-xl lg:hidden">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/5 bg-white/5 text-zinc-300 transition hover:bg-white/10"
-            aria-label="Open menu"
-          >
-            <Menu size={18} />
-          </button>
-
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-400">
-              <UtensilsCrossed size={14} className="text-white" />
-            </div>
-            <p className="text-sm font-semibold text-white">dinerr.in</p>
-          </div>
-
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-500/15 text-xs font-bold text-orange-300 ring-1 ring-orange-500/20">
-            {userInitial}
-          </div>
-        </header>
-
-        <header className="sticky top-0 z-30 hidden h-16 items-center justify-between border-b border-white/5 bg-[#09090b]/85 px-6 backdrop-blur-xl lg:flex">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-zinc-500">dinerr.in</span>
-            <ChevronRight size={14} className="text-zinc-700" />
-            <span className="font-medium text-zinc-200">{activePage?.label ?? 'Dashboard'}</span>
-          </div>
-
-          <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/5 px-3 py-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-orange-500/15 text-[10px] font-bold text-orange-300">
-              {userInitial}
-            </div>
-            <p className="max-w-[220px] truncate text-sm text-zinc-300">
-              {user?.email ?? 'Owner'}
-            </p>
-          </div>
-        </header>
-
-        <main className="relative min-h-[calc(100vh-4rem)] px-4 pb-24 pt-4 sm:px-6 sm:pt-6 lg:px-8 lg:pb-10">
-          <div className="mx-auto w-full max-w-screen-2xl">{children}</div>
-        </main>
-
-        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/5 bg-zinc-950/95 backdrop-blur-xl lg:hidden">
-          <div className="grid grid-cols-6 gap-0 px-1 py-1">
-            {NAV.map(({ href, label, icon: Icon }) => {
-              const active = isActive(href)
-              const short =
-                {
-                  Overview: 'Home',
-                  Restaurant: 'Rest',
-                  Menu: 'Menu',
-                  Analytics: 'Stats',
-                  'QR Code': 'QR',
-                  Billing: 'Bill',
-                }[label] ?? label
-
-              return (
-                <Link key={href} href={href} className="flex flex-col items-center gap-1 rounded-2xl py-2">
-                  <div
-                    className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${
-                      active ? 'bg-orange-500/15 text-orange-300' : 'text-zinc-600'
-                    }`}
-                  >
-                    <Icon size={16} />
-                  </div>
-                  <span className={`text-[10px] font-medium ${active ? 'text-orange-300' : 'text-zinc-600'}`}>
-                    {short}
-                  </span>
-                </Link>
-              )
-            })}
-          </div>
-        </nav>
-      </div>
     </div>
   )
 }
+
+

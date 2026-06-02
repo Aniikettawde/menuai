@@ -1,6 +1,4 @@
 // app/r/[slug]/page.tsx
-// This is the main QR landing page for each restaurant
-// Server component: fetches data, passes to client shell
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getSupabaseServer } from '@/lib/supabase'
@@ -11,7 +9,6 @@ interface PageProps {
   params: { slug: string }
 }
 
-// Server-side data fetching with 5-min ISR
 async function getMenuData(slug: string): Promise<MenuPageData | null> {
   const supabase = getSupabaseServer()
 
@@ -22,10 +19,7 @@ async function getMenuData(slug: string): Promise<MenuPageData | null> {
     .eq('is_active', true)
     .single()
 
- console.log("Restaurant:", restaurant)
-console.log("Error:", restError)
-
-if (restError || !restaurant) return null
+  if (restError || !restaurant) return null
 
   const [{ data: categories }, { data: items }] = await Promise.all([
     supabase
@@ -49,10 +43,10 @@ if (restError || !restaurant) return null
   }
 }
 
-// Dynamic metadata per restaurant
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const data = await getMenuData(params.slug)
   if (!data) return { title: 'Restaurant Not Found' }
+
   return {
     title: `${data.restaurant.name} — Menu`,
     description: data.restaurant.description,
@@ -71,5 +65,7 @@ export default async function RestaurantPage({ params }: PageProps) {
   return <RestaurantShell initialData={data} />
 }
 
-// ISR: revalidate every 5 minutes
-export const revalidate = 300
+// IMPORTANT: do not cache this page
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
