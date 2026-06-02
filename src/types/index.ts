@@ -234,18 +234,6 @@ export interface MenuPageData {
   items: MenuItem[]
 }
 
-export interface ChatRequest {
-  message: string
-  history: { role: MessageRole; content: string }[]
-  restaurant_id: string
-  session_id: string
-  menu_context: {
-    categories: string[]
-    bestsellers: string[]
-    available_items: string[]
-    restaurant_name?: string
-  }
-}
 
 export interface ChatResponse {
   reply: string
