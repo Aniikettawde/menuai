@@ -122,7 +122,7 @@ async function sendWebPushToRestaurant(
   }
 }
 
-aasync function sendAndroidPushToRestaurant(
+async function sendAndroidPushToRestaurant(
   admin: SupabaseClient,
   payload: {
     restaurantSlug: string
