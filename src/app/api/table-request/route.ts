@@ -56,7 +56,6 @@ function sanitizeTopic(topic: string) {
   return topic.replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function sendWebPushToRestaurant(
   admin: SupabaseClient,
   restaurantId: string,
@@ -141,11 +140,11 @@ async function sendAndroidPushToRestaurant(
     .eq('restaurant_slug', payload.restaurantSlug)
 
   if (!tokens?.length) {
-    console.log('No device tokens found')
+    console.log('[FCM] No device tokens found')
     return
   }
 
-  const tokenList = tokens.map(t => t.fcm_token)
+  const tokenList = tokens.map((t) => t.fcm_token)
 
   await messaging.sendEachForMulticast({
     tokens: tokenList,
@@ -251,7 +250,7 @@ export async function POST(req: NextRequest) {
         requestId: inserted.id,
         tag: `waiter-${restaurant.id}-table-${tableNumber}`,
       }),
-      sendAndroidPushToRestaurant({
+      sendAndroidPushToRestaurant(admin, {
         restaurantSlug,
         title,
         body: bodyText,
