@@ -1,7 +1,6 @@
-// app/api/table-request/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import * as webpush from 'web-push'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import webpush from 'web-push'
 
 export const runtime = 'nodejs'
 
@@ -11,7 +10,6 @@ const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
 const vapidEmail = process.env.VAPID_EMAIL ?? 'mailto:admin@menuai.app'
 
-// Configure web-push once at module level
 if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey)
 }
@@ -29,8 +27,9 @@ type PushSubscriptionRow = {
   keys: { p256dh: string; auth: string }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function sendPushToRestaurant(
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseClient,
   restaurantId: string,
   payload: {
     title: string
@@ -45,7 +44,6 @@ async function sendPushToRestaurant(
     return
   }
 
-  // Fetch all push subscriptions for this restaurant's owner
   const { data: subs, error } = await admin
     .from('push_subscriptions')
     .select('endpoint, keys')
@@ -65,23 +63,16 @@ async function sendPushToRestaurant(
     url: '/dashboard/orders',
   })
 
-  // Send to all subscriptions in parallel; remove expired ones
   const results = await Promise.allSettled(
     (subs as PushSubscriptionRow[]).map((sub) =>
       webpush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.keys.p256dh,
-            auth: sub.keys.auth,
-          },
-        },
+        { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } },
         notification
       )
     )
   )
 
-  // Clean up expired/invalid subscriptions (410 Gone)
+  // Clean up expired subscriptions (410 Gone / 404)
   const expiredEndpoints: string[] = []
   results.forEach((result, i) => {
     if (result.status === 'rejected') {
@@ -89,16 +80,13 @@ async function sendPushToRestaurant(
       if (err?.statusCode === 410 || err?.statusCode === 404) {
         expiredEndpoints.push((subs as PushSubscriptionRow[])[i].endpoint)
       } else {
-        console.error('[Push] Failed to send to subscription:', result.reason)
+        console.error('[Push] Failed to send:', result.reason)
       }
     }
   })
 
   if (expiredEndpoints.length > 0) {
-    await admin
-      .from('push_subscriptions')
-      .delete()
-      .in('endpoint', expiredEndpoints)
+    await admin.from('push_subscriptions').delete().in('endpoint', expiredEndpoints)
   }
 }
 
@@ -136,7 +124,6 @@ export async function POST(req: NextRequest) {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    // 1. Look up the restaurant
     const { data: restaurant, error: restaurantError } = await admin
       .from('restaurants')
       .select('id, name, slug')
@@ -147,7 +134,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
 
-    // 2. Insert the table request
     const { data: inserted, error: insertError } = await admin
       .from('table_requests')
       .insert({
@@ -166,11 +152,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
-    // 3. Fire push notification (non-blocking — don't fail the request if push fails)
-    const itemSummary = items.slice(0, 2).map((i) => `${i.name} ×${i.qty}`).join(', ')
-    const moreCount = items.length - 2
+    const itemSummary = (items as RequestItem[])
+      .slice(0, 2)
+      .map((i) => `${i.name} ×${i.qty}`)
+      .join(', ')
+    const moreCount = (items as RequestItem[]).length - 2
     const bodyText =
-      items.length <= 2
+      (items as RequestItem[]).length <= 2
         ? itemSummary
         : `${itemSummary} +${moreCount} more`
 
@@ -182,12 +170,7 @@ export async function POST(req: NextRequest) {
       tag: `waiter-${restaurant.id}-table-${tableNumber}`,
     }).catch((err) => console.error('[Push] Background push error:', err))
 
-    return NextResponse.json({
-      ok: true,
-      request: inserted,
-      tableNumber,
-      restaurantSlug,
-    })
+    return NextResponse.json({ ok: true, request: inserted, tableNumber, restaurantSlug })
   } catch (error) {
     console.error('table-request route error:', error)
     return NextResponse.json(
