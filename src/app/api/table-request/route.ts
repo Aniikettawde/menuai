@@ -122,32 +122,39 @@ async function sendWebPushToRestaurant(
   }
 }
 
-async function sendAndroidPushToRestaurant(payload: {
-  restaurantSlug: string
-  title: string
-  body: string
-  tableNumber: number
-  requestId: string
-}) {
-  if (!firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
-    console.warn('[FCM] Firebase env vars missing — skipping Android push')
-    return
+aasync function sendAndroidPushToRestaurant(
+  admin: SupabaseClient,
+  payload: {
+    restaurantSlug: string
+    title: string
+    body: string
+    tableNumber: number
+    requestId: string
   }
-
+) {
   const app = getFirebaseApp()
   const messaging = getMessaging(app)
 
-  const topic = sanitizeTopic(`restaurant_${payload.restaurantSlug}`)
+  const { data: tokens } = await admin
+    .from('device_tokens')
+    .select('fcm_token')
+    .eq('restaurant_slug', payload.restaurantSlug)
 
-  await messaging.send({
-    topic,
+  if (!tokens?.length) {
+    console.log('No device tokens found')
+    return
+  }
+
+  const tokenList = tokens.map(t => t.fcm_token)
+
+  await messaging.sendEachForMulticast({
+    tokens: tokenList,
     notification: {
       title: payload.title,
       body: payload.body,
     },
     data: {
       url: '/dashboard/orders',
-      restaurantSlug: payload.restaurantSlug,
       tableNumber: String(payload.tableNumber),
       requestId: payload.requestId,
     },
