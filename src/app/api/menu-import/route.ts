@@ -6,8 +6,6 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const GEMINI_MODEL = 'gemini-2.5-flash'
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 
-// Keep this well below the documented inline request ceiling so the prompt + payload stay safe.
-// Gemini docs say inline image data is for smaller requests and recommend File API for larger files. :contentReference[oaicite:1]{index=1}
 const MAX_INLINE_BYTES = 15 * 1024 * 1024
 
 const GEMINI_PROMPT = `You are a menu digitization expert for Indian restaurants.
@@ -80,7 +78,6 @@ function stripDataUrlPrefix(input: string): string {
 }
 
 function estimateBytesFromBase64(base64: string): number {
-  // Buffer.byteLength with 'base64' gives a good approximation of decoded bytes.
   return Buffer.byteLength(base64, 'base64')
 }
 
@@ -94,30 +91,26 @@ function safeDisplayName(fileName?: string, mimeType?: string): string {
 async function readErrorMessage(res: Response): Promise<string> {
   const text = await res.text().catch(() => '')
   if (!text) return `${res.status} ${res.statusText}`
-
   try {
     const json = JSON.parse(text)
-    return (
-      json?.error?.message ??
-      json?.message ??
-      text.slice(0, 1000)
-    )
+    return json?.error?.message ?? json?.message ?? text.slice(0, 1000)
   } catch {
     return text.slice(0, 1000)
   }
 }
 
 async function uploadToGeminiFilesApi(params: {
-  bytes: Uint8Array
+  base64: string
   mimeType: string
   fileName?: string
 }): Promise<{ uri: string; mimeType: string }> {
-  if (!GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY missing')
-  }
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing')
 
-  const { bytes, mimeType, fileName } = params
+  const { base64, mimeType, fileName } = params
   const displayName = safeDisplayName(fileName, mimeType)
+  // Convert to ArrayBuffer — accepted by fetch as BodyInit in all environments
+  const arrayBuffer = Buffer.from(base64, 'base64').buffer as ArrayBuffer
+  const byteLength = arrayBuffer.byteLength
 
   const startRes = await fetch(`${GEMINI_BASE_URL}/upload/v1beta/files`, {
     method: 'POST',
@@ -125,15 +118,11 @@ async function uploadToGeminiFilesApi(params: {
       'x-goog-api-key': GEMINI_API_KEY,
       'X-Goog-Upload-Protocol': 'resumable',
       'X-Goog-Upload-Command': 'start',
-      'X-Goog-Upload-Header-Content-Length': String(bytes.length),
+      'X-Goog-Upload-Header-Content-Length': String(byteLength),
       'X-Goog-Upload-Header-Content-Type': mimeType,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      file: {
-        display_name: displayName,
-      },
-    }),
+    body: JSON.stringify({ file: { display_name: displayName } }),
   })
 
   if (!startRes.ok) {
@@ -144,18 +133,17 @@ async function uploadToGeminiFilesApi(params: {
     startRes.headers.get('x-goog-upload-url') ||
     startRes.headers.get('X-Goog-Upload-URL')
 
-  if (!uploadUrl) {
-    throw new Error('File upload failed: missing upload URL from Gemini')
-  }
+  if (!uploadUrl) throw new Error('File upload failed: missing upload URL from Gemini')
 
   const uploadRes = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
-      'Content-Length': String(bytes.length),
+      'Content-Length': String(byteLength),
       'X-Goog-Upload-Offset': '0',
       'X-Goog-Upload-Command': 'upload, finalize',
     },
-    body: bytes,
+    // ArrayBuffer is valid BodyInit — no Buffer, no Uint8Array
+    body: arrayBuffer,
   })
 
   if (!uploadRes.ok) {
@@ -165,20 +153,13 @@ async function uploadToGeminiFilesApi(params: {
   const uploaded = (await uploadRes.json()) as GeminiUploadFile
   const uri = uploaded?.file?.uri
 
-  if (!uri) {
-    throw new Error('File upload succeeded but Gemini did not return a file URI')
-  }
+  if (!uri) throw new Error('File upload succeeded but Gemini did not return a file URI')
 
-  return {
-    uri,
-    mimeType: uploaded.file?.mimeType || mimeType,
-  }
+  return { uri, mimeType: uploaded.file?.mimeType || mimeType }
 }
 
 async function callGeminiGenerateContent(part: Record<string, unknown>) {
-  if (!GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY missing')
-  }
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing')
 
   const response = await fetch(
     `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
@@ -189,10 +170,7 @@ async function callGeminiGenerateContent(part: Record<string, unknown>) {
         contents: [
           {
             role: 'user',
-            parts: [
-              part,
-              { text: GEMINI_PROMPT },
-            ],
+            parts: [part, { text: GEMINI_PROMPT }],
           },
         ],
         generationConfig: {
@@ -203,38 +181,25 @@ async function callGeminiGenerateContent(part: Record<string, unknown>) {
     }
   )
 
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response))
-  }
-
+  if (!response.ok) throw new Error(await readErrorMessage(response))
   return response.json()
 }
 
 export async function POST(req: NextRequest) {
   try {
     if (!GEMINI_API_KEY) {
-      return NextResponse.json(
-        { error: 'GEMINI_API_KEY missing' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'GEMINI_API_KEY missing' }, { status: 500 })
     }
 
     const body = (await req.json().catch(() => null)) as ImportBody | null
-
     if (!body) {
-      return NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
     const { base64Data, mimeType, fileName } = body
 
     if (!base64Data || !mimeType) {
-      return NextResponse.json(
-        { error: 'Missing base64Data or mimeType' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing base64Data or mimeType' }, { status: 400 })
     }
 
     const cleanMimeType = normalizeMimeType(mimeType)
@@ -245,19 +210,14 @@ export async function POST(req: NextRequest) {
 
     if (!isPdf && !isImage) {
       return NextResponse.json(
-        {
-          error: `Unsupported mimeType: ${cleanMimeType}. Use an image/* or application/pdf file.`,
-        },
+        { error: `Unsupported mimeType: ${cleanMimeType}. Use an image/* or application/pdf file.` },
         { status: 400 }
       )
     }
 
     let dataPart: Record<string, unknown>
 
-    // Small files: inline data
     if (byteSize <= MAX_INLINE_BYTES) {
-      // REST payload must use snake_case field names.
-      // Gemini docs show `inline_data` for REST examples and `file_data` for File API usage. :contentReference[oaicite:2]{index=2}
       dataPart = {
         inline_data: {
           mime_type: cleanMimeType,
@@ -265,11 +225,8 @@ export async function POST(req: NextRequest) {
         },
       }
     } else {
-      // Larger files: upload to File API, then reference with file_data
-      const bytes = new Uint8Array(Buffer.from(base64Data, 'base64'))
-
       const uploaded = await uploadToGeminiFilesApi({
-        bytes,
+        base64: cleanBase64,
         mimeType: cleanMimeType,
         fileName,
       })
@@ -286,13 +243,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(data)
   } catch (error) {
     console.error('Menu import route error:', error)
-
-    const message =
-      error instanceof Error ? error.message : 'Import failed'
-
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : 'Import failed'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
