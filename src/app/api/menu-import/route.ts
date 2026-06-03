@@ -267,7 +267,6 @@ export async function POST(req: NextRequest) {
     } else {
       // Larger files: upload to File API, then reference with file_data
       const bytes = new Uint8Array(Buffer.from(base64Data, 'base64'))
-      const bytes = new Uint8Array(Buffer.from(base64Data, 'base64'))
 
       const uploaded = await uploadToGeminiFilesApi({
         bytes,
