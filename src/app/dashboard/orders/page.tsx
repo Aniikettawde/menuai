@@ -126,15 +126,23 @@ export default function OrdersPage() {
 
     const channel = supabase
       .channel(`table-requests-${restaurant.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'table_requests', filter: `restaurant_id=eq.${restaurant.id}` },
-        () => {
-          void load()
-          const audio = new Audio('/notification.mp3')
-          void audio.play().catch(() => {})
-        }
-      )
+     .on(
+  'postgres_changes',
+  {
+    event: 'INSERT',
+    schema: 'public',
+    table: 'table_requests',
+    filter: `restaurant_id=eq.${restaurant.id}`,
+  },
+  () => {
+    void load()
+    const audio = new Audio('/notification.mp3')
+    void audio.play().catch(() => {})
+    if ('vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200])
+    }
+  }
+)
       .subscribe()
 
     return () => { void supabase.removeChannel(channel) }

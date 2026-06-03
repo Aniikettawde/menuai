@@ -1,17 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
+import { cert, getApps, initializeApp } from 'firebase-admin/app'
+import { getMessaging } from 'firebase-admin/messaging'
 
 export const runtime = 'nodejs'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
 const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
 const vapidEmail = process.env.VAPID_EMAIL ?? 'mailto:admin@menuai.app'
 
+const firebaseProjectId = process.env.FIREBASE_PROJECT_ID
+const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL
+const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+
 if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey)
+}
+
+function getFirebaseApp() {
+  if (getApps().length > 0) {
+    return getApps()[0]!
+  }
+
+  if (!firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
+    throw new Error('Missing Firebase Admin env vars')
+  }
+
+  return initializeApp({
+    credential: cert({
+      projectId: firebaseProjectId,
+      clientEmail: firebaseClientEmail,
+      privateKey: firebasePrivateKey,
+    }),
+  })
 }
 
 type RequestItem = {
@@ -27,8 +52,12 @@ type PushSubscriptionRow = {
   keys: { p256dh: string; auth: string }
 }
 
+function sanitizeTopic(topic: string) {
+  return topic.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function sendPushToRestaurant(
+async function sendWebPushToRestaurant(
   admin: SupabaseClient,
   restaurantId: string,
   payload: {
@@ -40,7 +69,7 @@ async function sendPushToRestaurant(
   }
 ) {
   if (!vapidPublicKey || !vapidPrivateKey) {
-    console.warn('[Push] VAPID keys not configured — skipping push')
+    console.warn('[WebPush] VAPID keys not configured — skipping web push')
     return
   }
 
@@ -50,7 +79,7 @@ async function sendPushToRestaurant(
     .eq('restaurant_id', restaurantId)
 
   if (error || !subs?.length) {
-    console.log('[Push] No subscriptions found for restaurant', restaurantId)
+    console.log('[WebPush] No subscriptions found for restaurant', restaurantId)
     return
   }
 
@@ -66,21 +95,24 @@ async function sendPushToRestaurant(
   const results = await Promise.allSettled(
     (subs as PushSubscriptionRow[]).map((sub) =>
       webpush.sendNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } },
+        {
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+        },
         notification
       )
     )
   )
 
-  // Clean up expired subscriptions (410 Gone / 404)
   const expiredEndpoints: string[] = []
+
   results.forEach((result, i) => {
     if (result.status === 'rejected') {
       const err = result.reason as { statusCode?: number }
       if (err?.statusCode === 410 || err?.statusCode === 404) {
         expiredEndpoints.push((subs as PushSubscriptionRow[])[i].endpoint)
       } else {
-        console.error('[Push] Failed to send:', result.reason)
+        console.error('[WebPush] Failed to send:', result.reason)
       }
     }
   })
@@ -88,6 +120,45 @@ async function sendPushToRestaurant(
   if (expiredEndpoints.length > 0) {
     await admin.from('push_subscriptions').delete().in('endpoint', expiredEndpoints)
   }
+}
+
+async function sendAndroidPushToRestaurant(payload: {
+  restaurantSlug: string
+  title: string
+  body: string
+  tableNumber: number
+  requestId: string
+}) {
+  if (!firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
+    console.warn('[FCM] Firebase env vars missing — skipping Android push')
+    return
+  }
+
+  const app = getFirebaseApp()
+  const messaging = getMessaging(app)
+
+  const topic = sanitizeTopic(`restaurant_${payload.restaurantSlug}`)
+
+  await messaging.send({
+    topic,
+    notification: {
+      title: payload.title,
+      body: payload.body,
+    },
+    data: {
+      url: '/dashboard/orders',
+      restaurantSlug: payload.restaurantSlug,
+      tableNumber: String(payload.tableNumber),
+      requestId: payload.requestId,
+    },
+    android: {
+      priority: 'high',
+      notification: {
+        channelId: 'dinezydash_orders',
+        sound: 'default',
+      },
+    },
+  })
 }
 
 export async function POST(req: NextRequest) {
@@ -156,21 +227,46 @@ export async function POST(req: NextRequest) {
       .slice(0, 2)
       .map((i) => `${i.name} ×${i.qty}`)
       .join(', ')
+
     const moreCount = (items as RequestItem[]).length - 2
     const bodyText =
       (items as RequestItem[]).length <= 2
         ? itemSummary
         : `${itemSummary} +${moreCount} more`
 
-    sendPushToRestaurant(admin, restaurant.id, {
-      title: `🔔 Table ${tableNumber} — ${restaurant.name}`,
-      body: bodyText,
-      tableNumber: tableNumber as number,
-      requestId: inserted.id,
-      tag: `waiter-${restaurant.id}-table-${tableNumber}`,
-    }).catch((err) => console.error('[Push] Background push error:', err))
+    const title = `🔔 Table ${tableNumber} — ${restaurant.name}`
 
-    return NextResponse.json({ ok: true, request: inserted, tableNumber, restaurantSlug })
+    const [webPushResult, androidPushResult] = await Promise.allSettled([
+      sendWebPushToRestaurant(admin, restaurant.id, {
+        title,
+        body: bodyText,
+        tableNumber: tableNumber as number,
+        requestId: inserted.id,
+        tag: `waiter-${restaurant.id}-table-${tableNumber}`,
+      }),
+      sendAndroidPushToRestaurant({
+        restaurantSlug,
+        title,
+        body: bodyText,
+        tableNumber: tableNumber as number,
+        requestId: inserted.id,
+      }),
+    ])
+
+    if (webPushResult.status === 'rejected') {
+      console.error('[WebPush] Background push error:', webPushResult.reason)
+    }
+
+    if (androidPushResult.status === 'rejected') {
+      console.error('[FCM] Android push error:', androidPushResult.reason)
+    }
+
+    return NextResponse.json({
+      ok: true,
+      request: inserted,
+      tableNumber,
+      restaurantSlug,
+    })
   } catch (error) {
     console.error('table-request route error:', error)
     return NextResponse.json(
