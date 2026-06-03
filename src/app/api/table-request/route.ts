@@ -131,40 +131,60 @@ async function sendAndroidPushToRestaurant(
     requestId: string
   }
 ) {
-  const app = getFirebaseApp()
-  const messaging = getMessaging(app)
+  try {
+    console.log('[FCM] Starting send')
+    console.log('[FCM] Restaurant:', payload.restaurantSlug)
 
-  const { data: tokens } = await admin
-    .from('device_tokens')
-    .select('fcm_token')
-    .eq('restaurant_slug', payload.restaurantSlug)
+    const app = getFirebaseApp()
+    const messaging = getMessaging(app)
 
-  if (!tokens?.length) {
-    console.log('[FCM] No device tokens found')
-    return
-  }
+    const { data: tokens, error } = await admin
+      .from('device_tokens')
+      .select('fcm_token')
+      .eq('restaurant_slug', payload.restaurantSlug)
 
-  const tokenList = tokens.map((t) => t.fcm_token)
+    if (error) {
+      console.error('[FCM] Token query error:', error)
+      return
+    }
 
-  await messaging.sendEachForMulticast({
-    tokens: tokenList,
-    notification: {
-      title: payload.title,
-      body: payload.body,
-    },
-    data: {
-      url: '/dashboard/orders',
-      tableNumber: String(payload.tableNumber),
-      requestId: payload.requestId,
-    },
-    android: {
-      priority: 'high',
+    console.log('[FCM] Tokens found:', tokens?.length ?? 0)
+
+    if (!tokens?.length) {
+      console.log('[FCM] No device tokens found')
+      return
+    }
+
+    const tokenList = tokens.map((t) => t.fcm_token)
+
+    console.log('[FCM] Sending to:', tokenList)
+
+    const result = await messaging.sendEachForMulticast({
+      tokens: tokenList,
       notification: {
-        channelId: 'dinezydash_orders',
-        sound: 'default',
+        title: payload.title,
+        body: payload.body,
       },
-    },
-  })
+      data: {
+        url: '/dashboard/orders',
+        tableNumber: String(payload.tableNumber),
+        requestId: payload.requestId,
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'dinezydash_orders',
+          sound: 'default',
+        },
+      },
+    })
+
+    console.log('[FCM] Success:', result.successCount)
+    console.log('[FCM] Failed:', result.failureCount)
+    console.log('[FCM] Full Result:', JSON.stringify(result))
+  } catch (err) {
+    console.error('[FCM] SEND ERROR:', err)
+  }
 }
 
 export async function POST(req: NextRequest) {
