@@ -1,13 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  })
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceKey) {
+      return NextResponse.json(
+        {
+          error: 'Missing env vars',
+          hasUrl: !!supabaseUrl,
+          hasServiceKey: !!serviceKey,
+        },
+        { status: 500 }
+      )
+    }
+
+    const admin = createClient(supabaseUrl, serviceKey)
+
     const { restaurantSlug, token } = await req.json()
 
     if (!restaurantSlug || !token) {
@@ -43,7 +62,9 @@ export async function POST(req: NextRequest) {
     console.error(e)
 
     return NextResponse.json(
-      { error: 'failed' },
+      {
+        error: e instanceof Error ? e.message : 'failed',
+      },
       { status: 500 }
     )
   }
