@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { useAppStore } from '@/store/app-store'
 import type { MenuPageData } from '@/types'
@@ -24,16 +25,28 @@ const supabase = createBrowserClient(
 )
 
 export function RestaurantShell({ initialData }: Props) {
+  const searchParams = useSearchParams()
+
   const {
     restaurant,
     setRestaurantData,
     setIsOffline,
     setShowChat,
+    setTableNumber,
+    tableNumber,
+    sessionId,
+    clearCart,
     showRating,
   } = useAppStore()
 
   usePWA()
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const raw = searchParams.get('table')
+    const n = raw ? Number(raw) : null
+    setTableNumber(Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null)
+  }, [searchParams, setTableNumber])
 
   const refreshMenu = useCallback(async () => {
     const restaurantId = initialData.restaurant.id
@@ -41,11 +54,7 @@ export function RestaurantShell({ initialData }: Props) {
 
     try {
       const [{ data: restaurantRow }, { data: categories }, { data: items }] = await Promise.all([
-        supabase
-          .from('restaurants')
-          .select('*')
-          .eq('id', restaurantId)
-          .single(),
+        supabase.from('restaurants').select('*').eq('id', restaurantId).single(),
         supabase
           .from('menu_categories')
           .select('*')
@@ -76,7 +85,6 @@ export function RestaurantShell({ initialData }: Props) {
   }, [initialData.restaurant.id, initialData.restaurant.slug, setRestaurantData])
 
   useEffect(() => {
-    // initial snapshot
     setRestaurantData(initialData)
     setCachedMenu(initialData.restaurant.slug, initialData)
   }, [initialData, setRestaurantData])
@@ -104,7 +112,6 @@ export function RestaurantShell({ initialData }: Props) {
   }, [initialData.restaurant.id])
 
   useEffect(() => {
-    // Realtime updates for immediate menu reflection
     const restaurantId = initialData.restaurant.id
 
     const channel = supabase
@@ -176,6 +183,48 @@ export function RestaurantShell({ initialData }: Props) {
     [setShowChat]
   )
 
+  const handleCallWaiter = useCallback(
+    async (payload: {
+      items: {
+        id: string
+        name: string
+        qty: number
+        price: number
+        total: number
+      }[]
+      subtotal: number
+    }) => {
+      if (!restaurant) return
+
+      if (!tableNumber) {
+        alert('Table number missing. Please scan the table QR again.')
+        return
+      }
+
+      const res = await fetch('/api/table-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantSlug: restaurant.slug,
+          tableNumber,
+          sessionId,
+          items: payload.items,
+          subtotal: payload.subtotal,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Failed to send waiter request')
+      }
+
+      clearCart()
+      alert(`Waiter notified for Table ${tableNumber}`)
+    },
+    [restaurant, tableNumber, sessionId, clearCart]
+  )
+
   if (!restaurant) return null
 
   return (
@@ -185,7 +234,7 @@ export function RestaurantShell({ initialData }: Props) {
       <CategoryTabs />
       <div className="flex-1 flex flex-col lg:flex-row max-w-[1280px] mx-auto w-full">
         <div className="flex-1 min-w-0">
-          <MenuGrid onAsk={handleAsk} onOpenChat={handleOpenChat} />
+          <MenuGrid onAsk={handleAsk} onOpenChat={handleOpenChat} onCallWaiter={handleCallWaiter} />
         </div>
         <ChatPanel />
       </div>
