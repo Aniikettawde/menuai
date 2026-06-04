@@ -879,7 +879,6 @@ export default function DinezyLanding() {
                   { label: "Privacy Policy", href: "/privacy-policy" },
                   { label: "Terms & Conditions", href: "/terms" },
                   { label: "Refund & Cancellation Policy", href: "/refund-policy" },
-                  { label: "Shipping & Delivery Policy", href: "/shipping-policy" },
                 ].map(l => (
                   <li key={l.label}>
                     <a href={l.href} className="text-slate-400 text-sm hover:text-white transition-colors">{l.label}</a>
