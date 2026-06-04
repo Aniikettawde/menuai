@@ -1,15 +1,33 @@
 'use client'
-// src/app/dashboard/onboarding/page.tsx
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Sparkles, Check, Zap, Shield, BarChart3,
-  UtensilsCrossed, Star, CreditCard, ChevronRight,
-  Loader2, AlertCircle, Clock,
+  Sparkles,
+  Check,
+  Zap,
+  Shield,
+  BarChart3,
+  UtensilsCrossed,
+  Star,
+  CreditCard,
+  Loader2,
+  AlertCircle,
+  Clock,
+  ArrowRight,
+  BadgeIndianRupee,
+  PhoneCall,
+  LockKeyhole,
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import type { RazorpayOptions, RazorpayPaymentResponse } from '@/types/billing'
+import {
+  BILLING_PLANS,
+  formatRupees,
+  type BillingCycle,
+  type BillingPlan,
+  type PlanId,
+} from '@/lib/billing-plans'
 
 declare global {
   interface Window {
@@ -19,50 +37,112 @@ declare global {
 
 const FEATURES = [
   { icon: UtensilsCrossed, text: 'Unlimited menu items & categories' },
-  { icon: Sparkles,        text: 'Gemini AI chatbot for your customers' },
-  { icon: BarChart3,       text: 'Full analytics — traffic, items, upsells' },
-  { icon: Zap,             text: 'AI upsell engine (avg +18% order value)' },
-  { icon: Star,            text: 'Customer ratings & review management' },
-  { icon: Shield,          text: 'QR code generator & offline menu cache' },
+  { icon: Sparkles, text: 'Gemini AI chatbot for your customers' },
+  { icon: BarChart3, text: 'Full analytics — traffic, items, upsells' },
+  { icon: Zap, text: 'AI upsell engine (avg +18% order value)' },
+  { icon: Star, text: 'Customer ratings & review management' },
+  { icon: Shield, text: 'QR code generator & offline menu cache' },
 ]
+
+const PLAN_LIST: BillingPlan[] = [
+  BILLING_PLANS.small,
+  BILLING_PLANS.growth,
+  BILLING_PLANS.large,
+]
+
+type BillingStatus = {
+  plan: string
+  has_access: boolean
+  trial_days_remaining?: number | null
+} | null
 
 export default function OnboardingPage() {
   const router = useRouter()
   const supabase = getSupabaseDashboardBrowser()
+
   const [paying, setPaying] = useState(false)
   const [startingTrial, setStartingTrial] = useState(false)
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
   const [error, setError] = useState('')
-  // Cache the access token so we don't re-fetch it on every action
+  const [checkingStatus, setCheckingStatus] = useState(true)
+  const [canStartTrial, setCanStartTrial] = useState(true)
+
   const accessTokenRef = useRef<string | null>(null)
 
-  // Load Razorpay SDK
   useEffect(() => {
     if (document.querySelector('script[src*="razorpay"]')) return
+
     const s = document.createElement('script')
     s.src = 'https://checkout.razorpay.com/v1/checkout.js'
     s.async = true
     document.head.appendChild(s)
   }, [])
 
-  // ── Get access token (handles cookie race condition after fresh signup) ──
+  useEffect(() => {
+    let mounted = true
+
+    async function checkBillingStatus() {
+      try {
+        const res = await fetch('/api/billing/status', {
+          cache: 'no-store',
+        })
+
+        if (!res.ok) {
+          if (mounted) setCanStartTrial(true)
+          return
+        }
+
+        const data: { status?: BillingStatus } = await res.json()
+        const status = data.status ?? null
+
+        if (!mounted) return
+
+        if (status?.has_access) {
+          router.replace('/dashboard')
+          return
+        }
+
+        if (status?.plan === 'trial' && !status.has_access) {
+          setCanStartTrial(false)
+        } else {
+          setCanStartTrial(true)
+        }
+      } catch {
+        if (mounted) setCanStartTrial(true)
+      } finally {
+        if (mounted) setCheckingStatus(false)
+      }
+    }
+
+    void checkBillingStatus()
+
+    return () => {
+      mounted = false
+    }
+  }, [router])
+
   async function getAccessToken(): Promise<string | null> {
     if (accessTokenRef.current) return accessTokenRef.current
 
-    // Try up to 5 times with 300ms delay — session may not be set immediately
     for (let i = 0; i < 5; i++) {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
       if (session?.access_token) {
         accessTokenRef.current = session.access_token
         return session.access_token
       }
-      await new Promise(r => setTimeout(r, 300))
+
+      await new Promise((r) => setTimeout(r, 300))
     }
+
     return null
   }
 
-  // ── Authenticated fetch helper ────────────────────────────
   async function authFetch(url: string, options: RequestInit = {}) {
     const token = await getAccessToken()
+
     return fetch(url, {
       ...options,
       headers: {
@@ -73,16 +153,24 @@ export default function OnboardingPage() {
     })
   }
 
-  // ── Start free trial ──────────────────────────────────────
-  const handleStartTrial = async () => {
+  const handleStartTrial = async (planId?: PlanId) => {
     setError('')
     setStartingTrial(true)
+
     try {
-      const res = await authFetch('/api/billing/start-trial', { method: 'POST' })
+      const res = await authFetch('/api/billing/start-trial', {
+        method: 'POST',
+        body: JSON.stringify({
+          plan_id: planId ?? 'growth',
+          billing_cycle: billingCycle,
+        }),
+      })
+
       if (!res.ok) {
         const e = await res.json()
         throw new Error(e.error ?? 'Failed to start trial')
       }
+
       router.push('/dashboard?welcome=trial')
       router.refresh()
     } catch (err) {
@@ -91,59 +179,82 @@ export default function OnboardingPage() {
     }
   }
 
-  // ── Pay now ───────────────────────────────────────────────
-  const handlePay = async () => {
+  const handlePay = async (plan: BillingPlan) => {
     setError('')
     setPaying(true)
-    try {
-      // Ensure sub row exists first (idempotent)
-      await authFetch('/api/billing/start-trial', { method: 'POST' })
 
-      const orderRes = await authFetch('/api/billing/create-order', { method: 'POST' })
+    try {
+      const orderRes = await authFetch('/api/billing/create-order', {
+        method: 'POST',
+        body: JSON.stringify({
+          plan_id: plan.id,
+          billing_cycle: billingCycle,
+        }),
+      })
+
       if (!orderRes.ok) {
         const e = await orderRes.json()
         throw new Error(e.error ?? 'Failed to create order')
       }
-      const { order_id, amount, currency, key } = await orderRes.json()
+
+      const {
+        order_id,
+        amount,
+        currency,
+        key,
+        plan_id,
+        billing_cycle,
+      } = await orderRes.json()
 
       await new Promise<void>((resolve, reject) => {
         const options: RazorpayOptions = {
           key,
           amount,
           currency,
-          name: 'MenuAI',
-          description: 'Monthly Subscription — ₹999/month',
+          name: 'Dinezy',
+          description: `${plan.name} • ${billingCycle === 'monthly' ? 'Monthly' : 'Yearly'} subscription`,
           order_id,
-          theme: { color: '#f97316' },
-          modal: { ondismiss: () => reject(new Error('DISMISSED')) },
+          theme: { color: '#2563eb' },
+          modal: {
+            ondismiss: () => reject(new Error('DISMISSED')),
+          },
           handler: async (response: RazorpayPaymentResponse) => {
             try {
               const verifyRes = await authFetch('/api/billing/verify-payment', {
                 method: 'POST',
-                body: JSON.stringify(response),
+                body: JSON.stringify({
+                  ...response,
+                  plan_id,
+                  billing_cycle,
+                  amount,
+                }),
               })
+
               if (!verifyRes.ok) {
                 const e = await verifyRes.json()
                 reject(new Error(e.error ?? 'Verification failed'))
                 return
               }
+
               resolve()
-            } catch (err) { reject(err) }
+            } catch (err) {
+              reject(err)
+            }
           },
         }
+
         if (!window.Razorpay) {
           reject(new Error('Payment SDK not loaded. Please refresh and try again.'))
           return
         }
+
         new window.Razorpay(options).open()
       })
 
       router.push('/dashboard?welcome=paid')
       router.refresh()
     } catch (err: unknown) {
-      if (err instanceof Error && err.message === 'DISMISSED') {
-        // user closed modal — not an error
-      } else {
+      if (!(err instanceof Error && err.message === 'DISMISSED')) {
         setError(err instanceof Error ? err.message : 'Payment failed. Please try again.')
       }
       setPaying(false)
@@ -152,150 +263,325 @@ export default function OnboardingPage() {
 
   const busy = paying || startingTrial
 
-  return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-start justify-center px-4 py-10 sm:py-16">
-      <div className="w-full max-w-lg space-y-6">
-
-        {/* Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center">
-            <Sparkles size={17} className="text-white" />
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#f8fbff] via-white to-[#f3f7ff] px-4 py-6 text-slate-900">
+        <div className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center">
+          <div className="rounded-3xl border border-slate-200 bg-white/85 px-6 py-5 shadow-sm backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <Loader2 className="animate-spin text-blue-600" size={18} />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Checking your plan…</p>
+                <p className="text-xs text-slate-500">Loading billing status</p>
+              </div>
+            </div>
           </div>
-          <span className="font-bold text-white text-xl tracking-tight">MenuAI</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#f8fbff] via-white to-[#f3f7ff] text-slate-900">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-200">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <p className="text-lg font-black tracking-tight text-slate-900">Dinezy</p>
+              <p className="text-xs text-slate-500">AI-powered QR dining</p>
+            </div>
+          </div>
+
+          <div className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:flex">
+            <Shield size={12} />
+            7-day free trial
+          </div>
         </div>
 
-        {/* Headline */}
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
-            Welcome! Choose how<br />you'd like to start.
-          </h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            Full access either way. Pick what works for you.
-          </p>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-            <AlertCircle size={15} className="flex-shrink-0" />
-            {error}
+        {!canStartTrial && (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Your free trial has already been used. Choose a paid plan to continue.
           </div>
         )}
 
-        {/* ── Option A: Free Trial ── */}
-        <button
-          onClick={handleStartTrial}
-          disabled={busy}
-          className="w-full text-left rounded-2xl border border-zinc-700 bg-zinc-900 hover:border-zinc-500 hover:bg-zinc-800/70 transition-all disabled:opacity-50 disabled:cursor-not-allowed group overflow-hidden"
-        >
-          <div className="p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0">
-                  <Clock size={18} className="text-zinc-300" />
-                </div>
-                <div>
-                  <p className="font-semibold text-white text-base">Start free trial</p>
-                  <p className="text-xs text-zinc-400">No card needed right now</p>
-                </div>
-              </div>
-              <span className="flex-shrink-0 text-xs font-semibold bg-zinc-700 text-zinc-200 px-2.5 py-1 rounded-full">
-                7 days free
-              </span>
-            </div>
-
-            <p className="text-sm text-zinc-400 mb-4">
-              Get full access for 7 days. After that, keep going for ₹999/month — or stop anytime with no charge.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {FEATURES.map(({ text }) => (
-                <div key={text} className="flex items-center gap-2">
-                  <Check size={11} className="text-zinc-400 flex-shrink-0" />
-                  <span className="text-xs text-zinc-400">{text}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-zinc-500">Trial ends in 7 days → ₹999/month</span>
-              {startingTrial ? (
-                <div className="flex items-center gap-1.5 text-xs text-zinc-300">
-                  <Loader2 size={13} className="animate-spin" /> Setting up…
-                </div>
-              ) : (
-                <span className="text-xs font-semibold text-zinc-200 group-hover:text-white transition-colors flex items-center gap-1">
-                  Start trial <ChevronRight size={13} />
-                </span>
-              )}
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} className="flex-shrink-0" />
+              {error}
             </div>
           </div>
-        </button>
+        )}
 
-        {/* Divider */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-zinc-800" />
-          <span className="text-xs text-zinc-600 font-medium">or</span>
-          <div className="flex-1 h-px bg-zinc-800" />
+        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+          <div className="space-y-6">
+            <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:p-8">
+              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
+                Start your Dinezy plan
+              </div>
+
+              <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
+                Choose a plan that fits your restaurant size
+              </h1>
+
+              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+                Pick monthly or yearly billing. Every plan includes a 7-day free trial, no card required.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                  <Clock size={12} />
+                  7-day free trial
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                  <CreditCard size={12} />
+                  Razorpay secure payments
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                  <Shield size={12} />
+                  Cancel anytime
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-[32px] border border-slate-200 bg-white/85 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Billing cycle</p>
+                  <p className="text-xs text-slate-500">Choose monthly or yearly</p>
+                </div>
+
+                <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle('monthly')}
+                    className={[
+                      'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:flex-none',
+                      billingCycle === 'monthly'
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800',
+                    ].join(' ')}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle('yearly')}
+                    className={[
+                      'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:flex-none',
+                      billingCycle === 'yearly'
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800',
+                    ].join(' ')}
+                  >
+                    Yearly <span className="ml-1 text-xs font-bold text-emerald-600">50% off</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-5">
+              {PLAN_LIST.map((plan) => {
+                const price = billingCycle === 'monthly' ? plan.monthly : plan.yearly
+                const yearlySavings = plan.monthly * 12 - plan.yearly
+
+                return (
+                  <div
+                    key={plan.id}
+                    className={[
+                      'relative overflow-hidden rounded-[32px] border bg-white/90 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl transition hover:-translate-y-0.5',
+                      plan.popular ? 'border-violet-300 ring-1 ring-violet-100' : 'border-slate-200',
+                    ].join(' ')}
+                  >
+                    {plan.popular && (
+                      <div className="absolute right-4 top-4 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-1 text-[11px] font-bold text-white shadow-lg">
+                        Most popular
+                      </div>
+                    )}
+
+                    <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-start">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex rounded-full bg-gradient-to-r ${plan.color} px-3 py-1 text-[11px] font-bold text-white shadow-sm`}
+                          >
+                            {plan.highlight}
+                          </span>
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
+                            {plan.tables}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h2 className="text-2xl font-black tracking-tight text-slate-900">{plan.name}</h2>
+                          <p className="mt-1 text-sm leading-6 text-slate-500">{plan.description}</p>
+                        </div>
+
+                        <div className="flex items-end gap-2">
+                          <p className="text-4xl font-black tracking-tight text-slate-900">
+                            ₹{formatRupees(price)}
+                          </p>
+                          <span className="pb-1 text-sm font-medium text-slate-500">
+                            {billingCycle === 'monthly' ? '/month' : '/year'}
+                          </span>
+                        </div>
+
+                        {billingCycle === 'yearly' && (
+                          <p className="text-sm font-medium text-emerald-700">
+                            Save ₹{formatRupees(yearlySavings)} every year
+                          </p>
+                        )}
+
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {plan.features.map((feature) => (
+                            <div key={feature} className="flex items-center gap-2 text-sm text-slate-600">
+                              <Check size={13} className="shrink-0 text-blue-600" />
+                              <span>{feature}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                        {canStartTrial && (
+                          <button
+                            onClick={() => void handleStartTrial(plan.id)}
+                            disabled={busy}
+                            className={[
+                              'inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100',
+                              busy ? 'cursor-not-allowed opacity-50' : '',
+                            ].join(' ')}
+                          >
+                            {startingTrial ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}
+                            Start trial
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => void handlePay(plan)}
+                          disabled={busy}
+                          className={[
+                            'inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5',
+                            busy ? 'cursor-not-allowed opacity-50' : '',
+                          ].join(' ')}
+                        >
+                          {paying ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
+                          Pay now
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <aside className="space-y-6">
+            <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+              <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+                <BadgeIndianRupee size={15} />
+                What you get with Dinezy
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {FEATURES.map(({ icon: Icon, text }) => (
+                  <div
+                    key={text}
+                    className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                  >
+                    <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+                      <Icon size={15} />
+                    </div>
+                    <p className="text-sm leading-6 text-slate-700">{text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[32px] border border-slate-200 bg-gradient-to-br from-blue-50 to-violet-50 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <LockKeyhole size={15} className="text-blue-700" />
+                Secure checkout
+              </div>
+
+              <p className="mt-3 text-sm leading-7 text-slate-600">
+                Razorpay supports UPI, cards, and net banking. Your subscription starts only after successful payment.
+              </p>
+
+              <div className="mt-5 grid gap-2">
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <Check size={13} className="text-emerald-600" />
+                  Dinezy branding on payment page
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <Check size={13} className="text-emerald-600" />
+                  Monthly and yearly billing
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <Check size={13} className="text-emerald-600" />
+                  7-day free trial before commitment
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <PhoneCall size={15} className="text-violet-600" />
+                Need help?
+              </div>
+              <p className="mt-3 text-sm leading-7 text-slate-600">
+                Contact support if you need help with onboarding, pricing, or payment setup.
+              </p>
+              <div className="mt-4 space-y-2 text-sm">
+                <a
+                  href="mailto:anikettawdee@gmail.com"
+                  className="block rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-blue-700 transition hover:bg-white"
+                >
+                  anikettawdee@gmail.com
+                </a>
+                <a
+                  href="tel:+918605123549"
+                  className="block rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-blue-700 transition hover:bg-white"
+                >
+                  +91 86051 23549
+                </a>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <div className="rounded-[32px] border border-slate-200 bg-white/85 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Quick start</p>
+              <p className="text-xs text-slate-500">
+                Pick a plan above and continue with a 7-day free trial or pay now.
+              </p>
+            </div>
+
+            {canStartTrial ? (
+              <button
+                onClick={() => void handleStartTrial('growth')}
+                disabled={busy}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ArrowRight size={15} />
+                Continue with trial
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-200 px-5 py-3.5 text-sm font-semibold text-slate-500"
+              >
+                Trial already used
+              </button>
+            )}
+          </div>
         </div>
-
-        {/* ── Option B: Pay Now ── */}
-        <button
-          onClick={handlePay}
-          disabled={busy}
-          className="w-full text-left rounded-2xl border border-orange-500/40 bg-orange-500/5 hover:bg-orange-500/10 hover:border-orange-500/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed group overflow-hidden"
-        >
-          <div className="p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center flex-shrink-0">
-                  <CreditCard size={18} className="text-orange-400" />
-                </div>
-                <div>
-                  <p className="font-semibold text-white text-base">Pay now & activate</p>
-                  <p className="text-xs text-zinc-400">Skip the trial, go straight in</p>
-                </div>
-              </div>
-              <div className="flex-shrink-0 text-right">
-                <p className="text-lg font-bold text-white leading-none">₹999</p>
-                <p className="text-[11px] text-zinc-500">/month</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-zinc-400 mb-4">
-              Full access immediately. Billed monthly, cancel anytime. Less than ₹34/day.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-4">
-              {FEATURES.map(({ text }) => (
-                <div key={text} className="flex items-center gap-2">
-                  <Check size={11} className="text-orange-400 flex-shrink-0" />
-                  <span className="text-xs text-zinc-300">{text}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 text-xs text-zinc-500">
-                <span className="flex items-center gap-1"><Shield size={11} /> Razorpay</span>
-                <span>UPI · Cards · Net Banking</span>
-              </div>
-              {paying ? (
-                <div className="flex items-center gap-1.5 text-xs text-orange-300">
-                  <Loader2 size={13} className="animate-spin" /> Processing…
-                </div>
-              ) : (
-                <span className="text-xs font-semibold text-orange-300 group-hover:text-orange-200 transition-colors flex items-center gap-1">
-                  Pay ₹999 <ChevronRight size={13} />
-                </span>
-              )}
-            </div>
-          </div>
-        </button>
-
-        <p className="text-center text-xs text-zinc-600 pb-6">
-          By continuing you agree to our Terms of Service and Privacy Policy.
-        </p>
       </div>
     </div>
   )

@@ -68,6 +68,12 @@ export async function POST(req: NextRequest) {
 	console.log('[start-trial] CALLED')
 console.log('[start-trial] userId:', userId)
 
+console.log('==========================')
+console.log('START TRIAL CALLED')
+console.log('TIME:', new Date().toISOString())
+console.log('USER:', userId)
+console.log('==========================')
+
     const { error } = await sb
       .from('subscriptions')
       .insert({

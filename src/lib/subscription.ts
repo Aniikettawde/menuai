@@ -4,20 +4,26 @@
 
 import { createClient } from '@supabase/supabase-js'
 import type { SubscriptionStatus } from '@/types/billing'
+import { getPlanAmountPaise, type BillingCycle, type PlanId } from '@/lib/billing-plans'
+
+type ActivateSubscriptionOptions = {
+  planId?: PlanId
+  billingCycle?: BillingCycle
+  amountPaise?: number
+}
 
 function getServiceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
+    { auth: { persistSession: false } },
   )
 }
 
-// ── Check if user has access (trial active OR paid active) ──
 export async function getUserSubscriptionStatus(userId: string): Promise<SubscriptionStatus | null> {
   const sb = getServiceClient()
   const { data, error } = await sb
-    .from('subscription_status')      // the VIEW we created
+    .from('subscription_status')
     .select('*')
     .eq('user_id', userId)
     .single()
@@ -26,36 +32,54 @@ export async function getUserSubscriptionStatus(userId: string): Promise<Subscri
   return data as SubscriptionStatus
 }
 
-// ── Flip plan to 'active' after successful Razorpay payment ──
 export async function activateSubscription(
   userId: string,
   paymentId: string,
   orderId: string,
-  signature: string
+  signature: string,
+  opts: ActivateSubscriptionOptions = {},
 ) {
   const sb = getServiceClient()
+
   const now = new Date()
-  const nextMonth = new Date(now)
-  nextMonth.setMonth(nextMonth.getMonth() + 1)
+  const end = new Date(now)
+  const billingCycle: BillingCycle = opts.billingCycle ?? 'monthly'
+  const planId: PlanId = opts.planId ?? 'growth'
+  const amountPaise = opts.amountPaise ?? getPlanAmountPaise(planId, billingCycle)
 
-  const { error: subError } = await sb
+  // Dynamic expiry based on billing cycle
+  if (billingCycle === 'yearly') {
+    end.setFullYear(end.getFullYear() + 1)
+  } else {
+    end.setMonth(end.getMonth() + 1)
+  }
+
+  // Save plan_id, billing_cycle, amount_paise alongside subscription state
+  const { error: upsertError } = await sb
     .from('subscriptions')
-    .update({
-      plan: 'active',
-      razorpay_payment_id: paymentId,
-      current_period_start: now.toISOString(),
-      current_period_end: nextMonth.toISOString(),
-    })
-    .eq('user_id', userId)
+    .upsert(
+      {
+        user_id: userId,
+        plan: 'active',
+        plan_id: planId,
+        billing_cycle: billingCycle,
+        amount_paise: amountPaise,
+        razorpay_payment_id: paymentId,
+        current_period_start: now.toISOString(),
+        current_period_end: end.toISOString(),
+      },
+      { onConflict: 'user_id' },
+    )
 
-  if (subError) throw subError
+  if (upsertError) throw upsertError
 
-  // Log to payment history
-  const { data: sub } = await sb
+  const { data: sub, error: subFetchError } = await sb
     .from('subscriptions')
     .select('id')
     .eq('user_id', userId)
-    .single()
+    .maybeSingle()
+
+  if (subFetchError) throw subFetchError
 
   await sb.from('payment_history').insert({
     user_id: userId,
@@ -63,13 +87,12 @@ export async function activateSubscription(
     razorpay_order_id: orderId,
     razorpay_payment_id: paymentId,
     razorpay_signature: signature,
-    amount_paise: 99900,
+    amount_paise: amountPaise,
     currency: 'INR',
     status: 'paid',
   })
 }
 
-// ── Mark trial as expired ──────────────────────────────────
 export async function expireTrials() {
   const sb = getServiceClient()
   await sb
@@ -79,7 +102,6 @@ export async function expireTrials() {
     .lt('trial_end', new Date().toISOString())
 }
 
-// ── Get trials expiring tomorrow (for reminder emails) ────
 export async function getTrialsExpiringSoon(): Promise<string[]> {
   const sb = getServiceClient()
   const tomorrow = new Date()
@@ -95,7 +117,7 @@ export async function getTrialsExpiringSoon(): Promise<string[]> {
     .gte('trial_end', tomorrow.toISOString())
     .lt('trial_end', dayAfter.toISOString())
 
-  return data?.map(r => r.user_id) ?? []
+  return data?.map((r) => r.user_id) ?? []
 }
 
 export async function markReminderSent(userId: string) {
