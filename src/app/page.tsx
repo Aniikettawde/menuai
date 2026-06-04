@@ -104,7 +104,7 @@ const dashboardFeatures = [
   { title: "AI conversation log", desc: "Read every AI chat session. Understand what guests ask and improve your menu copy accordingly.", icon: "💬" },
 ]
 
-function formatPrice(n: number) {
+function formatPrice(n: number): string {
   return new Intl.NumberFormat("en-IN").format(n)
 }
 
@@ -132,32 +132,39 @@ function WaiterNotification({ show }: { show: boolean }) {
   )
 }
 
+type Message = { from: string; text: string }
+
+type ResponseMap = {
+  [key: string]: string
+  default: string
+}
+
 function AIChatDemo() {
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     { from: "ai", text: "Hi! I'm Dinezy AI. Ask me anything about our menu 😊" },
   ])
-  const [input, setInput] = useState("")
-  const [typing, setTyping] = useState(false)
-  const chatRef = useRef(null)
+  const [input, setInput] = useState<string>("")
+  const [typing, setTyping] = useState<boolean>(false)
+  const chatRef = useRef<HTMLDivElement>(null)
 
   const suggestions = ["What's today's special?", "Any vegetarian options?", "Recommend a combo?"]
 
-  const responses = {
+  const responses: ResponseMap = {
     "what's today's special?": "Today's spotlight is **Butter Chicken** (₹320) served with warm Garlic Naan. Chef's recommended pairing: Dal Makhani for a complete North Indian experience!",
     "any vegetarian options?": "Absolutely! We have **Paneer Tikka** (₹280), **Dal Makhani** (₹220), **Veg Biryani** (₹260), and a fresh **Mixed Veg Curry** (₹200). The Paneer Tikka is our best-seller!",
     "recommend a combo?": "Great choice! Our most popular combo: **Butter Chicken + Garlic Naan + Dal Makhani** — saves ₹60 vs ordering individually. Want me to add it?",
     default: "Great question! Our AI is trained on the full menu. For this demo, try one of the suggestions below 👇",
   }
 
-  const handleSend = async (text) => {
-    const msg = text || input
+  const handleSend = async (text?: string): Promise<void> => {
+    const msg = text ?? input
     if (!msg.trim()) return
     setInput("")
     setMessages((p) => [...p, { from: "user", text: msg }])
     setTyping(true)
     await new Promise((r) => setTimeout(r, 1200))
     const key = msg.toLowerCase()
-    const reply = responses[key] || responses.default
+    const reply = responses[key] ?? responses.default
     setTyping(false)
     setMessages((p) => [...p, { from: "ai", text: reply }])
   }
@@ -249,8 +256,8 @@ function AIChatDemo() {
 }
 
 function FloatingMenuCard({ onCallWaiter }: { onCallWaiter: () => void }) {
-  const [added, setAdded] = useState([])
-  const [notified, setNotified] = useState(false)
+  const [added, setAdded] = useState<string[]>([])
+  const [notified, setNotified] = useState<boolean>(false)
 
   const items = [
     { name: "Butter Chicken", price: 320, label: "Today's spotlight", emoji: "🍛" },
@@ -258,11 +265,11 @@ function FloatingMenuCard({ onCallWaiter }: { onCallWaiter: () => void }) {
     { name: "Paneer Tikka", price: 280, label: "Veg favourite", emoji: "🥘" },
   ]
 
-  const toggle = (name) => {
+  const toggle = (name: string): void => {
     setAdded((p) => (p.includes(name) ? p.filter((x) => x !== name) : [...p, name]))
   }
 
-  const handleCallWaiter = () => {
+  const handleCallWaiter = (): void => {
     if (added.length === 0) return
     setNotified(true)
     onCallWaiter()
@@ -346,10 +353,10 @@ function FloatingMenuCard({ onCallWaiter }: { onCallWaiter: () => void }) {
 }
 
 export default function DinezyLanding() {
-  const [billing, setBilling] = useState("monthly")
-  const [waiterAlert, setWaiterAlert] = useState(false)
-  const [navScrolled, setNavScrolled] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [billing, setBilling] = useState<string>("monthly")
+  const [waiterAlert, setWaiterAlert] = useState<boolean>(false)
+  const [navScrolled, setNavScrolled] = useState<boolean>(false)
+  const [mobileOpen, setMobileOpen] = useState<boolean>(false)
 
   useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 16)
@@ -357,12 +364,12 @@ export default function DinezyLanding() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
-  const triggerWaiter = () => {
+  const triggerWaiter = (): void => {
     setWaiterAlert(true)
     setTimeout(() => setWaiterAlert(false), 4000)
   }
 
-  const scrollTo = (id) => {
+  const scrollTo = (id: string): void => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })
     setMobileOpen(false)
   }
@@ -607,7 +614,7 @@ export default function DinezyLanding() {
               </div>
               <AIChatDemo />
               <p className="text-xs text-slate-400 text-center mt-3">
-                Try the suggestions — this AI is powered by Dinezy's menu assistant
+                Try the suggestions — this AI is powered by Dinezy&apos;s menu assistant
               </p>
             </div>
           </div>
@@ -622,7 +629,7 @@ export default function DinezyLanding() {
               Restaurant dashboard
             </span>
             <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4">
-              Your restaurant's control center
+              Your restaurant&apos;s control center
             </h2>
             <p className="text-slate-500 text-lg">
               Every insight you need to optimize performance, boost revenue, and serve guests faster.
@@ -810,7 +817,6 @@ export default function DinezyLanding() {
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-3 gap-10 pb-10 border-b border-slate-800">
 
-            {/* Brand + owner contact info (required by Razorpay) */}
             <div className="lg:col-span-1">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center font-black text-lg shadow-lg">
@@ -825,13 +831,11 @@ export default function DinezyLanding() {
                 AI-powered QR menus that make every restaurant experience feel premium. Built for Indian restaurants.
               </p>
 
-              {/* Contact details — required by Razorpay for sole proprietor verification */}
               <div className="space-y-2 text-sm text-slate-400 border-t border-slate-800 pt-4">
                 <p className="text-slate-300 font-semibold text-xs uppercase tracking-wide mb-3">Contact details</p>
                 <p>
                   <span className="text-slate-500">Address: </span>
-                  Balewadi,Pune 411045 Maharashtra, India
-                 
+                  Balewadi, Pune 411045, Maharashtra, India
                 </p>
                 <p>
                   <span className="text-slate-500">Email: </span>
@@ -853,7 +857,6 @@ export default function DinezyLanding() {
               </div>
             </div>
 
-            {/* Quick links */}
             <div>
               <p className="font-black text-sm text-white mb-4 uppercase tracking-wide">Company</p>
               <ul className="space-y-2.5">
@@ -869,7 +872,6 @@ export default function DinezyLanding() {
               </ul>
             </div>
 
-            {/* Legal — all four pages Razorpay checks */}
             <div>
               <p className="font-black text-sm text-white mb-4 uppercase tracking-wide">Legal</p>
               <ul className="space-y-2.5">
@@ -895,7 +897,6 @@ export default function DinezyLanding() {
             </div>
           </div>
 
-          {/* Bottom bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8">
             <div className="text-center sm:text-left">
               <p className="text-slate-500 text-sm">© 2025 Dinezy. All rights reserved. Made in India 🇮🇳</p>
