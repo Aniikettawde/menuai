@@ -174,7 +174,7 @@ export function ChatPanel() {
         {!showChat && (
           <button
             onClick={() => setShowChat(true)}
-            className="fixed bottom-6 right-4 z-[var(--z-overlay)] flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-gold)] text-[#0a0a0a] shadow-xl transition-transform active:scale-95"
+            className="fixed bottom-6 right-4 z-[var(--z-overlay)] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/25 transition-transform active:scale-95"
             aria-label="Open AI chat"
           >
             <Sparkles size={22} />
@@ -183,26 +183,26 @@ export function ChatPanel() {
 
         {showChat && (
           <div
-            className={`fixed inset-x-0 bottom-0 z-[var(--z-overlay)] flex flex-col rounded-t-3xl border-t border-[var(--surface-border)] bg-[#0b0b0b]/95 backdrop-blur-xl transition-all duration-300 ${
-              isExpanded ? 'h-[82dvh]' : 'h-[52px]'
+            className={`fixed inset-x-0 bottom-0 z-[var(--z-overlay)] flex flex-col rounded-t-[28px] border-t border-slate-200 bg-white/95 shadow-[0_-20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-all duration-300 ${
+              isExpanded ? 'h-[82dvh]' : 'h-[58px]'
             }`}
           >
             <div
               className="flex cursor-pointer select-none items-center justify-between px-4 py-3"
               onClick={() => setIsExpanded((e) => !e)}
             >
-              <div className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-[var(--surface-border-hover)]" />
+              <div className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-slate-200" />
               <div className="mt-1 flex items-center gap-2">
-                <Sparkles size={15} className="text-[var(--brand-gold)]" />
-                <span className="text-sm font-semibold text-[var(--text-primary)]">AI Waiter</span>
-                <span className="text-[10px] text-[var(--text-muted)]">· Ask about the menu</span>
+                <Sparkles size={15} className="text-blue-600" />
+                <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
+                <span className="text-[10px] text-slate-500">· Ask about the menu</span>
               </div>
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   setShowChat(false)
                 }}
-                className="mt-1 rounded-full p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                className="mt-1 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close chat"
               >
                 <X size={15} />
@@ -217,7 +217,11 @@ export function ChatPanel() {
                   ) : (
                     <>
                       {messages.map((msg) => (
-                        <ChatMessageComp key={msg.id} message={msg as any} onSuggestionTap={sendMessage} />
+                        <ChatMessageComp
+                          key={msg.id}
+                          message={msg as any}
+                          onSuggestionTap={sendMessage}
+                        />
                       ))}
                       {isChatLoading && <TypingIndicator />}
                       <div ref={messagesEndRef} />
@@ -238,17 +242,17 @@ export function ChatPanel() {
         )}
       </div>
 
-      <div className="sticky top-[var(--header-height,160px)] hidden h-[calc(100dvh-var(--header-height,160px))] w-[360px] flex-shrink-0 flex-col border-l border-[var(--surface-border)] lg:flex">
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-[var(--surface-border)] px-4 py-3">
-          <Sparkles size={15} className="text-[var(--brand-gold)]" />
-          <span className="text-sm font-semibold text-[var(--text-primary)]">AI Waiter</span>
-          <span className="ml-1 text-[11px] text-[var(--text-muted)]">Powered by Gemini</span>
+      <div className="sticky top-[var(--header-height,160px)] hidden h-[calc(100dvh-var(--header-height,160px))] w-[360px] flex-shrink-0 flex-col border-l border-slate-200 bg-white/90 backdrop-blur-xl lg:flex">
+        <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
+          <Sparkles size={15} className="text-blue-600" />
+          <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
+          <span className="ml-1 text-[11px] text-slate-500">Powered by Gemini</span>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {isEmpty ? (
             <div className="space-y-3">
-              <p className="pb-1 pt-2 text-center text-xs text-[var(--text-muted)]">
+              <p className="pb-1 pt-2 text-center text-xs text-slate-500">
                 Ask me anything about the menu 👋
               </p>
               <StarterGrid onSend={sendMessage} />
@@ -256,7 +260,11 @@ export function ChatPanel() {
           ) : (
             <>
               {messages.map((msg) => (
-                <ChatMessageComp key={msg.id} message={msg as any} onSuggestionTap={sendMessage} />
+                <ChatMessageComp
+                  key={msg.id}
+                  message={msg as any}
+                  onSuggestionTap={sendMessage}
+                />
               ))}
               {isChatLoading && <TypingIndicator />}
               <div ref={messagesEndRef} />
@@ -283,7 +291,7 @@ function StarterChips({ onSend }: { onSend: (t: string) => void }) {
         <button
           key={s.action}
           onClick={() => onSend(s.action)}
-          className="rounded-full border border-[var(--surface-border)] bg-[var(--surface-elevated)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-transform hover:border-[var(--brand-gold-border)] hover:text-[var(--brand-gold)] active:scale-95"
+          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-md active:scale-95"
         >
           {s.label}
         </button>
@@ -299,7 +307,7 @@ function StarterGrid({ onSend }: { onSend: (t: string) => void }) {
         <button
           key={s.action}
           onClick={() => onSend(s.action)}
-          className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-elevated)] px-3 py-3 text-left text-xs text-[var(--text-secondary)] transition hover:border-[var(--brand-gold-border)] hover:text-[var(--brand-gold)] active:scale-[0.98]"
+          className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left text-xs font-medium text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-md active:scale-[0.98]"
         >
           {s.label}
         </button>
@@ -324,7 +332,7 @@ function ChatInput({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex flex-shrink-0 items-center gap-2 border-t border-[var(--surface-border)] px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+      className="flex flex-shrink-0 items-center gap-2 border-t border-slate-200 bg-white/95 px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
     >
       <input
         ref={inputRef}
@@ -332,14 +340,14 @@ function ChatInput({
         onChange={(e) => setInput(e.target.value)}
         placeholder="Ask about the menu..."
         disabled={disabled}
-        className="flex-1 rounded-2xl border border-[var(--surface-border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-muted)] focus:border-[var(--brand-gold-border)]"
+        className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white"
         autoComplete="off"
         enterKeyHint="send"
       />
       <button
         type="submit"
         disabled={disabled || !input.trim()}
-        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-[var(--brand-gold)] text-[#0a0a0a] transition active:scale-95 disabled:opacity-40"
+        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-500/20 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         aria-label="Send message"
       >
         <Send size={16} />
@@ -351,11 +359,11 @@ function ChatInput({
 function TypingIndicator() {
   return (
     <div className="flex items-center gap-2 py-2">
-      <div className="flex items-center gap-1 rounded-2xl bg-[var(--surface-card)] px-3 py-2">
+      <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--brand-gold)]"
+            className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-600"
             style={{ animationDelay: `${i * 0.16}s` }}
           />
         ))}

@@ -22,18 +22,21 @@ function formatPrice(paise: number) {
 }
 
 function getChefsPick(items: MenuItem[]): MenuItem | null {
-  return items.find(i => i.is_special) ?? items.find(i => i.is_bestseller) ?? null
+  return items.find((i) => i.is_special) ?? items.find((i) => i.is_bestseller) ?? null
 }
 
 type PsychKind = 'social_proof' | 'anchoring' | 'scarcity' | 'none'
 
-interface Badge { kind: PsychKind; label: string }
+interface Badge {
+  kind: PsychKind
+  label: string
+}
 
 function getBadge(item: MenuItem, catItems: MenuItem[]): Badge {
   if (item.is_bestseller) return { kind: 'social_proof', label: 'Most ordered today' }
   if (item.is_special) return { kind: 'scarcity', label: 'Limited special' }
 
-  const prices = catItems.map(i => i.price).sort((a, b) => a - b)
+  const prices = catItems.map((i) => i.price).sort((a, b) => a - b)
   const median = prices[Math.floor(prices.length / 2)] ?? 0
   if (item.price > median * 1.3) return { kind: 'anchoring', label: "Regulars' choice" }
 
@@ -41,9 +44,9 @@ function getBadge(item: MenuItem, catItems: MenuItem[]): Badge {
 }
 
 const BADGE_STYLES: Record<PsychKind, string> = {
-  social_proof: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  anchoring: 'bg-purple-500/10  text-purple-400  border-purple-500/20',
-  scarcity: 'bg-red-500/10     text-red-400     border-red-500/20',
+  social_proof: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  anchoring: 'bg-violet-50 text-violet-700 border-violet-200',
+  scarcity: 'bg-rose-50 text-rose-700 border-rose-200',
   none: '',
 }
 
@@ -58,7 +61,10 @@ function PsychBadge({ badge }: { badge: Badge }) {
   if (badge.kind === 'none') return null
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${BADGE_STYLES[badge.kind]}`}
+      className={[
+        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide',
+        BADGE_STYLES[badge.kind],
+      ].join(' ')}
     >
       {BADGE_ICONS[badge.kind]}
       {badge.label}
@@ -66,45 +72,56 @@ function PsychBadge({ badge }: { badge: Badge }) {
   )
 }
 
-function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) => void }) {
+function ChefsPickCard({
+  item,
+  onAsk,
+}: {
+  item: MenuItem
+  onAsk?: (t: string) => void
+}) {
   return (
     <button
       type="button"
       onClick={() => onAsk?.(`Tell me more about ${item.name} — why is it the chef's pick?`)}
-      className="group w-full rounded-2xl border border-[var(--brand-gold-border)] bg-gradient-to-br from-[var(--brand-gold-dim)] to-white/[0.03] p-3.5 text-left transition hover:-translate-y-0.5"
+      className="group w-full rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-violet-50 p-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-gold)] text-[#0a0a0a]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-500/20">
           <ChefHat size={15} />
         </div>
+
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--brand-gold)]">
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-700">
               Chef&apos;s pick
             </span>
-            <span className="rounded-full border border-white/5 bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
+            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">
               Featured
             </span>
           </div>
-          <p className="mt-1 text-sm font-semibold text-white">{item.name}</p>
+
+          <p className="mt-1 text-sm font-semibold text-slate-900">{item.name}</p>
+
           {item.description && (
-            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-400">
+            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">
               {item.description}
             </p>
           )}
+
           <div className="mt-2 flex items-center gap-3">
-            <span className="text-sm font-semibold text-[var(--brand-gold)]">
+            <span className="text-sm font-semibold text-blue-700">
               {formatPrice(item.price)}
             </span>
-            <span className="inline-flex items-center gap-1 text-[11px] text-zinc-500">
-              <Sparkles size={10} className="text-[var(--brand-gold)]" />
+            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+              <Sparkles size={10} className="text-violet-500" />
               Tap to learn more
             </span>
           </div>
         </div>
+
         <ChevronRight
           size={15}
-          className="mt-0.5 shrink-0 text-zinc-600 transition group-hover:translate-x-0.5 group-hover:text-white"
+          className="mt-0.5 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-700"
         />
       </div>
     </button>
@@ -113,14 +130,14 @@ function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) =>
 
 function AnchoringBanner() {
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.04] px-4 py-3">
+    <div className="rounded-3xl border border-amber-100 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-300">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-600">
           <Flame size={15} />
         </div>
         <div>
-          <p className="text-sm font-medium text-white">Most guests order a full meal combo</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-zinc-400">
+          <p className="text-sm font-semibold text-slate-900">Most guests order a full meal combo</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
             Starter + main + bread or rice makes the table feel complete.
           </p>
         </div>
@@ -141,28 +158,32 @@ function CategorySection({
   onAsk?: (t: string) => void
 }) {
   const chefsPick = showChefsPick ? getChefsPick(items) : null
-  const otherItems = chefsPick ? items.filter(i => i.id !== chefsPick.id) : items
+  const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
 
   return (
     <section
       id={`cat-${category.id}`}
-      className="scroll-mt-24 rounded-3xl border border-white/5 bg-white/[0.04] p-4 shadow-lg shadow-black/10"
+      className="scroll-mt-28 rounded-[28px] border border-slate-200 bg-white/90 p-4 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur-xl"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-semibold tracking-tight text-white">
+            <h2 className="text-base font-semibold tracking-tight text-slate-900">
               {category.name}
             </h2>
-            <span className="rounded-full border border-white/5 bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
               {items.length} items
             </span>
           </div>
+
           {category.description && (
-            <p className="mt-1 text-xs leading-relaxed text-zinc-400">{category.description}</p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              {category.description}
+            </p>
           )}
         </div>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-zinc-500">
+
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-50 to-violet-50 text-blue-700 shadow-sm ring-1 ring-blue-100">
           <UtensilsCrossed size={15} />
         </div>
       </div>
@@ -174,7 +195,7 @@ function CategorySection({
       )}
 
       <div className="mt-4 space-y-3">
-        {otherItems.map(item => {
+        {otherItems.map((item) => {
           const badge = getBadge(item, items)
           return (
             <div key={item.id} className="relative">
@@ -210,11 +231,16 @@ interface MenuGridProps {
   upsellCard?: React.ReactNode
 }
 
-export function MenuGrid({ onAsk, onOpenChat, onCallWaiter, upsellCard }: MenuGridProps = {}) {
+export function MenuGrid({
+  onAsk,
+  onOpenChat,
+  onCallWaiter,
+  upsellCard,
+}: MenuGridProps = {}) {
   const { restaurant, categories, items } = useAppStore()
 
   const categoriesWithItems = useMemo(
-    () => categories.filter(cat => items.some(i => i.category_id === cat.id)),
+    () => categories.filter((cat) => items.some((i) => i.category_id === cat.id)),
     [categories, items],
   )
 
@@ -222,26 +248,33 @@ export function MenuGrid({ onAsk, onOpenChat, onCallWaiter, upsellCard }: MenuGr
   const handleOpenChat = () => onOpenChat?.()
 
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-36 pt-4 sm:px-6 lg:pb-8">
+    <div className="relative mx-auto max-w-7xl px-4 pb-36 pt-4 sm:px-6 lg:pb-10">
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_55%)]" />
       <div className="space-y-4">
         {restaurant && (
-          <HeroBanner
-            restaurant={restaurant}
-            items={items}
-            onAsk={handleAsk}
-            onOpenChat={handleOpenChat}
-          />
+          <div className="animate-[fadeUp_500ms_ease-out]">
+            <HeroBanner
+              restaurant={restaurant}
+              items={items}
+              onAsk={handleAsk}
+              onOpenChat={handleOpenChat}
+            />
+          </div>
         )}
 
-        {upsellCard && <div>{upsellCard}</div>}
+        {upsellCard && (
+          <div className="animate-[fadeUp_520ms_ease-out] rounded-[28px] border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur-xl">
+            {upsellCard}
+          </div>
+        )}
 
         {categoriesWithItems.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {categoriesWithItems.map(cat => (
+            {categoriesWithItems.map((cat) => (
               <a
                 key={cat.id}
                 href={`#cat-${cat.id}`}
-                className="whitespace-nowrap rounded-full border border-white/5 bg-white/5 px-3 py-2 text-xs font-medium text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                className="whitespace-nowrap rounded-full border border-slate-200 bg-white/80 px-3 py-2 text-xs font-medium text-slate-600 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-white hover:text-slate-900 hover:shadow-md"
               >
                 {cat.name}
               </a>
@@ -251,17 +284,22 @@ export function MenuGrid({ onAsk, onOpenChat, onCallWaiter, upsellCard }: MenuGr
 
         <div className="space-y-4">
           {categories.map((cat, catIndex) => {
-            const catItems = items.filter(i => i.category_id === cat.id)
+            const catItems = items.filter((i) => i.category_id === cat.id)
             if (catItems.length === 0) return null
 
             return (
-              <div key={cat.id} className="space-y-4">
+              <div
+                key={cat.id}
+                className="animate-[fadeUp_600ms_ease-out]"
+                style={{ animationDelay: `${catIndex * 80}ms` }}
+              >
                 <CategorySection
                   category={cat}
                   items={catItems}
-                  showChefsPick={catIndex === 0 || catItems.some(i => i.is_special)}
+                  showChefsPick={catIndex === 0 || catItems.some((i) => i.is_special)}
                   onAsk={handleAsk}
                 />
+
                 {catIndex === 1 && <AnchoringBanner />}
               </div>
             )

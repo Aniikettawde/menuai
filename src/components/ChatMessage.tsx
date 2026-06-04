@@ -28,44 +28,44 @@ const PSYCH_BADGE: Record<
   social_proof: {
     icon: <TrendingUp size={10} />,
     label: 'Most paired',
-    color: 'text-emerald-400 bg-emerald-950/40',
-    borderColor: 'border-emerald-800/50',
+    color: 'text-emerald-700 bg-emerald-50',
+    borderColor: 'border-emerald-200',
   },
   scarcity: {
     icon: <Clock3 size={10} />,
     label: 'Limited today',
-    color: 'text-red-400 bg-red-950/40',
-    borderColor: 'border-red-800/50',
+    color: 'text-rose-700 bg-rose-50',
+    borderColor: 'border-rose-200',
   },
   completion: {
     icon: <Sparkles size={10} />,
     label: 'Completes the meal',
-    color: 'text-blue-400 bg-blue-950/40',
-    borderColor: 'border-blue-800/50',
+    color: 'text-sky-700 bg-sky-50',
+    borderColor: 'border-sky-200',
   },
   anchoring: {
     icon: <Flame size={10} />,
     label: 'Smart add-on',
-    color: 'text-violet-400 bg-violet-950/40',
-    borderColor: 'border-violet-800/50',
+    color: 'text-violet-700 bg-violet-50',
+    borderColor: 'border-violet-200',
   },
   reciprocity: {
     icon: <ChefHat size={10} />,
     label: "Chef's pick",
-    color: 'text-amber-400 bg-amber-950/40',
-    borderColor: 'border-amber-800/50',
+    color: 'text-amber-700 bg-amber-50',
+    borderColor: 'border-amber-200',
   },
   fomo: {
     icon: <ShieldCheck size={10} />,
     label: 'Trending now',
-    color: 'text-orange-400 bg-orange-950/40',
-    borderColor: 'border-orange-800/50',
+    color: 'text-orange-700 bg-orange-50',
+    borderColor: 'border-orange-200',
   },
   none: {
     icon: <Sparkles size={10} />,
     label: 'Pairs well with this',
-    color: 'text-[var(--brand-gold)] bg-[var(--brand-gold-dim)]',
-    borderColor: 'border-[var(--brand-gold-border)]',
+    color: 'text-blue-700 bg-blue-50',
+    borderColor: 'border-blue-200',
   },
 }
 
@@ -78,10 +78,11 @@ function MenuItemCard({
 }) {
   return (
     <button
+      type="button"
       onClick={onTap}
-      className="group flex w-full items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.04] p-3 text-left transition hover:border-[var(--brand-gold-border)] hover:bg-white/[0.07]"
+      className="group flex w-full items-center gap-3 rounded-3xl border border-slate-200 bg-white/95 p-3 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
     >
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/5">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
         {item.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -97,25 +98,25 @@ function MenuItemCard({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="truncate text-sm font-medium text-white">{item.name}</p>
+          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
           {item.is_bestseller && (
-            <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
               Bestseller
             </span>
           )}
         </div>
 
         {item.description && (
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
             {item.description}
           </p>
         )}
 
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-[var(--brand-gold)]">
+          <span className="text-sm font-semibold text-blue-700">
             {formatPrice(item.price)}
           </span>
-          <span className="text-[11px] text-zinc-500 group-hover:text-zinc-300">
+          <span className="text-[11px] text-slate-400 transition group-hover:text-slate-700">
             Open dish →
           </span>
         </div>
@@ -137,8 +138,9 @@ function UpsellCard({
 
   return (
     <button
+      type="button"
       onClick={onLearnMore}
-      className="group w-full rounded-2xl border border-white/5 bg-white/[0.04] p-3 text-left transition hover:border-[var(--brand-gold-border)] hover:bg-white/[0.07]"
+      className="group w-full rounded-3xl border border-slate-200 bg-white/95 p-3 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
     >
       <div
         className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${badge.color} ${badge.borderColor}`}
@@ -147,8 +149,10 @@ function UpsellCard({
         {badge.label}
       </div>
 
-      <p className="mt-2 text-sm font-medium text-white">{itemName}</p>
-      <p className="mt-1 text-xs text-zinc-500 group-hover:text-zinc-400">Tap to learn more</p>
+      <p className="mt-2 text-sm font-semibold text-slate-900">{itemName}</p>
+      <p className="mt-1 text-xs text-slate-500 transition group-hover:text-slate-700">
+        Tap to learn more
+      </p>
     </button>
   )
 }
@@ -157,7 +161,8 @@ export function ChatMessage({ message, onSuggestionTap }: Props) {
   const isUser = message.role === 'user'
   const isAI = message.role === 'assistant'
 
-  const content = typeof message.content === 'string' ? message.content : String(message.content ?? '')
+  const content =
+    typeof message.content === 'string' ? message.content : String(message.content ?? '')
   const psychTrigger = (message.psych_trigger ?? 'none') as PsychTrigger
   const menuItems = message.menu_items ?? []
   const upsellItems = (message as any).upsell_items ?? []
@@ -165,18 +170,19 @@ export function ChatMessage({ message, onSuggestionTap }: Props) {
   return (
     <div className={`mb-4 flex gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
       {isAI && (
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--brand-gold-border)] bg-[var(--brand-gold-dim)] text-[var(--brand-gold)]">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-sm shadow-blue-500/20">
           <Sparkles size={12} />
         </div>
       )}
 
       <div className={`flex max-w-[88%] flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+          className={[
+            'rounded-[22px] px-4 py-3 text-sm leading-relaxed shadow-sm transition-all duration-300',
             isUser
-              ? 'rounded-tr-sm bg-white/5 text-white'
-              : 'rounded-tl-sm bg-transparent text-white'
-          }`}
+              ? 'rounded-tr-sm bg-gradient-to-br from-blue-600 to-violet-600 text-white'
+              : 'rounded-tl-sm border border-slate-200 bg-white/95 text-slate-800',
+          ].join(' ')}
         >
           <div className="whitespace-pre-wrap">{content}</div>
         </div>
@@ -195,7 +201,9 @@ export function ChatMessage({ message, onSuggestionTap }: Props) {
 
         {isAI && upsellItems.length > 0 && (
           <div className="grid w-full grid-cols-1 gap-2">
-            <p className="px-0.5 text-[11px] text-zinc-500">Pairs well with this</p>
+            <p className="px-0.5 text-[11px] font-medium text-slate-400">
+              Pairs well with this
+            </p>
             {upsellItems.slice(0, 2).map((itemName: string, idx: number) => (
               <UpsellCard
                 key={`${itemName}-${idx}`}

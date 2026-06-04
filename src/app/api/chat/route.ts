@@ -22,7 +22,7 @@ interface MenuItemAIContext {
   allergens?: string[]
   prep_time_minutes?: number
   calories?: number
-  spice_level?: string
+  spice_level?: string | number
   taste_profile?: string[]
   best_with?: string[]
   chef_note?: string
@@ -36,6 +36,7 @@ type MenuContextPayload = NonNullable<ChatRequest['menu_context']> & {
 function getSupabaseAdminClient() {
   if (!SUPABASE_URL) throw new Error('NEXT_PUBLIC_SUPABASE_URL is missing')
   if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is missing')
+
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
@@ -78,6 +79,90 @@ function detectConvoStage(history: ChatRequest['history'] | undefined, message: 
   return 'early'
 }
 
+function getSpiceScore(raw: unknown): number {
+  const value = String(raw ?? '').toLowerCase().trim()
+
+  if (!value) return 0
+  if (/extra|very hot|super hot|5/.test(value)) return 5
+  if (/hot|4/.test(value)) return 4
+  if (/medium|3/.test(value)) return 3
+  if (/mild|2/.test(value)) return 2
+  if (/low|1/.test(value)) return 1
+
+  return 0
+}
+
+function getCourseGroup(item: MenuItemAIContext): 'dessert' | 'drink' | 'bread' | 'rice' | 'starter' | 'main' | 'other' {
+  const hay = normalizeText(
+    [
+      item.course_type ?? '',
+      item.name ?? '',
+      item.description ?? '',
+      ...(item.tags ?? []),
+      ...(item.taste_profile ?? []),
+      ...(item.best_with ?? []),
+    ].join(' '),
+  )
+
+  if (/(dessert|sweet|gulab|jamun|kheer|ice cream|icecream|kulfi|cake|brownie|halwa|pudding|falooda)/.test(hay)) {
+    return 'dessert'
+  }
+
+  if (/(drink|lassi|juice|shake|coffee|tea|mocktail|soda|buttermilk|chaas|coffee)/.test(hay)) {
+    return 'drink'
+  }
+
+  if (/(bread|roti|naan|paratha|parotta|kulcha|phulka|tandoor)/.test(hay)) {
+    return 'bread'
+  }
+
+  if (/(rice|biryani|pulao|fried rice|jeera rice|plain rice|steam rice|steamed rice)/.test(hay)) {
+    return 'rice'
+  }
+
+  if (/(starter|appetizer|snack|tikka|pakora|salad|fries|chaat|kebab|kabab)/.test(hay)) {
+    return 'starter'
+  }
+
+  if (/(main|curry|gravy|masala|korma|butter|chicken|paneer|mutton|fish|dal|sabzi|thali|combo)/.test(hay)) {
+    return 'main'
+  }
+
+  return 'other'
+}
+
+function isDessertQuery(message: string) {
+  return /dessert|sweet|after meal|after-meal|gulab|jamun|kheer|ice cream|icecream|kulfi|cake|brownie|sweet dish/.test(
+    message.toLowerCase(),
+  )
+}
+
+function isSpicyQuery(message: string) {
+  return /spicy|hot|heat|chilli|chili|mirchi|fiery|extra spice/.test(message.toLowerCase())
+}
+
+function isFillingQuery(message: string) {
+  return /filling|hearty|full meal|complete meal|combo|satisfying|proper meal|lunch|dinner/.test(
+    message.toLowerCase(),
+  )
+}
+
+function isVegQuery(message: string) {
+  return /veg|vegetarian|jain/.test(message.toLowerCase())
+}
+
+function isDrinkQuery(message: string) {
+  return /drink|lassi|juice|shake|coffee|tea|mocktail|beverage/.test(message.toLowerCase())
+}
+
+function isBreadQuery(message: string) {
+  return /roti|naan|paratha|kulcha|bread/.test(message.toLowerCase())
+}
+
+function isRiceQuery(message: string) {
+  return /rice|biryani|pulao|jeera rice|plain rice/.test(message.toLowerCase())
+}
+
 function formatMenuItemForPrompt(item: MenuItemAIContext, index: number) {
   const parts: string[] = []
   parts.push(`${index + 1}. ${item.name}`)
@@ -88,7 +173,7 @@ function formatMenuItemForPrompt(item: MenuItemAIContext, index: number) {
   if (item.is_bestseller) parts.push('bestseller')
   if (item.is_special) parts.push('special')
   if (item.course_type) parts.push(`course=${item.course_type}`)
-  if (item.spice_level) parts.push(`spice=${item.spice_level}`)
+  if (item.spice_level !== undefined && item.spice_level !== null) parts.push(`spice=${item.spice_level}`)
   if (item.taste_profile?.length) parts.push(`taste=${item.taste_profile.slice(0, 4).join(', ')}`)
   if (item.best_with?.length) parts.push(`pairs=${item.best_with.slice(0, 3).join(', ')}`)
   if (item.tags?.length) parts.push(`tags=${item.tags.slice(0, 5).join(', ')}`)
@@ -98,67 +183,304 @@ function formatMenuItemForPrompt(item: MenuItemAIContext, index: number) {
   return parts.join(' | ')
 }
 
-function selectRelevantItems(message: string, items: MenuItemAIContext[]) {
+function scoreMenuItem(item: MenuItemAIContext, message: string): number {
+  const lower = message.toLowerCase()
+  const name = normalizeText(item.name)
+  const desc = normalizeText(item.description ?? '')
+  const tags = (item.tags ?? []).map(normalizeText)
+  const bestWith = (item.best_with ?? []).map(normalizeText)
+  const course = getCourseGroup(item)
+
+  const spicyQuery = isSpicyQuery(message)
+  const vegQuery = isVegQuery(message)
+  const bestQuery = /best|popular|what's good|what is good|recommended|top seller|top pick/.test(lower)
+  const specialQuery = /special|chef pick|chef special|today's special|today special|chef's pick/.test(lower)
+  const mealQuery = isFillingQuery(message)
+  const dessertQuery = isDessertQuery(message)
+  const drinkQuery = isDrinkQuery(message)
+  const breadQuery = isBreadQuery(message)
+  const riceQuery = isRiceQuery(message)
+
+  let score = 0
+
+  if (lower.includes(name)) score += 18
+  if (name.includes(lower) && lower.length >= 4) score += 12
+  if (desc && lower.includes(desc.slice(0, Math.min(desc.length, 24)))) score += 4
+
+  if (spicyQuery) {
+    const spiceScore = getSpiceScore(item.spice_level)
+    if (spiceScore > 0) score += spiceScore * 4
+    if (tags.includes('spicy') || /spicy|hot|fiery/.test(desc)) score += 6
+    if (/(main|starter|curry|gravy|masala|korma|biryani|tikka)/.test(course)) score += 2
+  }
+
+  if (vegQuery && item.is_veg) score += 8
+  if (vegQuery && item.is_veg === false) score -= 6
+
+  if (bestQuery && item.is_bestseller) score += 5
+  if (specialQuery && item.is_special) score += 7
+
+  if (mealQuery && /(main|bread|rice|starter|combo|thali|curry|gravy|masala|biryani)/.test(course)) score += 5
+  if (dessertQuery && course === 'dessert') score += 10
+  if (drinkQuery && course === 'drink') score += 8
+  if (breadQuery && course === 'bread') score += 8
+  if (riceQuery && course === 'rice') score += 8
+
+  if (bestWith.some((pair) => lower.includes(pair))) score += 4
+  if ((item.taste_profile ?? []).some((t) => lower.includes(normalizeText(t)))) score += 3
+  if (tags.some((t) => lower.includes(t))) score += 2
+
+  // A little boost for genuinely useful menu structure
+  if (course === 'main') score += 2
+  if (course === 'bread' || course === 'rice' || course === 'dessert') score += 1
+
+  return score
+}
+
+function sortByIntent(items: MenuItemAIContext[], message: string) {
   const lower = message.toLowerCase()
 
-  const scored = items.map((item) => {
-    let score = 0
-    const name = normalizeText(item.name)
-    const desc = normalizeText(item.description ?? '')
-    const tags = (item.tags ?? []).map(normalizeText)
-    const bestWith = (item.best_with ?? []).map(normalizeText)
-    const course = normalizeText(item.course_type ?? '')
-    const spice = normalizeText(item.spice_level ?? '')
-    const taste = (item.taste_profile ?? []).map(normalizeText)
+  const orderedGroups: Array<ReturnType<typeof getCourseGroup>> = []
+  if (isDessertQuery(message)) {
+    orderedGroups.push('dessert', 'drink', 'main', 'starter', 'bread', 'rice', 'other')
+  } else if (isDrinkQuery(message)) {
+    orderedGroups.push('drink', 'starter', 'dessert', 'main', 'bread', 'rice', 'other')
+  } else if (isBreadQuery(message)) {
+    orderedGroups.push('bread', 'main', 'rice', 'starter', 'dessert', 'drink', 'other')
+  } else if (isRiceQuery(message)) {
+    orderedGroups.push('rice', 'main', 'starter', 'bread', 'dessert', 'drink', 'other')
+  } else if (isSpicyQuery(message) || isFillingQuery(message)) {
+    orderedGroups.push('main', 'starter', 'bread', 'rice', 'drink', 'dessert', 'other')
+  } else {
+    orderedGroups.push('main', 'starter', 'bread', 'rice', 'dessert', 'drink', 'other')
+  }
 
-    const spicyQuery = /spicy|hot|heat|chilli|chili|mirchi/.test(lower)
-    const vegQuery = /veg|vegetarian|jain/.test(lower)
-    const bestQuery = /best|popular|what's good|what is good|recommended|top seller/.test(lower)
-    const specialQuery = /special|chef pick|chef special|today's special|today special/.test(lower)
-    const mealQuery = /meal|combo|full meal|complete meal|plate|dinner|lunch/.test(lower)
-    const dessertQuery = /dessert|sweet|cake|ice cream|kheer|gulab|brownie/.test(lower)
-    const drinkQuery = /drink|lassi|juice|shake|coffee|tea|mocktail/.test(lower)
+  const groupRank = new Map(orderedGroups.map((g, idx) => [g, idx]))
 
-    if (spicyQuery && (spice || tags.includes('spicy') || /spicy|hot|fiery/.test(desc))) score += 8
-    if (vegQuery && item.is_veg) score += 8
-    if (vegQuery && item.is_veg === false) score -= 5
-    if (bestQuery && item.is_bestseller) score += 7
-    if (specialQuery && item.is_special) score += 8
-    if (mealQuery && /(main|bread|rice|roti|naan|starter|combo|thali)/.test(course)) score += 4
-    if (dessertQuery && /(dessert|sweet)/.test(course)) score += 8
-    if (drinkQuery && /(drink|beverage|juice|shake|tea|coffee|lassi)/.test(course)) score += 8
+  return items
+    .slice()
+    .sort((a, b) => {
+      const ag = groupRank.get(getCourseGroup(a)) ?? 99
+      const bg = groupRank.get(getCourseGroup(b)) ?? 99
+      if (ag !== bg) return ag - bg
 
-    if (lower.includes(name)) score += 10
-    if (bestWith.some((pair) => lower.includes(pair))) score += 3
-    if (taste.some((t) => lower.includes(t))) score += 3
-    if (tags.some((t) => lower.includes(t))) score += 2
+      return (
+        Number(b.is_special) - Number(a.is_special) ||
+        Number(b.is_bestseller) - Number(a.is_bestseller) ||
+        (a.price ?? 0) - (b.price ?? 0)
+      )
+    })
+}
 
-    if (item.is_bestseller) score += 1
+function selectRelevantItems(message: string, items: MenuItemAIContext[]) {
+  const scored = items
+    .map((item) => ({ item, score: scoreMenuItem(item, message) }))
+    .sort((a, b) => b.score - a.score)
+
+  const positive = scored.filter((x) => x.score > 0).map((x) => x.item)
+  if (positive.length > 0) {
+    return uniq(positive.map((i) => i.name))
+      .map((name) => positive.find((i) => i.name === name)!)
+      .slice(0, 10)
+  }
+
+  return sortByIntent(items, message).slice(0, 10)
+}
+
+function findBestByGroup(
+  items: MenuItemAIContext[],
+  groups: Array<'dessert' | 'drink' | 'bread' | 'rice' | 'starter' | 'main' | 'other'>,
+  exclude: Set<string>,
+  message: string,
+): MenuItemAIContext | undefined {
+  const lower = message.toLowerCase()
+  const candidates = items.filter((item) => !exclude.has(item.name))
+
+  const scored = candidates.map((item) => {
+    const group = getCourseGroup(item)
+    let score = groups.includes(group) ? 10 : 0
+
+    const hay = normalizeText(
+      [
+        item.course_type ?? '',
+        item.name ?? '',
+        item.description ?? '',
+        ...(item.tags ?? []),
+        ...(item.taste_profile ?? []),
+      ].join(' '),
+    )
+
+    if (groups.includes('bread') && /tandoor|roti|naan|kulcha|paratha|phulka|chapati/.test(hay)) score += 8
+    if (groups.includes('rice') && /rice|jeera|biryani|pulao|steam|plain/.test(hay)) score += 8
+    if (groups.includes('dessert') && /gulab|jamun|kheer|ice cream|kulfi|sweet|dessert/.test(hay)) score += 8
+    if (groups.includes('drink') && /tea|coffee|lassi|juice|shake|mocktail|buttermilk|chaas/.test(hay)) score += 8
+    if (groups.includes('starter') && /(tikka|starter|snack|salad|papad|chaat|kebab)/.test(hay)) score += 8
+    if (groups.includes('main') && /(curry|gravy|masala|korma|butter|paneer|chicken|mutton|fish|dal|sabzi|thali|combo)/.test(hay)) score += 5
+
+    if (lower.includes(normalizeText(item.name))) score += 12
     if (item.is_special) score += 1
+    if (item.is_bestseller) score += 1
+    if (item.is_veg && /veg|vegetarian|jain/.test(lower)) score += 1
+    if (item.is_veg === false && /non-veg|chicken|mutton|fish|egg/.test(lower)) score += 1
 
     return { item, score }
   })
 
-  const sorted = scored.sort((a, b) => b.score - a.score).map((x) => x.item)
-  const top = sorted.filter((item, index, arr) => arr.findIndex((i) => i.name === item.name) === index)
+  scored.sort((a, b) => b.score - a.score)
+  return scored[0]?.item
+}
 
-  if (top.length > 0 && top.some((i) => (i as any).score > 0)) {
-    return top.slice(0, 8)
+function pickPairings(primary: MenuItemAIContext | undefined, items: MenuItemAIContext[], message: string) {
+  if (!primary) return []
+
+  const exclude = new Set<string>([primary.name])
+  const pairings: MenuItemAIContext[] = []
+  const primaryGroup = getCourseGroup(primary)
+  const lower = message.toLowerCase()
+
+  const pushUnique = (item?: MenuItemAIContext) => {
+    if (!item) return
+    if (exclude.has(item.name)) return
+    if (pairings.some((x) => x.name === item.name)) return
+    pairings.push(item)
+    exclude.add(item.name)
   }
 
-  return items
-    .slice()
-    .sort((a, b) => Number(b.is_bestseller) - Number(a.is_bestseller) || Number(b.is_special) - Number(a.is_special))
-    .slice(0, 8)
+  // 1) Use explicit "best_with" relationships first.
+  for (const bw of primary.best_with ?? []) {
+    const match = items.find((item) => normalizeText(item.name) === normalizeText(bw))
+    if (match) pushUnique(match)
+    if (pairings.length >= 3) return pairings.slice(0, 3).map((x) => x.name)
+  }
+
+  // 2) Strong food-type heuristics.
+  const wantsDessert = isDessertQuery(message) || primaryGroup === 'dessert'
+  const wantsSpicy = isSpicyQuery(message)
+  const wantsFilling = isFillingQuery(message)
+  const wantsVeg = isVegQuery(message)
+
+  // If the user is ordering a curry / masala / main, pair with roti + rice.
+  if (
+    primaryGroup === 'main' ||
+    /(masala|curry|gravy|korma|butter|tikka masala|chicken masala|paneer masala)/.test(lower) ||
+    wantsSpicy ||
+    wantsFilling
+  ) {
+    pushUnique(findBestByGroup(items, ['bread'], exclude, message))
+    pushUnique(findBestByGroup(items, ['rice'], exclude, message))
+    pushUnique(findBestByGroup(items, ['starter'], exclude, message))
+  }
+
+  // If the user asked for dessert, recommend dessert + drink if available.
+  if (wantsDessert) {
+    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
+    pushUnique(findBestByGroup(items, ['drink'], exclude, message))
+  }
+
+  // If the user asked for drinks, pair with a starter or dessert.
+  if (getCourseGroup(primary) === 'drink') {
+    pushUnique(findBestByGroup(items, ['starter'], exclude, message))
+    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
+  }
+
+  // If the user asked for bread / rice, pair with a main.
+  if (primaryGroup === 'bread' || primaryGroup === 'rice') {
+    pushUnique(findBestByGroup(items, ['main'], exclude, message))
+    pushUnique(findBestByGroup(items, ['starter'], exclude, message))
+  }
+
+  // If user wants veg, keep pairings veg-friendly where possible.
+  if (wantsVeg) {
+    const vegPair = items.find((i) => i.is_veg && !exclude.has(i.name))
+    if (vegPair) pushUnique(vegPair)
+  }
+
+  // 3) Fallback: use same-course complements if still empty.
+  if (pairings.length === 0) {
+    if (primaryGroup === 'starter') {
+      pushUnique(findBestByGroup(items, ['main'], exclude, message))
+      pushUnique(findBestByGroup(items, ['drink'], exclude, message))
+    } else if (primaryGroup === 'dessert') {
+      pushUnique(findBestByGroup(items, ['drink'], exclude, message))
+    } else if (primaryGroup === 'main') {
+      pushUnique(findBestByGroup(items, ['bread'], exclude, message))
+      pushUnique(findBestByGroup(items, ['rice'], exclude, message))
+    } else {
+      pushUnique(findBestByGroup(items, ['main'], exclude, message))
+    }
+  }
+
+  return pairings.slice(0, 3).map((x) => x.name)
+}
+
+function buildNaturalList(names: string[]) {
+  const cleaned = uniq(names.filter(Boolean))
+  if (cleaned.length === 0) return ''
+  if (cleaned.length === 1) return cleaned[0]
+  if (cleaned.length === 2) return `${cleaned[0]} and ${cleaned[1]}`
+  return `${cleaned.slice(0, -1).join(', ')}, and ${cleaned[cleaned.length - 1]}`
+}
+
+function getReasonText(message: string) {
+  if (isDessertQuery(message)) return 'for a sweet finish'
+  if (isSpicyQuery(message)) return 'for a spicier, more exciting bite'
+  if (isFillingQuery(message)) return 'for a hearty, satisfying meal'
+  if (isVegQuery(message)) return 'for a vegetarian-friendly option'
+  if (isDrinkQuery(message)) return 'to balance the meal'
+  return 'for this order'
+}
+
+function buildFallbackResponse(
+  message: string,
+  stage: ConvoStage,
+  menuItems: MenuItemAIContext[],
+) {
+  const relevant = selectRelevantItems(message, menuItems)
+  const primary =
+    relevant[0] ??
+    findBestByGroup(
+      menuItems,
+      isDessertQuery(message)
+        ? ['dessert']
+        : isDrinkQuery(message)
+          ? ['drink']
+          : isBreadQuery(message)
+            ? ['bread']
+            : isRiceQuery(message)
+              ? ['rice']
+              : isSpicyQuery(message) || isFillingQuery(message)
+                ? ['main']
+                : ['main', 'starter'],
+      new Set<string>(),
+      message,
+    ) ??
+    menuItems[0]
+
+  const pairings = pickPairings(primary, menuItems, message)
+  const reason = getReasonText(message)
+  const pairingText = pairings.length ? ` Pair it with ${buildNaturalList(pairings)}.` : ''
+
+  const descText =
+    primary?.description?.trim() ? ` ${primary.description.trim().replace(/\.$/, '')}.` : ''
+
+  const reply = primary
+    ? `${primary.name} is a strong choice ${reason}.${descText}${pairingText}`
+    : 'I can help you choose from the menu. Tell me what mood you are in, and I will suggest the best available dishes.'
+
+  return {
+    reply: sanitizeReply(reply),
+    mentioned_items: primary ? [primary.name] : [],
+    upsell_items: pairings,
+    psych_trigger: inferPsychTrigger(message, reply, primary ? [primary.name] : [], pairings),
+    convo_stage: stage,
+  }
 }
 
 function buildSystemPrompt(restaurantName: string, ctx: MenuContextPayload, message: string): string {
   const menuItems = ctx.menu_items ?? []
   const relevantItems = selectRelevantItems(message, menuItems)
-
-  const allNames = uniq(
-    menuItems.map((item) => item.name)
-  ).join(', ')
+  const pairingsPreview = relevantItems.flatMap((item) => pickPairings(item, menuItems, message)).slice(0, 6)
+  const allNames = uniq(menuItems.map((item) => item.name)).join(', ')
 
   const relevantDetails = relevantItems.length
     ? relevantItems.map((item, idx) => formatMenuItemForPrompt(item, idx)).join('\n')
@@ -172,7 +494,11 @@ function buildSystemPrompt(restaurantName: string, ctx: MenuContextPayload, mess
 You are the AI waiter for ${restaurantName}.
 
 Your job is to help a guest choose food from THIS restaurant's menu.
-You must be confident, specific, and naturally persuasive without being pushy.
+
+You must be specific, useful, and menu-aware.
+Do NOT act like a generic chatbot.
+Do NOT default to bestseller/favourite items unless they also match the user's request.
+Always prefer dish compatibility and available pairings.
 
 Return ONLY valid JSON in this exact shape:
 {
@@ -186,17 +512,23 @@ Return ONLY valid JSON in this exact shape:
 Rules:
 - reply must be plain text only.
 - Do NOT use markdown, bullets, emojis, tags, headings, or follow-up prompts.
-- Do NOT ask a question unless the user is truly unclear.
 - Always recommend real dishes from this menu only.
-- If the user likes spicy food, choose spicy items from the menu details.
+- If the user asks for spicy food, choose spicy items from the menu details.
+- If the user asks for filling food, choose a hearty main and pair it with bread or rice if available.
+- If the user asks for dessert, recommend a dessert from the menu (for example Gulab Jamun if it exists) and optionally pair it with tea, coffee, or another dessert if available.
+- If the user names a dish like Chicken Masala, use the dish itself as the anchor and suggest available complements such as Tandoori Roti and Rice if they exist.
 - If the user wants vegetarian food, only use veg items.
-- If the user asks for best sellers, use bestseller items.
-- If the user asks for a full meal, give one primary dish plus one natural pairing when possible.
-- Mention the price in reply only when it helps the choice.
+- Mention exact item names only if they exist in the menu.
+- Mention the price when it helps the choice.
 - Keep reply short: 1–3 sentences.
+- Give a natural reason WHY the dish matches the request.
+- Use available pairings instead of repeating the same generic answer.
 
 Relevant menu details:
 ${relevantDetails}
+
+Suggested pairings for this query:
+${pairingsPreview.length ? pairingsPreview.join(', ') : 'none'}
 
 All menu item names:
 ${allNames || 'none'}
@@ -255,7 +587,6 @@ function deriveItemsFromReply(reply: string, menuItems: MenuItemAIContext[]) {
       const name = normalizeText(item.name)
       const desc = normalizeText(item.description ?? '')
       const tags = (item.tags ?? []).map(normalizeText)
-
       return (
         lower.includes(name) ||
         (desc && lower.includes(desc.slice(0, Math.min(desc.length, 18)))) ||
@@ -267,7 +598,12 @@ function deriveItemsFromReply(reply: string, menuItems: MenuItemAIContext[]) {
   return uniq(matches)
 }
 
-function inferPsychTrigger(message: string, reply: string, mentioned: string[], upsell: string[]): PsychTriggerOrNone {
+function inferPsychTrigger(
+  message: string,
+  reply: string,
+  mentioned: string[],
+  upsell: string[],
+): PsychTriggerOrNone {
   const lower = `${message} ${reply}`.toLowerCase()
   if (/today|special|chef/.test(lower)) return 'reciprocity'
   if (/best|popular|bestseller/.test(lower)) return 'social_proof'
@@ -279,49 +615,11 @@ function inferPsychTrigger(message: string, reply: string, mentioned: string[], 
   return 'none'
 }
 
-function buildFallbackResponse(
-  message: string,
-  stage: ConvoStage,
-  menuItems: MenuItemAIContext[]
-) {
-  const lower = message.toLowerCase()
-
-  const primary =
-    menuItems.find((i) => /spicy|hot|chilli|chili/.test(lower) && (
-      (i.spice_level && /hot|extra|medium|spicy/.test(i.spice_level.toLowerCase())) ||
-      (i.tags ?? []).some((t) => /spicy|hot|fiery/.test(t.toLowerCase())) ||
-      /spicy|hot|fiery/.test((i.description ?? '').toLowerCase())
-    )) ??
-    menuItems.find((i) => /veg|vegetarian|jain/.test(lower) && i.is_veg) ??
-    menuItems.find((i) => /best|popular|good|recommend/.test(lower) && i.is_bestseller) ??
-    menuItems.find((i) => /special|chef/.test(lower) && i.is_special) ??
-    menuItems.find((i) => i.is_bestseller) ??
-    menuItems[0]
-
-  const pairName =
-    primary?.best_with?.find((name) =>
-      menuItems.some((i) => normalizeText(i.name) === normalizeText(name))
-    ) ??
-    menuItems.find((i) => i.name !== primary?.name && (i.is_special || i.is_bestseller))?.name
-
-  const reply = primary
-    ? `${primary.name} is a strong choice. ${primary.description ? primary.description : 'It is one of the better picks on the menu.'}${pairName ? ` Many guests pair it with ${pairName}.` : ''}`
-    : 'I can help you choose a dish from the menu. Try asking for something spicy, vegetarian, or a full meal.'
-
-  return {
-    reply,
-    mentioned_items: primary ? [primary.name] : [],
-    upsell_items: pairName ? [pairName] : [],
-    psych_trigger: inferPsychTrigger(message, reply, primary ? [primary.name] : [], pairName ? [pairName] : []),
-    convo_stage: stage,
-  }
-}
-
 function parseStructuredReply(
   rawReply: string,
   message: string,
   stage: ConvoStage,
-  menuItems: MenuItemAIContext[]
+  menuItems: MenuItemAIContext[],
 ) {
   const parsed = extractJsonObject(rawReply)
 
@@ -333,11 +631,13 @@ function parseStructuredReply(
       return item?.best_with?.filter((bw) => menuItems.some((m) => m.name === bw)) ?? []
     })
 
+    const fallback = buildFallbackResponse(message, stage, menuItems)
+
     return {
-      reply: reply || buildFallbackResponse(message, stage, menuItems).reply,
-      mentioned_items: mentioned.length ? mentioned : buildFallbackResponse(message, stage, menuItems).mentioned_items,
-      upsell_items: uniq(upsell).slice(0, 2),
-      psych_trigger: inferPsychTrigger(message, reply, mentioned, upsell),
+      reply: reply || fallback.reply,
+      mentioned_items: mentioned.length ? mentioned : fallback.mentioned_items,
+      upsell_items: uniq(upsell).slice(0, 3),
+      psych_trigger: inferPsychTrigger(message, reply || fallback.reply, mentioned, upsell),
       convo_stage: stage,
     }
   }
@@ -345,7 +645,7 @@ function parseStructuredReply(
   const reply = sanitizeReply(String(parsed.reply ?? ''))
   const mentioned_items = normalizeMenuNames(parsed.mentioned_items, menuItems)
   const upsell_items = normalizeMenuNames(parsed.upsell_items, menuItems).filter(
-    (name) => !mentioned_items.includes(name)
+    (name) => !mentioned_items.includes(name),
   )
   const psych_trigger = (typeof parsed.psych_trigger === 'string' && parsed.psych_trigger) as PsychTriggerOrNone
   const convo_stage = (typeof parsed.convo_stage === 'string' && parsed.convo_stage) as ConvoStage
@@ -356,9 +656,11 @@ function parseStructuredReply(
     reply: reply || fallback.reply,
     mentioned_items: mentioned_items.length ? mentioned_items : fallback.mentioned_items,
     upsell_items: upsell_items.length ? upsell_items : fallback.upsell_items,
-    psych_trigger: psych_trigger && ['social_proof', 'scarcity', 'completion', 'anchoring', 'reciprocity', 'fomo', 'none'].includes(psych_trigger)
-      ? psych_trigger
-      : inferPsychTrigger(message, reply || fallback.reply, mentioned_items, upsell_items),
+    psych_trigger:
+      psych_trigger &&
+      ['social_proof', 'scarcity', 'completion', 'anchoring', 'reciprocity', 'fomo', 'none'].includes(psych_trigger)
+        ? psych_trigger
+        : inferPsychTrigger(message, reply || fallback.reply, mentioned_items, upsell_items),
     convo_stage: convo_stage || stage,
   }
 }
@@ -395,6 +697,34 @@ async function logChatEvents(params: {
   if (error) throw error
 }
 
+async function callGemini(systemPrompt: string, history: ChatRequest['history'], message: string) {
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing')
+
+  const geminiContents = [
+    ...(history ?? []).map((msg) => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: String(msg.content ?? '') }],
+    })),
+    { role: 'user', parts: [{ text: message }] },
+  ]
+
+  const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: geminiContents,
+      generationConfig: {
+        temperature: 0.25,
+        maxOutputTokens: 700,
+        topP: 0.9,
+      },
+    }),
+  })
+
+  return geminiRes
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!GEMINI_API_KEY) {
@@ -420,27 +750,7 @@ export async function POST(req: NextRequest) {
     const stage = detectConvoStage(history, message)
     const systemPrompt = buildSystemPrompt(restaurantName, menu_context, message)
 
-    const geminiContents = [
-      ...history.map((msg) => ({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: String(msg.content ?? '') }],
-      })),
-      { role: 'user', parts: [{ text: message }] },
-    ]
-
-    const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: geminiContents,
-        generationConfig: {
-          temperature: 0.45,
-          maxOutputTokens: 512,
-          topP: 0.9,
-        },
-      }),
-    })
+    const geminiRes = await callGemini(systemPrompt, history, message)
 
     if (!geminiRes.ok) {
       console.error('Gemini error:', await geminiRes.text())

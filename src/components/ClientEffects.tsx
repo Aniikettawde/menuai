@@ -24,8 +24,7 @@ function animateCount(el: HTMLElement, duration = 900) {
   const suffix = el.getAttribute('data-count-suffix') ?? ''
   const prefix = el.getAttribute('data-count-prefix') ?? ''
 
-  const reduced = prefersReducedMotion()
-  if (reduced) {
+  if (prefersReducedMotion()) {
     el.textContent = `${prefix}${Math.round(target)}${suffix}`
     return
   }
@@ -48,7 +47,6 @@ function animateCount(el: HTMLElement, duration = 900) {
   }
 
   raf = requestAnimationFrame(tick)
-
   ;(el as AnimatedElement).__animated = true
   el.dataset.raf = String(raf)
 }
@@ -84,7 +82,6 @@ function revealElement(el: HTMLElement, index = 0) {
 
   el.style.opacity = '1'
   el.style.filter = 'blur(0px)'
-
   el.classList.add('visible')
 
   const badge = el.querySelector<HTMLElement>('[data-reveal-badge]')
@@ -143,7 +140,7 @@ export default function ClientEffects() {
       {
         threshold: 0.14,
         rootMargin: '0px 0px -8% 0px',
-      }
+      },
     )
 
     const fillObserver = new IntersectionObserver(
@@ -159,7 +156,7 @@ export default function ClientEffects() {
       {
         threshold: 0.5,
         rootMargin: '0px 0px -4% 0px',
-      }
+      },
     )
 
     const countObserver = new IntersectionObserver(
@@ -176,13 +173,15 @@ export default function ClientEffects() {
       {
         threshold: 0.45,
         rootMargin: '0px 0px -6% 0px',
-      }
+      },
     )
 
     revealTargets.forEach((el) => {
       if (!reduced) {
         el.style.opacity = '0'
-        el.style.transform = el.classList.contains('reveal-scale') ? 'scale(0.98)' : 'translateY(16px)'
+        el.style.transform = el.classList.contains('reveal-scale')
+          ? 'scale(0.98)'
+          : 'translateY(16px)'
         el.style.filter = 'blur(6px)'
       } else {
         el.style.opacity = '1'
@@ -210,7 +209,10 @@ export default function ClientEffects() {
       let shouldRecollect = false
 
       for (const mutation of mutations) {
-        if (mutation.type === 'childList' && (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
+        if (
+          mutation.type === 'childList' &&
+          (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
+        ) {
           shouldRecollect = true
           break
         }

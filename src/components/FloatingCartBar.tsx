@@ -28,7 +28,7 @@ export function FloatingCartBar({ onCallWaiter }: Props) {
   useEffect(() => {
     if (itemCount === 0) return
     setBump(true)
-    const t = setTimeout(() => setBump(false), 250)
+    const t = setTimeout(() => setBump(false), 220)
     return () => clearTimeout(t)
   }, [cartPulse, itemCount])
 
@@ -39,37 +39,38 @@ export function FloatingCartBar({ onCallWaiter }: Props) {
       <button
         type="button"
         onClick={openCart}
-        className={`fixed bottom-4 left-1/2 z-[60] w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2 rounded-2xl bg-[#111111] px-4 py-3 shadow-2xl shadow-black/40 ring-1 ring-white/10 backdrop-blur-xl transition active:scale-[0.99] ${
-          bump ? 'scale-[1.02]' : 'scale-100'
-        }`}
+        className={[
+          'fixed bottom-4 left-1/2 z-[60] w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2',
+          'rounded-[28px] border border-slate-200 bg-white/95 px-4 py-3.5',
+          'shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop-blur-xl',
+          'transition-all duration-300 active:scale-[0.99]',
+          bump ? 'scale-[1.02]' : 'scale-100',
+        ].join(' ')}
       >
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div
-              className={`flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-gold)] text-[#0a0a0a] transition ${
-                bump ? 'animate-bounce' : ''
-              }`}
+              className={[
+                'flex h-11 w-11 items-center justify-center rounded-2xl',
+                'bg-gradient-to-br from-blue-600 to-violet-600 text-white',
+                'shadow-lg shadow-blue-500/20 transition-transform',
+                bump ? 'scale-105' : 'scale-100',
+              ].join(' ')}
             >
               <ShoppingBag size={18} />
             </div>
 
             <div className="min-w-0 text-left">
-              <p className="truncate text-sm font-semibold text-white">
+              <p className="truncate text-sm font-semibold text-slate-900">
                 Added {itemCount} item{itemCount !== 1 ? 's' : ''}
               </p>
-              <p className="text-xs text-zinc-500">
-                Tap to review cart and call waiter
-              </p>
+              <p className="text-xs text-slate-500">Tap to review cart and call waiter</p>
             </div>
           </div>
 
           <div className="shrink-0 text-right">
-            <p className="text-sm font-semibold text-[var(--brand-gold)]">
-              ₹{Math.round(subtotal / 100)}
-            </p>
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-              View cart
-            </p>
+            <p className="text-sm font-semibold text-blue-700">₹{Math.round(subtotal / 100)}</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-400">View cart</p>
           </div>
         </div>
       </button>
