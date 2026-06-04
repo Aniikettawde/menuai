@@ -104,7 +104,7 @@ const dashboardFeatures = [
   { title: "AI conversation log", desc: "Read every AI chat session. Understand what guests ask and improve your menu copy accordingly.", icon: "💬" },
 ]
 
-function formatPrice(n) {
+function formatPrice(n: number) {
   return new Intl.NumberFormat("en-IN").format(n)
 }
 
