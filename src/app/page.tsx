@@ -108,7 +108,7 @@ function formatPrice(n: number) {
   return new Intl.NumberFormat("en-IN").format(n)
 }
 
-function WaiterNotification({ show }) {
+function WaiterNotification({ show }: { show: boolean }) {
   return (
     <div
       className={`fixed bottom-6 right-6 z-[200] transition-all duration-500 ${
@@ -248,7 +248,7 @@ function AIChatDemo() {
   )
 }
 
-function FloatingMenuCard({ onCallWaiter }) {
+function FloatingMenuCard({ onCallWaiter }: { onCallWaiter: () => void }) {
   const [added, setAdded] = useState([])
   const [notified, setNotified] = useState(false)
 
