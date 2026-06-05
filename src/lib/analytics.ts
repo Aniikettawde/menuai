@@ -2,28 +2,10 @@
 // Thin analytics layer — tracks events, queues offline, flushes on reconnect
 
 import type { AnalyticsEvent } from '@/types'
+import type { AnalyticsEvent, EventType } from '@/types'  // ← add EventType here
 
 // ─── Event type registry ──────────────────────────────────────────────────────
-export type EventType =
-  // Existing
-  | 'page_view'
-  | 'item_view'
-  | 'item_search'
-  | 'bestseller_clicked'
-  | 'ai_upsell_accepted'
-  // New — cart funnel
-  | 'cart_opened'            // user tapped FloatingCartBar to open cart
-  | 'cart_item_added'        // any item added to cart (source: 'menu' | 'suggestion')
-  | 'cart_suggestion_accepted' // specifically the upsell recommendation card "+Add" tapped
-  | 'cart_item_removed'      // item removed from cart
-  | 'cart_cleared'           // clear cart tapped
-  | 'cart_submitted'         // "Call waiter" button tapped (before API call)
-  // New — waiter flow
-  | 'waiter_called'          // waiter API call succeeded
-  | 'waiter_call_failed'     // waiter API call failed
-  | 'rating_submitted'
-  | 'ai_upsell_shown'
-  | 'ai_upsell_impression'
+
 
 // ─── Session ID ───────────────────────────────────────────────────────────────
 export function getSessionId(): string {

@@ -154,20 +154,30 @@ export interface MealBuilderItem {
 
 export type EventType =
   | 'page_view'
-  | 'item_view'            // user tapped to read item description
-  | 'item_search'          // AI chat mentioned an item
-  | 'upsell_impression'    // upsell card was shown to user (replaces ai_upsell_shown)
-  | 'upsell_accepted'      // user tapped "learn more" or "add" on upsell card
-   | 'ai_upsell_impression' // legacy — kept for backward compat
-  | 'upsell_ignored'       // conversation continued without engaging the upsell
-  | 'ai_upsell_shown'      // legacy — kept for backward compat
-  | 'ai_upsell_accepted'   // legacy — kept for backward compat
+  | 'item_view'
+  | 'item_search'
+  | 'upsell_impression'
+  | 'upsell_accepted'
+  | 'upsell_ignored'
+  | 'ai_upsell_impression'
+  | 'ai_upsell_shown'
+  | 'ai_upsell_accepted'
   | 'bestseller_shown'
   | 'bestseller_clicked'
-  | 'meal_builder_add'     // user added an item to meal builder
+  | 'meal_builder_add'
   | 'rating_submitted'
   | 'session_start'
   | 'session_end'
+  // cart funnel
+  | 'cart_opened'
+  | 'cart_item_added'
+  | 'cart_suggestion_accepted'
+  | 'cart_item_removed'
+  | 'cart_cleared'
+  | 'cart_submitted'
+  // waiter flow
+  | 'waiter_called'
+  | 'waiter_call_failed'
 
 export interface AnalyticsEvent {
   restaurant_id: string
