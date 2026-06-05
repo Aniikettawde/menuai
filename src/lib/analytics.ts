@@ -23,6 +23,7 @@ export type EventType =
   | 'waiter_call_failed'     // waiter API call failed
   // New — rating
   | 'rating_submitted'       // user submitted a star rating
+    | 'ai_upsell_shown'
 
 // ─── Session ID ───────────────────────────────────────────────────────────────
 export function getSessionId(): string {
