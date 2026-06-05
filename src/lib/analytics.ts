@@ -21,9 +21,9 @@ export type EventType =
   // New — waiter flow
   | 'waiter_called'          // waiter API call succeeded
   | 'waiter_call_failed'     // waiter API call failed
-  // New — rating
-  | 'rating_submitted'       // user submitted a star rating
-    | 'ai_upsell_shown'
+  | 'rating_submitted'
+  | 'ai_upsell_shown'
+  | 'ai_upsell_impression'
 
 // ─── Session ID ───────────────────────────────────────────────────────────────
 export function getSessionId(): string {
