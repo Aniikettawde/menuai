@@ -1,7 +1,6 @@
 // lib/analytics.ts
 // Thin analytics layer — tracks events, queues offline, flushes on reconnect
 
-import type { AnalyticsEvent } from '@/types'
 import type { AnalyticsEvent, EventType } from '@/types'  // ← add EventType here
 
 // ─── Event type registry ──────────────────────────────────────────────────────
