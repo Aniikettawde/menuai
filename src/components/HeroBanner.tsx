@@ -6,8 +6,8 @@ import type { MenuItem, Restaurant } from '@/types'
 interface Props {
   restaurant: Restaurant
   items: MenuItem[]
-  onAsk: (text: string) => void
-  onOpenChat: () => void
+  onAsk?: (text: string) => void
+  onOpenChat?: () => void
 }
 
 const MOOD_CHIPS = [
@@ -25,9 +25,9 @@ export function HeroBanner({ restaurant, items, onAsk, onOpenChat }: Props) {
   const bestsellers = items.filter((i) => i.is_bestseller).slice(0, 3)
 
   function handleMoodChip(prompt: string) {
-    onOpenChat()
-    setTimeout(() => onAsk(prompt), 120)
-  }
+  onOpenChat?.()
+  setTimeout(() => onAsk?.(prompt), 120)
+}
 
   return (
     <div className="space-y-2.5">
@@ -50,7 +50,7 @@ export function HeroBanner({ restaurant, items, onAsk, onOpenChat }: Props) {
           </div>
           <button
             type="button"
-            onClick={onOpenChat}
+            onClick={() => onOpenChat?.()}
             className="shrink-0 flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-[11px] font-bold text-white transition-all active:scale-95 hover:bg-orange-400"
           >
             <Sparkles size={11} />
