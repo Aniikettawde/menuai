@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
-import { ChevronDown, Star, Flame, Plus, Minus, Sparkles } from 'lucide-react'
+import { Star, Flame, Plus, Minus, Sparkles } from 'lucide-react'
 import type { MenuItem } from '@/types'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
@@ -20,6 +19,89 @@ function getSocialCount(id: string): number {
   return 12 + (n % 41)
 }
 
+/** FSSAI-standard veg/non-veg indicator */
+function VegDot({ isVeg }: { isVeg: boolean }) {
+  return (
+    <div
+      aria-label={isVeg ? 'Vegetarian' : 'Non-vegetarian'}
+      className={[
+        'flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-[3px] border-[1.5px]',
+        isVeg ? 'border-green-600' : 'border-red-600',
+      ].join(' ')}
+    >
+      <div className={['h-[6px] w-[6px] rounded-full', isVeg ? 'bg-green-600' : 'bg-red-600'].join(' ')} />
+    </div>
+  )
+}
+
+function ItemImage({ src, alt, isVeg }: { src?: string | null; alt: string; isVeg: boolean }) {
+  return (
+    <div className="relative h-[90px] w-[90px] shrink-0 overflow-hidden rounded-xl bg-stone-100">
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt={alt} className="h-full w-full object-cover" loading="lazy" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-stone-50 to-stone-200 text-[32px]">
+          {isVeg ? '🥗' : '🍖'}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AddButton({
+  qtyInCart,
+  adding,
+  onAdd,
+  onInc,
+  onDec,
+}: {
+  qtyInCart: number
+  adding: boolean
+  onAdd: (e: React.MouseEvent) => void
+  onInc: (e: React.MouseEvent) => void
+  onDec: (e: React.MouseEvent) => void
+}) {
+  if (qtyInCart === 0) {
+    return (
+      <button
+        type="button"
+        onClick={onAdd}
+        className={[
+          'h-8 w-[76px] rounded-lg border-[1.5px] text-[11px] font-bold tracking-wide transition-all duration-150 active:scale-95',
+          adding
+            ? 'border-green-300 bg-green-50 text-green-600'
+            : 'border-orange-400 bg-white text-orange-500 hover:bg-orange-500 hover:text-white',
+        ].join(' ')}
+      >
+        {adding ? '✓ Added' : 'ADD'}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex h-8 w-[76px] items-center justify-between overflow-hidden rounded-lg bg-orange-500">
+      <button
+        type="button"
+        onClick={onDec}
+        className="flex h-full w-7 items-center justify-center text-white transition-colors active:bg-orange-700"
+        aria-label="Decrease"
+      >
+        <Minus size={13} strokeWidth={2.5} />
+      </button>
+      <span className="text-[12px] font-bold text-white tabular-nums">{qtyInCart}</span>
+      <button
+        type="button"
+        onClick={onInc}
+        className="flex h-full w-7 items-center justify-center text-white transition-colors active:bg-orange-700"
+        aria-label="Increase"
+      >
+        <Plus size={13} strokeWidth={2.5} />
+      </button>
+    </div>
+  )
+}
+
 export function MenuItemCard({ item }: Props) {
   const {
     restaurant,
@@ -35,12 +117,13 @@ export function MenuItemCard({ item }: Props) {
   const isExpanded = expandedItem === item.id
   const cartEntry = cartItems.find((c) => c.item.id === item.id)
   const qtyInCart = cartEntry?.quantity ?? 0
+  const socialCount = item.is_bestseller ? getSocialCount(item.id) : null
 
   const toggle = () => {
     const next = isExpanded ? null : item.id
     setExpandedItem(next)
     if (next && restaurant) {
-      track(restaurant.id, 'item_view', { item_id: item.id, item_name: item.name })
+      void track(restaurant.id, 'item_view', { item_id: item.id, item_name: item.name })
     }
   }
 
@@ -49,191 +132,146 @@ export function MenuItemCard({ item }: Props) {
     e.stopPropagation()
     setAdding(true)
     addToCart(item)
-    setTimeout(() => setAdding(false), 160)
+    if (restaurant) {
+      void track(restaurant.id, 'cart_item_added', {
+        item_id: item.id,
+        item_name: item.name,
+        metadata: { source: 'menu', price: item.price, is_bestseller: item.is_bestseller, is_special: item.is_special },
+      })
+    }
+    setTimeout(() => setAdding(false), 700)
   }
 
-  const handleInc = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    increaseCartItem(item.id)
-  }
+  const handleInc = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); increaseCartItem(item.id) }
+  const handleDec = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); decreaseCartItem(item.id) }
 
-  const handleDec = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    decreaseCartItem(item.id)
-  }
-
-  const socialCount = item.is_bestseller ? getSocialCount(item.id) : null
+  const hasDetails =
+    (item.allergens?.length ?? 0) > 0 ||
+    (item.tags?.filter((t) => t !== 'new' && t !== 'spicy').length ?? 0) > 0 ||
+    !!item.prep_time_minutes ||
+    !!item.calories
 
   return (
-    <div
-      className={[
-        'group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all duration-300',
-        'hover:-translate-y-1 hover:shadow-[0_24px_60px_rgba(15,23,42,0.12)]',
-        isExpanded ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200',
-      ].join(' ')}
-      onClick={toggle}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && toggle()}
-      aria-expanded={isExpanded}
-    >
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-600 via-violet-600 to-cyan-500 opacity-70" />
+    <div className="relative bg-white">
+      {/* ── Main card row ── */}
+      <div
+        className="flex cursor-pointer select-none items-start gap-3 px-4 py-3.5"
+        onClick={toggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && toggle()}
+        aria-expanded={isExpanded}
+      >
+        {/* Text side */}
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          {/* Veg dot + badges */}
+          <div className="flex items-center gap-1.5">
+            <VegDot isVeg={item.is_veg} />
+            {item.is_bestseller && (
+              <span className="flex items-center gap-0.5 rounded-sm bg-amber-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-amber-600">
+                <Star size={7} className="fill-amber-500 text-amber-500" />
+                Bestseller
+              </span>
+            )}
+            {item.is_special && (
+              <span className="rounded-sm bg-rose-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-rose-500">
+                Special
+              </span>
+            )}
+            {item.tags?.includes('new') && (
+              <span className="rounded-sm bg-violet-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-violet-500">
+                New
+              </span>
+            )}
+          </div>
 
-      <div className="flex gap-3 p-3.5">
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-start gap-2">
-            <div className="mt-1 flex-shrink-0">
-              <span
-                className={item.is_veg ? 'veg-dot' : 'nonveg-dot'}
-                title={item.is_veg ? 'Veg' : 'Non-Veg'}
-              />
-            </div>
+          {/* Name */}
+          <p className="text-[13.5px] font-semibold leading-snug text-stone-900">
+            {item.name}
+            {item.tags?.includes('spicy') && (
+              <Flame size={11} className="ml-1 inline-block text-rose-500" />
+            )}
+          </p>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-sm font-semibold leading-snug text-slate-900">
-                  {item.name}
-                </span>
+          {/* Price */}
+          <p className="text-[13px] font-bold text-stone-800">{formatPrice(item.price)}</p>
 
-                {item.is_bestseller && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
-                    <Star size={8} className="fill-current" /> BEST
-                  </span>
-                )}
+          {/* Description */}
+          {item.description && (
+            <p className={['text-[11.5px] leading-relaxed text-stone-400', isExpanded ? '' : 'line-clamp-2'].join(' ')}>
+              {item.description}
+            </p>
+          )}
 
-                {item.tags?.includes('new') && (
-                  <span className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600">
-                    NEW
-                  </span>
-                )}
+          {/* Social proof */}
+          {socialCount !== null && (
+            <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+              <Sparkles size={9} />
+              {socialCount} orders this hour
+            </span>
+          )}
 
-                {item.tags?.includes('spicy') && (
-                  <Flame size={11} className="flex-shrink-0 text-rose-500" />
-                )}
-              </div>
-
-              <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-slate-500">
-                {item.description}
-              </p>
-
-              {socialCount !== null && (
-                <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                  <Sparkles size={10} />
-                  {socialCount} ordered in the last hour
+          {/* Expanded details */}
+          {isExpanded && hasDetails && (
+            <div className="mt-2 space-y-2">
+              {(!!item.prep_time_minutes || !!item.calories) && (
+                <p className="text-[10.5px] text-stone-400">
+                  {item.prep_time_minutes ? `~${item.prep_time_minutes} min` : ''}
+                  {item.prep_time_minutes && item.calories ? '  ·  ' : ''}
+                  {item.calories ? `${item.calories} cal` : ''}
                 </p>
               )}
-            </div>
-          </div>
-
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-sm font-bold text-slate-900">{formatPrice(item.price)}</span>
-            {item.prep_time_minutes && (
-              <span className="text-[11px] text-slate-400">~{item.prep_time_minutes} min</span>
-            )}
-            {item.calories && (
-              <span className="text-[11px] text-slate-400">{item.calories} cal</span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col items-end gap-2">
-          {item.image_url && (
-            <div className="relative h-20 w-20 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
-              <Image
-                src={item.image_url}
-                alt={item.name}
-                fill
-                className="object-cover"
-                sizes="80px"
-                loading="lazy"
-              />
+              {(item.allergens?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">Contains:</span>
+                  {item.allergens.map((a) => (
+                    <span key={a} className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                      {a}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {(item.tags?.filter((t) => t !== 'new' && t !== 'spicy').length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {item.tags
+                    .filter((t) => t !== 'new' && t !== 'spicy')
+                    .map((tag) => (
+                      <span key={tag} className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-500">
+                        {tag}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
           )}
+        </div>
 
-          <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
-            {qtyInCart === 0 ? (
-              <button
-                type="button"
-                onClick={handleAdd}
-                className={[
-                  'min-w-[72px] rounded-full border px-4 py-1.5 text-xs font-semibold transition-all duration-300',
-                  adding
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-blue-200 bg-blue-50 text-blue-700 hover:-translate-y-0.5 hover:bg-blue-600 hover:text-white hover:shadow-md',
-                ].join(' ')}
-              >
-                {adding ? 'Added' : 'Add'}
-              </button>
-            ) : (
-              <div className="inline-flex items-center overflow-hidden rounded-full border border-blue-200 bg-blue-50 shadow-sm">
-                <button
-                  type="button"
-                  onClick={handleDec}
-                  className="flex h-8 w-8 items-center justify-center text-blue-700 transition hover:bg-blue-100"
-                  aria-label="Decrease quantity"
-                >
-                  <Minus size={14} />
-                </button>
-
-                <span className="min-w-7 px-2 text-center text-xs font-semibold text-blue-700">
-                  {qtyInCart}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={handleInc}
-                  className="flex h-8 w-8 items-center justify-center text-blue-700 transition hover:bg-blue-100"
-                  aria-label="Increase quantity"
-                >
-                  <Plus size={14} />
-                </button>
+        {/* Image + ADD button stacked */}
+        <div className="flex shrink-0 flex-col items-center gap-2">
+          <div className="relative">
+            <ItemImage src={item.image_url} alt={item.name} isVeg={item.is_veg} />
+            {/* Bestseller label on image bottom */}
+            {item.is_bestseller && (
+              <div className="absolute inset-x-0 bottom-0 rounded-b-xl bg-gradient-to-t from-black/60 to-transparent px-1.5 pb-1 pt-3">
+                <p className="text-center text-[8px] font-bold uppercase tracking-wider text-white">
+                  Bestseller
+                </p>
               </div>
             )}
           </div>
 
-          <ChevronDown
-            size={16}
-            className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
-          />
+          {/* ADD button sits below image, centered */}
+          <div onClick={(e) => e.stopPropagation()} className="-mt-4 z-10 relative">
+            <AddButton
+              qtyInCart={qtyInCart}
+              adding={adding}
+              onAdd={handleAdd}
+              onInc={handleInc}
+              onDec={handleDec}
+            />
+          </div>
         </div>
       </div>
-
-      {isExpanded && (
-        <div className="border-t border-slate-100 px-3.5 pb-3.5 pt-3 animate-[fadeUp_220ms_ease-out]">
-          <p className="mb-3 text-xs leading-relaxed text-slate-500">{item.description}</p>
-
-          {item.allergens?.length > 0 && (
-            <div className="mb-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-wide text-slate-400">Contains:</span>
-              {item.allergens.map((a) => (
-                <span
-                  key={a}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600"
-                >
-                  {a}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {item.tags?.filter((t) => t !== 'new' && t !== 'spicy').length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {item.tags
-                .filter((t) => t !== 'new' && t !== 'spicy')
-                .map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600"
-                  >
-                    {tag}
-                  </span>
-                ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }

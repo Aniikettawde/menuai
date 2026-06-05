@@ -94,6 +94,21 @@ function cleanStringArray(value: unknown): string[] {
     : []
 }
 
+const MENU_ASSET_BUCKET = 'restaurant-assets'
+
+function resolveMenuImageUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const value = raw.trim()
+  if (!value) return ''
+  if (/^(https?:\/\/|data:|blob:)/i.test(value)) return value
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '')
+  if (!supabaseUrl) return value
+
+  return `${supabaseUrl}/storage/v1/object/public/${MENU_ASSET_BUCKET}/${value.replace(/^\/+/, '')}`
+}
+
+
 // ============================================================
 // Gemini parsing
 // ============================================================
@@ -406,7 +421,7 @@ function ItemActionSheet({
             <div className="flex items-center gap-3">
               {item.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.image_url} alt={item.name} className="h-14 w-14 rounded-2xl object-cover" />
+                <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-14 w-14 rounded-2xl object-cover" />
               ) : (
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-800 text-2xl">
                   {item.is_veg ? '🥗' : '🍖'}
@@ -495,6 +510,7 @@ export default function MenuPage() {
   const [imageUploading, setImageUploading] = useState(false)
   const [actionSheetItem, setActionSheetItem] = useState<MenuItemRow | null>(null)
   const [showImport, setShowImport] = useState(false)
+  const [catImageUploading, setCatImageUploading] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -692,11 +708,41 @@ export default function MenuPage() {
         .upload(path, file, { upsert: true, contentType: file.type })
       if (uploadError) throw uploadError
       const { data } = supabase.storage.from('restaurant-assets').getPublicUrl(path)
-      setEditingItem((prev) => (prev ? { ...prev, image_url: data.publicUrl } : prev))
+      setEditingItem((prev) => (prev ? { ...prev, image_url: path } : prev))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload image')
     } finally {
       setImageUploading(false)
+    }
+  }
+
+  async function uploadCategoryImage(catId: string, file: File) {
+    setCatImageUploading(catId)
+    setError('')
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+      const safeName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')
+      const path = `${user.id}/categories/${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabase.storage
+        .from('restaurant-assets')
+        .upload(path, file, { upsert: true, contentType: file.type })
+      if (uploadError) throw uploadError
+      const { data } = supabase.storage.from('restaurant-assets').getPublicUrl(path)
+      const { data: updated, error: updateError } = await supabase
+        .from('menu_categories')
+        .update({ image_url: path })
+        .eq('id', catId)
+        .select()
+        .single()
+      if (updateError) throw updateError
+      if (updated) {
+        setCategories((prev) => prev.map((c) => (c.id === catId ? (updated as MenuCategoryRow) : c)))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload category image')
+    } finally {
+      setCatImageUploading(null)
     }
   }
 
@@ -847,15 +893,46 @@ export default function MenuPage() {
               categories.map((cat) => {
                 const count = items.filter((x) => x.category_id === cat.id).length
                 const avail = items.filter((x) => x.category_id === cat.id && x.is_available).length
+                const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
                 return (
                   <button
                     key={cat.id}
                     onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
-                    className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left active:scale-[0.99] transition"
+                    className="group flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left active:scale-[0.99] transition"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-lg shrink-0">
-                      🍱
+                    {/* Thumbnail with camera overlay */}
+                    <div className="relative shrink-0">
+                      {catWithImage.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={resolveMenuImageUrl(catWithImage.image_url)}
+                          alt={cat.name}
+                          className="h-12 w-12 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">
+                          🍱
+                        </div>
+                      )}
+                      {/* Camera upload badge */}
+                      <label
+                        className="absolute -bottom-1 -right-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
+                          {catImageUploading === cat.id
+                            ? <Loader2 size={9} className="animate-spin" />
+                            : <Camera size={9} />}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }}
+                        />
+                      </label>
                     </div>
+
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-zinc-100">{cat.name}</p>
                       <p className="text-xs text-zinc-500">{count} dishes · {avail} available</p>
@@ -1010,28 +1087,62 @@ export default function MenuPage() {
               {categories.map((cat) => {
                 const active = activeCat === cat.id
                 const count = items.filter((x) => x.category_id === cat.id).length
+                const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
                 return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCat(cat.id)}
-                    className={`group flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-3 text-left transition ${
-                      active
-                        ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20'
-                        : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-                    }`}
-                  >
-                    <span className="truncate text-sm">{cat.name}</span>
-                    <span className="flex items-center gap-2 text-xs shrink-0">
-                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
-                        className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
-                        aria-label="Delete category"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </span>
-                  </button>
+                  <div key={cat.id} className="group relative">
+                    <button
+                      onClick={() => setActiveCat(cat.id)}
+                      className={`flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-3 text-left transition ${
+                        active
+                          ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20'
+                          : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                      }`}
+                    >
+                      {/* Thumbnail + name */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        {catWithImage.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={resolveMenuImageUrl(catWithImage.image_url)}
+                            alt={cat.name}
+                            className="h-8 w-8 rounded-xl object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-sm shrink-0">
+                            🍱
+                          </div>
+                        )}
+                        <span className="truncate text-sm">{cat.name}</span>
+                      </div>
+
+                      {/* Count + delete */}
+                      <span className="flex items-center gap-2 text-xs shrink-0">
+                        <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
+                          className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                          aria-label="Delete category"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </span>
+                    </button>
+
+                    {/* Camera icon — appears on hover, overlays the thumbnail area */}
+                    <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900/80 text-zinc-400 hover:bg-orange-500 hover:text-white transition">
+                        {catImageUploading === cat.id
+                          ? <Loader2 size={11} className="animate-spin" />
+                          : <Camera size={11} />}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }}
+                      />
+                    </label>
+                  </div>
                 )
               })}
             </div>
@@ -1140,9 +1251,6 @@ export default function MenuPage() {
 
       {/* ══════════════════════════════════════════
           EDIT / ADD ITEM MODAL
-          Bottom sheet on mobile, centered on desktop.
-          Sticky footer ensures Save button is ALWAYS
-          visible above the bottom nav bar.
       ══════════════════════════════════════════ */}
       {editingItem && (
         <div
@@ -1174,7 +1282,7 @@ export default function MenuPage() {
               </button>
             </div>
 
-            {/* Scrollable form body — NO action buttons here */}
+            {/* Scrollable form body */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">
               {/* Veg / Non-veg toggle */}
               <div className="mb-4 flex gap-2">
@@ -1245,7 +1353,7 @@ export default function MenuPage() {
                       <div className="relative shrink-0">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={editingItem.image_url}
+                          src={resolveMenuImageUrl(editingItem.image_url)}
                           className="h-16 w-16 rounded-2xl object-cover ring-1 ring-zinc-700"
                           alt=""
                         />
@@ -1354,16 +1462,11 @@ export default function MenuPage() {
               </div>
             </div>
 
-            {/* ── STICKY FOOTER ──
-                Lives OUTSIDE the scroll area.
-                safe-area-inset-bottom ensures it clears
-                the iOS home indicator AND your bottom nav bar.
-            ── */}
+            {/* Sticky footer */}
             <div
               className="shrink-0 border-t border-white/[0.06] bg-[#111111] px-4 pt-3"
               style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
             >
-              {/* Show save error inline in footer so it's always visible */}
               {error && (
                 <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-200">
                   {error}
@@ -1389,7 +1492,6 @@ export default function MenuPage() {
                 </button>
               </div>
             </div>
-
           </div>
         </div>
       )}
@@ -1514,11 +1616,10 @@ function MobileItemRow({
         item.is_available ? 'border-zinc-800' : 'border-zinc-800/40 opacity-50'
       }`}
     >
-      {/* Thumbnail */}
       <button onClick={onTap} className="shrink-0">
         {item.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.image_url} alt={item.name} className="h-16 w-16 rounded-xl object-cover" />
+          <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-16 w-16 rounded-xl object-cover" />
         ) : (
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-zinc-800 text-3xl">
             {item.is_veg ? '🥗' : '🍖'}
@@ -1526,7 +1627,6 @@ function MobileItemRow({
         )}
       </button>
 
-      {/* Info */}
       <button onClick={onTap} className="min-w-0 flex-1 text-left">
         <div className="flex items-center justify-between gap-2">
           <p className="truncate text-sm font-bold text-white">{item.name}</p>
@@ -1540,7 +1640,6 @@ function MobileItemRow({
         )}
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {/* Veg / non-veg pill */}
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
               item.is_veg
@@ -1575,7 +1674,6 @@ function MobileItemRow({
         </div>
       </button>
 
-      {/* Controls */}
       <div className="flex shrink-0 flex-col items-center gap-2.5">
         <button
           onClick={onToggle}
@@ -1620,7 +1718,7 @@ function DesktopItemCard({
     >
       {item.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.image_url} alt={item.name} className="h-36 w-full object-cover" />
+        <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-36 w-full object-cover" />
       ) : (
         <div className="flex h-32 w-full items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 text-4xl">
           {item.is_veg ? '🥗' : '🍖'}

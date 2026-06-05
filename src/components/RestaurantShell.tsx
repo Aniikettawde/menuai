@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useCallback, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { useAppStore } from '@/store/app-store'
@@ -9,11 +9,11 @@ import { setCachedMenu } from '@/lib/cache'
 import { setupConnectivityListeners, track } from '@/lib/analytics'
 import { usePWA } from '@/hooks/usePWA'
 import { RestaurantHeader } from './RestaurantHeader'
-import { CategoryTabs } from './CategoryTabs'
 import { MenuGrid } from './MenuGrid'
 import { ChatPanel } from './ChatPanel'
 import { RatingModal } from './RatingModal'
 import { OfflineBanner } from './OfflineBanner'
+import { WaiterCalledToast } from './WaiterCalledToast'
 
 interface Props {
   initialData: MenuPageData
@@ -38,6 +38,13 @@ export function RestaurantShell({ initialData }: Props) {
     clearCart,
     showRating,
   } = useAppStore()
+
+  const [waiterToast, setWaiterToast] = useState<{
+    tableNumber: number
+    items: { id: string; name: string; qty: number; price: number; total: number }[]
+    subtotal: number
+  } | null>(null)
+  const [waiterLoading, setWaiterLoading] = useState(false)
 
   usePWA()
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -116,51 +123,18 @@ export function RestaurantShell({ initialData }: Props) {
 
     const channel = supabase
       .channel(`restaurant-menu-${restaurantId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'menu_categories',
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
-        () => {
-          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-          refreshTimerRef.current = setTimeout(() => {
-            void refreshMenu()
-          }, 120)
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'menu_items',
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
-        () => {
-          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-          refreshTimerRef.current = setTimeout(() => {
-            void refreshMenu()
-          }, 120)
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'restaurants',
-          filter: `id=eq.${restaurantId}`,
-        },
-        () => {
-          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-          refreshTimerRef.current = setTimeout(() => {
-            void refreshMenu()
-          }, 120)
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_categories', filter: `restaurant_id=eq.${restaurantId}` }, () => {
+        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` }, () => {
+        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` }, () => {
+        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+      })
       .subscribe()
 
     return () => {
@@ -185,13 +159,7 @@ export function RestaurantShell({ initialData }: Props) {
 
   const handleCallWaiter = useCallback(
     async (payload: {
-      items: {
-        id: string
-        name: string
-        qty: number
-        price: number
-        total: number
-      }[]
+      items: { id: string; name: string; qty: number; price: number; total: number }[]
       subtotal: number
     }) => {
       if (!restaurant) return
@@ -201,26 +169,53 @@ export function RestaurantShell({ initialData }: Props) {
         return
       }
 
-      const res = await fetch('/api/table-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          restaurantSlug: restaurant.slug,
+      setWaiterLoading(true)
+
+      try {
+        const res = await fetch('/api/table-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            restaurantSlug: restaurant.slug,
+            tableNumber,
+            sessionId,
+            items: payload.items,
+            subtotal: payload.subtotal,
+          }),
+        })
+
+        const data = await res.json().catch(() => ({}))
+
+        if (!res.ok) {
+          throw new Error(data?.error ?? 'Failed to send waiter request')
+        }
+
+        void track(restaurant.id, 'waiter_called', {
+          metadata: {
+            table_number: tableNumber,
+            item_count: payload.items.reduce((s, i) => s + i.qty, 0),
+            subtotal: payload.subtotal,
+            items: payload.items,
+          },
+        })
+
+        clearCart()
+        setWaiterToast({
           tableNumber,
-          sessionId,
           items: payload.items,
           subtotal: payload.subtotal,
-        }),
-      })
-
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        throw new Error(data?.error ?? 'Failed to send waiter request')
+        })
+      } catch (err) {
+        void track(restaurant.id, 'waiter_call_failed', {
+          metadata: {
+            table_number: tableNumber,
+            error: err instanceof Error ? err.message : 'unknown',
+          },
+        })
+        alert(err instanceof Error ? err.message : 'Something went wrong')
+      } finally {
+        setWaiterLoading(false)
       }
-
-      clearCart()
-      alert(`Waiter notified for Table ${tableNumber}`)
     },
     [restaurant, tableNumber, sessionId, clearCart]
   )
@@ -231,14 +226,26 @@ export function RestaurantShell({ initialData }: Props) {
     <div className="min-h-dvh flex flex-col bg-[var(--surface-bg)]">
       <OfflineBanner />
       <RestaurantHeader restaurant={restaurant} />
-      <CategoryTabs />
       <div className="flex-1 flex flex-col lg:flex-row max-w-[1280px] mx-auto w-full">
         <div className="flex-1 min-w-0">
-          <MenuGrid onAsk={handleAsk} onOpenChat={handleOpenChat} onCallWaiter={handleCallWaiter} />
+          <MenuGrid
+            onAsk={handleAsk}
+            onOpenChat={handleOpenChat}
+            onCallWaiter={handleCallWaiter}
+            isWaiterLoading={waiterLoading}
+          />
         </div>
         <ChatPanel />
       </div>
       {showRating && <RatingModal />}
+      {waiterToast && (
+        <WaiterCalledToast
+          tableNumber={waiterToast.tableNumber}
+          items={waiterToast.items}
+          subtotal={waiterToast.subtotal}
+          onClose={() => setWaiterToast(null)}
+        />
+      )}
     </div>
   )
 }

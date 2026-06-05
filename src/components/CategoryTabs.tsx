@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '@/store/app-store'
+import { resolveMenuImageUrl } from '@/lib/resolve-image'
 
 export function CategoryTabs() {
   const { categories, activeCategory, setActiveCategory, items } = useAppStore()
@@ -9,34 +10,39 @@ export function CategoryTabs() {
 
   useEffect(() => {
     if (!activeCategory || !scrollRef.current) return
-    const btn = scrollRef.current.querySelector(
-      `[data-id="${activeCategory}"]`,
-    ) as HTMLElement | null
-    btn?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    const el = scrollRef.current.querySelector(`[data-id="${activeCategory}"]`) as HTMLElement | null
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   }, [activeCategory])
+
+  const counts = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const item of items) {
+      map.set(item.category_id, (map.get(item.category_id) ?? 0) + 1)
+    }
+    return map
+  }, [items])
 
   if (categories.length === 0) return null
 
-  const countForCategory = (id: string) => items.filter((i) => i.category_id === id).length
-
   return (
-    <div className="sticky top-0 z-40 border-b border-white/70 bg-white/75 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60">
-      <div className="relative">
-        <div
-          ref={scrollRef}
-          className="flex gap-2 overflow-x-auto px-4 py-3"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          role="tablist"
-          aria-label="Menu categories"
-        >
-          {categories.map((cat) => {
-            const isActive = activeCategory === cat.id
-            const count = countForCategory(cat.id)
+    <div className="relative">
+      <div
+        ref={scrollRef}
+        className="flex gap-2.5 overflow-x-auto scrollbar-none pb-0.5"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        role="tablist"
+        aria-label="Menu categories"
+      >
+        {categories.map((cat) => {
+          const isActive = activeCategory === cat.id
+          const count = counts.get(cat.id) ?? 0
+          const rawImageUrl = (cat as any).image_url as string | null | undefined
+          const imageUrl = rawImageUrl ? resolveMenuImageUrl(rawImageUrl) : null
 
-            return (
+          return (
+            <div key={cat.id} data-id={cat.id} className="shrink-0">
               <button
-                key={cat.id}
-                data-id={cat.id}
+                type="button"
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => {
@@ -47,32 +53,55 @@ export function CategoryTabs() {
                   })
                 }}
                 className={[
-                  'group flex-shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-all duration-300 ease-out',
-                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30',
+                  'flex w-[80px] flex-col items-center gap-1.5 rounded-2xl border p-2 text-center transition-all duration-150',
                   isActive
-                    ? 'border-transparent bg-gradient-to-r from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-500/20'
-                    : 'border-slate-200 bg-white/80 text-slate-600 shadow-sm hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:text-slate-900 hover:shadow-md',
+                    ? 'border-stone-900 bg-white shadow-md'
+                    : 'border-stone-200 bg-white shadow-sm hover:border-stone-300 hover:shadow-md',
                 ].join(' ')}
               >
-                <span className="flex items-center gap-2">
-                  {cat.name}
-                  <span
-                    className={[
-                      'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
-                      isActive ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500',
-                    ].join(' ')}
-                  >
-                    {count}
-                  </span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
+                {/* Image */}
+                <div
+                  className={[
+                    'h-12 w-12 overflow-hidden rounded-xl bg-stone-100',
+                    isActive ? 'ring-2 ring-stone-900 ring-offset-1' : 'ring-1 ring-stone-100',
+                  ].join(' ')}
+                >
+                  {imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={imageUrl}
+                      alt={cat.name}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-xl">
+                      🍽️
+                    </div>
+                  )}
+                </div>
 
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent" />
+                {/* Name */}
+                <p
+                  className={[
+                    'line-clamp-1 w-full text-[11px] font-semibold leading-tight',
+                    isActive ? 'text-stone-900' : 'text-stone-600',
+                  ].join(' ')}
+                >
+                  {cat.name}
+                </p>
+
+                {/* Count */}
+                <p className="text-[9.5px] font-medium text-stone-400">{count} items</p>
+              </button>
+            </div>
+          )
+        })}
       </div>
+
+      {/* Fade edges */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-5 bg-gradient-to-r from-[var(--surface-bg,#f5f5f4)] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-5 bg-gradient-to-l from-[var(--surface-bg,#f5f5f4)] to-transparent" />
     </div>
   )
 }

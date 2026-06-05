@@ -19,28 +19,44 @@ export function RatingModal() {
     setLoading(true)
 
     try {
-      const supabase = getSupabaseBrowser()
+  const supabase = getSupabaseBrowser()
+  const { error } = await supabase
+    .from('ratings')
+    .insert([{
+      restaurant_id: restaurant.id,
+      session_id: sessionId,
+      score: selected,
+      comment: comment.trim() || null,
+    }] as any)
 
-      await supabase
-        .from('ratings')
-        .insert([
-          {
-            restaurant_id: restaurant.id,
-            session_id: sessionId,
-            score: selected,
-            comment: comment.trim() || null,
-          },
-        ] as any)
+  if (error) throw error   // ← was missing entirely
 
-      await track(restaurant.id, 'rating_submitted', {
-        metadata: { score: selected },
-      })
+  await track(restaurant.id, 'rating_submitted', {
+    metadata: { score: selected },
+  })
+  
+const { data: updated } = await supabase
+  .from('restaurants')
+  .select('avg_rating, total_ratings')
+  .eq('id', restaurant.id)
+  .single()
 
-      setSubmitted(true)
-      setTimeout(() => setShowRating(false), 1600)
-    } finally {
-      setLoading(false)
-    }
+if (updated) {
+  // Patch the restaurant in the store so the header updates live
+  useAppStore.getState().setRestaurantData({
+    restaurant: { ...restaurant, ...updated },
+    categories: useAppStore.getState().categories,
+    items: useAppStore.getState().items,
+  })
+}
+  setSubmitted(true)
+  setTimeout(() => setShowRating(false), 1600)
+} catch (err) {
+  console.error('Rating submit error:', err)
+  // optionally surface to user: setError('Failed to submit. Please try again.')
+} finally {
+  setLoading(false)
+}
   }
 
   return (

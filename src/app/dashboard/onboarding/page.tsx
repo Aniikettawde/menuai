@@ -18,9 +18,9 @@ import {
   BadgeIndianRupee,
   PhoneCall,
   LockKeyhole,
+  RefreshCw,
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
-import type { RazorpayOptions, RazorpayPaymentResponse } from '@/types/billing'
 import {
   BILLING_PLANS,
   formatRupees,
@@ -29,9 +29,25 @@ import {
   type PlanId,
 } from '@/lib/billing-plans'
 
+// ── Razorpay subscription checkout types ──────────────────────────
+interface RazorpaySubscriptionOptions {
+  key: string
+  subscription_id: string     // <-- key difference from one-time orders
+  name: string
+  description: string
+  theme?: { color?: string }
+  prefill?: { email?: string; contact?: string; name?: string }
+  modal?: { ondismiss?: () => void }
+  handler: (response: {
+    razorpay_payment_id: string
+    razorpay_subscription_id: string
+    razorpay_signature: string
+  }) => void
+}
+
 declare global {
   interface Window {
-    Razorpay: new (options: RazorpayOptions) => { open(): void }
+    Razorpay: new (options: RazorpaySubscriptionOptions) => { open(): void }
   }
 }
 
@@ -60,7 +76,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const supabase = getSupabaseDashboardBrowser()
 
-  const [paying, setPaying] = useState(false)
+  const [subscribing, setSubscribing] = useState(false)
   const [startingTrial, setStartingTrial] = useState(false)
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
   const [error, setError] = useState('')
@@ -69,28 +85,23 @@ export default function OnboardingPage() {
 
   const accessTokenRef = useRef<string | null>(null)
 
+  // Load Razorpay SDK
   useEffect(() => {
     if (document.querySelector('script[src*="razorpay"]')) return
-
     const s = document.createElement('script')
     s.src = 'https://checkout.razorpay.com/v1/checkout.js'
     s.async = true
     document.head.appendChild(s)
   }, [])
 
+  // Check billing status on mount
   useEffect(() => {
     let mounted = true
 
     async function checkBillingStatus() {
       try {
-        const res = await fetch('/api/billing/status', {
-          cache: 'no-store',
-        })
-
-        if (!res.ok) {
-          if (mounted) setCanStartTrial(true)
-          return
-        }
+        const res = await fetch('/api/billing/status', { cache: 'no-store' })
+        if (!res.ok) { if (mounted) setCanStartTrial(true); return }
 
         const data: { status?: BillingStatus } = await res.json()
         const status = data.status ?? null
@@ -102,11 +113,8 @@ export default function OnboardingPage() {
           return
         }
 
-        if (status?.plan === 'trial' && !status.has_access) {
-          setCanStartTrial(false)
-        } else {
-          setCanStartTrial(true)
-        }
+        // Expired trial — no second trial
+        setCanStartTrial(!(status?.plan === 'trial' && !status.has_access))
       } catch {
         if (mounted) setCanStartTrial(true)
       } finally {
@@ -115,34 +123,25 @@ export default function OnboardingPage() {
     }
 
     void checkBillingStatus()
-
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, [router])
 
+  // ── Auth helpers ─────────────────────────────────────────────────
   async function getAccessToken(): Promise<string | null> {
     if (accessTokenRef.current) return accessTokenRef.current
-
     for (let i = 0; i < 5; i++) {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
+      const { data: { session } } = await supabase.auth.getSession()
       if (session?.access_token) {
         accessTokenRef.current = session.access_token
         return session.access_token
       }
-
       await new Promise((r) => setTimeout(r, 300))
     }
-
     return null
   }
 
   async function authFetch(url: string, options: RequestInit = {}) {
     const token = await getAccessToken()
-
     return fetch(url, {
       ...options,
       headers: {
@@ -153,80 +152,73 @@ export default function OnboardingPage() {
     })
   }
 
-  const handleStartTrial = async (planId?: PlanId) => {
+  // ── Trial (no Razorpay involved) ─────────────────────────────────
+  const handleStartTrial = async (planId: PlanId = 'growth') => {
     setError('')
     setStartingTrial(true)
-
     try {
       const res = await authFetch('/api/billing/start-trial', {
         method: 'POST',
-        body: JSON.stringify({
-          plan_id: planId ?? 'growth',
-          billing_cycle: billingCycle,
-        }),
+        body: JSON.stringify({ plan_id: planId, billing_cycle: billingCycle }),
       })
-
       if (!res.ok) {
         const e = await res.json()
         throw new Error(e.error ?? 'Failed to start trial')
       }
-
       router.push('/dashboard?welcome=trial')
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setError(err instanceof Error ? err.message : 'Something went wrong.')
       setStartingTrial(false)
     }
   }
 
-  const handlePay = async (plan: BillingPlan) => {
+  // ── Subscription checkout ────────────────────────────────────────
+  const handleSubscribe = async (plan: BillingPlan) => {
     setError('')
-    setPaying(true)
+    setSubscribing(true)
 
     try {
-      const orderRes = await authFetch('/api/billing/create-order', {
+      // 1. Create Razorpay subscription on our server
+      const createRes = await authFetch('/api/billing/create-subscription', {
         method: 'POST',
-        body: JSON.stringify({
-          plan_id: plan.id,
-          billing_cycle: billingCycle,
-        }),
+        body: JSON.stringify({ plan_id: plan.id, billing_cycle: billingCycle }),
       })
 
-      if (!orderRes.ok) {
-        const e = await orderRes.json()
-        throw new Error(e.error ?? 'Failed to create order')
+      if (!createRes.ok) {
+        const e = await createRes.json()
+        throw new Error(e.error ?? 'Failed to create subscription')
       }
 
-      const {
-        order_id,
-        amount,
-        currency,
-        key,
-        plan_id,
-        billing_cycle,
-      } = await orderRes.json()
+      const { subscription_id, key, plan_id, billing_cycle } = await createRes.json()
 
+      // 2. Open Razorpay subscription checkout
       await new Promise<void>((resolve, reject) => {
-        const options: RazorpayOptions = {
+        if (!window.Razorpay) {
+          reject(new Error('Payment SDK not loaded. Please refresh and try again.'))
+          return
+        }
+
+        const options: RazorpaySubscriptionOptions = {
           key,
-          amount,
-          currency,
+          subscription_id,   // <-- subscription_id, NOT order_id
           name: 'Dinezy',
           description: `${plan.name} • ${billingCycle === 'monthly' ? 'Monthly' : 'Yearly'} subscription`,
-          order_id,
           theme: { color: '#2563eb' },
           modal: {
             ondismiss: () => reject(new Error('DISMISSED')),
           },
-          handler: async (response: RazorpayPaymentResponse) => {
+          handler: async (response) => {
             try {
-              const verifyRes = await authFetch('/api/billing/verify-payment', {
+              // 3. Verify on our server
+              const verifyRes = await authFetch('/api/billing/verify-subscription', {
                 method: 'POST',
                 body: JSON.stringify({
-                  ...response,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_subscription_id: response.razorpay_subscription_id,
+                  razorpay_signature: response.razorpay_signature,
                   plan_id,
                   billing_cycle,
-                  amount,
                 }),
               })
 
@@ -243,11 +235,6 @@ export default function OnboardingPage() {
           },
         }
 
-        if (!window.Razorpay) {
-          reject(new Error('Payment SDK not loaded. Please refresh and try again.'))
-          return
-        }
-
         new window.Razorpay(options).open()
       })
 
@@ -257,11 +244,11 @@ export default function OnboardingPage() {
       if (!(err instanceof Error && err.message === 'DISMISSED')) {
         setError(err instanceof Error ? err.message : 'Payment failed. Please try again.')
       }
-      setPaying(false)
+      setSubscribing(false)
     }
   }
 
-  const busy = paying || startingTrial
+  const busy = subscribing || startingTrial
 
   if (checkingStatus) {
     return (
@@ -284,6 +271,8 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f8fbff] via-white to-[#f3f7ff] text-slate-900">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+
+        {/* Header */}
         <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-200">
@@ -294,7 +283,6 @@ export default function OnboardingPage() {
               <p className="text-xs text-slate-500">AI-powered QR dining</p>
             </div>
           </div>
-
           <div className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:flex">
             <Shield size={12} />
             7-day free trial
@@ -303,7 +291,7 @@ export default function OnboardingPage() {
 
         {!canStartTrial && (
           <div className="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Your free trial has already been used. Choose a paid plan to continue.
+            Your free trial has been used. Choose a paid plan to continue.
           </div>
         )}
 
@@ -318,27 +306,26 @@ export default function OnboardingPage() {
 
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
           <div className="space-y-6">
+
+            {/* Hero */}
             <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:p-8">
               <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
                 Start your Dinezy plan
               </div>
-
               <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
-                Choose a plan that fits your restaurant size
+                Choose a plan that fits your restaurant
               </h1>
-
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-                Pick monthly or yearly billing. Every plan includes a 7-day free trial, no card required.
+                Recurring monthly or yearly subscription. Cancel anytime from Razorpay. Every plan includes a 7-day free trial — no card required.
               </p>
-
               <div className="mt-6 flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
                   <Clock size={12} />
                   7-day free trial
                 </span>
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-                  <CreditCard size={12} />
-                  Razorpay secure payments
+                  <RefreshCw size={12} />
+                  Auto-renews via Razorpay
                 </span>
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
                   <Shield size={12} />
@@ -347,13 +334,13 @@ export default function OnboardingPage() {
               </div>
             </div>
 
+            {/* Billing cycle toggle */}
             <div className="rounded-[32px] border border-slate-200 bg-white/85 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Billing cycle</p>
-                  <p className="text-xs text-slate-500">Choose monthly or yearly</p>
+                  <p className="text-xs text-slate-500">Yearly saves you 50%</p>
                 </div>
-
                 <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:w-auto">
                   <button
                     type="button"
@@ -383,6 +370,7 @@ export default function OnboardingPage() {
               </div>
             </div>
 
+            {/* Plan cards */}
             <div className="grid gap-5">
               {PLAN_LIST.map((plan) => {
                 const price = billingCycle === 'monthly' ? plan.monthly : plan.yearly
@@ -405,9 +393,7 @@ export default function OnboardingPage() {
                     <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-start">
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex rounded-full bg-gradient-to-r ${plan.color} px-3 py-1 text-[11px] font-bold text-white shadow-sm`}
-                          >
+                          <span className={`inline-flex rounded-full bg-gradient-to-r ${plan.color} px-3 py-1 text-[11px] font-bold text-white shadow-sm`}>
                             {plan.highlight}
                           </span>
                           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
@@ -431,7 +417,7 @@ export default function OnboardingPage() {
 
                         {billingCycle === 'yearly' && (
                           <p className="text-sm font-medium text-emerald-700">
-                            Save ₹{formatRupees(yearlySavings)} every year
+                            Save ₹{formatRupees(yearlySavings)} vs monthly
                           </p>
                         )}
 
@@ -456,20 +442,20 @@ export default function OnboardingPage() {
                             ].join(' ')}
                           >
                             {startingTrial ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}
-                            Start trial
+                            Start free trial
                           </button>
                         )}
 
                         <button
-                          onClick={() => void handlePay(plan)}
+                          onClick={() => void handleSubscribe(plan)}
                           disabled={busy}
                           className={[
                             'inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5',
                             busy ? 'cursor-not-allowed opacity-50' : '',
                           ].join(' ')}
                         >
-                          {paying ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
-                          Pay now
+                          {subscribing ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
+                          Subscribe
                         </button>
                       </div>
                     </div>
@@ -479,19 +465,16 @@ export default function OnboardingPage() {
             </div>
           </div>
 
+          {/* Sidebar */}
           <aside className="space-y-6">
             <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
               <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
                 <BadgeIndianRupee size={15} />
                 What you get with Dinezy
               </div>
-
               <div className="mt-5 space-y-3">
                 {FEATURES.map(({ icon: Icon, text }) => (
-                  <div
-                    key={text}
-                    className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                  >
+                  <div key={text} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
                       <Icon size={15} />
                     </div>
@@ -504,25 +487,23 @@ export default function OnboardingPage() {
             <div className="rounded-[32px] border border-slate-200 bg-gradient-to-br from-blue-50 to-violet-50 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)]">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <LockKeyhole size={15} className="text-blue-700" />
-                Secure checkout
+                How subscriptions work
               </div>
-
               <p className="mt-3 text-sm leading-7 text-slate-600">
-                Razorpay supports UPI, cards, and net banking. Your subscription starts only after successful payment.
+                Razorpay handles recurring billing. After subscribing, your card/UPI is charged automatically each cycle. You can cancel anytime from your Razorpay account or by contacting us.
               </p>
-
               <div className="mt-5 grid gap-2">
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <Check size={13} className="text-emerald-600" />
-                  Dinezy branding on payment page
+                  UPI, cards, and net banking
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <Check size={13} className="text-emerald-600" />
-                  Monthly and yearly billing
+                  Auto-renews until cancelled
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <Check size={13} className="text-emerald-600" />
-                  7-day free trial before commitment
+                  Trial has no auto-debit — you choose when to pay
                 </div>
               </div>
             </div>
@@ -533,7 +514,7 @@ export default function OnboardingPage() {
                 Need help?
               </div>
               <p className="mt-3 text-sm leading-7 text-slate-600">
-                Contact support if you need help with onboarding, pricing, or payment setup.
+                Contact support for help with onboarding, pricing, or subscription management.
               </p>
               <div className="mt-4 space-y-2 text-sm">
                 <a
@@ -553,15 +534,17 @@ export default function OnboardingPage() {
           </aside>
         </section>
 
+        {/* Quick start footer */}
         <div className="rounded-[32px] border border-slate-200 bg-white/85 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-900">Quick start</p>
               <p className="text-xs text-slate-500">
-                Pick a plan above and continue with a 7-day free trial or pay now.
+                {canStartTrial
+                  ? 'Try free for 7 days, no card needed. Subscribe when ready.'
+                  : 'Trial used — pick a plan above to subscribe.'}
               </p>
             </div>
-
             {canStartTrial ? (
               <button
                 onClick={() => void handleStartTrial('growth')}
@@ -569,16 +552,12 @@ export default function OnboardingPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ArrowRight size={15} />
-                Continue with trial
+                Start free trial
               </button>
             ) : (
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-200 px-5 py-3.5 text-sm font-semibold text-slate-500"
-              >
+              <span className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-500">
                 Trial already used
-              </button>
+              </span>
             )}
           </div>
         </div>

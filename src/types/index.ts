@@ -18,6 +18,7 @@ export interface Restaurant {
   is_active: boolean
   opening_hours: OpeningHours
   created_at: string
+  
 }
 
 export interface OpeningHours {
@@ -31,6 +32,8 @@ export interface MenuCategory {
   description?: string
   position: number
   is_active: boolean
+  image_url?: string | null
+
 }
 
 export interface MenuItem {

@@ -148,7 +148,9 @@ export const useAppStore = create<AppStore>()(
         }
 
         state.cartPulse += 1
-        state.isCartOpen = false
+        // ✅ intentionally NOT closing the cart here —
+        // cart stays open so users can keep adding suggestions
+        // without losing their place
       }),
 
     increaseCartItem: (itemId) =>

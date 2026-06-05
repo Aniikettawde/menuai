@@ -1,9 +1,30 @@
 // lib/analytics.ts
 // Thin analytics layer — tracks events, queues offline, flushes on reconnect
-import type { EventType, AnalyticsEvent } from '@/types'
-import { queueAnalyticsEvent, flushAnalyticsQueue } from './cache'
 
-// Generate / retrieve a stable anonymous session ID
+import type { AnalyticsEvent } from '@/types'
+
+// ─── Event type registry ──────────────────────────────────────────────────────
+export type EventType =
+  // Existing
+  | 'page_view'
+  | 'item_view'
+  | 'item_search'
+  | 'bestseller_clicked'
+  | 'ai_upsell_accepted'
+  // New — cart funnel
+  | 'cart_opened'            // user tapped FloatingCartBar to open cart
+  | 'cart_item_added'        // any item added to cart (source: 'menu' | 'suggestion')
+  | 'cart_suggestion_accepted' // specifically the upsell recommendation card "+Add" tapped
+  | 'cart_item_removed'      // item removed from cart
+  | 'cart_cleared'           // clear cart tapped
+  | 'cart_submitted'         // "Call waiter" button tapped (before API call)
+  // New — waiter flow
+  | 'waiter_called'          // waiter API call succeeded
+  | 'waiter_call_failed'     // waiter API call failed
+  // New — rating
+  | 'rating_submitted'       // user submitted a star rating
+
+// ─── Session ID ───────────────────────────────────────────────────────────────
 export function getSessionId(): string {
   if (typeof window === 'undefined') return 'server'
   let id = sessionStorage.getItem('menuai_sid')
@@ -14,11 +35,16 @@ export function getSessionId(): string {
   return id
 }
 
-// Core track function
+// ─── Core track function ──────────────────────────────────────────────────────
 export async function track(
   restaurantId: string,
   eventType: EventType,
-  extra?: Partial<Omit<AnalyticsEvent, 'restaurant_id' | 'session_id' | 'event_type' | 'timestamp' | 'hour_of_day' | 'day_of_week'>>
+  extra?: Partial<
+    Omit<
+      AnalyticsEvent,
+      'restaurant_id' | 'session_id' | 'event_type' | 'timestamp' | 'hour_of_day' | 'day_of_week'
+    >
+  >
 ): Promise<void> {
   const now = new Date()
   const event: AnalyticsEvent = {
@@ -30,39 +56,40 @@ export async function track(
     day_of_week: now.getDay(),
     ...extra,
   }
-
   if (navigator.onLine) {
-    // Fire and forget — send directly
     sendEvents([event]).catch(() => queueAnalyticsEvent(event))
   } else {
-    // Queue for later
     await queueAnalyticsEvent(event)
   }
 }
 
-// Send a batch of events to our API route
+// ─── Send batch ───────────────────────────────────────────────────────────────
 async function sendEvents(events: AnalyticsEvent[]): Promise<void> {
   await fetch('/api/analytics', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ events }),
-    // Low priority — doesn't block UI
     keepalive: true,
   })
 }
 
-// Call this when coming back online
+// ─── Offline queue (IndexedDB-backed via cache.ts) ────────────────────────────
+async function queueAnalyticsEvent(event: AnalyticsEvent): Promise<void> {
+  const { queueAnalyticsEvent: q } = await import('./cache')
+  await q(event)
+}
+
 export async function flushOfflineQueue(): Promise<void> {
+  const { flushAnalyticsQueue } = await import('./cache')
   const queued = await flushAnalyticsQueue()
   if (queued.length > 0) {
     await sendEvents(queued).catch(() => {
-      // Re-queue if still failing
-      queued.forEach(e => queueAnalyticsEvent(e))
+      queued.forEach((e) => queueAnalyticsEvent(e))
     })
   }
 }
 
-// Setup online/offline listeners — call once at app root
+// ─── Connectivity listeners ───────────────────────────────────────────────────
 export function setupConnectivityListeners(): () => void {
   const handleOnline = () => flushOfflineQueue()
   window.addEventListener('online', handleOnline)
