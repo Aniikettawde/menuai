@@ -42,14 +42,16 @@ const { data: updated } = await supabase
   .single()
 
 if (updated) {
-  // Patch the restaurant in the store so the header updates live
-  useAppStore.getState().setRestaurantData({
+  const store = useAppStore.getState()
+
+  store.setRestaurantData({
     restaurant: {
-  ...restaurant,
-  ...(updated ?? {}),
-},
-    categories: useAppStore.getState().categories,
-    items: useAppStore.getState().items,
+      ...restaurant,
+      avg_rating: Number((updated as any).avg_rating),
+      total_ratings: Number((updated as any).total_ratings),
+    },
+    categories: store.categories,
+    items: store.items,
   })
 }
   setSubmitted(true)
