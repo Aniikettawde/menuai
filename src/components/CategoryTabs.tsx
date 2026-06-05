@@ -7,9 +7,12 @@ import { resolveMenuImageUrl } from '@/lib/resolve-image'
 export function CategoryTabs() {
   const { categories, activeCategory, setActiveCategory, items } = useAppStore()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const clickedRef = useRef(false)  // ← add this
 
   useEffect(() => {
     if (!activeCategory || !scrollRef.current) return
+    if (!clickedRef.current) return  // ← only scroll tab strip on click, not observer update
+    clickedRef.current = false
     const el = scrollRef.current.querySelector(`[data-id="${activeCategory}"]`) as HTMLElement | null
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   }, [activeCategory])
@@ -45,13 +48,19 @@ export function CategoryTabs() {
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => {
-                  setActiveCategory(cat.id)
-                  document.getElementById(`cat-${cat.id}`)?.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start',
-                  })
-                }}
+            onClick={() => {
+  // Immediately set active — don't wait for observer
+  setActiveCategory(cat.id)
+  clickedRef.current = true
+  window.dispatchEvent(new Event('menuai:tab-scroll'))
+  
+  const el = document.getElementById(`cat-${cat.id}`)
+  if (el) {
+    const headerOffset = 80
+    const top = el.getBoundingClientRect().top + window.scrollY - headerOffset
+    window.scrollTo({ top, behavior: 'smooth' })
+  }
+}}
                 className={[
                   'flex w-[80px] flex-col items-center gap-1.5 rounded-2xl border p-2 text-center transition-all duration-150',
                   isActive

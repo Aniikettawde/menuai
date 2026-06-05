@@ -9,6 +9,7 @@ import { setCachedMenu } from '@/lib/cache'
 import { setupConnectivityListeners, track } from '@/lib/analytics'
 import { usePWA } from '@/hooks/usePWA'
 import { RestaurantHeader } from './RestaurantHeader'
+import { CategoryTabs } from './CategoryTabs'
 import { MenuGrid } from './MenuGrid'
 import { ChatPanel } from './ChatPanel'
 import { RatingModal } from './RatingModal'
@@ -21,7 +22,7 @@ interface Props {
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 )
 
 export function RestaurantShell({ initialData }: Props) {
@@ -123,18 +124,30 @@ export function RestaurantShell({ initialData }: Props) {
 
     const channel = supabase
       .channel(`restaurant-menu-${restaurantId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_categories', filter: `restaurant_id=eq.${restaurantId}` }, () => {
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` }, () => {
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` }, () => {
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
-      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'menu_categories', filter: `restaurant_id=eq.${restaurantId}` },
+        () => {
+          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+          refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` },
+        () => {
+          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+          refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` },
+        () => {
+          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+          refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+        },
+      )
       .subscribe()
 
     return () => {
@@ -154,7 +167,7 @@ export function RestaurantShell({ initialData }: Props) {
         window.dispatchEvent(new CustomEvent('menuai:ask', { detail: { text } }))
       }, 80)
     },
-    [setShowChat]
+    [setShowChat],
   )
 
   const handleCallWaiter = useCallback(
@@ -217,7 +230,7 @@ export function RestaurantShell({ initialData }: Props) {
         setWaiterLoading(false)
       }
     },
-    [restaurant, tableNumber, sessionId, clearCart]
+    [restaurant, tableNumber, sessionId, clearCart],
   )
 
   if (!restaurant) return null
@@ -226,8 +239,10 @@ export function RestaurantShell({ initialData }: Props) {
     <div className="min-h-dvh flex flex-col bg-[var(--surface-bg)]">
       <OfflineBanner />
       <RestaurantHeader restaurant={restaurant} />
-      <div className="flex-1 flex flex-col lg:flex-row max-w-[1280px] mx-auto w-full">
-        <div className="flex-1 min-w-0">
+
+      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4 lg:px-4">
+        <div className="min-w-0 px-4 sm:px-6 lg:px-0">
+          <CategoryTabs />
           <MenuGrid
             onAsk={handleAsk}
             onOpenChat={handleOpenChat}
@@ -235,9 +250,12 @@ export function RestaurantShell({ initialData }: Props) {
             isWaiterLoading={waiterLoading}
           />
         </div>
+
         <ChatPanel />
-      </div>
+      </main>
+
       {showRating && <RatingModal />}
+
       {waiterToast && (
         <WaiterCalledToast
           tableNumber={waiterToast.tableNumber}

@@ -120,7 +120,7 @@ function CategorySection({
   return (
     <section
       id={`cat-${category.id}`}
-      className="scroll-mt-28 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
     >
       <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3.5">
         <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
@@ -209,34 +209,53 @@ export function MenuGrid({
   )
 
   // Scroll-spy: update activeCategory as user scrolls through sections
-  useEffect(() => {
-    if (categoriesWithItems.length === 0) return
+ // In MenuGrid.tsx, replace the useEffect with this:
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // Find the topmost visible section
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+useEffect(() => {
+  if (categoriesWithItems.length === 0) return
 
-        if (visible.length > 0) {
-          const id = visible[0].target.id.replace('cat-', '')
-          setActiveCategory(id)
-        }
-      },
-      {
-        rootMargin: '-10% 0px -60% 0px',
-        threshold: 0,
-      },
-    )
+  let isProgrammaticScroll = false
+  let programmaticTimer: ReturnType<typeof setTimeout>
 
-    categoriesWithItems.forEach((cat) => {
-      const el = document.getElementById(`cat-${cat.id}`)
-      if (el) observer.observe(el)
-    })
+  const onTabScroll = () => {
+    isProgrammaticScroll = true
+    clearTimeout(programmaticTimer)
+    // Wait long enough for smooth scroll to finish
+    programmaticTimer = setTimeout(() => { isProgrammaticScroll = false }, 1200)
+  }
+  window.addEventListener('menuai:tab-scroll', onTabScroll)
 
-    return () => observer.disconnect()
-  }, [categoriesWithItems, setActiveCategory])
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (isProgrammaticScroll) return
+
+      // Only consider entries that just became visible
+      const visible = entries
+        .filter((e) => e.isIntersecting && e.intersectionRatio > 0)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+
+      if (visible.length > 0) {
+        const id = visible[0]!.target.id.replace('cat-', '')
+        setActiveCategory(id)
+      }
+    },
+    {
+      rootMargin: '-80px 0px -50% 0px', // top offset matches your header
+      threshold: 0,
+    },
+  )
+
+  categoriesWithItems.forEach((cat) => {
+    const el = document.getElementById(`cat-${cat.id}`)
+    if (el) observer.observe(el)
+  })
+
+  return () => {
+    observer.disconnect()
+    window.removeEventListener('menuai:tab-scroll', onTabScroll)
+    clearTimeout(programmaticTimer)
+  }
+}, [categoriesWithItems, setActiveCategory])
 
   return (
     <div className="relative mx-auto max-w-7xl px-4 pb-36 pt-4 sm:px-6 lg:pb-10">
@@ -268,8 +287,8 @@ export function MenuGrid({
             return (
               <div
                 key={cat.id}
-                className="animate-[fadeUp_500ms_ease-out]"
-                style={{ animationDelay: `${catIndex * 60}ms` }}
+                className="animate-[fadeUp_500ms_ease-out_both]"
+style={{ animationDelay: `${catIndex * 60}ms`, animationFillMode: 'both' }}
               >
                 <CategorySection
                   category={cat as any}

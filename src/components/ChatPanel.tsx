@@ -11,7 +11,7 @@ import { nanoid } from '@/lib/nanoid'
 const STARTERS: QuickReply[] = [
   { label: 'Suggest a meal', action: 'Suggest a complete meal for me' },
   { label: 'Best sellers', action: 'Show me your best selling dishes' },
-  { label: "Today’s special", action: "What is today's special?" },
+  { label: 'Today’s special', action: "What is today's special?" },
   { label: 'Recommend me a dish', action: 'Recommend me a dish' },
 ]
 
@@ -174,7 +174,7 @@ export function ChatPanel() {
         {!showChat && (
           <button
             onClick={() => setShowChat(true)}
-            className="fixed bottom-6 right-4 z-[var(--z-overlay)] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/25 transition-transform active:scale-95"
+            className="fixed bottom-6 right-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/25 transition-transform active:scale-95"
             aria-label="Open AI chat"
           >
             <Sparkles size={22} />
@@ -183,7 +183,7 @@ export function ChatPanel() {
 
         {showChat && (
           <div
-            className={`fixed inset-x-0 bottom-0 z-[var(--z-overlay)] flex flex-col rounded-t-[28px] border-t border-slate-200 bg-white/95 shadow-[0_-20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-all duration-300 ${
+            className={`fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-[28px] border-t border-slate-200 bg-white/95 shadow-[0_-20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-all duration-300 ${
               isExpanded ? 'h-[82dvh]' : 'h-[58px]'
             }`}
           >
@@ -242,7 +242,7 @@ export function ChatPanel() {
         )}
       </div>
 
-      <div className="sticky top-[var(--header-height,160px)] hidden h-[calc(100dvh-var(--header-height,160px))] w-[360px] flex-shrink-0 flex-col border-l border-slate-200 bg-white/90 backdrop-blur-xl lg:flex">
+      <div className="hidden lg:flex lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:w-full lg:flex-shrink-0 lg:flex-col lg:overflow-hidden lg:rounded-[28px] lg:border lg:border-slate-200 lg:bg-white/90 lg:backdrop-blur-xl">
         <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
           <Sparkles size={15} className="text-blue-600" />
           <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
