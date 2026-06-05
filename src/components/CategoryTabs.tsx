@@ -7,13 +7,16 @@ import { resolveMenuImageUrl } from '@/lib/resolve-image'
 export function CategoryTabs() {
   const { categories, activeCategory, setActiveCategory, items } = useAppStore()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const clickedRef = useRef(false)  // ← add this
+  const clickedRef = useRef(false)
 
   useEffect(() => {
     if (!activeCategory || !scrollRef.current) return
-    if (!clickedRef.current) return  // ← only scroll tab strip on click, not observer update
+    if (!clickedRef.current) return
+
     clickedRef.current = false
-    const el = scrollRef.current.querySelector(`[data-id="${activeCategory}"]`) as HTMLElement | null
+    const el = scrollRef.current.querySelector(
+      `[data-id="${activeCategory}"]`,
+    ) as HTMLElement | null
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   }, [activeCategory])
 
@@ -48,19 +51,17 @@ export function CategoryTabs() {
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-            onClick={() => {
-  // Immediately set active — don't wait for observer
-  setActiveCategory(cat.id)
-  clickedRef.current = true
-  window.dispatchEvent(new Event('menuai:tab-scroll'))
-  
-  const el = document.getElementById(`cat-${cat.id}`)
-  if (el) {
-    const headerOffset = 80
-    const top = el.getBoundingClientRect().top + window.scrollY - headerOffset
-    window.scrollTo({ top, behavior: 'smooth' })
-  }
-}}
+                onClick={() => {
+                  setActiveCategory(cat.id)
+                  clickedRef.current = true
+
+                  const el = document.getElementById(`cat-${cat.id}`)
+                  if (el) {
+                    const headerOffset = 80
+                    const top = el.getBoundingClientRect().top + window.scrollY - headerOffset
+                    window.scrollTo({ top, behavior: 'smooth' })
+                  }
+                }}
                 className={[
                   'flex w-[80px] flex-col items-center gap-1.5 rounded-2xl border p-2 text-center transition-all duration-150',
                   isActive
@@ -68,7 +69,6 @@ export function CategoryTabs() {
                     : 'border-stone-200 bg-white shadow-sm hover:border-stone-300 hover:shadow-md',
                 ].join(' ')}
               >
-                {/* Image */}
                 <div
                   className={[
                     'h-12 w-12 overflow-hidden rounded-xl bg-stone-100',
@@ -90,7 +90,6 @@ export function CategoryTabs() {
                   )}
                 </div>
 
-                {/* Name */}
                 <p
                   className={[
                     'line-clamp-1 w-full text-[11px] font-semibold leading-tight',
@@ -100,7 +99,6 @@ export function CategoryTabs() {
                   {cat.name}
                 </p>
 
-                {/* Count */}
                 <p className="text-[9.5px] font-medium text-stone-400">{count} items</p>
               </button>
             </div>
@@ -108,7 +106,6 @@ export function CategoryTabs() {
         })}
       </div>
 
-      {/* Fade edges */}
       <div className="pointer-events-none absolute inset-y-0 left-0 w-5 bg-gradient-to-r from-[var(--surface-bg,#f5f5f4)] to-transparent" />
       <div className="pointer-events-none absolute inset-y-0 right-0 w-5 bg-gradient-to-l from-[var(--surface-bg,#f5f5f4)] to-transparent" />
     </div>

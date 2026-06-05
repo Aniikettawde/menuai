@@ -1,10 +1,9 @@
 'use client'
 
-import { useMemo, useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { MenuItemCard } from './MenuItemCard'
 import { HeroBanner } from './HeroBanner'
-import { CategoryTabs } from './CategoryTabs'
 import { FloatingCartBar } from './FloatingCartBar'
 import { ChefHat, Sparkles, ChevronRight, TrendingUp, Clock, Star } from 'lucide-react'
 import type { MenuItem } from '@/types'
@@ -30,7 +29,6 @@ function getBadge(item: MenuItem, catItems: MenuItem[]): Badge {
 
   const prices = catItems.map((i) => i.price).sort((a, b) => a - b)
   const median = prices[Math.floor(prices.length / 2)] ?? 0
-
   if (item.price > median * 1.3) return { kind: 'anchoring', label: "Chef's choice" }
   return { kind: 'none', label: '' }
 }
@@ -69,33 +67,35 @@ function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) =>
     <button
       type="button"
       onClick={() => onAsk?.(`Tell me more about ${item.name} — why is it the chef's pick?`)}
-      className="group w-full rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left transition-all duration-200 hover:bg-amber-100/60"
+      className="group w-full rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-left transition-all duration-200 hover:bg-amber-100/60"
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-200 text-amber-800">
-          <ChefHat size={15} />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-200 text-amber-900">
+          <ChefHat size={16} />
         </div>
+
         <div className="min-w-0 flex-1">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">
             Chef&apos;s pick
           </span>
-          <p className="mt-0.5 text-sm font-semibold text-stone-900">{item.name}</p>
+          <p className="mt-1 text-sm font-semibold text-zinc-900">{item.name}</p>
           {item.description && (
-            <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-stone-500">
+            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-600">
               {item.description}
             </p>
           )}
           <div className="mt-2 flex items-center gap-3">
-            <span className="text-sm font-bold text-stone-800">{formatPrice(item.price)}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-stone-400">
+            <span className="text-sm font-bold text-zinc-900">{formatPrice(item.price)}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
               <Sparkles size={9} className="text-amber-500" />
               Tap to learn more
             </span>
           </div>
         </div>
+
         <ChevronRight
           size={14}
-          className="mt-0.5 shrink-0 text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-stone-600"
+          className="mt-0.5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-zinc-700"
         />
       </div>
     </button>
@@ -120,7 +120,7 @@ function CategorySection({
   return (
     <section
       id={`cat-${category.id}`}
-      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+      className="scroll-mt-28 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
     >
       <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3.5">
         <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
@@ -201,72 +201,55 @@ export function MenuGrid({
   isWaiterLoading = false,
   upsellCard,
 }: MenuGridProps = {}) {
-  const { restaurant, categories, items, setActiveCategory } = useAppStore()
+  const { restaurant, categories, items, activeCategory, setActiveCategory } = useAppStore()
 
   const categoriesWithItems = useMemo(
     () => categories.filter((cat) => items.some((i) => i.category_id === cat.id)),
     [categories, items],
   )
 
-  // Scroll-spy: update activeCategory as user scrolls through sections
- // In MenuGrid.tsx, replace the useEffect with this:
+  useEffect(() => {
+    if (categoriesWithItems.length === 0) return
 
-useEffect(() => {
-  if (categoriesWithItems.length === 0) return
+    if (!activeCategory && categoriesWithItems[0]) {
+      setActiveCategory(categoriesWithItems[0].id)
+    }
 
-  let isProgrammaticScroll = false
-  let programmaticTimer: ReturnType<typeof setTimeout>
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
 
-  const onTabScroll = () => {
-    isProgrammaticScroll = true
-    clearTimeout(programmaticTimer)
-    // Wait long enough for smooth scroll to finish
-    programmaticTimer = setTimeout(() => { isProgrammaticScroll = false }, 1200)
-  }
-  window.addEventListener('menuai:tab-scroll', onTabScroll)
+        if (visible.length > 0) {
+          const id = visible[0]!.target.id.replace('cat-', '')
+          setActiveCategory(id)
+        }
+      },
+      {
+        rootMargin: '-120px 0px -55% 0px',
+        threshold: [0.08, 0.18, 0.32],
+      },
+    )
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      if (isProgrammaticScroll) return
+    categoriesWithItems.forEach((cat) => {
+      const el = document.getElementById(`cat-${cat.id}`)
+      if (el) observer.observe(el)
+    })
 
-      // Only consider entries that just became visible
-      const visible = entries
-        .filter((e) => e.isIntersecting && e.intersectionRatio > 0)
-        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-
-      if (visible.length > 0) {
-        const id = visible[0]!.target.id.replace('cat-', '')
-        setActiveCategory(id)
-      }
-    },
-    {
-      rootMargin: '-80px 0px -50% 0px', // top offset matches your header
-      threshold: 0,
-    },
-  )
-
-  categoriesWithItems.forEach((cat) => {
-    const el = document.getElementById(`cat-${cat.id}`)
-    if (el) observer.observe(el)
-  })
-
-  return () => {
-    observer.disconnect()
-    window.removeEventListener('menuai:tab-scroll', onTabScroll)
-    clearTimeout(programmaticTimer)
-  }
-}, [categoriesWithItems, setActiveCategory])
+    return () => observer.disconnect()
+  }, [activeCategory, categoriesWithItems, setActiveCategory])
 
   return (
-    <div className="relative mx-auto max-w-7xl px-4 pb-36 pt-4 sm:px-6 lg:pb-10">
+    <div className="relative w-full pb-36 pt-4">
       <div className="space-y-4">
         {restaurant && (
           <div className="animate-[fadeUp_400ms_ease-out]">
             <HeroBanner
               restaurant={restaurant}
               items={items}
-              onAsk={onAsk}
-              onOpenChat={onOpenChat}
+              onAsk={onAsk ?? (() => {})}
+              onOpenChat={onOpenChat ?? (() => {})}
             />
           </div>
         )}
@@ -277,8 +260,6 @@ useEffect(() => {
           </div>
         )}
 
-        <CategoryTabs />
-
         <div className="space-y-4">
           {categories.map((cat, catIndex) => {
             const catItems = items.filter((i) => i.category_id === cat.id)
@@ -288,7 +269,7 @@ useEffect(() => {
               <div
                 key={cat.id}
                 className="animate-[fadeUp_500ms_ease-out_both]"
-style={{ animationDelay: `${catIndex * 60}ms`, animationFillMode: 'both' }}
+                style={{ animationDelay: `${catIndex * 60}ms`, animationFillMode: 'both' }}
               >
                 <CategorySection
                   category={cat as any}
