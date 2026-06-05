@@ -44,7 +44,10 @@ const { data: updated } = await supabase
 if (updated) {
   // Patch the restaurant in the store so the header updates live
   useAppStore.getState().setRestaurantData({
-    restaurant: { ...restaurant, ...updated },
+    restaurant: {
+  ...restaurant,
+  ...(updated ?? {}),
+},
     categories: useAppStore.getState().categories,
     items: useAppStore.getState().items,
   })
