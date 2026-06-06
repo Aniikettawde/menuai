@@ -21,6 +21,8 @@ type SubscriptionStatus = {
   billing_cycle: BillingCycle | null
   amount_paise: number | null
   has_access: boolean
+  is_paid_active?: boolean
+  is_trial_active?: boolean
   trial_days_remaining?: number | null
   current_period_end?: string | null
   trial_end?: string | null
@@ -38,7 +40,7 @@ function getPlanColor(planId: PlanId | null): string {
 
 function formatAmount(amountPaise: number | null, billingCycle: BillingCycle | null): string {
   if (!amountPaise) return '—'
-  const rupees = Math.round(amountPaise)
+  const rupees = Math.round(amountPaise / 100)
   const formatted = `₹${formatRupees(rupees)}`
   if (billingCycle === 'yearly') return `${formatted}/year`
   if (billingCycle === 'monthly') return `${formatted}/month`
@@ -83,7 +85,7 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8 animate-pulse">
+      <div className="mx-auto max-w-3xl animate-pulse px-4 py-6 sm:px-6 lg:px-8">
         <div className="h-10 w-32 rounded-lg bg-zinc-800" />
         <div className="mt-3 h-4 w-56 rounded bg-zinc-800/60" />
         <div className="mt-6 h-44 rounded-3xl bg-zinc-900" />
@@ -92,22 +94,24 @@ export default function BillingPage() {
     )
   }
 
-  const isActive = status?.plan === 'active' && status.has_access
-  const isTrial = status?.plan === 'trial' && status.has_access
-  const isExpired = status && !status.has_access
+  const isActive = Boolean(status?.is_paid_active || (status?.plan === 'active' && status.has_access))
+  const isTrial = Boolean(status?.is_trial_active || (status?.plan === 'trial' && status.has_access))
+  const isExpired = Boolean(status && !status.has_access)
 
-  const planLabel = getPlanLabel(status?.plan_id ?? null)
-  const planColor = getPlanColor(status?.plan_id ?? null)
-  const amountLabel = formatAmount(status?.amount_paise ?? null, status?.billing_cycle ?? null)
+  const planLabel = status?.plan === 'trial' ? 'Free trial' : getPlanLabel(status?.plan_id ?? null)
+  const planColor = status?.plan === 'trial' ? 'from-amber-500 to-orange-500' : getPlanColor(status?.plan_id ?? null)
+  const amountLabel =
+    status?.plan === 'trial'
+      ? 'Free'
+      : formatAmount(status?.amount_paise ?? null, status?.billing_cycle ?? null)
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
-      {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Billing</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            Manage your Dinezy plan, renewal, and payment history
+            Manage your Dinezy trial, renewal, and payment history
           </p>
         </div>
         <button
@@ -118,7 +122,6 @@ export default function BillingPage() {
         </button>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="mb-5 flex items-center gap-2 rounded-2xl border border-red-500/25 bg-red-500/8 p-4 text-sm text-red-300">
           <AlertCircle size={16} className="shrink-0 text-red-400" />
@@ -126,15 +129,14 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Trial warning */}
       {isTrial && (
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-orange-500/25 bg-orange-500/8 p-4">
           <Clock size={16} className="mt-0.5 shrink-0 text-orange-400" />
           <div>
             <p className="text-sm font-semibold text-orange-300">
-              {(status.trial_days_remaining ?? 0) === 0
+              {(status?.trial_days_remaining ?? 0) === 0
                 ? 'Your trial ends today'
-                : `${status.trial_days_remaining} day${status.trial_days_remaining !== 1 ? 's' : ''} left in your trial`}
+                : `${status?.trial_days_remaining ?? 0} day${(status?.trial_days_remaining ?? 0) !== 1 ? 's' : ''} left in your trial`}
             </p>
             <p className="mt-0.5 text-xs text-zinc-500">
               Your menu will go offline when the trial ends. Choose a paid plan to keep it live.
@@ -143,7 +145,6 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Expired / no access */}
       {isExpired && (
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/25 bg-red-500/8 p-4">
           <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
@@ -156,7 +157,6 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Current plan card */}
       <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900">
         <div className={`h-1 w-full bg-gradient-to-r ${planColor}`} />
 
@@ -167,11 +167,7 @@ export default function BillingPage() {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">
-                {isActive
-                  ? 'Active subscription'
-                  : isTrial
-                  ? 'Trial subscription'
-                  : 'No active plan'}
+                {isActive ? 'Active subscription' : isTrial ? 'Trial subscription' : 'No active plan'}
               </p>
               <p className="text-xs text-zinc-500">
                 {isActive || isTrial ? planLabel : 'Upgrade to get full access'}
@@ -179,7 +175,6 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {/* Dynamic plan details */}
           {(isActive || isTrial) && (
             <div className="mb-5 grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:grid-cols-3">
               <div>
@@ -195,9 +190,7 @@ export default function BillingPage() {
                   {isActive ? 'Renews' : 'Trial ends'}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-zinc-200">
-                  {isActive
-                    ? formatDate(status?.current_period_end)
-                    : formatDate(status?.trial_end)}
+                  {isActive ? formatDate(status?.current_period_end) : formatDate(status?.trial_end)}
                 </p>
               </div>
             </div>
@@ -224,7 +217,6 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Payment history */}
       <div className="mt-4 rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
         <div className="mb-3 flex items-center gap-2">
           <CreditCard size={15} className="text-zinc-500" />
@@ -259,8 +251,8 @@ export default function BillingPage() {
                     p.status === 'paid'
                       ? 'bg-green-500/10 text-green-400'
                       : p.status === 'failed'
-                      ? 'bg-red-500/10 text-red-400'
-                      : 'bg-zinc-700 text-zinc-400'
+                        ? 'bg-red-500/10 text-red-400'
+                        : 'bg-zinc-700 text-zinc-400'
                   }`}
                 >
                   {p.status}
@@ -271,7 +263,6 @@ export default function BillingPage() {
         )}
       </div>
 
-      {/* Plan features */}
       <div className="mt-4 rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
         <p className="text-sm font-semibold text-white">Plan features</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">

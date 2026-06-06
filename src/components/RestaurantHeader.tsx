@@ -26,13 +26,14 @@ function isOpenNow(hours: Restaurant['opening_hours']): boolean {
 export function RestaurantHeader({ restaurant }: Props) {
   const { setShowRating } = useAppStore()
   const open = isOpenNow(restaurant.opening_hours)
+  const hasBanner = Boolean(restaurant.cover_url?.trim())
 
   return (
     <header className="relative overflow-hidden">
-      {restaurant.cover_url ? (
+      {hasBanner && (
         <div className="relative h-56 lg:h-72">
           <Image
-            src={restaurant.cover_url}
+            src={restaurant.cover_url as string}
             alt={restaurant.name}
             fill
             priority
@@ -42,11 +43,14 @@ export function RestaurantHeader({ restaurant }: Props) {
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/10 via-slate-950/25 to-white" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.18),transparent_34%)]" />
         </div>
-      ) : (
-        <div className="h-36 bg-gradient-to-br from-blue-100 via-violet-100 to-cyan-50" />
       )}
 
-      <div className="relative z-10 -mt-10 px-4 pb-5">
+      <div
+        className={[
+          'relative z-10 px-4 pb-5',
+          hasBanner ? '-mt-10' : 'pt-4',
+        ].join(' ')}
+      >
         <div className="rounded-[28px] border border-white/70 bg-white/90 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl">
           <div className="flex items-end gap-3">
             {restaurant.logo_url ? (
@@ -60,8 +64,8 @@ export function RestaurantHeader({ restaurant }: Props) {
                 />
               </div>
             ) : (
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-600 to-violet-600 text-2xl font-bold text-white shadow-lg shadow-blue-500/20">
-                {restaurant.name[0]}
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl font-bold text-slate-900 shadow-sm">
+                {restaurant.name?.[0]?.toUpperCase() ?? 'R'}
               </div>
             )}
 

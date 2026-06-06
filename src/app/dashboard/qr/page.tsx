@@ -17,6 +17,7 @@ import {
   Sparkles,
   Hash,
   Table,
+  AlertTriangle,
 } from 'lucide-react'
 
 type RestaurantRecord = {
@@ -25,21 +26,87 @@ type RestaurantRecord = {
   logo_url?: string | null
   cover_url?: string | null
   description?: string | null
+  qr_generated_count?: number | null
+  qr_count_used?: number | null
+  generated_qr_count?: number | null
+  qr_count?: number | null
+  [key: string]: unknown
 }
 
-type Mode = 'single' | 'tables'
+type BillingPlanKey = 'trial' | 'small' | 'growth' | 'large'
+
+type BillingStatus = {
+  plan: string
+  plan_id: BillingPlanKey | null
+  billing_cycle: string | null
+  amount_paise: number | null
+  has_access: boolean
+  is_paid_active?: boolean
+  is_trial_active?: boolean
+  trial_days_remaining?: number | null
+  current_period_end?: string | null
+  trial_end?: string | null
+} | null
+
+const QR_LIMITS: Record<BillingPlanKey, number> = {
+  trial: 10,
+  small: 20,
+  growth: 50,
+  large: 200,
+}
+
+const PLAN_LABELS: Record<BillingPlanKey, string> = {
+  trial: 'Free trial',
+  small: 'Small Monthly',
+  growth: 'Growth Monthly',
+  large: 'Large Monthly',
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n))
+}
+
+function getNumberField(record: RestaurantRecord | null, keys: string[]): number {
+  if (!record) return 0
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
+      return Number(value)
+    }
+  }
+  return 0
+}
+
+function getUsedQrCount(record: RestaurantRecord | null): number {
+  return getNumberField(record, ['qr_generated_count', 'qr_count_used', 'generated_qr_count', 'qr_count'])
+}
+
+function getEffectivePlan(status: BillingStatus): BillingPlanKey {
+  if (!status) return 'trial'
+  if (status.plan === 'trial') return 'trial'
+  if (status.plan === 'active' && status.plan_id) return status.plan_id
+  return 'trial'
+}
+
+function getPlanLabel(status: BillingStatus): string {
+  return PLAN_LABELS[getEffectivePlan(status)]
+}
+
+function getPlanLimit(status: BillingStatus): number {
+  return QR_LIMITS[getEffectivePlan(status)]
+}
 
 export default function QRPage() {
   const supabase = getSupabaseDashboardBrowser()
 
   const [restaurant, setRestaurant] = useState<RestaurantRecord | null>(null)
+  const [billing, setBilling] = useState<BillingStatus>(null)
   const [baseUrl, setBaseUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState<Mode>('single')
   const [tableCount, setTableCount] = useState(10)
-  const [previewQr, setPreviewQr] = useState('')
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
 
   useEffect(() => {
@@ -51,15 +118,11 @@ export default function QRPage() {
     return `${baseUrl}/r/${restaurant.slug}`
   }, [baseUrl, restaurant?.slug])
 
-  const tableNumbers = useMemo(() => {
-    const safeCount = Math.max(1, Math.min(100, Number(tableCount) || 1))
-    return Array.from({ length: safeCount }, (_, i) => i + 1)
-  }, [tableCount])
-
-  const getTableMenuUrl = (tableNo: number) => {
-    if (!menuUrl) return ''
-    return `${menuUrl}?table=${tableNo}`
-  }
+  const allowedQrLimit = useMemo(() => getPlanLimit(billing), [billing])
+  const quotaLabel = useMemo(() => getPlanLabel(billing), [billing])
+  const usedQrCount = getUsedQrCount(restaurant)
+  const remainingQrLimit = Math.max(0, allowedQrLimit - usedQrCount)
+  const isQuotaExhausted = remainingQrLimit === 0
 
   useEffect(() => {
     let mounted = true
@@ -75,14 +138,17 @@ export default function QRPage() {
           return
         }
 
-        const { data } = await supabase
-          .from('restaurants')
-          .select('slug, name, logo_url, cover_url, description')
-          .eq('owner_id', user.id)
-          .maybeSingle()
+        const [restaurantResult, billingRes] = await Promise.all([
+          supabase.from('restaurants').select('*').eq('owner_id', user.id).maybeSingle(),
+          fetch('/api/billing/status', { cache: 'no-store' }),
+        ])
+
+        const billingData = billingRes.ok ? await billingRes.json().catch(() => ({})) : {}
 
         if (!mounted) return
-        setRestaurant((data as RestaurantRecord | null) ?? null)
+
+        setRestaurant((restaurantResult.data as RestaurantRecord | null) ?? null)
+        setBilling((billingData.status as BillingStatus) ?? null)
       } catch (err) {
         console.error('QR page load error:', err)
       } finally {
@@ -97,36 +163,40 @@ export default function QRPage() {
   }, [supabase])
 
   useEffect(() => {
-    let mounted = true
+    if (remainingQrLimit <= 0) return
 
-    async function buildSinglePreview() {
-      if (!menuUrl) return
-      try {
-        const qr = await QRCode.toDataURL(menuUrl, {
-          errorCorrectionLevel: 'H',
-          margin: 2,
-          width: 480,
-          color: { dark: '#1a1a1a', light: '#ffffff' },
-        })
-        if (mounted) setPreviewQr(qr)
-      } catch (err) {
-        console.error('QR preview error:', err)
-      }
-    }
+    setTableCount((prev) => {
+      const next = Number.isFinite(prev) && prev > 0 ? prev : Math.min(10, remainingQrLimit)
+      return clamp(next, 1, remainingQrLimit)
+    })
+  }, [remainingQrLimit])
 
-    void buildSinglePreview()
-    return () => {
-      mounted = false
-    }
-  }, [menuUrl])
+  const safeTableCount = useMemo(() => {
+    if (remainingQrLimit <= 0) return 0
+    return clamp(Number(tableCount) || 1, 1, remainingQrLimit)
+  }, [tableCount, remainingQrLimit])
+
+  const tableNumbers = useMemo(() => {
+    return Array.from({ length: safeTableCount }, (_, i) => i + 1)
+  }, [safeTableCount])
+
+  const getTableMenuUrl = (tableNo: number) => {
+    if (!menuUrl) return ''
+    return `${menuUrl}?table=${tableNo}`
+  }
 
   useEffect(() => {
     let mounted = true
 
     async function buildTablePreviews() {
-      if (!menuUrl || mode !== 'tables') return
+      if (!menuUrl) return
 
       try {
+        if (tableNumbers.length === 0) {
+          if (mounted) setTablePreviewMap({})
+          return
+        }
+
         const entries = await Promise.all(
           tableNumbers.map(async (tableNo) => {
             const qr = await QRCode.toDataURL(getTableMenuUrl(tableNo), {
@@ -136,7 +206,7 @@ export default function QRPage() {
               color: { dark: '#1a1a1a', light: '#ffffff' },
             })
             return [tableNo, qr] as const
-          })
+          }),
         )
 
         if (!mounted) return
@@ -150,7 +220,7 @@ export default function QRPage() {
     return () => {
       mounted = false
     }
-  }, [menuUrl, mode, tableNumbers])
+  }, [menuUrl, tableNumbers])
 
   async function copyLink() {
     if (!menuUrl) return
@@ -189,7 +259,7 @@ export default function QRPage() {
     y: number,
     w: number,
     h: number,
-    r: number
+    r: number,
   ) {
     ctx.beginPath()
     ctx.moveTo(x + r, y)
@@ -204,244 +274,19 @@ export default function QRPage() {
     ctx.closePath()
   }
 
-  function drawCenteredTextFit(
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    centerX: number,
-    y: number,
-    maxWidth: number,
-    startSize: number,
-    minSize: number,
-    family: string,
-    weight = 'bold'
-  ) {
-    let size = startSize
-    while (size > minSize) {
-      ctx.font = `${weight} ${size}px ${family}`
-      if (ctx.measureText(text).width <= maxWidth) break
-      size -= 2
-    }
-    ctx.fillText(text, centerX, y)
-  }
-
-  async function downloadSingleBrandedQR() {
-    if (!menuUrl || !restaurant) return
-    setBusy(true)
-
-    try {
-      const W = 1200
-      const H = 1680
-      const canvas = document.createElement('canvas')
-      canvas.width = W
-      canvas.height = H
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Canvas context unavailable')
-
-      // background
-      ctx.fillStyle = '#faf9f7'
-      ctx.fillRect(0, 0, W, H)
-
-      // subtle dot grid
-      ctx.fillStyle = 'rgba(0,0,0,0.045)'
-      for (let x = 40; x < W; x += 48) {
-        for (let y = 40; y < H; y += 48) {
-          ctx.beginPath()
-          ctx.arc(x, y, 1.5, 0, Math.PI * 2)
-          ctx.fill()
-        }
-      }
-
-      // main card
-      ctx.fillStyle = '#ffffff'
-      ctx.shadowColor = 'rgba(0,0,0,0.10)'
-      ctx.shadowBlur = 60
-      ctx.shadowOffsetY = 8
-      roundedRect(ctx, 60, 60, W - 120, H - 120, 56)
-      ctx.fill()
-      ctx.shadowColor = 'transparent'
-      ctx.shadowBlur = 0
-      ctx.shadowOffsetY = 0
-
-      // top accent
-      const grad = ctx.createLinearGradient(60, 0, W - 60, 0)
-      grad.addColorStop(0, '#f97316')
-      grad.addColorStop(1, '#fb923c')
-      ctx.fillStyle = grad
-      roundedRect(ctx, 60, 60, W - 120, 14, 7)
-      ctx.fill()
-
-      // cover image
-      let contentStartY = 160
-      if (restaurant.cover_url) {
-        const cover = await loadImage(restaurant.cover_url)
-        if (cover) {
-          ctx.save()
-          roundedRect(ctx, 60, 74, W - 120, 260, 0)
-          ctx.clip()
-          ctx.drawImage(cover, 60, 74, W - 120, 260)
-
-          const coverGrad = ctx.createLinearGradient(0, 74, 0, 334)
-          coverGrad.addColorStop(0, 'rgba(0,0,0,0.0)')
-          coverGrad.addColorStop(1, 'rgba(0,0,0,0.55)')
-          ctx.fillStyle = coverGrad
-          ctx.fillRect(60, 74, W - 120, 260)
-          ctx.restore()
-          contentStartY = 200
-        }
-      }
-
-      // logo
-      const logoY = restaurant.cover_url ? 260 : 130
-      if (restaurant.logo_url) {
-        const logo = await loadImage(restaurant.logo_url)
-        if (logo) {
-          const cx = W / 2
-          const cy = logoY + 70
-          const r = 78
-
-          ctx.fillStyle = '#ffffff'
-          ctx.shadowColor = 'rgba(0,0,0,0.15)'
-          ctx.shadowBlur = 20
-          ctx.beginPath()
-          ctx.arc(cx, cy, r + 12, 0, Math.PI * 2)
-          ctx.fill()
-          ctx.shadowBlur = 0
-
-          ctx.save()
-          ctx.beginPath()
-          ctx.arc(cx, cy, r, 0, Math.PI * 2)
-          ctx.closePath()
-          ctx.clip()
-          ctx.drawImage(logo, cx - r, cy - r, r * 2, r * 2)
-          ctx.restore()
-
-          ctx.strokeStyle = '#f97316'
-          ctx.lineWidth = 5
-          ctx.beginPath()
-          ctx.arc(cx, cy, r + 4, 0, Math.PI * 2)
-          ctx.stroke()
-
-          contentStartY = cy + r + 30
-        }
-      }
-
-      // restaurant name
-      ctx.fillStyle = '#111111'
-      drawCenteredTextFit(
-        ctx,
-        restaurant.name,
-        W / 2,
-        contentStartY + 60,
-        900,
-        68,
-        34,
-        'Georgia, serif'
-      )
-
-      // description
-      if (restaurant.description) {
-        ctx.fillStyle = '#777777'
-        ctx.font = '28px Georgia, serif'
-        const desc =
-          restaurant.description.length > 80
-            ? `${restaurant.description.slice(0, 80).trim()}…`
-            : restaurant.description
-        ctx.fillText(desc, W / 2, contentStartY + 110)
-      }
-
-      // divider
-      const divY = contentStartY + 145
-      ctx.strokeStyle = '#eeebe6'
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      ctx.moveTo(160, divY)
-      ctx.lineTo(W - 160, divY)
-      ctx.stroke()
-
-      // scan label
-      ctx.fillStyle = '#f97316'
-      ctx.font = 'bold 22px Arial'
-      ctx.textAlign = 'center'
-      ctx.fillText('SCAN TO VIEW MENU', W / 2, divY + 48)
-
-      // QR
-      const qrDataUrl = await QRCode.toDataURL(menuUrl, {
-        errorCorrectionLevel: 'H',
-        margin: 2,
-        width: 900,
-        color: { dark: '#111111', light: '#ffffff' },
-      })
-      const qrImg = await loadImage(qrDataUrl)
-      if (!qrImg) throw new Error('Failed to create QR image')
-
-      const qrSize = 680
-      const qrX = (W - qrSize) / 2
-      const qrY = divY + 70
-
-      ctx.fillStyle = '#ffffff'
-      ctx.shadowColor = 'rgba(0,0,0,0.08)'
-      ctx.shadowBlur = 30
-      roundedRect(ctx, qrX - 30, qrY - 20, qrSize + 60, qrSize + 60, 32)
-      ctx.fill()
-      ctx.shadowBlur = 0
-
-      ctx.strokeStyle = '#f0ece6'
-      ctx.lineWidth = 2
-      roundedRect(ctx, qrX - 30, qrY - 20, qrSize + 60, qrSize + 60, 32)
-      ctx.stroke()
-
-      ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize)
-
-      // url pill
-      const urlY = qrY + qrSize + 80
-      ctx.fillStyle = '#f5f2ee'
-      roundedRect(ctx, 200, urlY, W - 400, 72, 36)
-      ctx.fill()
-
-      ctx.fillStyle = '#555555'
-      ctx.font = '26px Arial'
-      ctx.fillText(menuUrl, W / 2, urlY + 46)
-
-      // branding
-      const brandY = urlY + 130
-      ctx.fillStyle = '#111111'
-      ctx.font = 'bold 40px Georgia, serif'
-      ctx.fillText('dinerr.in', W / 2, brandY)
-
-      ctx.fillStyle = '#aaaaaa'
-      ctx.font = '22px Arial'
-      ctx.fillText('Digital menus for modern restaurants', W / 2, brandY + 44)
-
-      ctx.fillStyle = '#f97316'
-      ctx.beginPath()
-      ctx.arc(W / 2, brandY + 78, 4, 0, Math.PI * 2)
-      ctx.fill()
-
-      const grad2 = ctx.createLinearGradient(60, 0, W - 60, 0)
-      grad2.addColorStop(0, 'rgba(249,115,22,0)')
-      grad2.addColorStop(0.5, 'rgba(249,115,22,0.5)')
-      grad2.addColorStop(1, 'rgba(249,115,22,0)')
-      ctx.strokeStyle = grad2
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(60, H - 66)
-      ctx.lineTo(W - 60, H - 66)
-      ctx.stroke()
-
-      const link = document.createElement('a')
-      link.href = canvas.toDataURL('image/png')
-      link.download = `${restaurant.slug}-qr-dinerr.png`
-      link.click()
-    } catch (err) {
-      console.error('Download QR error:', err)
-      alert('Could not generate QR image. Please try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function downloadTableSheet() {
     if (!restaurant || !menuUrl) return
+
+    if (remainingQrLimit <= 0) {
+      alert('Your QR limit is exhausted for this plan.')
+      return
+    }
+
+    if (tableNumbers.length === 0) {
+      alert('Please choose at least one table.')
+      return
+    }
+
     setBusy(true)
 
     try {
@@ -463,11 +308,9 @@ export default function QRPage() {
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('Canvas context unavailable')
 
-      // background
       ctx.fillStyle = '#faf9f7'
       ctx.fillRect(0, 0, W, H)
 
-      // title area
       ctx.fillStyle = '#111111'
       ctx.font = 'bold 42px Georgia, serif'
       ctx.textAlign = 'left'
@@ -477,7 +320,6 @@ export default function QRPage() {
       ctx.font = '24px Arial'
       ctx.fillText('Each card contains a separate QR for each table.', margin, 112)
 
-      // subtle divider
       ctx.strokeStyle = '#e8e2da'
       ctx.lineWidth = 2
       ctx.beginPath()
@@ -485,7 +327,6 @@ export default function QRPage() {
       ctx.lineTo(W - margin, headerH - 10)
       ctx.stroke()
 
-      // QR cards
       for (let index = 0; index < tables.length; index++) {
         const tableNo = tables[index]
         const row = Math.floor(index / cols)
@@ -494,7 +335,6 @@ export default function QRPage() {
         const x = margin + col * (cardW + gap)
         const y = margin + headerH + row * (cardH + gap)
 
-        // card shadow
         ctx.fillStyle = '#ffffff'
         ctx.shadowColor = 'rgba(0,0,0,0.10)'
         ctx.shadowBlur = 30
@@ -504,7 +344,6 @@ export default function QRPage() {
         ctx.shadowBlur = 0
         ctx.shadowOffsetY = 0
 
-        // top bar
         const g = ctx.createLinearGradient(x, y, x + cardW, y)
         g.addColorStop(0, '#f97316')
         g.addColorStop(1, '#fb923c')
@@ -512,7 +351,6 @@ export default function QRPage() {
         roundedRect(ctx, x, y, cardW, 18, 9)
         ctx.fill()
 
-        // table label pill
         const pillW = 210
         const pillH = 52
         const pillX = x + (cardW - pillW) / 2
@@ -532,17 +370,14 @@ export default function QRPage() {
         ctx.textAlign = 'center'
         ctx.fillText(`TABLE ${tableNo}`, x + cardW / 2, pillY + 33)
 
-        // restaurant name
         ctx.fillStyle = '#111111'
         ctx.font = 'bold 34px Georgia, serif'
         ctx.fillText(restaurant.name, x + cardW / 2, y + 145)
 
-        // scan line
         ctx.fillStyle = '#777777'
         ctx.font = '20px Arial'
         ctx.fillText('Scan to open menu', x + cardW / 2, y + 180)
 
-        // QR
         const qrDataUrl = await QRCode.toDataURL(getTableMenuUrl(tableNo), {
           errorCorrectionLevel: 'H',
           margin: 2,
@@ -570,7 +405,6 @@ export default function QRPage() {
 
         ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize)
 
-        // url pill
         const shortUrl = getTableMenuUrl(tableNo)
         const urlY = y + 710
         ctx.fillStyle = '#f5f2ee'
@@ -581,10 +415,9 @@ export default function QRPage() {
         ctx.font = '18px Arial'
         ctx.fillText(shortUrl, x + cardW / 2, urlY + 37)
 
-        // footer branding
         ctx.fillStyle = '#111111'
         ctx.font = 'bold 26px Georgia, serif'
-        ctx.fillText('dinerr.in', x + cardW / 2, y + 820)
+        ctx.fillText('dinezy.in', x + cardW / 2, y + 820)
 
         ctx.fillStyle = '#999999'
         ctx.font = '16px Arial'
@@ -597,7 +430,7 @@ export default function QRPage() {
       link.click()
     } catch (err) {
       console.error('Download table sheet error:', err)
-      alert('Could not generate table QR sheet. Please try again.')
+      alert('Could not generate QR image. Please try again.')
     } finally {
       setBusy(false)
     }
@@ -631,10 +464,7 @@ export default function QRPage() {
           <div className="h-[520px] animate-pulse rounded-3xl border border-zinc-800 bg-zinc-900" />
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className="h-28 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900"
-              />
+              <div key={i} className="h-28 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900" />
             ))}
           </div>
         </div>
@@ -651,7 +481,7 @@ export default function QRPage() {
           </div>
           <p className="font-semibold text-zinc-200">No restaurant yet</p>
           <p className="mt-2 text-sm text-zinc-500">
-            Create your restaurant profile first to generate a QR code.
+            Create your restaurant profile first to generate QR codes.
           </p>
         </div>
       </div>
@@ -661,270 +491,183 @@ export default function QRPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
       <div className="mb-7">
-        <h1 className="text-2xl font-bold text-white">QR Code & Sharing</h1>
+        <h1 className="text-2xl font-bold text-white">Table QR Codes</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Print the branded QR card and place it on tables, counter, or entrance.
+          Generate branded table QR cards and keep your QR usage within plan limits.
         </p>
       </div>
 
-      {/* Mode selector */}
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <button
-          type="button"
-          onClick={() => setMode('single')}
-          className={`rounded-2xl border p-4 text-left transition ${
-            mode === 'single'
-              ? 'border-orange-500/30 bg-orange-500/10'
-              : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80'
-          }`}
-        >
-          <div className="mb-2 flex items-center gap-2">
-            <QrCode size={16} className={mode === 'single' ? 'text-orange-400' : 'text-zinc-500'} />
-            <p className="text-sm font-semibold text-white">Create QR</p>
-          </div>
-          <p className="text-xs leading-relaxed text-zinc-500">
-            Generate one branded QR for the whole restaurant.
-          </p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setMode('tables')}
-          className={`rounded-2xl border p-4 text-left transition ${
-            mode === 'tables'
-              ? 'border-orange-500/30 bg-orange-500/10'
-              : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80'
-          }`}
-        >
-          <div className="mb-2 flex items-center gap-2">
-            <Table
-              size={16}
-              className={mode === 'tables' ? 'text-orange-400' : 'text-zinc-500'}
-            />
-            <p className="text-sm font-semibold text-white">Create QR for each table</p>
-          </div>
-          <p className="text-xs leading-relaxed text-zinc-500">
-            Generate separate table-wise QR cards for dine-in service.
-          </p>
-        </button>
-      </div>
-
-      {mode === 'tables' && (
-        <div className="mb-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Hash size={14} className="text-zinc-500" />
-            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-              How many tables?
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="w-full sm:max-w-xs">
-              <label className="mb-2 block text-xs text-zinc-500">Table count</label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={tableCount}
-                onChange={(e) => setTableCount(Number(e.target.value || 1))}
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
-              />
-            </div>
-
-            <div className="text-xs text-zinc-500">
-              This will generate QR cards for Table 1 to Table {Math.max(1, Math.min(100, tableCount))}
-              . Each QR will open the menu with a table number in the URL.
+      {isQuotaExhausted && (
+        <div className="mb-5 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={16} className="mt-0.5 text-rose-400" />
+            <div>
+              <p className="text-sm font-semibold text-rose-300">QR limit reached</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
+                Your {quotaLabel.toLowerCase()} plan allows {allowedQrLimit} QR codes total, and this
+                restaurant has already used all of them.
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
-        {/* Left side */}
-        <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900">
-          {mode === 'single' ? (
-            <>
-              <div className="relative flex flex-col items-center bg-[#faf9f7] px-8 py-10">
-                <div
-                  className="pointer-events-none absolute inset-0 opacity-30"
-                  style={{
-                    backgroundImage: 'radial-gradient(circle, #00000018 1px, transparent 1px)',
-                    backgroundSize: '32px 32px',
-                  }}
-                />
-
-                <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-orange-500 to-orange-400" />
-
-                {restaurant.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={restaurant.logo_url}
-                    alt="logo"
-                    className="relative z-10 mb-3 h-16 w-16 rounded-full border-4 border-white object-cover shadow-lg ring-2 ring-orange-500/40"
-                  />
-                ) : (
-                  <div className="relative z-10 mb-3 flex h-16 w-16 items-center justify-center rounded-full border-4 border-white bg-orange-500/10 shadow-lg ring-2 ring-orange-500/30 text-2xl">
-                    🍽️
-                  </div>
-                )}
-
-                <p
-                  className="relative z-10 text-center text-xl font-bold text-zinc-900"
-                  style={{ fontFamily: 'Georgia, serif' }}
-                >
-                  {restaurant.name}
-                </p>
-
-                {restaurant.description && (
-                  <p className="relative z-10 mt-1 max-w-xs text-center text-xs text-zinc-500 line-clamp-2">
-                    {restaurant.description}
-                  </p>
-                )}
-
-                <div className="relative z-10 my-4 w-full max-w-xs border-t border-zinc-200" />
-
-                <p className="relative z-10 mb-3 text-[11px] font-bold tracking-[3px] text-orange-500 uppercase">
-                  Scan to view menu
-                </p>
-
-                <div className="relative z-10 rounded-2xl bg-white p-3 shadow-md ring-1 ring-zinc-200">
-                  {previewQr ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previewQr} alt="QR Code" className="h-52 w-52 sm:h-56 sm:w-56" />
-                  ) : (
-                    <div className="flex h-52 w-52 items-center justify-center sm:h-56 sm:w-56">
-                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
-                    </div>
-                  )}
-                </div>
-
-                <p className="relative z-10 mt-4 rounded-full bg-zinc-100 px-4 py-1.5 font-mono text-xs text-zinc-500">
-                  {menuUrl}
-                </p>
-
-                <div className="relative z-10 mt-5 flex flex-col items-center gap-0.5">
-                  <p className="text-sm font-bold text-zinc-800" style={{ fontFamily: 'Georgia, serif' }}>
-                    dinerr.in
-                  </p>
-                  <p className="text-[10px] text-zinc-400">Digital menus for modern restaurants</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 border-t border-zinc-800 p-4">
-                <button
-                  onClick={downloadSingleBrandedQR}
-                  disabled={busy}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {busy ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Generating…
-                    </>
-                  ) : (
-                    <>
-                      <Download size={15} />
-                      Download QR
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={shareMenu}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700"
-                >
-                  <Share2 size={15} />
-                  Share
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="bg-[#faf9f7] p-4 sm:p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-900">Table-wise QR Preview</p>
-                    <p className="text-xs text-zinc-500">
-                      Table number is shown at the top of each QR card.
-                    </p>
-                  </div>
-                  <div className="rounded-full bg-orange-500/10 px-3 py-1 text-[11px] font-semibold text-orange-500">
-                    {tableNumbers.length} tables
-                  </div>
-                </div>
-
-                <div className="grid max-h-[780px] grid-cols-1 gap-4 overflow-auto pr-1 sm:grid-cols-2">
-                  {tableNumbers.map((tableNo) => (
-                    <div
-                      key={tableNo}
-                      className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
-                    >
-                      <div className="bg-gradient-to-r from-orange-500 to-orange-400 px-4 py-2 text-xs font-bold tracking-widest text-white uppercase">
-                        Table {tableNo}
-                      </div>
-
-                      <div className="flex flex-col items-center px-4 py-5">
-                        <p className="text-base font-bold text-zinc-900" style={{ fontFamily: 'Georgia, serif' }}>
-                          {restaurant.name}
-                        </p>
-                        <p className="mt-1 text-[11px] text-zinc-500">Scan to view menu</p>
-
-                        <div className="mt-4 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
-                          {tablePreviewMap[tableNo] ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={tablePreviewMap[tableNo]}
-                              alt={`Table ${tableNo} QR`}
-                              className="h-36 w-36"
-                            />
-                          ) : (
-                            <div className="flex h-36 w-36 items-center justify-center">
-                              <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
-                            </div>
-                          )}
-                        </div>
-
-                        <p className="mt-3 max-w-full truncate rounded-full bg-zinc-100 px-3 py-1 text-[10px] font-mono text-zinc-500">
-                          {getTableMenuUrl(tableNo)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 border-t border-zinc-800 p-4">
-                <button
-                  onClick={downloadTableSheet}
-                  disabled={busy}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {busy ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Generating…
-                    </>
-                  ) : (
-                    <>
-                      <Download size={15} />
-                      Download Sheet
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={shareMenu}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700"
-                >
-                  <Share2 size={15} />
-                  Share
-                </button>
-              </div>
-            </>
-          )}
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            Current plan
+          </p>
+          <p className="mt-2 text-sm font-semibold text-white">{quotaLabel}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Max QR allowed: <span className="text-orange-400">{allowedQrLimit}</span>
+          </p>
         </div>
 
-        {/* Right panel */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Used QR</p>
+          <p className="mt-2 text-sm font-semibold text-white">{usedQrCount}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Remaining: <span className="text-orange-400">{remainingQrLimit}</span>
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            Menu link
+          </p>
+          <p className="mt-2 break-all font-mono text-xs text-orange-400">{menuUrl}</p>
+        </div>
+      </div>
+
+      <div className="mb-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Hash size={14} className="text-zinc-500" />
+          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            How many tables?
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="w-full sm:max-w-xs">
+            <label className="mb-2 block text-xs text-zinc-500">Table count</label>
+            <input
+              type="number"
+              min={1}
+              max={Math.max(1, remainingQrLimit || 1)}
+              value={tableCount}
+              onChange={(e) => setTableCount(Number(e.target.value || 1))}
+              disabled={isQuotaExhausted}
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+
+          <div className="text-xs leading-relaxed text-zinc-500">
+            {isQuotaExhausted ? (
+              <span>QR generation is disabled until the plan is upgraded or usage is reset.</span>
+            ) : (
+              <span>
+                This will generate QR cards for Table 1 to Table {safeTableCount}. Each QR will open
+                the menu with a table number in the URL.
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
+        <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900">
+          <div className="bg-[#faf9f7] p-4 sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-zinc-900">Table-wise QR Preview</p>
+                <p className="text-xs text-zinc-500">
+                  Table number is shown at the top of each QR card.
+                </p>
+              </div>
+              <div className="rounded-full bg-orange-500/10 px-3 py-1 text-[11px] font-semibold text-orange-500">
+                {tableNumbers.length} tables
+              </div>
+            </div>
+
+            <div className="grid max-h-[780px] grid-cols-1 gap-4 overflow-auto pr-1 sm:grid-cols-2">
+              {tableNumbers.length === 0 ? (
+                <div className="col-span-full rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center">
+                  <Table size={20} className="mx-auto text-zinc-400" />
+                  <p className="mt-3 text-sm font-semibold text-zinc-700">No QR cards to generate</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Increase the table count or upgrade your plan to generate more QR cards.
+                  </p>
+                </div>
+              ) : (
+                tableNumbers.map((tableNo) => (
+                  <div
+                    key={tableNo}
+                    className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
+                  >
+                    <div className="bg-gradient-to-r from-orange-500 to-orange-400 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white">
+                      Table {tableNo}
+                    </div>
+
+                    <div className="flex flex-col items-center px-4 py-5">
+                      <p className="text-base font-bold text-zinc-900" style={{ fontFamily: 'Georgia, serif' }}>
+                        {restaurant.name}
+                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-500">Scan to view menu</p>
+
+                      <div className="mt-4 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200">
+                        {tablePreviewMap[tableNo] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={tablePreviewMap[tableNo]}
+                            alt={`Table ${tableNo} QR`}
+                            className="h-36 w-36"
+                          />
+                        ) : (
+                          <div className="flex h-36 w-36 items-center justify-center">
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+                          </div>
+                        )}
+                      </div>
+
+                      <p className="mt-3 max-w-full truncate rounded-full bg-zinc-100 px-3 py-1 text-[10px] font-mono text-zinc-500">
+                        {getTableMenuUrl(tableNo)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 border-t border-zinc-800 p-4">
+            <button
+              onClick={downloadTableSheet}
+              disabled={busy || isQuotaExhausted || tableNumbers.length === 0}
+              className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <Download size={15} />
+                  Download Sheet
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={shareMenu}
+              className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700"
+            >
+              <Share2 size={15} />
+              Share
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-4">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="mb-2 flex items-center gap-2">
@@ -1021,15 +764,19 @@ export default function QRPage() {
             </div>
           </div>
 
-          {mode === 'tables' && (
-            <div className="rounded-2xl border border-orange-500/15 bg-orange-500/5 p-4">
-              <p className="text-xs font-semibold text-orange-300">Table QR setup</p>
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                Each table QR is unique. Later, you can connect this to a waiter request flow using
-                the table number from the URL.
-              </p>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/15">
+                <Hash size={14} className="text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-blue-300">Plan limits enforced</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
+                  Trial: 10 QR. Small: 20. Growth: 50. Large: 200.
+                </p>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

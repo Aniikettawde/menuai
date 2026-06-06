@@ -1,15 +1,17 @@
-// src/app/api/billing/verify-subscription/route.ts
-//
-// Called by client after Razorpay subscription checkout succeeds.
-// Razorpay returns: razorpay_payment_id, razorpay_subscription_id, razorpay_signature
-// (NOT order_id — subscriptions use subscription_id)
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { getPlanAmountPaise, type BillingCycle, type PlanId } from '@/lib/billing-plans'
 import crypto from 'crypto'
+
+function isValidPlanId(value: unknown): value is PlanId {
+  return value === 'small' || value === 'growth' || value === 'large'
+}
+
+function isValidBillingCycle(value: unknown): value is BillingCycle {
+  return value === 'monthly' || value === 'yearly'
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +27,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing payment fields' }, { status: 400 })
     }
 
-    // ── Authenticate user ────────────────────────────────────────────
+    if (!isValidPlanId(plan_id) || !isValidBillingCycle(billing_cycle)) {
+      return NextResponse.json({ error: 'Invalid plan details' }, { status: 400 })
+    }
+
     let userId: string | null = null
 
     const authHeader = req.headers.get('authorization')
@@ -36,7 +41,9 @@ export async function POST(req: NextRequest) {
         process.env.SUPABASE_SERVICE_ROLE_KEY!,
         { auth: { persistSession: false } },
       )
-      const { data: { user } } = await sb.auth.getUser(token)
+      const {
+        data: { user },
+      } = await sb.auth.getUser(token)
       if (user) userId = user.id
     }
 
@@ -47,12 +54,16 @@ export async function POST(req: NextRequest) {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
           cookies: {
-            getAll() { return cookieStore.getAll() },
+            getAll() {
+              return cookieStore.getAll()
+            },
             setAll() {},
           },
         },
       )
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (user) userId = user.id
     }
 
@@ -60,8 +71,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // ── Verify Razorpay signature ────────────────────────────────────
-    // For subscriptions, signature = HMAC(payment_id + "|" + subscription_id)
     const secret = process.env.RAZORPAY_KEY_SECRET!
     const expectedSig = crypto
       .createHmac('sha256', secret)
@@ -69,12 +78,15 @@ export async function POST(req: NextRequest) {
       .digest('hex')
 
     if (expectedSig !== razorpay_signature) {
-      console.error('Subscription signature mismatch', { expected: expectedSig, got: razorpay_signature })
+      console.error('Subscription signature mismatch', {
+        expected: expectedSig,
+        got: razorpay_signature,
+      })
       return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 })
     }
 
-    const selectedPlanId = (plan_id as PlanId) ?? 'growth'
-    const selectedBillingCycle = (billing_cycle as BillingCycle) ?? 'monthly'
+    const selectedPlanId = plan_id
+    const selectedBillingCycle = billing_cycle
     const amountPaise = getPlanAmountPaise(selectedPlanId, selectedBillingCycle)
 
     const sb = createClient(
@@ -83,7 +95,6 @@ export async function POST(req: NextRequest) {
       { auth: { persistSession: false } },
     )
 
-    // ── Activate subscription in our DB ──────────────────────────────
     const now = new Date()
     const end = new Date(now)
     if (selectedBillingCycle === 'yearly') {
@@ -114,7 +125,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: upsertError.message }, { status: 500 })
     }
 
-    // ── Log payment ──────────────────────────────────────────────────
     const { data: sub } = await sb
       .from('subscriptions')
       .select('id')
@@ -124,7 +134,7 @@ export async function POST(req: NextRequest) {
     await sb.from('payment_history').insert({
       user_id: userId,
       subscription_id: sub?.id ?? null,
-      razorpay_order_id: null,        // no order_id for subscriptions
+      razorpay_order_id: null,
       razorpay_payment_id,
       razorpay_signature,
       amount_paise: amountPaise,

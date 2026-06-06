@@ -20,6 +20,19 @@ async function getMenuData(slug: string): Promise<MenuPageData | null> {
     .single()
 
   if (restError || !restaurant) return null
+  
+   const { data: sub } = await supabase
+    .from('subscriptions')
+    .select('plan, trial_end, current_period_end')
+    .eq('user_id', restaurant.owner_id)
+    .maybeSingle()
+
+  const now = new Date()
+  const hasAccess =
+    sub?.plan === 'active' ||
+    (sub?.plan === 'trial' && sub.trial_end && new Date(sub.trial_end) > now)
+
+  if (!hasAccess) return null
 
   const [{ data: categories }, { data: items }] = await Promise.all([
     supabase

@@ -29,10 +29,9 @@ import {
   type PlanId,
 } from '@/lib/billing-plans'
 
-// ── Razorpay subscription checkout types ──────────────────────────
 interface RazorpaySubscriptionOptions {
   key: string
-  subscription_id: string     // <-- key difference from one-time orders
+  subscription_id: string
   name: string
   description: string
   theme?: { color?: string }
@@ -60,15 +59,14 @@ const FEATURES = [
   { icon: Shield, text: 'QR code generator & offline menu cache' },
 ]
 
-const PLAN_LIST: BillingPlan[] = [
-  BILLING_PLANS.small,
-  BILLING_PLANS.growth,
-  BILLING_PLANS.large,
-]
+const PLAN_LIST: BillingPlan[] = [BILLING_PLANS.small, BILLING_PLANS.growth, BILLING_PLANS.large]
 
 type BillingStatus = {
   plan: string
+  plan_id?: PlanId | null
   has_access: boolean
+  is_paid_active?: boolean
+  is_trial_active?: boolean
   trial_days_remaining?: number | null
 } | null
 
@@ -85,7 +83,6 @@ export default function OnboardingPage() {
 
   const accessTokenRef = useRef<string | null>(null)
 
-  // Load Razorpay SDK
   useEffect(() => {
     if (document.querySelector('script[src*="razorpay"]')) return
     const s = document.createElement('script')
@@ -94,27 +91,28 @@ export default function OnboardingPage() {
     document.head.appendChild(s)
   }, [])
 
-  // Check billing status on mount
   useEffect(() => {
     let mounted = true
 
     async function checkBillingStatus() {
       try {
         const res = await fetch('/api/billing/status', { cache: 'no-store' })
-        if (!res.ok) { if (mounted) setCanStartTrial(true); return }
+        if (!res.ok) {
+          if (mounted) setCanStartTrial(true)
+          return
+        }
 
         const data: { status?: BillingStatus } = await res.json()
         const status = data.status ?? null
 
         if (!mounted) return
 
-        if (status?.has_access) {
+        if (status?.plan === 'active' && status?.is_paid_active) {
           router.replace('/dashboard')
           return
         }
 
-        // Expired trial — no second trial
-        setCanStartTrial(!(status?.plan === 'trial' && !status.has_access))
+        setCanStartTrial(!status)
       } catch {
         if (mounted) setCanStartTrial(true)
       } finally {
@@ -123,14 +121,17 @@ export default function OnboardingPage() {
     }
 
     void checkBillingStatus()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [router])
 
-  // ── Auth helpers ─────────────────────────────────────────────────
   async function getAccessToken(): Promise<string | null> {
     if (accessTokenRef.current) return accessTokenRef.current
     for (let i = 0; i < 5; i++) {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (session?.access_token) {
         accessTokenRef.current = session.access_token
         return session.access_token
@@ -152,14 +153,13 @@ export default function OnboardingPage() {
     })
   }
 
-  // ── Trial (no Razorpay involved) ─────────────────────────────────
-  const handleStartTrial = async (planId: PlanId = 'growth') => {
+  const handleStartTrial = async () => {
     setError('')
     setStartingTrial(true)
     try {
       const res = await authFetch('/api/billing/start-trial', {
         method: 'POST',
-        body: JSON.stringify({ plan_id: planId, billing_cycle: billingCycle }),
+        body: JSON.stringify({}),
       })
       if (!res.ok) {
         const e = await res.json()
@@ -173,13 +173,11 @@ export default function OnboardingPage() {
     }
   }
 
-  // ── Subscription checkout ────────────────────────────────────────
   const handleSubscribe = async (plan: BillingPlan) => {
     setError('')
     setSubscribing(true)
 
     try {
-      // 1. Create Razorpay subscription on our server
       const createRes = await authFetch('/api/billing/create-subscription', {
         method: 'POST',
         body: JSON.stringify({ plan_id: plan.id, billing_cycle: billingCycle }),
@@ -192,7 +190,6 @@ export default function OnboardingPage() {
 
       const { subscription_id, key, plan_id, billing_cycle } = await createRes.json()
 
-      // 2. Open Razorpay subscription checkout
       await new Promise<void>((resolve, reject) => {
         if (!window.Razorpay) {
           reject(new Error('Payment SDK not loaded. Please refresh and try again.'))
@@ -201,16 +198,15 @@ export default function OnboardingPage() {
 
         const options: RazorpaySubscriptionOptions = {
           key,
-          subscription_id,   // <-- subscription_id, NOT order_id
+          subscription_id,
           name: 'Dinezy',
-          description: `${plan.name} • ${billingCycle === 'monthly' ? 'Monthly' : 'Yearly'} subscription`,
+          description: `${plan.name} • ${billing_cycle === 'monthly' ? 'Monthly' : 'Yearly'} subscription`,
           theme: { color: '#2563eb' },
           modal: {
             ondismiss: () => reject(new Error('DISMISSED')),
           },
           handler: async (response) => {
             try {
-              // 3. Verify on our server
               const verifyRes = await authFetch('/api/billing/verify-subscription', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -271,8 +267,6 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#f8fbff] via-white to-[#f3f7ff] text-slate-900">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-
-        {/* Header */}
         <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-200">
@@ -306,18 +300,17 @@ export default function OnboardingPage() {
 
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
           <div className="space-y-6">
-
-            {/* Hero */}
             <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:p-8">
               <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
                 Start your Dinezy plan
               </div>
               <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
-                Choose a plan that fits your restaurant
+                Start with a 7-day free trial, then choose a plan
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-                Recurring monthly or yearly subscription. Cancel anytime from Razorpay. Every plan includes a 7-day free trial — no card required.
+                No UPI or credit card needed for the trial. After 7 days, choose Small, Growth, or Large to keep your restaurant live.
               </p>
+
               <div className="mt-6 flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
                   <Clock size={12} />
@@ -325,16 +318,26 @@ export default function OnboardingPage() {
                 </span>
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
                   <RefreshCw size={12} />
-                  Auto-renews via Razorpay
+                  Paid plans renew via Razorpay
                 </span>
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
                   <Shield size={12} />
                   Cancel anytime
                 </span>
               </div>
+
+              {canStartTrial && (
+                <button
+                  onClick={() => void handleStartTrial()}
+                  disabled={busy}
+                  className="mt-6 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {startingTrial ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}
+                  Start free trial
+                </button>
+              )}
             </div>
 
-            {/* Billing cycle toggle */}
             <div className="rounded-[32px] border border-slate-200 bg-white/85 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -370,7 +373,6 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            {/* Plan cards */}
             <div className="grid gap-5">
               {PLAN_LIST.map((plan) => {
                 const price = billingCycle === 'monthly' ? plan.monthly : plan.yearly
@@ -393,7 +395,9 @@ export default function OnboardingPage() {
                     <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-start">
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <span className={`inline-flex rounded-full bg-gradient-to-r ${plan.color} px-3 py-1 text-[11px] font-bold text-white shadow-sm`}>
+                          <span
+                            className={`inline-flex rounded-full bg-gradient-to-r ${plan.color} px-3 py-1 text-[11px] font-bold text-white shadow-sm`}
+                          >
                             {plan.highlight}
                           </span>
                           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
@@ -402,8 +406,12 @@ export default function OnboardingPage() {
                         </div>
 
                         <div>
-                          <h2 className="text-2xl font-black tracking-tight text-slate-900">{plan.name}</h2>
-                          <p className="mt-1 text-sm leading-6 text-slate-500">{plan.description}</p>
+                          <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                            {plan.name}
+                          </h2>
+                          <p className="mt-1 text-sm leading-6 text-slate-500">
+                            {plan.description}
+                          </p>
                         </div>
 
                         <div className="flex items-end gap-2">
@@ -432,20 +440,6 @@ export default function OnboardingPage() {
                       </div>
 
                       <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                        {canStartTrial && (
-                          <button
-                            onClick={() => void handleStartTrial(plan.id)}
-                            disabled={busy}
-                            className={[
-                              'inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100',
-                              busy ? 'cursor-not-allowed opacity-50' : '',
-                            ].join(' ')}
-                          >
-                            {startingTrial ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}
-                            Start free trial
-                          </button>
-                        )}
-
                         <button
                           onClick={() => void handleSubscribe(plan)}
                           disabled={busy}
@@ -454,7 +448,11 @@ export default function OnboardingPage() {
                             busy ? 'cursor-not-allowed opacity-50' : '',
                           ].join(' ')}
                         >
-                          {subscribing ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
+                          {subscribing ? (
+                            <Loader2 size={15} className="animate-spin" />
+                          ) : (
+                            <CreditCard size={15} />
+                          )}
                           Subscribe
                         </button>
                       </div>
@@ -465,7 +463,6 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          {/* Sidebar */}
           <aside className="space-y-6">
             <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
               <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
@@ -474,7 +471,10 @@ export default function OnboardingPage() {
               </div>
               <div className="mt-5 space-y-3">
                 {FEATURES.map(({ icon: Icon, text }) => (
-                  <div key={text} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div
+                    key={text}
+                    className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                  >
                     <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
                       <Icon size={15} />
                     </div>
@@ -490,12 +490,12 @@ export default function OnboardingPage() {
                 How subscriptions work
               </div>
               <p className="mt-3 text-sm leading-7 text-slate-600">
-                Razorpay handles recurring billing. After subscribing, your card/UPI is charged automatically each cycle. You can cancel anytime from your Razorpay account or by contacting us.
+                Razorpay handles recurring billing for the paid plans. The 7-day trial is separate and does not need UPI or credit card details.
               </p>
               <div className="mt-5 grid gap-2">
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <Check size={13} className="text-emerald-600" />
-                  UPI, cards, and net banking
+                  UPI, cards, and net banking for paid plans
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <Check size={13} className="text-emerald-600" />
@@ -503,7 +503,7 @@ export default function OnboardingPage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <Check size={13} className="text-emerald-600" />
-                  Trial has no auto-debit — you choose when to pay
+                  Trial is separate from the 3 paid plans
                 </div>
               </div>
             </div>
@@ -534,22 +534,21 @@ export default function OnboardingPage() {
           </aside>
         </section>
 
-        {/* Quick start footer */}
         <div className="rounded-[32px] border border-slate-200 bg-white/85 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-900">Quick start</p>
               <p className="text-xs text-slate-500">
                 {canStartTrial
-                  ? 'Try free for 7 days, no card needed. Subscribe when ready.'
-                  : 'Trial used — pick a plan above to subscribe.'}
+                  ? 'Start the free trial first, then subscribe when ready.'
+                  : 'Trial already used — pick one of the paid plans above.'}
               </p>
             </div>
             {canStartTrial ? (
               <button
-                onClick={() => void handleStartTrial('growth')}
+                onClick={() => void handleStartTrial()}
                 disabled={busy}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ArrowRight size={15} />
                 Start free trial
