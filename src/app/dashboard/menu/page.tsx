@@ -167,7 +167,7 @@ function ImportMenuModal({
   const [step, setStep] = useState<ImportStep>('choose')
   const [error, setError] = useState('')
   const [result, setResult] = useState<GeminiMenuResult | null>(null)
-  const [progress, setProgress] = useState('')
+  const [progress, setProgress] = useState('')  
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(file: File) {
@@ -511,6 +511,10 @@ export default function MenuPage() {
   const [actionSheetItem, setActionSheetItem] = useState<MenuItemRow | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [catImageUploading, setCatImageUploading] = useState<string | null>(null)
+  const [descriptionGenerating, setDescriptionGenerating] = useState(false)
+const [descriptionTone, setDescriptionTone] = useState<
+  'premium' | 'comforting' | 'bold' | 'chef'
+>('premium')
 
   useEffect(() => {
     let mounted = true
@@ -604,66 +608,107 @@ export default function MenuPage() {
     }
   }
 
-  async function saveItem() {
-    if (!editingItem || !restaurant || !activeCat) return
-    const name = cleanString(editingItem.name)
-    if (!name) return
+ async function saveItem() {
+  if (!editingItem || !restaurant || !activeCat) return
 
-    setItemSaving(true)
-    setError('')
+  const name = cleanString(editingItem.name)
+  if (!name) return
 
-    try {
-      const payload = {
-        restaurant_id: restaurant.id,
-        category_id: editingItem.category_id || activeCat,
-        name,
-        description: cleanString(editingItem.description),
-        price: toIntOrZero(editingItem.price),
-        currency: 'INR',
-        image_url: cleanString(editingItem.image_url),
-        is_available: Boolean(editingItem.is_available ?? true),
-        is_bestseller: Boolean(editingItem.is_bestseller ?? false),
-        is_veg: Boolean(editingItem.is_veg ?? true),
-        is_special: Boolean(editingItem.is_special ?? false),
-        tags: cleanStringArray(editingItem.tags),
-        allergens: cleanStringArray(editingItem.allergens),
-        prep_time_minutes: toIntOrNull(editingItem.prep_time_minutes),
-        calories: toIntOrNull(editingItem.calories),
-        position: Number.isFinite(Number(editingItem.position))
-          ? Number(editingItem.position)
-          : items.filter((x) => x.category_id === activeCat).length,
-      }
+  setItemSaving(true)
+  setError('')
 
-      if (editingItem.id) {
-        const { data, error } = await supabase
-          .from('menu_items')
-          .update(payload)
-          .eq('id', editingItem.id)
-          .select()
-          .single()
-        if (error) throw error
-        if (data) {
-          setItems((prev) => prev.map((x) => (x.id === data.id ? (data as MenuItemRow) : x)))
-          setActionSheetItem((prev) => (prev?.id === data.id ? (data as MenuItemRow) : prev))
-        }
-      } else {
-        const { data, error } = await supabase
-          .from('menu_items')
-          .insert(payload)
-          .select()
-          .single()
-        if (error) throw error
-        if (data) setItems((prev) => [...prev, data as MenuItemRow])
-      }
-
-      setEditingItem(null)
-    } catch (err) {
-      console.error('Failed to save dish:', err)
-      setError(err instanceof Error ? err.message : 'Failed to save dish')
-    } finally {
-      setItemSaving(false)
+  try {
+    const payload = {
+      restaurant_id: restaurant.id,
+      category_id: editingItem.category_id || activeCat,
+      name,
+      description: cleanString(editingItem.description),
+      price: toIntOrZero(editingItem.price),
+      currency: 'INR',
+      image_url: cleanString(editingItem.image_url),
+      is_available: Boolean(editingItem.is_available ?? true),
+      is_bestseller: Boolean(editingItem.is_bestseller ?? false),
+      is_veg: Boolean(editingItem.is_veg ?? true),
+      is_special: Boolean(editingItem.is_special ?? false),
+      tags: cleanStringArray(editingItem.tags),
+      allergens: cleanStringArray(editingItem.allergens),
+      prep_time_minutes: toIntOrNull(editingItem.prep_time_minutes),
+      calories: toIntOrNull(editingItem.calories),
+      position: Number.isFinite(Number(editingItem.position))
+        ? Number(editingItem.position)
+        : items.filter((x) => x.category_id === activeCat).length,
     }
+
+    if (editingItem.id) {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .update(payload)
+        .eq('id', editingItem.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      if (data) {
+        setItems((prev) => prev.map((x) => (x.id === data.id ? (data as MenuItemRow) : x)))
+        setActionSheetItem((prev) => (prev?.id === data.id ? (data as MenuItemRow) : prev))
+      }
+    } else {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .insert(payload)
+        .select()
+        .single()
+
+      if (error) throw error
+      if (data) setItems((prev) => [...prev, data as MenuItemRow])
+    }
+
+    setEditingItem(null)
+  } catch (err) {
+    console.error('Failed to save dish:', err)
+    setError(err instanceof Error ? err.message : 'Failed to save dish')
+  } finally {
+    setItemSaving(false)
   }
+}
+
+
+async function generateDescription() {
+  if (!editingItem || !editingItem.name?.trim()) return
+ 
+  setDescriptionGenerating(true)
+  setError('')
+ 
+  try {
+    const categoryName =
+      categories.find((c) => c.id === (editingItem.category_id || activeCat))?.name ?? ''
+ 
+    const res = await fetch('/api/menu-generate-description', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: editingItem.name,
+        currentDescription: editingItem.description ?? '',
+        categoryName,
+        isVeg: Boolean(editingItem.is_veg),
+        isBestseller: Boolean(editingItem.is_bestseller),
+        isSpecial: Boolean(editingItem.is_special),
+        tags: editingItem.tags ?? [],
+      }),
+    })
+ 
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data?.error ?? 'Failed to generate description')
+    if (data?.description) {
+      setEditingItem((prev) => (prev ? { ...prev, description: data.description } : prev))
+    }
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to generate description')
+  } finally {
+    setDescriptionGenerating(false)
+  }
+}
 
   async function deleteItem(id: string) {
     if (!confirm('Delete this dish?')) return
@@ -1318,34 +1363,32 @@ export default function MenuPage() {
                     autoFocus
                   />
                 </Field>
-
-                <Field label="Description">
-                  <textarea
-                    value={editingItem.description ?? ''}
-                    onChange={(e) => setEditingItem((f) => (f ? { ...f, description: e.target.value } : f))}
-                    rows={2}
-                    placeholder="Rich, creamy tomato-based curry…"
-                    className={`${INPUT} resize-none`}
-                  />
-                </Field>
-
-                <Field label="Price (₹)">
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-zinc-400">₹</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editingItem.price ? Number(editingItem.price) / 100 : ''}
-                      onChange={(e) =>
-                        setEditingItem((f) =>
-                          f ? { ...f, price: Math.round(parseFloat(e.target.value || '0') * 100) } : f
-                        )
-                      }
-                      placeholder="299"
-                      className={`${INPUT} pl-8`}
-                    />
-                  </div>
-                </Field>
+<Field label="Description">
+  <div className="space-y-2">
+    <textarea
+      value={editingItem.description ?? ''}
+      onChange={(e) => setEditingItem((f) => (f ? { ...f, description: e.target.value } : f))}
+      rows={3}
+      placeholder="Rich, creamy tomato-based curry…"
+      className={`${INPUT} resize-none`}
+    />
+    {editingItem.name?.trim() && (
+      <button
+        type="button"
+        onClick={() => void generateDescription()}
+        disabled={descriptionGenerating}
+        className="inline-flex items-center gap-2 rounded-xl border border-orange-500/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-400 transition hover:bg-orange-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {descriptionGenerating ? (
+          <Loader2 size={13} className="animate-spin" />
+        ) : (
+          <Sparkles size={13} />
+        )}
+        {editingItem.description?.trim() ? 'Improve with AI' : 'Generate with AI'}
+      </button>
+    )}
+  </div>
+</Field>
 
                 <Field label="Photo">
                   <div className="flex items-center gap-3">

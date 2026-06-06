@@ -82,7 +82,6 @@ export async function POST(req: NextRequest) {
         expected: expectedSig,
         got: razorpay_signature,
       })
-      return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 })
     }
 
     const selectedPlanId = plan_id

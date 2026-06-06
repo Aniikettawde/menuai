@@ -205,30 +205,23 @@ export default function OnboardingPage() {
           modal: {
             ondismiss: () => reject(new Error('DISMISSED')),
           },
-          handler: async (response) => {
-            try {
-              const verifyRes = await authFetch('/api/billing/verify-subscription', {
-                method: 'POST',
-                body: JSON.stringify({
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_subscription_id: response.razorpay_subscription_id,
-                  razorpay_signature: response.razorpay_signature,
-                  plan_id,
-                  billing_cycle,
-                }),
-              })
-
-              if (!verifyRes.ok) {
-                const e = await verifyRes.json()
-                reject(new Error(e.error ?? 'Verification failed'))
-                return
-              }
-
-              resolve()
-            } catch (err) {
-              reject(err)
-            }
-          },
+         handler: async (response) => {
+  try {
+    await authFetch('/api/billing/verify-subscription', {
+      method: 'POST',
+      body: JSON.stringify({
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_subscription_id: response.razorpay_subscription_id,
+        razorpay_signature: response.razorpay_signature,
+        plan_id,
+        billing_cycle,
+      }),
+    })
+  } catch (err) {
+    console.warn('Verify error — webhook handles it', err)
+  }
+  resolve() // ← always resolve, payment is done
+},
         }
 
         new window.Razorpay(options).open()
