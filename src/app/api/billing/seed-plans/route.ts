@@ -59,6 +59,22 @@ export async function GET(req: Request) {
 
   try {
     const plans = await Promise.all([
+	
+	createPlan({
+    name: 'Dinezy Test – Monthly',
+    amount: 49 * 100,       // ₹49 in paise
+    interval: 1,
+    period: 'monthly',
+    notes: { plan_id: 'test', billing_cycle: 'monthly' },
+  }),
+  createPlan({
+    name: 'Dinezy Test – Yearly',
+    amount: 49 * 100,
+    interval: 1,
+    period: 'yearly',
+    notes: { plan_id: 'test', billing_cycle: 'yearly' },
+  }),
+  
       createPlan({
         name: 'Dinezy Small – Monthly',
         amount: 1999 * 100,
@@ -104,6 +120,8 @@ export async function GET(req: Request) {
     ])
 
     const [
+	  testMonthly, testYearly,          // ← add these
+
       smallMonthly, smallYearly,
       growthMonthly, growthYearly,
       largeMonthly, largeYearly,
@@ -112,6 +130,8 @@ export async function GET(req: Request) {
     return NextResponse.json({
       message: 'Plans created. Copy these into your .env.local',
       env: [
+	    `RAZORPAY_PLAN_TEST_MONTHLY=${testMonthly.id}`,   // ← add
+    `RAZORPAY_PLAN_TEST_YEARLY=${testYearly.id}`,     // ← add
         `RAZORPAY_PLAN_SMALL_MONTHLY=${smallMonthly.id}`,
         `RAZORPAY_PLAN_SMALL_YEARLY=${smallYearly.id}`,
         `RAZORPAY_PLAN_GROWTH_MONTHLY=${growthMonthly.id}`,

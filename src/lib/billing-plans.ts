@@ -1,5 +1,5 @@
 export type BillingCycle = 'monthly' | 'yearly'
-export type PlanId = 'small' | 'growth' | 'large'
+export type PlanId = 'test' | 'small' | 'growth' | 'large'  // ← add 'test'
 
 export type BillingPlan = {
   id: PlanId
@@ -19,6 +19,20 @@ export type BillingPlan = {
 }
 
 export const BILLING_PLANS: Record<PlanId, BillingPlan> = {
+	 test: {
+    id: 'test',
+    name: 'Test Plan',
+    tables: '1–5 tables',
+    monthly: 49,
+    yearly: 49,
+    highlight: 'For testing only',
+    color: 'from-green-500 to-emerald-600',
+    shadow: 'shadow-green-200',
+    description: 'A minimal plan to test the payment flow end to end.',
+    features: ['QR menu', 'AI assistant', 'Waiter call', 'Basic analytics'],
+    razorpay_plan_id_monthly: process.env.RAZORPAY_PLAN_TEST_MONTHLY ?? '',
+    razorpay_plan_id_yearly: process.env.RAZORPAY_PLAN_TEST_YEARLY ?? '',
+  },
   small: {
     id: 'small',
     name: 'Small Dining Room',

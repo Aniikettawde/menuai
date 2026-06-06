@@ -59,7 +59,7 @@ const FEATURES = [
   { icon: Shield, text: 'QR code generator & offline menu cache' },
 ]
 
-const PLAN_LIST: BillingPlan[] = [BILLING_PLANS.small, BILLING_PLANS.growth, BILLING_PLANS.large]
+const PLAN_LIST: BillingPlan[] = [BILLING_PLANS.test, BILLING_PLANS.small, BILLING_PLANS.growth, BILLING_PLANS.large]
 
 type BillingStatus = {
   plan: string
@@ -391,6 +391,12 @@ export default function OnboardingPage() {
                         Most popular
                       </div>
                     )}
+					
+					{plan.id === 'test' && (
+  <div className="absolute left-4 top-4 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 px-3 py-1 text-[11px] font-bold text-white shadow-lg">
+    🧪 Test only
+  </div>
+)}
 
                     <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-start">
                       <div className="space-y-3">
