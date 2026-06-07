@@ -16,7 +16,8 @@ import {
   UtensilsCrossed,
   ChevronRight,
   ChevronDown,
-
+  LogOut,
+  KeyRound,
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import { TrialBanner } from '@/components/billing/TrialBanner'
@@ -88,18 +89,19 @@ const [showMobileAccountMenu, setShowMobileAccountMenu] = useState(false)
     return () => { mounted = false; subscription.unsubscribe() }
   }, [isBarePage, router, supabase])
   
-  async function handleSignOut() {
-  setShowMobileAccountMenu(false)
-  await supabase.auth.signOut()
-  setUser(null)
-  router.push('/dashboard/login')
-}
+ async function handleSignOut() {
+  try {
+    setShowMobileAccountMenu(false)
 
-  async function handleSignOut() {
     await supabase.auth.signOut()
+
     setUser(null)
+
     router.push('/dashboard/login')
+  } catch (error) {
+    console.error('Logout failed:', error)
   }
+}
 
   if (isBarePage) return <>{children}</>
 
