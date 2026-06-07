@@ -279,8 +279,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="px-4 pt-4 pb-[88px] sm:px-5 sm:pt-5 lg:px-6 lg:pt-5 lg:pb-6 xl:px-8 xl:pt-6">
           <div className="mx-auto w-full max-w-5xl">
             <TrialBanner />
-            {children}
-          </div>
+ className="pb-28 lg:pb-6"
+>
+  {children}          </div>
         </div>
       </main>
 
