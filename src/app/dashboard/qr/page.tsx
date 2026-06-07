@@ -756,9 +756,9 @@ export default function QRPage() {
                 <Sparkles size={14} className="text-orange-400" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-orange-300">Branded with dinerr.in</p>
+                <p className="text-xs font-semibold text-orange-300">Branded with Dinezy</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
-                  Every downloaded card includes your restaurant name, logo, and the dinerr.in wordmark.
+                  Every downloaded card includes your restaurant name, logo, and the Dinezy wordmark.
                 </p>
               </div>
             </div>

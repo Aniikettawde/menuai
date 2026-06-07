@@ -15,6 +15,8 @@ import {
   Store,
   UtensilsCrossed,
   ChevronRight,
+  ChevronDown,
+
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import { TrialBanner } from '@/components/billing/TrialBanner'
@@ -38,7 +40,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<User | null>(null)
   const [checked, setChecked] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-
+const [showMobileAccountMenu, setShowMobileAccountMenu] = useState(false)
   const isBarePage = BARE_PAGES.includes(pathname)
 
   const activePage = useMemo(
@@ -54,6 +56,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+  
+  useEffect(() => {
+  setShowMobileAccountMenu(false)
+}, [pathname])
 
   useEffect(() => {
     if (isBarePage) { setChecked(true); return }
@@ -81,6 +87,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     return () => { mounted = false; subscription.unsubscribe() }
   }, [isBarePage, router, supabase])
+  
+  async function handleSignOut() {
+  setShowMobileAccountMenu(false)
+  await supabase.auth.signOut()
+  setUser(null)
+  router.push('/dashboard/login')
+}
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -130,7 +143,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <UtensilsCrossed size={15} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold tracking-tight text-white">dinerr.in</p>
+            <p className="text-sm font-bold tracking-tight text-white">Dinezy</p>
             <p className="text-[10px] font-medium tracking-widest text-zinc-600 uppercase">Dashboard</p>
           </div>
         </div>
@@ -199,7 +212,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-md shadow-orange-500/20">
               <UtensilsCrossed size={13} className="text-white" />
             </div>
-            <p className="text-sm font-bold tracking-tight text-white">dinerr.in</p>
+            <p className="text-sm font-bold tracking-tight text-white">Dinezy</p>
           </Link>
 
           <nav className="flex flex-1 items-center justify-center gap-1">
@@ -246,33 +259,101 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </header>
 
       {/* ── Mobile Top Bar ── */}
-      <header className={`sticky top-0 z-40 border-b border-white/[0.05] transition-all duration-300 lg:hidden ${
-        scrolled ? 'bg-[#080808]/98 shadow-lg shadow-black/30 backdrop-blur-2xl' : 'bg-[#080808]/95 backdrop-blur-xl'
-      }`}>
-        <div className="flex h-14 items-center justify-between gap-3 px-4">
-          <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-md shadow-orange-500/20">
-              <UtensilsCrossed size={13} className="text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold tracking-tight text-white">
-                {activePage?.label ?? 'Dashboard'}
-              </p>
-              <p className="text-[10px] leading-none text-zinc-600">dinerr.in</p>
-            </div>
-          </Link>
+      <header
+  className={`sticky top-0 z-40 border-b border-white/[0.05] transition-all duration-300 lg:hidden ${
+    scrolled ? 'bg-[#080808]/98 shadow-lg shadow-black/30 backdrop-blur-2xl' : 'bg-[#080808]/95 backdrop-blur-xl'
+  }`}
+>
+  <div className="flex h-14 items-center justify-between gap-3 px-4">
+    <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-md shadow-orange-500/20">
+        <UtensilsCrossed size={13} className="text-white" />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-bold tracking-tight text-white">
+          {activePage?.label ?? 'Dashboard'}
+        </p>
+        <p className="text-[10px] leading-none text-zinc-600">Dinezy</p>
+      </div>
+    </Link>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/15 bg-emerald-500/6 px-2.5 py-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] font-semibold text-emerald-400">Live</span>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-[11px] font-bold text-white shadow-md shadow-orange-500/20">
-              {userInitial}
-            </div>
-          </div>
+    <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/15 bg-emerald-500/6 px-2.5 py-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-[10px] font-semibold text-emerald-400">Live</span>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowMobileAccountMenu((v) => !v)}
+        className="flex items-center gap-1 rounded-xl border border-white/[0.06] bg-white/[0.03] pr-1.5 pl-1.5 py-1 text-zinc-500 transition hover:bg-white/[0.07] hover:text-zinc-300"
+        aria-label="Open account menu"
+        aria-expanded={showMobileAccountMenu}
+      >
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 text-[11px] font-bold text-white shadow-md shadow-orange-500/20">
+          {userInitial}
         </div>
-      </header>
+        <ChevronDown
+          size={12}
+          className={`transition-transform duration-200 ${showMobileAccountMenu ? 'rotate-180' : ''}`}
+        />
+      </button>
+    </div>
+  </div>
+
+  {showMobileAccountMenu && (
+    <div
+      className="fixed inset-0 z-50 lg:hidden"
+      onClick={() => setShowMobileAccountMenu(false)}
+    >
+      <div
+        className="absolute right-4 top-16 w-[220px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101010] shadow-2xl shadow-black/40"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="border-b border-white/[0.06] px-4 py-3">
+          <p className="truncate text-xs font-semibold text-white">{userEmail}</p>
+          <p className="mt-0.5 text-[10px] text-zinc-600">Account</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowMobileAccountMenu(false)
+            router.push('/dashboard/change-password')
+          }}
+          className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-orange-400">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 17v-1" />
+              <path d="M7 10a5 5 0 0 1 10 0v2H7v-2Z" />
+              <rect x="5" y="10" width="14" height="10" rx="2" />
+            </svg>
+          </span>
+          <span className="flex-1">Change password</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowMobileAccountMenu(false)
+            void handleSignOut()
+          }}
+          className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-zinc-400">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </span>
+          <span className="flex-1">Logout</span>
+        </button>
+      </div>
+    </div>
+  )}
+</header>
 
       {/* ── Main Content ── */}
       <main className="relative z-10 xl:ml-60">
