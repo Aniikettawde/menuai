@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
 	
-	const orderCode = makeOrderCode(tableNumber)
+const orderCode = makeOrderCode(tableNumber as number)
 
    const { data: inserted, error: insertError } = await admin
   .from('table_requests')
