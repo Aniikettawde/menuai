@@ -1,6 +1,6 @@
 'use client'
 // src/app/dashboard/analytics/page.tsx
-
+import { useDashboardContext } from '@/hooks/useDashboardContext'
 import { useEffect, useMemo, useState } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import {
@@ -142,8 +142,14 @@ function FunnelStep({
 
 export default function AnalyticsPage() {
   const supabase = getSupabaseDashboardBrowser()
+  
+  const [psychStats, setPsychStats] = useState<
+  { trigger: string; shown: number; accepted: number }[]
+>([])
 
-  const [restaurantId, setRestaurantId] = useState<string | null>(null)
+  const { context, loading: contextLoading } = useDashboardContext()
+
+const restaurantId = context?.restaurantId ?? null
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState(7)
 
@@ -175,36 +181,26 @@ export default function AnalyticsPage() {
 
   // Init: get restaurant
   useEffect(() => {
-    let mounted = true
-    async function init() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { if (mounted) setLoading(false); return }
+  if (!restaurantId) return
 
-        const { data: restaurant } = await supabase
-          .from('restaurants')
-          .select('id, avg_rating, total_ratings')
-          .eq('owner_id', user.id)
-          .maybeSingle()
+  async function loadRestaurant() {
+    const { data } = await supabase
+      .from('restaurants')
+      .select('avg_rating,total_ratings')
+      .eq('id', restaurantId)
+      .single()
 
-        if (!restaurant) { if (mounted) setLoading(false); return }
+    if (!data) return
 
-        if (mounted) {
-          setRestaurantId(restaurant.id)
-          setTotals((t) => ({
-            ...t,
-            avgRating: Number(restaurant.avg_rating ?? 0),
-            totalRatings: Number(restaurant.total_ratings ?? 0),
-          }))
-        }
-      } catch (err) {
-        console.error('Analytics init error:', err)
-        if (mounted) setLoading(false)
-      }
-    }
-    init()
-    return () => { mounted = false }
-  }, [supabase])
+    setTotals((t) => ({
+      ...t,
+      avgRating: Number(data.avg_rating ?? 0),
+      totalRatings: Number(data.total_ratings ?? 0),
+    }))
+  }
+
+  void loadRestaurant()
+}, [restaurantId, supabase])
 
   useEffect(() => {
     if (!restaurantId) return
@@ -232,6 +228,34 @@ export default function AnalyticsPage() {
       if (error) console.error('Analytics fetch error:', error)
 
       const events = (eventsRaw ?? []) as AnalyticsEvent[]
+	  
+	  const upsellShownEvents = events.filter((e) => e.event_type === 'ai_upsell_shown')
+const upsellAcceptedEvents = events.filter((e) => e.event_type === 'ai_upsell_accepted')
+
+const triggerMap = new Map<string, { shown: number; accepted: number }>()
+
+const bump = (trigger: string, key: 'shown' | 'accepted') => {
+  const t = trigger || 'none'
+  const current = triggerMap.get(t) ?? { shown: 0, accepted: 0 }
+  current[key] += 1
+  triggerMap.set(t, current)
+}
+
+upsellShownEvents.forEach((e) => {
+  const meta = e.metadata as { psych_trigger?: string } | null
+  bump(meta?.psych_trigger ?? 'none', 'shown')
+})
+
+upsellAcceptedEvents.forEach((e) => {
+  const meta = e.metadata as { psych_trigger?: string } | null
+  bump(meta?.psych_trigger ?? 'none', 'accepted')
+})
+
+setPsychStats(
+  Array.from(triggerMap.entries())
+    .map(([trigger, stats]) => ({ trigger, ...stats }))
+    .sort((a, b) => b.accepted - a.accepted || b.shown - a.shown),
+)
 
       // ── Unique visitors ──────────────────────────────────────────────────────
       const uniqueSessions = new Set(
@@ -420,6 +444,21 @@ export default function AnalyticsPage() {
     cartFunnel.cartOpens > 0
       ? ((cartFunnel.waiterCalled / cartFunnel.cartOpens) * 100).toFixed(1)
       : '0'
+	  
+	  if (contextLoading) {
+  return (
+    <div className="space-y-3">
+      {[...Array(4)].map((_, i) => (
+        <div
+          key={i}
+          className="h-24 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900"
+        />
+      ))}
+    </div>
+  )
+}
+
+
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-4 py-4 sm:px-6 lg:px-8">
@@ -595,6 +634,39 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </div>
+		  
+		  
+		  <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+  <div className="mb-1 flex items-center gap-2">
+    <Sparkles size={14} className="text-orange-400" />
+    <h2 className="text-sm font-semibold text-zinc-200">Best Upsell Triggers</h2>
+  </div>
+  <p className="mb-4 text-xs text-zinc-600">Which psychology pattern converts best</p>
+
+  <div className="space-y-2">
+    {psychStats.length === 0 ? (
+      <p className="text-xs text-zinc-500">No trigger data yet.</p>
+    ) : (
+      psychStats.slice(0, 5).map((row) => {
+        const rate = row.shown > 0 ? ((row.accepted / row.shown) * 100).toFixed(1) : '0.0'
+        return (
+          <div
+            key={row.trigger}
+            className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/40 px-3 py-2.5"
+          >
+            <div>
+              <p className="text-sm font-medium text-zinc-200 capitalize">{row.trigger}</p>
+              <p className="text-[10px] text-zinc-500">
+                {row.accepted} accepted / {row.shown} shown
+              </p>
+            </div>
+            <span className="text-sm font-bold text-orange-400">{rate}%</span>
+          </div>
+        )
+      })
+    )}
+  </div>
+</div>
 
           {/* ── Daily trend ───────────────────────────────────────────────────── */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">

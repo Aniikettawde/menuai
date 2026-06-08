@@ -50,12 +50,20 @@ export function usePushNotifications(restaurantId: string | null | undefined) {
       }
 
       const existing = await reg.pushManager.getSubscription()
-      const sub =
-        existing ??
-        (await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-        }))
+
+// If old FCM endpoint, force unsubscribe to get fresh one
+if (existing && existing.endpoint.includes('/fcm/send/')) {
+  await existing.unsubscribe()
+  console.log('[Push] Unsubscribed stale FCM endpoint')
+}
+
+const freshExisting = await reg.pushManager.getSubscription()
+const sub =
+  freshExisting ??
+  (await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+  }))
 
       subscriptionRef.current = sub
       setStatus('granted')

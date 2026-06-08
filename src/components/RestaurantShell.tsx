@@ -41,10 +41,12 @@ export function RestaurantShell({ initialData }: Props) {
   } = useAppStore()
 
   const [waiterToast, setWaiterToast] = useState<{
-    tableNumber: number
-    items: { id: string; name: string; qty: number; price: number; total: number }[]
-    subtotal: number
-  } | null>(null)
+  tableNumber: number
+  orderId: string
+  orderCode: string
+  items: { id: string; name: string; qty: number; price: number; total: number }[]
+  subtotal: number
+} | null>(null)
   const [waiterLoading, setWaiterLoading] = useState(false)
 
   usePWA()
@@ -171,67 +173,73 @@ export function RestaurantShell({ initialData }: Props) {
   )
 
   const handleCallWaiter = useCallback(
-    async (payload: {
-      items: { id: string; name: string; qty: number; price: number; total: number }[]
-      subtotal: number
-    }) => {
-      if (!restaurant) return
+  async (payload: {
+    items: { id: string; name: string; qty: number; price: number; total: number }[]
+    subtotal: number
+  }) => {
+    if (!restaurant) return
 
-      if (!tableNumber) {
-        alert('Table number missing. Please scan the table QR again.')
-        return
-      }
+    if (!tableNumber) {
+      alert('Table number missing. Please scan the table QR again.')
+      return
+    }
 
-      setWaiterLoading(true)
+    setWaiterLoading(true)
 
-      try {
-        const res = await fetch('/api/table-request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            restaurantSlug: restaurant.slug,
-            tableNumber,
-            sessionId,
-            items: payload.items,
-            subtotal: payload.subtotal,
-          }),
-        })
-
-        const data = await res.json().catch(() => ({}))
-
-        if (!res.ok) {
-          throw new Error(data?.error ?? 'Failed to send waiter request')
-        }
-
-        void track(restaurant.id, 'waiter_called', {
-          metadata: {
-            table_number: tableNumber,
-            item_count: payload.items.reduce((s, i) => s + i.qty, 0),
-            subtotal: payload.subtotal,
-            items: payload.items,
-          },
-        })
-
-        clearCart()
-        setWaiterToast({
+    try {
+      const res = await fetch('/api/table-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantSlug: restaurant.slug,
           tableNumber,
+          sessionId,
           items: payload.items,
           subtotal: payload.subtotal,
-        })
-      } catch (err) {
-        void track(restaurant.id, 'waiter_call_failed', {
-          metadata: {
-            table_number: tableNumber,
-            error: err instanceof Error ? err.message : 'unknown',
-          },
-        })
-        alert(err instanceof Error ? err.message : 'Something went wrong')
-      } finally {
-        setWaiterLoading(false)
+        }),
+      })
+
+      const data = await res.json().catch(() => ({} as any))
+
+      if (!res.ok) {
+        throw new Error(data?.error ?? 'Failed to send waiter request')
       }
-    },
-    [restaurant, tableNumber, sessionId, clearCart],
-  )
+
+      void track(restaurant.id, 'waiter_called', {
+        metadata: {
+          table_number: tableNumber,
+          item_count: payload.items.reduce((s, i) => s + i.qty, 0),
+          subtotal: payload.subtotal,
+          items: payload.items,
+          order_id: data.orderId ?? null,
+          order_code: data.orderCode ?? null,
+        },
+      })
+
+      clearCart()
+
+      const orderId = String(data.orderId ?? '')
+      setWaiterToast({
+        tableNumber,
+        orderId,
+        orderCode: String(data.orderCode ?? orderId.slice(0, 8).toUpperCase()),
+        items: payload.items,
+        subtotal: payload.subtotal,
+      })
+    } catch (err) {
+      void track(restaurant.id, 'waiter_call_failed', {
+        metadata: {
+          table_number: tableNumber,
+          error: err instanceof Error ? err.message : 'unknown',
+        },
+      })
+      alert(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setWaiterLoading(false)
+    }
+  },
+  [restaurant, tableNumber, sessionId, clearCart],
+)
 
   if (!restaurant) return null
 
@@ -240,7 +248,8 @@ export function RestaurantShell({ initialData }: Props) {
       <OfflineBanner />
       <RestaurantHeader restaurant={restaurant} />
 
-      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4 lg:px-4">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-4 lg:px-4">
+
         <div className="min-w-0 px-4 sm:px-6 lg:px-0">
           <CategoryTabs />
           <MenuGrid
@@ -257,13 +266,17 @@ export function RestaurantShell({ initialData }: Props) {
       {showRating && <RatingModal />}
 
       {waiterToast && (
-        <WaiterCalledToast
-          tableNumber={waiterToast.tableNumber}
-          items={waiterToast.items}
-          subtotal={waiterToast.subtotal}
-          onClose={() => setWaiterToast(null)}
-        />
-      )}
+  <WaiterCalledToast
+    supabase={supabase}                          // ← add this
+    tableNumber={waiterToast.tableNumber}
+    orderId={waiterToast.orderId}
+    orderCode={waiterToast.orderCode}
+    restaurantSlug={restaurant.slug}             // ← add this
+    items={waiterToast.items}
+    subtotal={waiterToast.subtotal}
+    onClose={() => setWaiterToast(null)}
+  />
+)}
     </div>
   )
 }

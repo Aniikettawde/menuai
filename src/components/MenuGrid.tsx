@@ -115,7 +115,11 @@ function CategorySection({
 }) {
   const chefsPick = showChefsPick ? getChefsPick(items) : null
   const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
-  const imageUrl = category.image_url ?? null
+  const imageUrl = category.image_url
+  ? category.image_url.startsWith('http')
+    ? category.image_url
+    : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/restaurant-assets/${category.image_url}`
+  : null
 
   return (
     <section

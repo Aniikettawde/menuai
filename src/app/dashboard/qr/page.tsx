@@ -1,5 +1,5 @@
 'use client'
-
+import { useDashboardContext } from '@/hooks/useDashboardContext'
 import { useEffect, useMemo, useState } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import * as QRCode from 'qrcode'
@@ -99,6 +99,11 @@ function getPlanLimit(status: BillingStatus): number {
 
 export default function QRPage() {
   const supabase = getSupabaseDashboardBrowser()
+  
+  const { context, loading: contextLoading } =
+  useDashboardContext()
+
+const restaurantId = context?.restaurantId ?? null
 
   const [restaurant, setRestaurant] = useState<RestaurantRecord | null>(null)
   const [billing, setBilling] = useState<BillingStatus>(null)
@@ -129,19 +134,23 @@ export default function QRPage() {
 
     async function load() {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
+        if (!restaurantId) {
+  if (mounted) setLoading(false)
+  return
+}
 
-        if (!user) {
-          if (mounted) setLoading(false)
-          return
-        }
+const [restaurantResult, billingRes] =
+  await Promise.all([
+    supabase
+      .from('restaurants')
+      .select('*')
+      .eq('id', restaurantId)
+      .single(),
 
-        const [restaurantResult, billingRes] = await Promise.all([
-          supabase.from('restaurants').select('*').eq('owner_id', user.id).maybeSingle(),
-          fetch('/api/billing/status', { cache: 'no-store' }),
-        ])
+    fetch('/api/billing/status', {
+      cache: 'no-store',
+    }),
+  ])
 
         const billingData = billingRes.ok ? await billingRes.json().catch(() => ({})) : {}
 
@@ -160,7 +169,7 @@ export default function QRPage() {
     return () => {
       mounted = false
     }
-  }, [supabase])
+  }, [restaurantId, supabase])
 
   useEffect(() => {
     if (remainingQrLimit <= 0) return
@@ -452,6 +461,30 @@ export default function QRPage() {
       await copyLink()
     }
   }
+  
+  if (contextLoading) {
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-6">
+      <div className="h-32 animate-pulse rounded-3xl bg-zinc-900" />
+    </div>
+  )
+}
+
+if (!context) {
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-10">
+      <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
+        <h2 className="text-lg font-semibold text-red-300">
+          No restaurant access
+        </h2>
+
+        <p className="mt-2 text-zinc-400">
+          Your account is not linked to any restaurant.
+        </p>
+      </div>
+    </div>
+  )
+}
 
   if (loading) {
     return (

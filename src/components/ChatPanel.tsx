@@ -1,22 +1,114 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { X, Send, Sparkles } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { ChatMessage as ChatMessageComp } from './ChatMessage'
 import { track } from '@/lib/analytics'
-import type { ChatMessage, QuickReply } from '@/types'
+import type { ChatMessage, QuickReply, PsychTrigger } from '@/types'
 import { nanoid } from '@/lib/nanoid'
-
-const STARTERS: QuickReply[] = [
-  { label: 'Suggest a meal', action: 'Suggest a complete meal for me' },
-  { label: 'Best sellers', action: 'Show me your best selling dishes' },
-  { label: 'Today’s special', action: "What is today's special?" },
-  { label: 'Recommend me a dish', action: 'Recommend me a dish' },
-]
 
 function normalizeText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9₹]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function buildStarters(hasNonVeg: boolean): QuickReply[] {
+  const base: QuickReply[] = []
+
+  if (hasNonVeg) {
+    base.push(
+      { label: 'Veg only', action: 'I want veg food' },
+      { label: 'Non-veg', action: 'I want non-veg food' },
+    )
+  } else {
+    base.push({ label: 'Veg dishes', action: 'I want veg food' })
+  }
+
+  base.push(
+    { label: 'Best sellers', action: 'Show me your best selling dishes' },
+    { label: 'Chef special', action: "What is today's special?" },
+    { label: 'Help me choose', action: 'Suggest a complete meal for me' },
+  )
+
+  return base.slice(0, 4)
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex gap-1">
+        <span className="h-2 w-2 animate-bounce rounded-full bg-blue-500" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-blue-500" style={{ animationDelay: '0.15s' }} />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-blue-500" style={{ animationDelay: '0.3s' }} />
+      </div>
+      <span className="text-xs text-slate-500">AI is thinking...</span>
+    </div>
+  )
+}
+
+function ChatInput({
+  input,
+  setInput,
+  onSubmit,
+  disabled,
+  inputRef,
+}: {
+  input: string
+  setInput: (v: string) => void
+  onSubmit: (e: React.FormEvent) => void
+  disabled: boolean
+  inputRef: React.RefObject<HTMLInputElement>
+}) {
+  return (
+    <form onSubmit={onSubmit} className="flex items-center gap-2 border-t border-slate-100 px-4 py-3">
+      <input
+        ref={inputRef}
+        type="text"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Ask about the menu..."
+        disabled={disabled}
+        className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
+      />
+      <button
+        type="submit"
+        disabled={disabled || !input.trim()}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-sm transition-transform active:scale-95 disabled:opacity-40"
+        aria-label="Send"
+      >
+        <Send size={15} />
+      </button>
+    </form>
+  )
+}
+
+function StarterChips({
+  starters,
+  hasNonVeg,
+  onSend,
+}: {
+  starters: QuickReply[]
+  hasNonVeg: boolean
+  onSend: (text: string) => void
+}) {
+  return (
+    <div className="space-y-3 pt-2">
+      <p className="text-xs text-slate-500">
+        {hasNonVeg ? 'Start with a preference:' : 'Start with the best veg dishes:'}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {starters.map((s) => (
+          <button
+            key={s.action}
+            onClick={() => onSend(s.action)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition hover:border-blue-200 hover:text-blue-700"
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function ChatPanel() {
@@ -36,11 +128,17 @@ export function ChatPanel() {
   const [input, setInput] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const desktopMessagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const desktopInputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  const hasNonVeg = useMemo(() => items.some((i) => i.is_veg === false), [items])
+  const starters = useMemo(() => buildStarters(hasNonVeg), [hasNonVeg])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    desktopMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isChatLoading])
 
   const sendMessage = useCallback(
@@ -113,10 +211,7 @@ export function ChatPanel() {
         if (!res.ok) throw new Error('Chat API error')
         const data = await res.json()
 
-        const mentioned = new Set<string>(
-          (data.mentioned_items ?? []).map((x: string) => normalizeText(x)),
-        )
-
+        const mentioned = new Set<string>((data.mentioned_items ?? []).map((x: string) => normalizeText(x)))
         const matchedMenuItems = items.filter((i) => mentioned.has(normalizeText(i.name)))
 
         const aiMsg: ChatMessage = {
@@ -128,13 +223,18 @@ export function ChatPanel() {
           upsell_items: Array.isArray(data.upsell_items) ? data.upsell_items : [],
           psych_trigger: data.psych_trigger ?? 'none',
           convo_stage: data.convo_stage ?? 'early',
+          suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
         } as any
 
         addMessage(aiMsg)
 
         if (data.upsell_items?.length) {
           track(restaurant.id, 'ai_upsell_shown', {
-            metadata: { items: data.upsell_items },
+            metadata: {
+              items: data.upsell_items,
+              psych_trigger: data.psych_trigger ?? 'none',
+              stage: data.convo_stage ?? 'early',
+            },
           })
         }
       } catch (err: unknown) {
@@ -150,6 +250,22 @@ export function ChatPanel() {
       }
     },
     [restaurant, items, categories, messages, isChatLoading, addMessage, setIsChatLoading, sessionId],
+  )
+
+  const handleUpsellTap = useCallback(
+    (itemName: string, psychTrigger: PsychTrigger, stage?: string) => {
+      if (restaurant) {
+        track(restaurant.id, 'ai_upsell_accepted', {
+          metadata: {
+            item_name: itemName,
+            psych_trigger: psychTrigger,
+            stage: stage ?? 'early',
+          },
+        })
+      }
+      sendMessage(`Tell me more about ${itemName}`)
+    },
+    [restaurant, sendMessage],
   )
 
   useEffect(() => {
@@ -170,6 +286,7 @@ export function ChatPanel() {
 
   return (
     <>
+      {/* ─── MOBILE ─── */}
       <div className="lg:hidden">
         {!showChat && (
           <button
@@ -187,6 +304,7 @@ export function ChatPanel() {
               isExpanded ? 'h-[82dvh]' : 'h-[58px]'
             }`}
           >
+            {/* drag handle / header */}
             <div
               className="flex cursor-pointer select-none items-center justify-between px-4 py-3"
               onClick={() => setIsExpanded((e) => !e)}
@@ -198,10 +316,7 @@ export function ChatPanel() {
                 <span className="text-[10px] text-slate-500">· Ask about the menu</span>
               </div>
               <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowChat(false)
-                }}
+                onClick={(e) => { e.stopPropagation(); setShowChat(false) }}
                 className="mt-1 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close chat"
               >
@@ -213,7 +328,7 @@ export function ChatPanel() {
               <>
                 <div className="flex-1 overflow-y-auto px-4 pb-2">
                   {isEmpty ? (
-                    <StarterChips onSend={sendMessage} />
+                    <StarterChips starters={starters} hasNonVeg={hasNonVeg} onSend={sendMessage} />
                   ) : (
                     <>
                       {messages.map((msg) => (
@@ -221,6 +336,7 @@ export function ChatPanel() {
                           key={msg.id}
                           message={msg as any}
                           onSuggestionTap={sendMessage}
+                          onUpsellTap={handleUpsellTap}
                         />
                       ))}
                       {isChatLoading && <TypingIndicator />}
@@ -228,35 +344,30 @@ export function ChatPanel() {
                     </>
                   )}
                 </div>
-
-                <ChatInput
-                  input={input}
-                  setInput={setInput}
-                  onSubmit={handleSubmit}
-                  disabled={isChatLoading}
-                  inputRef={inputRef}
-                />
+                <ChatInput input={input} setInput={setInput} onSubmit={handleSubmit} disabled={isChatLoading} inputRef={inputRef} />
               </>
             )}
           </div>
         )}
       </div>
 
-      <div className="hidden lg:flex lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:w-full lg:flex-shrink-0 lg:flex-col lg:overflow-hidden lg:rounded-[28px] lg:border lg:border-slate-200 lg:bg-white/90 lg:backdrop-blur-xl">
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
-          <Sparkles size={15} className="text-blue-600" />
-          <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
-          <span className="ml-1 text-[11px] text-slate-500">Powered by Gemini</span>
+      {/* ─── DESKTOP ─── */}
+      <div className="hidden lg:flex lg:flex-col lg:shrink-0 sticky top-4 h-[calc(100vh-2rem)] w-[340px] xl:w-[380px] rounded-2xl border border-slate-200 bg-white/95 shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-2.5 border-b border-slate-100 px-5 py-4">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-sm shadow-blue-500/20">
+            <Sparkles size={14} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">AI Waiter</p>
+            <p className="text-[11px] text-slate-400">Ask about the menu</p>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
           {isEmpty ? (
-            <div className="space-y-3">
-              <p className="pb-1 pt-2 text-center text-xs text-slate-500">
-                Ask me anything about the menu 👋
-              </p>
-              <StarterGrid onSend={sendMessage} />
-            </div>
+            <StarterChips starters={starters} hasNonVeg={hasNonVeg} onSend={sendMessage} />
           ) : (
             <>
               {messages.map((msg) => (
@@ -264,110 +375,18 @@ export function ChatPanel() {
                   key={msg.id}
                   message={msg as any}
                   onSuggestionTap={sendMessage}
+                  onUpsellTap={handleUpsellTap}
                 />
               ))}
               {isChatLoading && <TypingIndicator />}
-              <div ref={messagesEndRef} />
+              <div ref={desktopMessagesEndRef} />
             </>
           )}
         </div>
 
-        <ChatInput
-          input={input}
-          setInput={setInput}
-          onSubmit={handleSubmit}
-          disabled={isChatLoading}
-          inputRef={inputRef}
-        />
+        {/* Input */}
+        <ChatInput input={input} setInput={setInput} onSubmit={handleSubmit} disabled={isChatLoading} inputRef={desktopInputRef} />
       </div>
     </>
-  )
-}
-
-function StarterChips({ onSend }: { onSend: (t: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2 pb-1 pt-2">
-      {STARTERS.map((s) => (
-        <button
-          key={s.action}
-          onClick={() => onSend(s.action)}
-          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-md active:scale-95"
-        >
-          {s.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function StarterGrid({ onSend }: { onSend: (t: string) => void }) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {STARTERS.map((s) => (
-        <button
-          key={s.action}
-          onClick={() => onSend(s.action)}
-          className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left text-xs font-medium text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-md active:scale-[0.98]"
-        >
-          {s.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function ChatInput({
-  input,
-  setInput,
-  onSubmit,
-  disabled,
-  inputRef,
-}: {
-  input: string
-  setInput: (v: string) => void
-  onSubmit: (e: React.FormEvent) => void
-  disabled: boolean
-  inputRef: React.RefObject<HTMLInputElement>
-}) {
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="flex flex-shrink-0 items-center gap-2 border-t border-slate-200 bg-white/95 px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
-    >
-      <input
-        ref={inputRef}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Ask about the menu..."
-        disabled={disabled}
-        className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white"
-        autoComplete="off"
-        enterKeyHint="send"
-      />
-      <button
-        type="submit"
-        disabled={disabled || !input.trim()}
-        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-500/20 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-        aria-label="Send message"
-      >
-        <Send size={16} />
-      </button>
-    </form>
-  )
-}
-
-function TypingIndicator() {
-  return (
-    <div className="flex items-center gap-2 py-2">
-      <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-600"
-            style={{ animationDelay: `${i * 0.16}s` }}
-          />
-        ))}
-      </div>
-    </div>
   )
 }

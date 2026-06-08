@@ -1,15 +1,28 @@
 'use client'
 
-import type { ChatMessage as ChatMessageType, PsychTrigger } from '@/types'
-import { Sparkles, TrendingUp, ChefHat, Clock3, Flame, ShieldCheck } from 'lucide-react'
+import type { ChatMessage as ChatMessageType, PsychTrigger, QuickReply } from '@/types'
+import { Sparkles, TrendingUp, ChefHat, Clock3, Flame, ShieldCheck, ArrowRight, Plus, Check } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useState } from 'react'
+import { useAppStore } from '@/store/app-store'
+import { track } from '@/lib/analytics'
 
 interface Props {
   message: ChatMessageType & {
     psych_trigger?: string
     convo_stage?: string
+    suggestions?: QuickReply[]
   }
   onSuggestionTap: (text: string) => void
+  onUpsellTap?: (itemName: string, psychTrigger: PsychTrigger, stage?: string) => void
+}
+
+function getImageUrl(imageUrl: string | null | undefined): string | null {
+  if (!imageUrl) return null
+  if (imageUrl.startsWith('http')) return imageUrl
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return null
+  return `${base}/storage/v1/object/public/restaurant-assets/${imageUrl}`
 }
 
 function formatPrice(paise: number) {
@@ -71,22 +84,18 @@ const PSYCH_BADGE: Record<
 
 function MenuItemCard({
   item,
-  onTap,
+  onAdd,
 }: {
   item: any
-  onTap: () => void
+  onAdd: () => void
 }) {
   return (
-    <button
-      type="button"
-      onClick={onTap}
-      className="group flex w-full items-center gap-3 rounded-3xl border border-slate-200 bg-white/95 p-3 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
-    >
+    <div className="group flex w-full items-center gap-3 rounded-3xl border border-slate-200 bg-white/95 p-3 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
         {item.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={item.image_url}
+            src={getImageUrl(item.image_url)!}
             alt={item.name}
             className="h-full w-full object-cover"
             loading="lazy"
@@ -116,12 +125,18 @@ function MenuItemCard({
           <span className="text-sm font-semibold text-blue-700">
             {formatPrice(item.price)}
           </span>
-          <span className="text-[11px] text-slate-400 transition group-hover:text-slate-700">
-            Open dish →
-          </span>
+
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-blue-700 active:scale-95"
+          >
+            <Plus size={12} />
+            ADD
+          </button>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -157,15 +172,51 @@ function UpsellCard({
   )
 }
 
-export function ChatMessage({ message, onSuggestionTap }: Props) {
+function QuickReplyChip({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700"
+    >
+      {label}
+      <ArrowRight size={11} />
+    </button>
+  )
+}
+
+export function ChatMessage({ message, onSuggestionTap, onUpsellTap }: Props) {
   const isUser = message.role === 'user'
   const isAI = message.role === 'assistant'
-
-  const content =
-    typeof message.content === 'string' ? message.content : String(message.content ?? '')
+  const content = typeof message.content === 'string' ? message.content : String(message.content ?? '')
   const psychTrigger = (message.psych_trigger ?? 'none') as PsychTrigger
   const menuItems = message.menu_items ?? []
   const upsellItems = (message as any).upsell_items ?? []
+  const suggestions = message.suggestions ?? []
+
+  const { restaurant, addToCart } = useAppStore()
+  const [addingId, setAddingId] = useState<string | null>(null)
+
+  const handleAdd = (item: any) => {
+    setAddingId(item.id ?? item.name)
+
+    addToCart(item)
+
+    if (restaurant) {
+      void track(restaurant.id, 'cart_item_added', {
+        item_id: item.id,
+        item_name: item.name,
+        metadata: {
+          source: 'ai_suggestion',
+          price: item.price,
+          is_bestseller: item.is_bestseller,
+          is_special: item.is_special,
+        },
+      })
+    }
+
+    setTimeout(() => setAddingId(null), 800)
+  }
 
   return (
     <div className={`mb-4 flex gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -187,13 +238,25 @@ export function ChatMessage({ message, onSuggestionTap }: Props) {
           <div className="whitespace-pre-wrap">{content}</div>
         </div>
 
+        {isAI && suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s) => (
+              <QuickReplyChip
+                key={s.action}
+                label={s.label}
+                onClick={() => onSuggestionTap(s.action)}
+              />
+            ))}
+          </div>
+        )}
+
         {isAI && menuItems.length > 0 && (
           <div className="grid w-full grid-cols-1 gap-2">
             {menuItems.slice(0, 3).map((item: any, idx: number) => (
               <MenuItemCard
                 key={item.id ?? `${item.name}-${idx}`}
                 item={item}
-                onTap={() => onSuggestionTap(`Tell me more about ${item.name}`)}
+                onAdd={() => handleAdd(item)}
               />
             ))}
           </div>
@@ -201,15 +264,13 @@ export function ChatMessage({ message, onSuggestionTap }: Props) {
 
         {isAI && upsellItems.length > 0 && (
           <div className="grid w-full grid-cols-1 gap-2">
-            <p className="px-0.5 text-[11px] font-medium text-slate-400">
-              Pairs well with this
-            </p>
+            <p className="px-0.5 text-[11px] font-medium text-slate-400">Pairs well with this</p>
             {upsellItems.slice(0, 2).map((itemName: string, idx: number) => (
               <UpsellCard
                 key={`${itemName}-${idx}`}
                 itemName={itemName}
                 psychTrigger={psychTrigger}
-                onLearnMore={() => onSuggestionTap(`Tell me more about ${itemName}`)}
+                onLearnMore={() => onUpsellTap?.(itemName, psychTrigger, message.convo_stage)}
               />
             ))}
           </div>

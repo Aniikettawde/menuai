@@ -1,6 +1,8 @@
 // src/app/dashboard/page.tsx
 'use client'
-
+import { useRouter } from 'next/navigation'
+import { useDashboardContext } from '@/hooks/useDashboardContext'
+import AccessDenied from '@/components/dashboard/AccessDenied'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
@@ -143,6 +145,8 @@ function OrdersSection({ restaurantId }: { restaurantId: string }) {
       setLoading(false)
     }
   }
+  
+  
 
   useEffect(() => {
     let mounted = true
@@ -456,42 +460,38 @@ function LoadingSkeleton() {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [hasRestaurant, setHasRestaurant] = useState(true)
-  const [restaurantId, setRestaurantId] = useState<string | null>(null)
   const supabase = getSupabaseDashboardBrowser()
+  const { context, loading: contextLoading } = useDashboardContext()
+  const router = useRouter()
+  
+  useEffect(() => {
+  if (context?.role === 'waiter') {
+    router.replace('/dashboard/orders')
+  }
+}, [context, router])
 
   useEffect(() => {
     let mounted = true
 
     async function load() {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
+        if (!context?.restaurantId) {
+  setLoading(false)
+  return
+}
 
-        if (!user) {
-          if (mounted) {
-            setHasRestaurant(false)
-            setLoading(false)
-          }
-          return
-        }
+const { data: restaurant } = await supabase
+  .from('restaurants')
+  .select('id, name, slug, avg_rating, total_ratings')
+  .eq('id', context.restaurantId)
+  .single()
 
-        const { data: restaurant } = await supabase
-          .from('restaurants')
-          .select('id, name, slug, avg_rating, total_ratings')
-          .eq('owner_id', user.id)
-          .maybeSingle()
-
-        if (!restaurant) {
-          if (mounted) {
-            setHasRestaurant(false)
-            setLoading(false)
-          }
-          return
-        }
-
-        if (mounted) setRestaurantId(restaurant.id)
+if (!restaurant) {
+  if (mounted) {
+    setLoading(false)
+  }
+  return
+}
 
         const today = new Date()
         const todayKey = toDateKey(today)
@@ -577,7 +577,6 @@ export default function DashboardPage() {
           ).label
 
         if (mounted) {
-          setHasRestaurant(true)
           setStats({
             visitorsToday: todayBucket.pageViews.size,
             itemViewsToday: todayBucket.itemViews,
@@ -601,7 +600,6 @@ export default function DashboardPage() {
       } catch (err) {
         console.error(err)
         if (mounted) {
-          setHasRestaurant(false)
           setLoading(false)
         }
       }
@@ -611,7 +609,7 @@ export default function DashboardPage() {
     return () => {
       mounted = false
     }
-  }, [supabase])
+  }, [supabase, context])
 
   const statCards = useMemo(() => {
     if (!stats) return []
@@ -673,8 +671,27 @@ export default function DashboardPage() {
     ]
   }, [stats])
 
+const [contextReady, setContextReady] = useState(false)
+
+  useEffect(() => {
+    if (!contextLoading) {
+      const t = setTimeout(() => setContextReady(true), 150)
+      return () => clearTimeout(t)
+    }
+  }, [contextLoading])
+
+  if (contextLoading || !contextReady) return <LoadingSkeleton />
+  if (!context) {
+  return (
+    <div className="space-y-4">
+      <EmptyState />
+    </div>
+  )
+}
   if (loading) return <LoadingSkeleton />
-  if (!hasRestaurant || !stats) return <EmptyState />
+  if (!stats) {
+    return <div className="p-6 text-zinc-400">Failed to load dashboard data.</div>
+  }
 
   const maxDaily = Math.max(...stats.dailyTrend.map((d) => Math.max(d.visitors, d.views, d.chats, 1)))
 
@@ -794,8 +811,9 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {restaurantId && <OrdersSection restaurantId={restaurantId} />}
-
+<OrdersSection
+  restaurantId={context.restaurantId}
+/>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
         <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5 sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-3">

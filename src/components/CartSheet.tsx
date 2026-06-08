@@ -15,6 +15,12 @@ type Props = {
   isWaiterLoading?: boolean
 }
 
+function getImageUrl(imageUrl: string | null | undefined): string | null {
+  if (!imageUrl) return null
+  if (imageUrl.startsWith('http')) return imageUrl
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/restaurant-assets/${imageUrl}`
+}
+
 function formatPrice(paise: number) {
   return `₹${Math.round(paise / 100)}`
 }
@@ -24,23 +30,260 @@ function getSocialCount(id: string): number {
   return 12 + (n % 41)
 }
 
-function getRecommendations(
-  allItems: MenuItem[],
-  cartItemIds: Set<string>,
-  cartCategoryIds: Set<string>,
-): MenuItem[] {
-  const sameCat = allItems.filter(
-    (i) => !cartItemIds.has(i.id) && cartCategoryIds.has(i.category_id),
+
+
+type CourseGroup = 'main' | 'bread' | 'rice' | 'starter' | 'dessert' | 'drink' | 'other'
+
+function normalizeText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9₹]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function getCourseGroup(item: MenuItem): CourseGroup {
+  const hay = normalizeText(
+    [
+      item.name ?? '',
+      item.description ?? '',
+      (item as any).course_type ?? '',
+      ...((item as any).tags ?? []),
+      ...((item as any).best_with ?? []),
+    ].join(' '),
   )
-  const otherCat = allItems.filter(
-    (i) => !cartItemIds.has(i.id) && !cartCategoryIds.has(i.category_id),
-  )
-  const score = (i: MenuItem) =>
-    (i.is_bestseller ? 3 : 0) + (i.is_special ? 2 : 0) + (i.image_url ? 1 : 0)
-  return [
-    ...sameCat.sort((a, b) => score(b) - score(a)),
-    ...otherCat.sort((a, b) => score(b) - score(a)),
-  ].slice(0, 3)
+
+  if (/(dessert|sweet|gulab|jamun|kheer|ice cream|kulfi|cake|brownie|halwa|pudding|falooda)/.test(hay)) {
+    return 'dessert'
+  }
+  if (/(drink|lassi|juice|shake|coffee|tea|mocktail|soda|buttermilk|chaas)/.test(hay)) {
+    return 'drink'
+  }
+  if (/(bread|roti|naan|paratha|parotta|kulcha|phulka|chapati|tandoor)/.test(hay)) {
+    return 'bread'
+  }
+  if (/(rice|biryani|pulao|fried rice|jeera rice|plain rice|steam rice|steamed rice)/.test(hay)) {
+    return 'rice'
+  }
+  if (/(starter|appetizer|snack|tikka|pakora|salad|fries|chaat|kebab|kabab)/.test(hay)) {
+    return 'starter'
+  }
+  if (/(main|curry|gravy|masala|korma|butter|chicken|paneer|mutton|fish|dal|sabzi|thali|combo)/.test(hay)) {
+    return 'main'
+  }
+
+  return 'other'
+}
+
+function pickPrimaryCartItem(cartItems: { item: MenuItem; quantity: number }[]): MenuItem | null {
+  if (cartItems.length === 0) return null
+
+  const rank: Record<CourseGroup, number> = {
+    main: 60,
+    rice: 50,
+    bread: 45,
+    starter: 35,
+    dessert: 20,
+    drink: 15,
+    other: 25,
+  }
+
+  return cartItems
+    .slice()
+    .sort((a, b) => {
+      const ag = rank[getCourseGroup(a.item)] + a.quantity * 3 + (a.item.is_bestseller ? 2 : 0) + (a.item.is_special ? 1 : 0)
+      const bg = rank[getCourseGroup(b.item)] + b.quantity * 3 + (b.item.is_bestseller ? 2 : 0) + (b.item.is_special ? 1 : 0)
+      return bg - ag
+    })[0]?.item ?? null
+}
+
+function getDesiredGroups(anchor: MenuItem | null): CourseGroup[] {
+  if (!anchor) return ['main', 'bread', 'rice', 'starter', 'dessert', 'drink']
+
+  const group = getCourseGroup(anchor)
+  const hay = normalizeText([anchor.name, anchor.description ?? '', (anchor as any).course_type ?? ''].join(' '))
+
+  if (group === 'main') {
+    if (/(biryani|pulao|fried rice|jeera rice|rice)/.test(hay)) {
+      return ['dessert', 'drink', 'starter', 'bread', 'main']
+    }
+    return ['bread', 'rice', 'starter', 'dessert', 'drink']
+  }
+
+  if (group === 'rice') {
+    return ['main', 'starter', 'dessert', 'drink', 'bread']
+  }
+
+  if (group === 'bread') {
+    return ['main', 'rice', 'starter', 'dessert', 'drink']
+  }
+
+  if (group === 'starter') {
+  return ['main', 'dessert', 'drink', 'bread', 'rice']
+}
+
+  if (group === 'dessert') {
+    return ['drink', 'starter', 'main', 'bread', 'rice']
+  }
+
+  if (group === 'drink') {
+    return ['starter', 'dessert', 'main', 'bread', 'rice']
+  }
+
+  return ['main', 'bread', 'rice', 'starter', 'dessert', 'drink']
+}
+
+function pickBestByGroup(
+  items: MenuItem[],
+  desiredGroup: CourseGroup,
+  exclude: Set<string>,
+  anchor: MenuItem | null,
+): MenuItem | undefined {
+  const anchorNorm = anchor ? normalizeText(anchor.name) : ''
+  const anchorVeg = anchor?.is_veg
+
+  const scored = items
+    .filter((item) => !exclude.has(item.id))
+    .map((item) => {
+      const group = getCourseGroup(item)
+      const hay = normalizeText(
+        [
+          item.name ?? '',
+          item.description ?? '',
+          (item as any).course_type ?? '',
+          ...((item as any).tags ?? []),
+          ...((item as any).best_with ?? []),
+        ].join(' '),
+      )
+
+      let score = group === desiredGroup ? 20 : 0
+	  
+	  const itemCategoryName = normalizeText((item as any).category_name ?? '')
+const anchorCategoryName = anchor ? normalizeText((anchor as any).category_name ?? '') : ''
+if (anchorCategoryName && itemCategoryName === anchorCategoryName) score -= 15
+
+      if (desiredGroup === 'bread' && /roti|naan|kulcha|paratha|chapati|phulka|tandoor/.test(hay)) score += 12
+      if (desiredGroup === 'rice' && /rice|jeera|biryani|pulao|steam|plain/.test(hay)) score += 12
+      if (desiredGroup === 'starter' && /(tikka|starter|snack|salad|papad|chaat|kebab)/.test(hay)) score += 12
+      if (desiredGroup === 'dessert' && /gulab|jamun|kheer|ice cream|kulfi|sweet|dessert|halwa|pudding/.test(hay)) score += 12
+      if (desiredGroup === 'drink' && /tea|coffee|lassi|juice|shake|mocktail|buttermilk|chaas|soda/.test(hay)) score += 12
+      if (desiredGroup === 'main' && /(curry|gravy|masala|korma|butter|paneer|chicken|mutton|fish|dal|sabzi|thali|combo)/.test(hay)) score += 12
+	  if (group !== desiredGroup) score -= 10
+
+
+      if (anchorNorm && hay.includes(anchorNorm)) score += 8
+      if (((item as any).best_with ?? []).some((pair: string) => anchorNorm && normalizeText(pair).includes(anchorNorm))) score += 8
+      if (item.is_bestseller) score += 3
+      if (item.is_special) score += 2
+      if (item.image_url) score += 1
+
+      if (anchorVeg === true && item.is_veg) score += 2
+      if (anchorVeg === false && item.is_veg === false) score += 2
+      if (anchorVeg === true && item.is_veg === false) score -= 2
+
+      return { item, score }
+    })
+
+  scored.sort((a, b) => b.score - a.score)
+  return scored[0]?.item
+}
+
+function getRecommendations(allItems: MenuItem[], cartItems: { item: MenuItem; quantity: number }[]): MenuItem[] {
+  const cartItemIds = new Set(cartItems.map((c) => c.item.id))
+  const anchor = pickPrimaryCartItem(cartItems)
+  const desiredGroups = getDesiredGroups(anchor)
+  const picked: MenuItem[] = []
+  const exclude = new Set<string>(cartItemIds)
+
+  for (const group of desiredGroups) {
+    const best = pickBestByGroup(allItems, group, exclude, anchor)
+    if (best) {
+      picked.push(best)
+      exclude.add(best.id)
+    }
+    if (picked.length >= 3) break
+  }
+
+  if (picked.length < 3) {
+    const fallback = allItems
+      .filter((item) => !exclude.has(item.id))
+      .slice()
+      .sort((a, b) => {
+        return (
+          Number(b.is_special) - Number(a.is_special) ||
+          Number(b.is_bestseller) - Number(a.is_bestseller) ||
+          Number(Boolean(b.image_url)) - Number(Boolean(a.image_url))
+        )
+      })
+
+    for (const item of fallback) {
+      picked.push(item)
+      if (picked.length >= 3) break
+    }
+  }
+
+  return picked.slice(0, 3)
+}
+
+function buildRecommendationCopy(anchor: MenuItem | null, recs: MenuItem[]) {
+  const top = recs[0]?.name ?? 'the right add-on'
+  const second = recs[1]?.name
+  const group = anchor ? getCourseGroup(anchor) : 'other'
+  const anchorName = anchor?.name ?? 'your order'
+
+  if (group === 'main') {
+    return {
+      badge: "Chef's favorite pairing",
+      title: `Your ${anchorName} feels incomplete without ${top}.`,
+      subtitle: second
+        ? `Most tables finish this with ${top} and ${second}. You should not miss this.`
+        : `This is the kind of add-on that makes ${anchorName} feel complete.`,
+    }
+  }
+
+  if (group === 'rice') {
+    return {
+      badge: 'Strong completion',
+      title: `This ${anchorName} gets much better with ${top}.`,
+      subtitle: second
+        ? `Add ${top} and ${second} to turn it into a proper meal.`
+        : `A small add-on can make this feel fuller and more satisfying.`,
+    }
+  }
+
+  if (group === 'bread') {
+    return {
+      badge: 'Must-try pairing',
+      title: `Your ${anchorName} is waiting for the right curry.`,
+      subtitle: second
+        ? `Pair it with ${top} or ${second} for a complete bite.`
+        : `You should not eat this bread without a proper curry beside it.`,
+    }
+  }
+
+  if (group === 'dessert') {
+    return {
+      badge: 'Finish strong',
+      title: `End this meal on a perfect note.`,
+      subtitle: second
+        ? `A cool drink with ${top} makes this a complete finish.`
+        : `A drink is the easiest way to balance dessert beautifully.`,
+    }
+  }
+
+  if (group === 'drink') {
+    return {
+      badge: 'Round it out',
+      title: `This drink needs something to go with it.`,
+      subtitle: second
+        ? `Add ${top} and ${second} so the table feels complete.`
+        : `Pair it with a starter or dessert for a fuller order.`,
+    }
+  }
+
+  return {
+    badge: "Don't miss this",
+    title: `Your meal gets better with ${top}.`,
+    subtitle: second
+      ? `We picked the most natural pairings so your order feels complete.`
+      : `A simple add-on can make the whole meal feel finished.`,
+  }
 }
 
 function RecommendationCard({ item }: { item: MenuItem }) {
@@ -55,25 +298,31 @@ function RecommendationCard({ item }: { item: MenuItem }) {
     e.stopPropagation()
     setAdding(true)
     addToCart(item)
-    // Track suggestion acceptance — the highest-value cart event
+
     if (restaurant) {
       void track(restaurant.id, 'cart_suggestion_accepted', {
         item_id: item.id,
         item_name: item.name,
         metadata: {
           source: 'cart_recommendation',
+          psych_trigger: 'completion',
           price: item.price,
           is_bestseller: item.is_bestseller,
           is_special: item.is_special,
         },
       })
-      // Also track as generic cart_item_added with source tag
+
       void track(restaurant.id, 'cart_item_added', {
         item_id: item.id,
         item_name: item.name,
-        metadata: { source: 'suggestion', price: item.price },
+        metadata: {
+          source: 'suggestion',
+          psych_trigger: 'completion',
+          price: item.price,
+        },
       })
     }
+
     setTimeout(() => setAdding(false), 160)
   }
 
@@ -81,76 +330,98 @@ function RecommendationCard({ item }: { item: MenuItem }) {
     e.stopPropagation()
     increaseCartItem(item.id)
   }
+
   const handleDec = (e: React.MouseEvent) => {
     e.stopPropagation()
     decreaseCartItem(item.id)
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-      {item.image_url ? (
-        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-100">
-          <Image src={item.image_url} alt={item.name} fill className="object-cover" sizes="56px" />
-        </div>
-      ) : (
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-violet-50 text-blue-300">
-          <span className="text-xl">🍽️</span>
-        </div>
-      )}
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span
-            className={[
-              'inline-block h-2 w-2 shrink-0 rounded-sm border',
-              item.is_veg
-                ? 'border-green-600 bg-green-500'
-                : 'border-red-600 bg-red-500',
-            ].join(' ')}
-          />
-          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
-          {item.is_bestseller && (
-            <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">
-              <Star size={7} className="fill-current" /> BEST
-            </span>
-          )}
-          {item.tags?.includes('spicy') && <Flame size={10} className="shrink-0 text-rose-500" />}
-        </div>
-
-        {socialCount !== null && (
-          <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-            <TrendingUp size={9} />
-            {socialCount} ordered recently
-          </p>
+    <div className="group overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md">
+      <div className="flex items-stretch gap-3 p-3">
+        {item.image_url ? (
+          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
+            <Image
+              src={getImageUrl(item.image_url)!}
+              alt={item.name}
+              fill
+              className="object-cover"
+              sizes="64px"
+            />
+          </div>
+        ) : (
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 text-2xl">
+            {item.is_veg ? '🥗' : '🍖'}
+          </div>
         )}
 
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <span className="text-sm font-bold text-slate-900">{formatPrice(item.price)}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                <Sparkles size={10} />
+                You should not miss this
+              </div>
 
-          {qtyInCart === 0 ? (
-            <button
-              type="button"
-              onClick={handleAdd}
-              className={[
-                'rounded-full border px-3 py-1 text-xs font-semibold transition-all',
-                adding
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white',
-              ].join(' ')}
-            >
-              {adding ? 'Added ✓' : '+ Add'}
-            </button>
-          ) : (
-            <div className="inline-flex items-center overflow-hidden rounded-full border border-blue-200 bg-blue-50">
-              <button type="button" onClick={handleDec} className="flex h-7 w-7 items-center justify-center text-blue-700 hover:bg-blue-100">
-                <Minus size={12} />
-              </button>
-              <span className="min-w-6 px-1 text-center text-xs font-semibold text-blue-700">{qtyInCart}</span>
-              <button type="button" onClick={handleInc} className="flex h-7 w-7 items-center justify-center text-blue-700 hover:bg-blue-100">
-                <Plus size={12} />
-              </button>
+              <p className="mt-1 truncate text-sm font-semibold text-slate-900">{item.name}</p>
             </div>
+
+            {item.is_bestseller && (
+              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+                Bestseller
+              </span>
+            )}
+          </div>
+
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+            {item.description || 'This add-on makes the meal feel complete.'}
+          </p>
+
+          {socialCount !== null && (
+            <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+              <TrendingUp size={9} />
+              {socialCount} ordered recently
+            </p>
           )}
+
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-sm font-bold text-slate-900">{formatPrice(item.price)}</span>
+
+            {qtyInCart === 0 ? (
+              <button
+                type="button"
+                onClick={handleAdd}
+                className={[
+                  'rounded-full border px-3 py-1 text-xs font-semibold transition-all',
+                  adding
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-600 hover:text-white',
+                ].join(' ')}
+              >
+                {adding ? 'Added ✓' : '+ Add'}
+              </button>
+            ) : (
+              <div className="inline-flex items-center overflow-hidden rounded-full border border-orange-200 bg-orange-50">
+                <button
+                  type="button"
+                  onClick={handleDec}
+                  className="flex h-7 w-7 items-center justify-center text-orange-700 hover:bg-orange-100"
+                >
+                  <Minus size={12} />
+                </button>
+                <span className="min-w-6 px-1 text-center text-xs font-semibold text-orange-700">
+                  {qtyInCart}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleInc}
+                  className="flex h-7 w-7 items-center justify-center text-orange-700 hover:bg-orange-100"
+                >
+                  <Plus size={12} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -175,7 +446,10 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
 
   const cartItemIds = new Set(cartItems.map((c) => c.item.id))
   const cartCategoryIds = new Set(cartItems.map((c) => c.item.category_id))
-  const recommendations = getRecommendations(allItems, cartItemIds, cartCategoryIds)
+  const recommendations = getRecommendations(allItems, cartItems)
+const anchorItem = pickPrimaryCartItem(cartItems)
+const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
+
 
   const handleRemove = (itemId: string, itemName: string) => {
     removeFromCart(itemId)
@@ -337,33 +611,31 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
 
           {/* Recommendations — only show when cart has items */}
           {cartItems.length > 0 && recommendations.length > 0 && (
-            <div className="border-t border-slate-100 px-4 pb-4 pt-3">
-              <div className="mb-3 flex items-center gap-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 text-white">
-                  <Sparkles size={11} />
-                </div>
-                <p className="text-xs font-semibold text-slate-900">
-                  Guests who ordered this also added
-                </p>
-              </div>
+  <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+    <div className="mb-3 rounded-[28px] border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-4">
+      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-500">
+        <Sparkles size={12} />
+        Chef&apos;s favorite pairing
+      </div>
+      <h3 className="mt-2 text-base font-semibold text-slate-900">
+        {recommendationCopy.title}
+      </h3>
+      <p className="mt-1 text-sm leading-6 text-slate-600">
+        {recommendationCopy.subtitle}
+      </p>
+    </div>
 
-              <div className="space-y-2.5">
-                {recommendations.map((item, i) => (
-                  <div
-                    key={item.id}
-                    className="animate-[fadeUp_200ms_ease-out]"
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    <RecommendationCard item={item} />
-                  </div>
-                ))}
-              </div>
+    <div className="space-y-2.5">
+      {recommendations.map((item) => (
+        <RecommendationCard key={item.id} item={item} />
+      ))}
+    </div>
 
-              <p className="mt-3 text-center text-[10px] text-slate-400">
-                Most tables order 3–4 dishes for a complete meal
-              </p>
-            </div>
-          )}
+    <p className="mt-3 text-center text-[10px] text-slate-400">
+      A small add-on often turns a good order into a complete meal.
+    </p>
+  </div>
+)}
         </div>
 
         {/* Footer */}

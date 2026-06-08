@@ -165,8 +165,7 @@ export default function OnboardingPage() {
         const e = await res.json()
         throw new Error(e.error ?? 'Failed to start trial')
       }
-      router.push('/dashboard?welcome=trial')
-      router.refresh()
+      window.location.href = '/dashboard?welcome=trial'
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
       setStartingTrial(false)

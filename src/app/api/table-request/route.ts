@@ -1,3 +1,5 @@
+
+import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
@@ -19,6 +21,10 @@ const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n
 
 if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey)
+}
+
+function makeOrderCode(tableNumber: number) {
+  return `SM-${tableNumber}-${randomUUID().slice(0, 8).toUpperCase()}`
 }
 
 function getFirebaseApp() {
@@ -230,19 +236,22 @@ export async function POST(req: NextRequest) {
     if (restaurantError || !restaurant) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
+	
+	const orderCode = makeOrderCode(tableNumber)
 
-    const { data: inserted, error: insertError } = await admin
-      .from('table_requests')
-      .insert({
-        restaurant_id: restaurant.id,
-        table_number: tableNumber,
-        session_id: sessionId,
-        items,
-        subtotal,
-        status: 'pending',
-      })
-      .select('*')
-      .single()
+   const { data: inserted, error: insertError } = await admin
+  .from('table_requests')
+  .insert({
+    restaurant_id: restaurant.id,
+    table_number: tableNumber,
+    session_id: sessionId,
+    items,
+    subtotal,
+    status: 'pending',
+    order_code: orderCode, // keep this only if you added the column
+  })
+  .select('*')
+  .single()
 
     if (insertError) {
       console.error('table-request insert error:', insertError)
@@ -288,11 +297,13 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      ok: true,
-      request: inserted,
-      tableNumber,
-      restaurantSlug,
-    })
+  ok: true,
+  request: inserted,
+  orderId: inserted.id,
+  orderCode: inserted.order_code ?? orderCode,
+  tableNumber,
+  restaurantSlug,
+})
   } catch (error) {
     console.error('table-request route error:', error)
     return NextResponse.json(

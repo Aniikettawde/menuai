@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
-import { BellRing, Armchair, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { BellRing, CheckCircle2, ChefHat, PartyPopper, X, ChevronUp, Armchair, ClipboardList } from 'lucide-react'
 
 type CartItem = {
   id: string
@@ -11,90 +12,298 @@ type CartItem = {
   total: number
 }
 
+type OrderStatus = 'pending' | 'accepted' | 'completed' | 'cancelled'
+
 interface Props {
+  supabase: SupabaseClient
   tableNumber: number
+  orderId: string
+  orderCode?: string
+  restaurantSlug: string
   items: CartItem[]
   subtotal: number
   onClose: () => void
 }
 
-export function WaiterCalledToast({ tableNumber, items, subtotal, onClose }: Props) {
+export function WaiterCalledToast({
+  supabase,
+  tableNumber,
+  orderId,
+  orderCode,
+  restaurantSlug,
+  items,
+  subtotal,
+  onClose,
+}: Props) {
+  const displayCode = orderCode ?? orderId.slice(0, 8).toUpperCase()
+
+  const [status, setStatus] = useState<OrderStatus>('pending')
+  const [avgPrepTime, setAvgPrepTime] = useState(20)
+  const [acceptedAt, setAcceptedAt] = useState<string | null>(null)
+  const [minimized, setMinimized] = useState(false)
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   useEffect(() => {
-    const t = setTimeout(onClose, 8000)
-    return () => clearTimeout(t)
-  }, [onClose])
+    async function fetchPrepTime() {
+      const { data } = await supabase
+        .from('restaurants')
+        .select('avg_prep_time')
+        .eq('slug', restaurantSlug)
+        .single()
+      if (data?.avg_prep_time) setAvgPrepTime(data.avg_prep_time)
+    }
+    void fetchPrepTime()
+  }, [restaurantSlug, supabase])
+
+  useEffect(() => {
+  const channel = supabase
+    .channel(`order-status-${orderId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'table_requests',
+        // no filter here — filter in callback instead
+      },
+      (payload) => {
+        const row = payload.new as {
+          id: string
+          status: OrderStatus
+          accepted_at: string | null
+        }
+        // only react to our specific order
+        if (row.id !== orderId) return
+
+        setStatus(row.status)
+        if (row.accepted_at) setAcceptedAt(row.accepted_at)
+        setMinimized(false)
+      },
+    )
+    .subscribe((status, err) => {
+      // log subscription health so you can see if it's actually connecting
+      console.log('[WaiterToast] channel status:', status, err ?? '')
+    })
+
+  return () => { void supabase.removeChannel(channel) }
+}, [orderId, supabase])
+
+useEffect(() => {
+  if (status === 'completed' || status === 'cancelled') return
+
+  const interval = setInterval(async () => {
+    const { data } = await supabase
+      .from('table_requests')
+      .select('status, accepted_at')
+      .eq('id', orderId)
+      .single()
+
+    if (!data) return
+    if (data.status !== status) {
+      setStatus(data.status as OrderStatus)
+      if (data.accepted_at) setAcceptedAt(data.accepted_at)
+      setMinimized(false)
+    }
+  }, 8000)
+
+  return () => clearInterval(interval)
+}, [orderId, status, supabase])
+
+  useEffect(() => {
+    if (status !== 'accepted' || !acceptedAt) return
+
+    function calcSecondsLeft() {
+      const elapsed = (Date.now() - new Date(acceptedAt!).getTime()) / 1000
+      return Math.max(0, Math.round(avgPrepTime * 60 - elapsed))
+    }
+
+    setSecondsLeft(calcSecondsLeft())
+    timerRef.current = setInterval(() => {
+      const left = calcSecondsLeft()
+      setSecondsLeft(left)
+      if (left <= 0) clearInterval(timerRef.current!)
+    }, 1000)
+
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [status, acceptedAt, avgPrepTime])
+
+  function formatTime(secs: number) {
+    if (secs <= 0) return 'Almost ready!'
+    const m = Math.floor(secs / 60)
+    const s = secs % 60
+    return m > 0 ? `${m}m ${s}s` : `${s}s`
+  }
+
+  const totalSecs = avgPrepTime * 60
+  const progress = secondsLeft !== null ? 1 - secondsLeft / totalSecs : 0
+  const circumference = 2 * Math.PI * 20
+  const stepIndex = status === 'pending' ? 0 : status === 'accepted' ? 1 : 2
+
+  const stateConfig = {
+    pending: {
+      icon: <BellRing size={22} />,
+      ringClass: 'bg-green-500/15 text-green-500',
+      title: 'Waiter on the way!',
+      sub: 'Your order has been sent',
+    },
+    accepted: {
+      icon: <CheckCircle2 size={22} />,
+      ringClass: 'bg-blue-500/15 text-blue-400',
+      title: 'Order confirmed!',
+      sub: 'Kitchen is preparing your food',
+    },
+    completed: {
+      icon: <PartyPopper size={22} />,
+      ringClass: 'bg-green-500/15 text-green-400',
+      title: 'Order ready!',
+      sub: 'Enjoy your meal 🍽️',
+    },
+    cancelled: {
+      icon: <X size={22} />,
+      ringClass: 'bg-zinc-500/15 text-zinc-400',
+      title: 'Order cancelled',
+      sub: 'Please speak to staff',
+    },
+  }
+
+  const cfg = stateConfig[status]
+
+  if (minimized) {
+    return (
+      <>
+        <div
+          className="fixed bottom-6 left-4 z-50 flex cursor-pointer items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 shadow-xl transition hover:bg-zinc-800"
+          style={{ animation: 'toastIn 0.3s ease both' }}
+          onClick={() => setMinimized(false)}
+          role="button"
+          aria-label="View order status"
+        >
+          {status === 'accepted' && secondsLeft !== null && secondsLeft > 0 ? (
+            <div className="relative h-10 w-10 flex-shrink-0">
+              <svg className="-rotate-90" width="40" height="40" viewBox="0 0 44 44">
+                <circle cx="22" cy="22" r="20" fill="none" stroke="#27272a" strokeWidth="3" />
+                <circle
+                  cx="22" cy="22" r="20"
+                  fill="none"
+                  stroke="#f97316"
+                  strokeWidth="3"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={circumference * (1 - progress)}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 1s linear' }}
+                />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-orange-400">
+                {Math.ceil((secondsLeft ?? 0) / 60)}m
+              </span>
+            </div>
+          ) : (
+            <div className={`flex h-10 w-10 items-center justify-center rounded-full ${cfg.ringClass}`}>
+              {cfg.icon}
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-semibold text-white">{cfg.title}</p>
+            <p className="text-xs text-zinc-500">Table {tableNumber} · Tap to expand</p>
+          </div>
+          <ChevronUp size={14} className="ml-1 text-zinc-500" />
+        </div>
+        <style>{`@keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      </>
+    )
+  }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6"
-      style={{ background: 'rgba(0,0,0,0.45)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
+    <>
       <div
-        className="w-full max-w-sm rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-4"
-        style={{ animation: 'waiterSlideUp 0.35s cubic-bezier(0.34,1.56,0.64,1) both' }}
+        className="fixed bottom-6 left-4 z-50 w-[320px] rounded-3xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl"
+        style={{ animation: 'toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both' }}
       >
-        {/* Close */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1 rounded-full text-zinc-400 hover:text-zinc-600"
-          aria-label="Close"
-        >
-          <X size={16} />
-        </button>
-
-        {/* Icon */}
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-          <BellRing size={26} />
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full ${cfg.ringClass}`}>
+              {cfg.icon}
+            </div>
+            <div>
+              <p className="font-semibold text-white">{cfg.title}</p>
+              <p className="mt-0.5 text-xs text-zinc-500">{cfg.sub}</p>
+            </div>
+          </div>
+          <div className="flex gap-1">
+            {status !== 'completed' && status !== 'cancelled' && (
+              <button
+                onClick={() => setMinimized(true)}
+                className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                aria-label="Minimize"
+              >
+                <ChevronUp size={14} />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+              aria-label="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
 
-        {/* Title */}
-        <div className="text-center">
-          <p className="text-lg font-semibold text-zinc-900 dark:text-white">Waiter on the way!</p>
-          <p className="mt-1 text-sm text-zinc-500">Your order has been sent to the kitchen</p>
+        {/* Step progress */}
+        <div className="mt-4 flex gap-1.5">
+          {(['pending', 'accepted', 'completed'] as const).map((s, i) => (
+            <div
+              key={s}
+              className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+                i < stepIndex
+                  ? 'bg-green-500'
+                  : i === stepIndex
+                    ? status === 'completed' ? 'bg-green-500' : 'animate-pulse bg-orange-500'
+                    : 'bg-zinc-700'
+              }`}
+            />
+          ))}
         </div>
 
-        {/* Table badge */}
-        <div className="mx-auto flex items-center gap-2 rounded-full bg-blue-50 dark:bg-blue-900/30 px-4 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-400">
-          <Armchair size={14} />
-          Table {tableNumber}
+        {/* Pills */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-[11px] font-semibold text-orange-300">
+            <Armchair size={11} />
+            Table {tableNumber}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-zinc-300">
+            <ClipboardList size={11} />
+            #{displayCode}
+          </span>
         </div>
 
-        <hr className="border-zinc-100 dark:border-zinc-800" />
+        {/* Countdown */}
+        {status === 'accepted' && secondsLeft !== null && (
+          <div className="mt-3 flex items-center gap-2">
+            <ChefHat size={13} className="text-orange-400" />
+            <span className="text-xs text-zinc-400">
+              Ready in <span className="font-semibold text-orange-400">{formatTime(secondsLeft)}</span>
+            </span>
+          </div>
+        )}
 
         {/* Items */}
-        <div className="flex flex-col gap-1.5">
+        <div className="mt-4 space-y-1.5 border-t border-white/5 pt-3">
           {items.map((item) => (
             <div key={item.id} className="flex justify-between text-sm">
-              <span className="text-zinc-500">{item.name}</span>
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">×{item.qty}</span>
+              <span className="text-zinc-400">{item.name}</span>
+              <span className="font-medium text-zinc-200">×{item.qty}</span>
             </div>
           ))}
         </div>
 
-        <hr className="border-zinc-100 dark:border-zinc-800" />
-
-        {/* Subtotal */}
-        <div className="flex justify-between text-sm font-semibold text-zinc-900 dark:text-white">
+        <div className="mt-3 flex justify-between border-t border-white/5 pt-3 text-sm font-semibold text-white">
           <span>Subtotal</span>
           <span>₹{(subtotal / 100).toLocaleString('en-IN')}</span>
         </div>
-
-        {/* CTA */}
-        <button
-          onClick={onClose}
-          className="w-full rounded-2xl bg-green-700 py-3 text-sm font-semibold text-green-50 transition hover:bg-green-600 active:scale-[0.98]"
-        >
-          Got it
-        </button>
       </div>
-
-      <style>{`
-        @keyframes waiterSlideUp {
-          from { opacity: 0; transform: translateY(24px) scale(0.96); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-      `}</style>
-    </div>
+      <style>{`@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
+    </>
   )
 }

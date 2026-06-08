@@ -1,14 +1,20 @@
-// src/middleware.ts
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import {
+  canAccessPath,
+  getLandingPath,
+  getOwnerSubscriptionState,
+  resolveDashboardContext,
+} from '@/lib/dashboard-access'
 
 const PUBLIC_PATHS = [
   '/dashboard/login',
-  '/dashboard/onboarding',
   '/dashboard/billing',
   '/dashboard/billing/success',
   '/api/billing/webhook',
   '/api/billing/start-trial',
+  '/admin',
+  '/api/admin',
 ]
 
 export async function middleware(request: NextRequest) {
@@ -19,33 +25,21 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
+        getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
-  cookiesToSet.forEach(({ name, value }) =>
-    request.cookies.set(name, value)
-  )
-  supabaseResponse = NextResponse.next({ request })
-  cookiesToSet.forEach(({ name, value, options }) =>
-    supabaseResponse.cookies.set(name, value, options)
-  )
-},
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options),
+          )
+        },
       },
-    }
+    },
   )
 
-  const { data: { user }, error } = await supabase.auth.getUser()
-
-  // ── DEBUG (remove after fixing) ──
-  console.log('[middleware] path:', request.nextUrl.pathname)
-  console.log('[middleware] user:', user?.id ?? null)
-  console.log('[middleware] error:', error?.message ?? null)
-  console.log('[middleware] cookies:', request.cookies.getAll().map(c => c.name))
-  // ────────────────────────────────
-
+  const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
-  const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
 
   if (!user) {
     if (pathname.startsWith('/dashboard') && !isPublic) {
@@ -56,45 +50,59 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
+  // Redirect away from login if already authenticated
   if (pathname === '/dashboard/login') {
+    const context = await resolveDashboardContext(user.id, user.email ?? null)
+    if (!context) return supabaseResponse
+    const sub = await getOwnerSubscriptionState(context.ownerId)
+    if (!sub?.hasAccess) return supabaseResponse
     const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/dashboard'
+    redirectUrl.pathname = getLandingPath(context.role)
     return NextResponse.redirect(redirectUrl)
+  }
+
+  // Onboarding — redirect staff/owners who already have restaurant access
+  if (pathname === '/dashboard/onboarding') {
+    const context = await resolveDashboardContext(user.id, user.email ?? null)
+    if (context) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = getLandingPath(context.role)
+      return NextResponse.redirect(redirectUrl)
+    }
+    return supabaseResponse
   }
 
   if (isPublic) return supabaseResponse
 
   if (pathname.startsWith('/dashboard')) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const context = await resolveDashboardContext(user.id, user.email ?? null)
 
-    const url = `${supabaseUrl}/rest/v1/subscription_status?user_id=eq.${user.id}&select=has_access,plan,trial_days_remaining&limit=1`
-    const subRes = await fetch(url, {
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    })
-
-    let sub: { has_access: boolean; plan: string; trial_days_remaining: number | null } | null = null
-    if (subRes.ok) {
-      const rows = await subRes.json()
-      sub = rows?.[0] ?? null
+    if (!context) {
+      const sub = await getOwnerSubscriptionState(user.id)
+      if (!sub?.hasAccess) {
+        const redirectUrl = request.nextUrl.clone()
+        redirectUrl.pathname = '/dashboard/onboarding'
+        return NextResponse.redirect(redirectUrl)
+      }
+      return supabaseResponse
     }
 
-    console.log('[middleware] sub:', JSON.stringify(sub))
-
+    const sub = await getOwnerSubscriptionState(context.ownerId)
     if (!sub) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard/onboarding'
       return NextResponse.redirect(redirectUrl)
     }
 
-    if (!sub.has_access) {
+    if (!sub.hasAccess && !pathname.startsWith('/dashboard/billing')) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard/billing'
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    if (!canAccessPath(context.role, pathname)) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = getLandingPath(context.role)
       return NextResponse.redirect(redirectUrl)
     }
   }
@@ -103,5 +111,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/api/billing/:path*'],
+  matcher: ['/dashboard/:path*', '/api/billing/:path*', '/admin/:path*', '/api/admin/:path*'],
 }

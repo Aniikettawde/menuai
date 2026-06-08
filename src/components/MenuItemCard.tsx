@@ -10,6 +10,14 @@ interface Props {
   item: MenuItem
 }
 
+function getImageUrl(imageUrl: string | null | undefined): string | null {
+  if (!imageUrl) return null
+  if (imageUrl.startsWith('http')) return imageUrl
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return null
+  return `${base}/storage/v1/object/public/restaurant-assets/${imageUrl}`
+}
+
 function formatPrice(paise: number): string {
   return `₹${Math.round(paise / 100)}`
 }
@@ -249,7 +257,8 @@ export function MenuItemCard({ item }: Props) {
         {/* Image + ADD button stacked */}
         <div className="flex shrink-0 flex-col items-center gap-2">
           <div className="relative">
-            <ItemImage src={item.image_url} alt={item.name} isVeg={item.is_veg} />
+            <ItemImage src={getImageUrl(item.image_url)} alt={item.name} isVeg={item.is_veg} />
+
             {/* Bestseller label on image bottom */}
             {item.is_bestseller && (
               <div className="absolute inset-x-0 bottom-0 rounded-b-xl bg-gradient-to-t from-black/60 to-transparent px-1.5 pb-1 pt-3">

@@ -2,7 +2,7 @@
 // src/app/dashboard/restaurant/page.tsx
 // Create or edit restaurant profile: name, slug, description, cuisine, logo, hours
 // Mobile-friendly and safer version
-
+import { useDashboardContext } from '@/hooks/useDashboardContext'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import type { Restaurant } from '@/types'
@@ -31,6 +31,7 @@ type RestaurantForm = {
   cuisine_type: string
   address: string
   phone: string
+  avg_prep_time: number
   opening_hours: OpeningHours
 }
 
@@ -74,6 +75,13 @@ function createDefaultHours(): OpeningHours {
 
 export default function RestaurantPage() {
   const supabase = getSupabaseDashboardBrowser()
+const {
+  context,
+  loading: contextLoading,
+} = useDashboardContext()
+
+const restaurantId = context?.restaurantId ?? null
+const role = context?.role
 
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null)
   const [saving, setSaving] = useState(false)
@@ -85,16 +93,16 @@ export default function RestaurantPage() {
 
   const logoRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
-
-  const [form, setForm] = useState<RestaurantForm>({
-    name: '',
-    slug: '',
-    description: '',
-    cuisine_type: '',
-    address: '',
-    phone: '',
-    opening_hours: createDefaultHours(),
-  })
+const [form, setForm] = useState<RestaurantForm>({
+  name: '',
+  slug: '',
+  description: '',
+  cuisine_type: '',
+  address: '',
+  phone: '',
+  avg_prep_time: 20,
+  opening_hours: createDefaultHours(),
+})
 
   const [logoUrl, setLogoUrl] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
@@ -110,18 +118,16 @@ export default function RestaurantPage() {
 
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+       if (!restaurantId) {
+  if (mounted) setLoading(false)
+  return
+}
 
-        if (!user) {
-          if (mounted) setLoading(false)
-          return
-        }
-
-        const { data, error } = await supabase
-          .from('restaurants')
-          .select('*')
-          .eq('owner_id', user.id)
-          .maybeSingle()
+const { data, error } = await supabase
+  .from('restaurants')
+  .select('*')
+  .eq('id', restaurantId)
+  .single()
 
         if (error) {
           console.error('Restaurant load error:', error)
@@ -156,7 +162,7 @@ export default function RestaurantPage() {
     return () => {
       mounted = false
     }
-  }, [supabase])
+  }, [restaurantId, supabase])
 
   // Auto-slug from restaurant name, only if the user hasn't customized it.
   function handleNameChange(name: string) {
@@ -246,87 +252,102 @@ export default function RestaurantPage() {
     }))
   }
 
-  async function uploadImage(file: File, bucket: 'logos' | 'covers'): Promise<string> {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      throw new Error('Not authenticated')
-    }
-
-    const safeFileName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')
-    const path = `${user.id}/${bucket}/${Date.now()}-${safeFileName}`
-
-    const { error } = await supabase.storage
-      .from('restaurant-assets')
-      .upload(path, file, {
-        upsert: true,
-        contentType: file.type,
-      })
-
-    if (error) throw error
-
-    const { data } = supabase.storage.from('restaurant-assets').getPublicUrl(path)
-    return data.publicUrl
+ async function uploadImage(file: File, bucket: 'logos' | 'covers'): Promise<string> {
+  if (!restaurantId) {
+    throw new Error('Restaurant not found')
   }
+
+  const safeFileName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')
+  const path = `${restaurantId}/${bucket}/${Date.now()}-${safeFileName}`
+
+  const { error } = await supabase.storage
+    .from('restaurant-assets')
+    .upload(path, file, {
+      upsert: true,
+      contentType: file.type,
+    })
+
+  if (error) throw error
+
+  const { data } = supabase.storage.from('restaurant-assets').getPublicUrl(path)
+  return data.publicUrl
+}
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setError('')
+  e.preventDefault()
+  setError('')
 
-    if (slugTaken) {
-      setError('This slug is already taken')
-      return
-    }
-
-    setSaving(true)
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) throw new Error('Not authenticated')
-
-      const payload = {
-        ...form,
-        slug: slugify(form.slug || form.name),
-        logo_url: logoUrl || null,
-        cover_url: coverUrl || null,
-        owner_id: user.id,
-      }
-
-      if (restaurant) {
-        const { data, error } = await supabase
-          .from('restaurants')
-          .update(payload)
-          .eq('id', restaurant.id)
-          .select('*')
-          .single()
-
-        if (error) throw error
-        if (data) setRestaurant(data as Restaurant)
-      } else {
-        const { data, error } = await supabase
-          .from('restaurants')
-          .insert(payload)
-          .select('*')
-          .single()
-
-        if (error) throw error
-        if (data) setRestaurant(data as Restaurant)
-      }
-
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    } catch (err) {
-      console.error('Restaurant save error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to save restaurant')
-    } finally {
-      setSaving(false)
-    }
+  if (slugTaken) {
+    setError('This slug is already taken')
+    return
   }
+
+  setSaving(true)
+
+  try {
+    const { data: authData } = await supabase.auth.getUser()
+    const user = authData.user
+    if (!user?.email) throw new Error('Not authenticated')
+
+    const payload = {
+      ...form,
+      slug: slugify(form.slug || form.name),
+      logo_url: logoUrl || null,
+      cover_url: coverUrl || null,
+    }
+
+    if (restaurant) {
+      const { data, error } = await supabase
+        .from('restaurants')
+        .update(payload)
+        .eq('id', restaurant.id)
+        .select('*')
+        .single()
+
+      if (error) throw error
+      if (data) setRestaurant(data as Restaurant)
+    } else {
+  const { data, error } = await supabase
+    .from('restaurants')
+    .insert({ ...payload, owner_id: user.id })  // ADD owner_id
+    .select('*')
+    .single()
+
+  if (error) throw error
+  if (!data) throw new Error('Restaurant insert failed')
+
+  setRestaurant(data as Restaurant)
+
+  const { error: staffError } = await supabase.from('restaurant_staff').insert({
+    restaurant_id: data.id,
+    email: user.email,
+    role: 'owner',
+    active: true,
+    created_by: user.id,
+    user_id: user.id,   // ADD user_id
+  })
+
+  if (staffError) throw staffError
+}
+
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  } catch (err) {
+    console.error('Restaurant save error:', err)
+    setError(err instanceof Error ? err.message : 'Failed to save restaurant')
+  } finally {
+    setSaving(false)
+  }
+}
+  
+  if (contextLoading) {
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-4">
+      <div className="h-44 animate-pulse rounded-2xl bg-zinc-900" />
+    </div>
+  )
+}
+
 
   if (loading) {
     return (
@@ -489,7 +510,7 @@ export default function RestaurantPage() {
                 setForm((f) => ({ ...f, slug: next }))
               }}
               placeholder="spice-garden"
-              pattern="[a-z0-9-]+"
+              pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
               className={INPUT}
               required
             />

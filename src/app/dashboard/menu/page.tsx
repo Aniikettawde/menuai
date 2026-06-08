@@ -1,5 +1,5 @@
 'use client'
-
+import { useDashboardContext } from '@/hooks/useDashboardContext'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
@@ -10,9 +10,6 @@ import {
   X, ToggleLeft, ToggleRight, Flame, Leaf, Zap,
 } from 'lucide-react'
 
-// ─── Constants ───────────────────────────────────────────────
-// Height of the fixed bottom nav bar (px). Must match DashboardLayout.
-// The nav has py-2 rows + pb-safe. 56px nav + ~8px safe = 64px min, use 72 for safety.
 const BOTTOM_NAV_H = 72
 
 type MenuItemForm = Partial<MenuItem> & { _open?: boolean }
@@ -28,7 +25,6 @@ type ParsedItem = { name: string; description?: string; price?: number; is_veg?:
 type ParsedCategory = { name: string; items: ParsedItem[] }
 type GeminiMenuResult = { categories: ParsedCategory[] }
 
-// ─── Helpers ─────────────────────────────────────────────────
 function toIntOrNull(value: unknown): number | null {
   if (value === '' || value === null || value === undefined) return null
   const n = Number(value)
@@ -54,9 +50,6 @@ function resolveMenuImageUrl(raw: unknown): string {
   return `${supabaseUrl}/storage/v1/object/public/${MENU_ASSET_BUCKET}/${value.replace(/^\/+/, '')}`
 }
 
-// ─── Bottom-sheet modal wrapper ──────────────────────────────
-// Sits ABOVE the bottom nav by reserving BOTTOM_NAV_H px at the bottom of the overlay.
-// On sm+ (tablet/desktop) it centers normally.
 function BottomSheet({
   children, onClose, maxWidthClass = 'max-w-2xl', zIndex = 'z-[60]',
 }: {
@@ -75,7 +68,6 @@ function BottomSheet({
         className={`w-full ${maxWidthClass} flex flex-col overflow-hidden rounded-t-3xl border border-zinc-800 bg-[#111111] shadow-2xl sm:rounded-3xl`}
         style={{ maxHeight: '100%' }}
       >
-        {/* Mobile drag handle */}
         <div className="flex justify-center pt-2.5 pb-0 sm:hidden shrink-0">
           <div className="h-1 w-10 rounded-full bg-zinc-700" />
         </div>
@@ -85,7 +77,6 @@ function BottomSheet({
   )
 }
 
-// ─── Gemini parsing ───────────────────────────────────────────
 async function parseMenuWithGemini(base64Data: string, mimeType: string): Promise<GeminiMenuResult> {
   let safeMime = mimeType || ''
   if (!safeMime || safeMime === 'application/octet-stream') safeMime = 'image/jpeg'
@@ -114,7 +105,6 @@ async function parseMenuWithGemini(base64Data: string, mimeType: string): Promis
   return parsed
 }
 
-// ─── Import modal ─────────────────────────────────────────────
 type ImportStep = 'choose' | 'scanning' | 'preview' | 'importing' | 'done'
 
 function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport: (result: GeminiMenuResult) => Promise<void> }) {
@@ -162,7 +152,6 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
 
   return (
     <BottomSheet onClose={onClose}>
-      {/* Header */}
       <div className="shrink-0 border-b border-white/[0.06] px-4 py-3.5">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -175,7 +164,6 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
         </div>
       </div>
 
-      {/* Body */}
       <div className="flex-1 overflow-y-auto p-4">
         {error && <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
@@ -251,7 +239,6 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
         )}
       </div>
 
-      {/* Footer */}
       {step === 'preview' && result && (
         <div className="shrink-0 border-t border-white/[0.06] bg-[#111111] px-4 py-4">
           <div className="flex gap-3">
@@ -264,7 +251,6 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
   )
 }
 
-// ─── Action sheet ─────────────────────────────────────────────
 function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle }: {
   item: MenuItemRow; onClose: () => void; onEdit: () => void; onDelete: () => void; onToggle: () => void
 }) {
@@ -307,7 +293,6 @@ function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle }: {
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────
 export default function MenuPage() {
   const supabase = getSupabaseDashboardBrowser()
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null)
@@ -326,14 +311,22 @@ export default function MenuPage() {
   const [showImport, setShowImport] = useState(false)
   const [catImageUploading, setCatImageUploading] = useState<string | null>(null)
   const [descriptionGenerating, setDescriptionGenerating] = useState(false)
+  const { context, loading: contextLoading } = useDashboardContext()
 
   useEffect(() => {
     let mounted = true
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { if (mounted) setLoading(false); return }
-        const { data: r } = await supabase.from('restaurants').select('*').eq('owner_id', user.id).maybeSingle()
+        if (contextLoading) return
+        if (!context?.restaurantId) {
+          setLoading(false)
+          return
+        }
+        const { data: r } = await supabase
+          .from('restaurants')
+          .select('*')
+          .eq('id', context.restaurantId)
+          .single()
         if (!r) { if (mounted) setLoading(false); return }
         const { data: cats } = await supabase.from('menu_categories').select('*').eq('restaurant_id', r.id).order('position')
         const { data: its } = await supabase.from('menu_items').select('*').eq('restaurant_id', r.id).order('position')
@@ -349,7 +342,7 @@ export default function MenuPage() {
     }
     void load()
     return () => { mounted = false }
-  }, [supabase])
+  }, [supabase, context?.restaurantId, contextLoading])
 
   const catItems = useMemo(() => items.filter((x) => x.category_id === activeCat), [items, activeCat])
   const activeCatData = categories.find((c) => c.id === activeCat) ?? null
@@ -506,15 +499,17 @@ export default function MenuPage() {
   const availableDishes = items.filter((x) => x.is_available).length
   const bestsellers = items.filter((x) => x.is_bestseller).length
 
-  if (loading) return (
-    <div className="space-y-4">
-      <div className="h-24 animate-pulse rounded-3xl bg-white/[0.04]" />
-      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-        <div className="h-96 animate-pulse rounded-3xl bg-white/[0.04]" />
-        <div className="h-96 animate-pulse rounded-3xl bg-white/[0.04]" />
+  if (loading || contextLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-24 animate-pulse rounded-3xl bg-white/[0.04]" />
+        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+          <div className="h-96 animate-pulse rounded-3xl bg-white/[0.04]" />
+          <div className="h-96 animate-pulse rounded-3xl bg-white/[0.04]" />
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   if (!restaurant) return (
     <div className="mx-auto max-w-xl rounded-3xl border border-white/[0.07] bg-[#111111] p-8 text-center">
@@ -564,7 +559,10 @@ export default function MenuPage() {
                 const avail = items.filter((x) => x.category_id === cat.id && x.is_available).length
                 const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
                 return (
-                  <button key={cat.id} onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
+                  // ── Mobile: plain <button> is fine here — no nested buttons inside ──
+                  <button
+                    key={cat.id}
+                    onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
                     className="group flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left active:scale-[0.99] transition"
                   >
                     <div className="relative shrink-0">
@@ -573,6 +571,7 @@ export default function MenuPage() {
                         ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
                         : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">🍱</div>
                       }
+                      {/* label is not a button — no nesting issue */}
                       <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
                         <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
                           {catImageUploading === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Camera size={9} />}
@@ -590,7 +589,6 @@ export default function MenuPage() {
               })
             )}
 
-            {/* Add category inline — no modal needed */}
             <div className="rounded-2xl border border-white/[0.07] bg-[#111111] p-4 space-y-2.5 mt-2">
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">New Category</p>
               <div className="flex gap-2">
@@ -601,7 +599,6 @@ export default function MenuPage() {
               </div>
             </div>
 
-            {/* FAB — sits above bottom nav */}
             {categories.length > 0 && (
               <button
                 onClick={() => {
@@ -677,9 +674,13 @@ export default function MenuPage() {
                 const count = items.filter((x) => x.category_id === cat.id).length
                 const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
                 return (
+                  // ── FIX: outer is a <div>, not <button>, so the delete <button> inside is valid ──
                   <div key={cat.id} className="group relative">
-                    <button onClick={() => setActiveCat(cat.id)}
-                      className={`flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-3 text-left transition ${active ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'}`}
+                    <div
+                      onClick={() => setActiveCat(cat.id)}
+                      className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-3 transition ${
+                        active ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                      }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         {catWithImage.image_url
@@ -691,9 +692,16 @@ export default function MenuPage() {
                       </div>
                       <span className="flex items-center gap-2 text-xs shrink-0">
                         <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
-                        <button onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }} className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"><Trash2 size={14} /></button>
+                        {/* delete button is inside a <div>, not a <button> — no nesting violation */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
+                          className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </span>
-                    </button>
+                    </div>
+                    {/* camera upload label — also inside the <div> wrapper, not a button */}
                     <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
                       <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900/80 text-zinc-400 hover:bg-orange-500 hover:text-white transition">
                         {catImageUploading === cat.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
@@ -712,6 +720,7 @@ export default function MenuPage() {
               </button>
             </div>
           </aside>
+
           <section className="rounded-3xl border border-white/[0.07] bg-[#111111] p-4">
             {activeCat ? (
               <>
@@ -836,7 +845,6 @@ export default function MenuPage() {
             </div>
           </div>
 
-          {/* Sticky footer — always visible inside the sheet */}
           <div className="shrink-0 border-t border-white/[0.06] bg-[#111111] px-4 py-4">
             {error && <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-200">{error}</div>}
             <div className="flex gap-2.5">
@@ -864,7 +872,6 @@ export default function MenuPage() {
   )
 }
 
-// ─── Small components ─────────────────────────────────────────
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <div><label className="mb-1.5 block text-xs font-semibold text-zinc-400">{label}</label>{children}</div>
 }
@@ -905,6 +912,7 @@ function DesktopStat({ value, label, icon, color, bg }: { value: number; label: 
 
 function MobileItemRow({ item, onTap, onToggle }: { item: MenuItemRow; onTap: () => void; onToggle: () => void }) {
   return (
+    // ── outer is a plain <div> — the buttons inside are siblings, not nested ──
     <div className={`flex items-center gap-3 rounded-2xl border bg-zinc-900/80 p-3 transition active:scale-[0.99] ${item.is_available ? 'border-zinc-800' : 'border-zinc-800/40 opacity-50'}`}>
       <button onClick={onTap} className="shrink-0">
         {item.image_url

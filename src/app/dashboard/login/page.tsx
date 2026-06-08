@@ -67,6 +67,8 @@ export default function DashboardLoginPage() {
       setError('Password must be at least 6 characters.')
       return false
     }
+	
+	
 
     if (mode === 'signup' && passwordInfo.score === 0) {
       setError('Please choose a stronger password.')
@@ -77,6 +79,7 @@ export default function DashboardLoginPage() {
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+	  console.log('MODE:', mode)
     e.preventDefault()
     setLoading(true)
     setError('')
@@ -90,55 +93,40 @@ export default function DashboardLoginPage() {
 
       const cleanEmail = email.trim().toLowerCase()
 
-      if (mode === 'login') {
-        const result = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        })
+     if (mode === 'signup') {
+  const { data, error } = await supabase.auth.signUp({
+    email: cleanEmail,
+    password,
+    options: {
+      data: { full_name: name.trim() },
+    },
+  })
 
-        if (result.error) {
-          setError(result.error.message)
-          return
-        }
+  if (error) {
+    setError(error.message)
+    return
+  }
 
-        const { data } = await supabase.auth.getSession()
-        if (!data.session) {
-          setError('Login succeeded, but session was not created. Please try again.')
-          return
-        }
+  if (data.user && !data.session) {
+    setMessage('Check your email to confirm your account, then sign in.')
+    setMode('login')
+    setPassword('')
+    return
+  }
 
-        router.replace('/dashboard')
-        router.refresh()
-        return
-      }
+  // Check if this user is a staff member
+  const res = await fetch('/api/dashboard/context', { cache: 'no-store' })
+  const json = await res.json().catch(() => ({}))
 
-      if (mode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: {
-            data: {
-              full_name: name.trim(),
-            },
-          },
-        })
+ if (json?.context) {
+  window.location.href = '/dashboard'
+} else {
+  window.location.href = '/dashboard/onboarding'
+}
+return
+}
 
-        if (error) {
-          setError(error.message)
-          return
-        }
-
-        if (data.user && !data.session) {
-          setMessage('Check your email to confirm your account, then sign in.')
-          setMode('login')
-          setPassword('')
-          return
-        }
-
-        router.replace('/dashboard/onboarding')
-        router.refresh()
-        return
-      }
+     
 
       if (mode === 'forgot') {
         const redirectTo =
@@ -157,6 +145,21 @@ export default function DashboardLoginPage() {
 
         setMessage('Password reset email sent. Please check your inbox.')
       }
+	  
+	  if (mode === 'login') {
+  const { error } = await supabase.auth.signInWithPassword({
+    email: cleanEmail,
+    password,
+  })
+
+  if (error) {
+    setError(error.message)
+    return
+  }
+
+  window.location.href = '/dashboard'
+  return
+}
     } catch (err) {
       console.error(err)
       setError('Something went wrong. Please try again.')

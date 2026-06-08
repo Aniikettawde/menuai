@@ -11,6 +11,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 type PsychTriggerOrNone = PsychTrigger | 'none'
 
+
 interface MenuItemAIContext {
   name: string
   description?: string
@@ -31,6 +32,59 @@ interface MenuItemAIContext {
 
 type MenuContextPayload = NonNullable<ChatRequest['menu_context']> & {
   menu_items?: MenuItemAIContext[]
+}
+
+type DietPreference = 'veg' | 'non-veg' | 'unknown'
+
+function hasNonVegMenu(menuItems: MenuItemAIContext[]) {
+  return menuItems.some((i) => i.is_veg === false)
+}
+
+function detectDietPreference(history: ChatRequest['history'] | undefined, message: string): DietPreference {
+  const text = `${history?.map((m) => m.content).join(' ')} ${message}`.toLowerCase()
+
+  if (/\bnon[- ]?veg\b|\bnonveg\b|\bnon vegetarian\b|\bchicken\b|\bmutton\b|\bfish\b|\begg\b/.test(text)) {
+    return 'non-veg'
+  }
+
+  if (/\bveg\b|\bvegetarian\b|\bjain\b/.test(text)) {
+    return 'veg'
+  }
+
+  return 'unknown'
+}
+
+function isBroadChoiceQuery(message: string) {
+  return /suggest|recommend|help me choose|what should i eat|what do you suggest|i'm hungry|hungry|something good|best dish|top dish|show me something|pick for me/i.test(
+    message,
+  )
+}
+
+function buildQuickReplies(params: {
+  hasNonVeg: boolean
+  preference: DietPreference
+  menuItems: MenuItemAIContext[]
+}): QuickReply[] {
+  const { hasNonVeg, preference, menuItems } = params
+  const hasDessert = menuItems.some((i) => getCourseGroup(i) === 'dessert')
+  const hasSpecial = menuItems.some((i) => i.is_special)
+  const hasBestseller = menuItems.some((i) => i.is_bestseller)
+
+  const chips: QuickReply[] = []
+
+  if (preference === 'unknown' && hasNonVeg) {
+    chips.push(
+      { label: 'Veg only', action: 'I want veg food' },
+      { label: 'Non-veg', action: 'I want non-veg food' },
+    )
+  }
+
+  if (hasBestseller) chips.push({ label: 'Best sellers', action: 'Show me your best selling dishes' })
+  if (hasSpecial) chips.push({ label: 'Chef special', action: "What is today's special?" })
+  if (hasDessert) chips.push({ label: 'Dessert', action: 'Show me dessert options' })
+  chips.push({ label: 'Help me choose', action: 'Suggest a complete meal for me' })
+
+  return chips.slice(0, 4)
 }
 
 function getSupabaseAdminClient() {
@@ -230,7 +284,6 @@ function scoreMenuItem(item: MenuItemAIContext, message: string): number {
   if ((item.taste_profile ?? []).some((t) => lower.includes(normalizeText(t)))) score += 3
   if (tags.some((t) => lower.includes(t))) score += 2
 
-  // A little boost for genuinely useful menu structure
   if (course === 'main') score += 2
   if (course === 'bread' || course === 'rice' || course === 'dessert') score += 1
 
@@ -238,8 +291,6 @@ function scoreMenuItem(item: MenuItemAIContext, message: string): number {
 }
 
 function sortByIntent(items: MenuItemAIContext[], message: string) {
-  const lower = message.toLowerCase()
-
   const orderedGroups: Array<ReturnType<typeof getCourseGroup>> = []
   if (isDessertQuery(message)) {
     orderedGroups.push('dessert', 'drink', 'main', 'starter', 'bread', 'rice', 'other')
@@ -346,68 +397,57 @@ function pickPairings(primary: MenuItemAIContext | undefined, items: MenuItemAIC
     exclude.add(item.name)
   }
 
-  // 1) Use explicit "best_with" relationships first.
   for (const bw of primary.best_with ?? []) {
     const match = items.find((item) => normalizeText(item.name) === normalizeText(bw))
     if (match) pushUnique(match)
     if (pairings.length >= 3) return pairings.slice(0, 3).map((x) => x.name)
   }
 
-  // 2) Strong food-type heuristics.
   const wantsDessert = isDessertQuery(message) || primaryGroup === 'dessert'
-  const wantsSpicy = isSpicyQuery(message)
-  const wantsFilling = isFillingQuery(message)
+  const wantsDrink = isDrinkQuery(message) || primaryGroup === 'dessert'
   const wantsVeg = isVegQuery(message)
 
-  // If the user is ordering a curry / masala / main, pair with roti + rice.
-  if (
-    primaryGroup === 'main' ||
-    /(masala|curry|gravy|korma|butter|tikka masala|chicken masala|paneer masala)/.test(lower) ||
-    wantsSpicy ||
-    wantsFilling
-  ) {
+  if (primaryGroup === 'main' || /biryani|curry|masala|gravy|korma|thali|combo/.test(lower)) {
     pushUnique(findBestByGroup(items, ['bread'], exclude, message))
     pushUnique(findBestByGroup(items, ['rice'], exclude, message))
-    pushUnique(findBestByGroup(items, ['starter'], exclude, message))
-  }
-
-  // If the user asked for dessert, recommend dessert + drink if available.
-  if (wantsDessert) {
     pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
     pushUnique(findBestByGroup(items, ['drink'], exclude, message))
   }
 
-  // If the user asked for drinks, pair with a starter or dessert.
-  if (getCourseGroup(primary) === 'drink') {
+  if (primaryGroup === 'rice' || /biryani|jeera rice|pulao/.test(lower)) {
     pushUnique(findBestByGroup(items, ['starter'], exclude, message))
+    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
+    pushUnique(findBestByGroup(items, ['drink'], exclude, message))
+  }
+
+  if (primaryGroup === 'starter') {
+    pushUnique(findBestByGroup(items, ['main'], exclude, message))
+    pushUnique(findBestByGroup(items, ['drink'], exclude, message))
     pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
   }
 
-  // If the user asked for bread / rice, pair with a main.
-  if (primaryGroup === 'bread' || primaryGroup === 'rice') {
+  if (wantsDessert) {
+    pushUnique(findBestByGroup(items, ['drink'], exclude, message))
+  }
+
+  if (wantsDrink) {
+    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
+  }
+
+  if (primaryGroup === 'bread') {
     pushUnique(findBestByGroup(items, ['main'], exclude, message))
-    pushUnique(findBestByGroup(items, ['starter'], exclude, message))
+    pushUnique(findBestByGroup(items, ['rice'], exclude, message))
+    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
   }
 
-  // If user wants veg, keep pairings veg-friendly where possible.
   if (wantsVeg) {
-    const vegPair = items.find((i) => i.is_veg && !exclude.has(i.name))
-    if (vegPair) pushUnique(vegPair)
+    pushUnique(items.find((i) => i.is_veg && !exclude.has(i.name)))
   }
 
-  // 3) Fallback: use same-course complements if still empty.
   if (pairings.length === 0) {
-    if (primaryGroup === 'starter') {
-      pushUnique(findBestByGroup(items, ['main'], exclude, message))
-      pushUnique(findBestByGroup(items, ['drink'], exclude, message))
-    } else if (primaryGroup === 'dessert') {
-      pushUnique(findBestByGroup(items, ['drink'], exclude, message))
-    } else if (primaryGroup === 'main') {
-      pushUnique(findBestByGroup(items, ['bread'], exclude, message))
-      pushUnique(findBestByGroup(items, ['rice'], exclude, message))
-    } else {
-      pushUnique(findBestByGroup(items, ['main'], exclude, message))
-    }
+    pushUnique(findBestByGroup(items, ['main'], exclude, message))
+    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
+    pushUnique(findBestByGroup(items, ['drink'], exclude, message))
   }
 
   return pairings.slice(0, 3).map((x) => x.name)
@@ -434,7 +474,21 @@ function buildFallbackResponse(
   message: string,
   stage: ConvoStage,
   menuItems: MenuItemAIContext[],
+  preference: DietPreference,
+  hasNonVeg: boolean,
 ) {
+  const broad = isBroadChoiceQuery(message)
+
+  if (stage === 'early' && broad && preference === 'unknown' && hasNonVeg) {
+    return {
+      reply: 'Are you looking for veg or non-veg today?',
+      mentioned_items: [],
+      upsell_items: [],
+      psych_trigger: 'none' as const,
+      convo_stage: stage,
+    }
+  }
+
   const relevant = selectRelevantItems(message, menuItems)
   const primary =
     relevant[0] ??
@@ -459,13 +513,11 @@ function buildFallbackResponse(
   const pairings = pickPairings(primary, menuItems, message)
   const reason = getReasonText(message)
   const pairingText = pairings.length ? ` Pair it with ${buildNaturalList(pairings)}.` : ''
-
-  const descText =
-    primary?.description?.trim() ? ` ${primary.description.trim().replace(/\.$/, '')}.` : ''
+  const descText = primary?.description?.trim() ? ` ${primary.description.trim().replace(/\.$/, '')}.` : ''
 
   const reply = primary
     ? `${primary.name} is a strong choice ${reason}.${descText}${pairingText}`
-    : 'I can help you choose from the menu. Tell me what mood you are in, and I will suggest the best available dishes.'
+    : 'I can help you choose from the menu. Tell me whether you want veg or non-veg, and I will suggest the best dishes.'
 
   return {
     reply: sanitizeReply(reply),
@@ -615,6 +667,7 @@ function inferPsychTrigger(
   return 'none'
 }
 
+// ✅ FIXED: both fallback calls now pass all 5 required args
 function parseStructuredReply(
   rawReply: string,
   message: string,
@@ -631,7 +684,7 @@ function parseStructuredReply(
       return item?.best_with?.filter((bw) => menuItems.some((m) => m.name === bw)) ?? []
     })
 
-    const fallback = buildFallbackResponse(message, stage, menuItems)
+    const fallback = buildFallbackResponse(message, stage, menuItems, 'unknown', false)
 
     return {
       reply: reply || fallback.reply,
@@ -650,7 +703,7 @@ function parseStructuredReply(
   const psych_trigger = (typeof parsed.psych_trigger === 'string' && parsed.psych_trigger) as PsychTriggerOrNone
   const convo_stage = (typeof parsed.convo_stage === 'string' && parsed.convo_stage) as ConvoStage
 
-  const fallback = buildFallbackResponse(message, stage, menuItems)
+  const fallback = buildFallbackResponse(message, stage, menuItems, 'unknown', false)
 
   return {
     reply: reply || fallback.reply,
@@ -665,17 +718,14 @@ function parseStructuredReply(
   }
 }
 
-function buildFallbackSuggestions(): QuickReply[] {
-  return []
-}
-
 async function logChatEvents(params: {
   restaurant_id?: string
   session_id?: string
   query: string
   stage: string
+  preference?: DietPreference
 }) {
-  const { restaurant_id, session_id, query, stage } = params
+  const { restaurant_id, session_id, query, stage, preference } = params
   if (!restaurant_id || !session_id) return
 
   const supabase = getSupabaseAdminClient()
@@ -687,7 +737,7 @@ async function logChatEvents(params: {
       session_id,
       event_type: 'item_search',
       item_name: null,
-      metadata: { query, stage },
+      metadata: { query, stage, preference },
       timestamp: now.toISOString(),
       hour_of_day: now.getHours(),
       day_of_week: now.getDay(),
@@ -746,36 +796,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Empty message' }, { status: 400 })
     }
 
-    const restaurantName = menu_context.restaurant_name?.trim() || 'this restaurant'
+    const menuItems = menu_context.menu_items ?? []
+    const hasNonVeg = hasNonVegMenu(menuItems)
+    const preference = detectDietPreference(history, message)
     const stage = detectConvoStage(history, message)
-    const systemPrompt = buildSystemPrompt(restaurantName, menu_context, message)
 
+    if (stage === 'early' && preference === 'unknown' && hasNonVeg && isBroadChoiceQuery(message)) {
+      const suggestions = buildQuickReplies({ hasNonVeg, preference, menuItems })
+      return NextResponse.json({
+        reply: 'Are you looking for veg or non-veg today?',
+        suggestions,
+        mentioned_items: [],
+        upsell_items: [],
+        psych_trigger: 'none',
+        convo_stage: stage,
+      })
+    }
+
+    const restaurantName = menu_context.restaurant_name?.trim() || 'this restaurant'
+    const systemPrompt = buildSystemPrompt(restaurantName, menu_context, message)
     const geminiRes = await callGemini(systemPrompt, history, message)
 
     if (!geminiRes.ok) {
       console.error('Gemini error:', await geminiRes.text())
-      const fallback = buildFallbackResponse(message, stage, menu_context.menu_items ?? [])
+      const fallback = buildFallbackResponse(message, stage, menuItems, preference, hasNonVeg)
       return NextResponse.json({
-        reply: fallback.reply,
-        suggestions: buildFallbackSuggestions(),
-        mentioned_items: fallback.mentioned_items,
-        upsell_items: fallback.upsell_items,
-        psych_trigger: fallback.psych_trigger,
-        convo_stage: fallback.convo_stage,
-      } satisfies ChatResponse & { psych_trigger?: string; convo_stage?: string })
+        ...fallback,
+        suggestions: buildQuickReplies({ hasNonVeg, preference, menuItems }),
+      } satisfies ChatResponse & { psych_trigger?: string; convo_stage?: string; suggestions?: QuickReply[] })
     }
 
     const geminiData = await geminiRes.json()
     const rawReply: string = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-
-    const parsed = parseStructuredReply(rawReply, message, stage, menu_context.menu_items ?? [])
+    const parsed = parseStructuredReply(rawReply, message, stage, menuItems)
 
     const response: ChatResponse & {
       psych_trigger?: string
       convo_stage?: string
+      suggestions?: QuickReply[]
     } = {
       reply: parsed.reply,
-      suggestions: buildFallbackSuggestions(),
+      suggestions: buildQuickReplies({ hasNonVeg, preference, menuItems }),
       mentioned_items: parsed.mentioned_items,
       upsell_items: parsed.upsell_items,
       psych_trigger: parsed.psych_trigger,
@@ -787,6 +848,7 @@ export async function POST(req: NextRequest) {
       session_id: body.session_id,
       query: message,
       stage: parsed.convo_stage,
+      preference,
     }).catch((err) => console.error('Analytics logging error:', err))
 
     return NextResponse.json(response)

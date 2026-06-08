@@ -2,6 +2,26 @@
 // CORE DATA TYPES
 // Shared between web and future Android/iOS
 // ============================================================
+export type TeamRole = 'owner' | 'manager' | 'waiter'
+
+export interface RestaurantStaff {
+  id: string
+  restaurant_id: string
+  email: string
+  role: Exclude<TeamRole, 'owner'>
+  active: boolean
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DashboardContext {
+  restaurantId: string
+  restaurantName: string
+  ownerId: string
+  role: TeamRole
+  email: string | null
+}
 
 export interface Restaurant {
   id: string
@@ -18,6 +38,7 @@ export interface Restaurant {
   is_active: boolean
   opening_hours: OpeningHours
   created_at: string
+  owner_id?: string | null
   
 }
 
