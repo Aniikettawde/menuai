@@ -138,14 +138,15 @@ const { data, error } = await supabase
         if (data) {
           setRestaurant(data as Restaurant)
           setForm({
-            name: data.name ?? '',
-            slug: data.slug ?? '',
-            description: data.description ?? '',
-            cuisine_type: data.cuisine_type ?? '',
-            address: data.address ?? '',
-            phone: data.phone ?? '',
-            opening_hours: (data.opening_hours as OpeningHours) ?? createDefaultHours(),
-          })
+  name: data.name ?? '',
+  slug: data.slug ?? '',
+  description: data.description ?? '',
+  cuisine_type: data.cuisine_type ?? '',
+  address: data.address ?? '',
+  phone: data.phone ?? '',
+  avg_prep_time: data.avg_prep_time ?? 20,  // ← add this
+  opening_hours: (data.opening_hours as OpeningHours) ?? createDefaultHours(),
+})
           setLogoUrl(data.logo_url ?? '')
           setCoverUrl(data.cover_url ?? '')
         }
