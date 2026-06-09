@@ -284,16 +284,18 @@ export function RestaurantShell({ initialData }: Props) {
 
       {showRating && <RatingModal />}
 
-      {waiterToast && (
-        <WaiterCalledToast
-          tableNumber={waiterToast.tableNumber}
-          orderId={waiterToast.orderId}
-          orderCode={waiterToast.orderCode}
-          items={waiterToast.items}
-          subtotal={waiterToast.subtotal}
-          onClose={() => setWaiterToast(null)}
-        />
-      )}
+     {waiterToast && (
+  <WaiterCalledToast
+    supabase={supabase}
+    restaurantSlug={restaurant.slug}
+    tableNumber={waiterToast.tableNumber}
+    orderId={waiterToast.orderId}
+    orderCode={waiterToast.orderCode}
+    items={waiterToast.items}
+    subtotal={waiterToast.subtotal}
+    onClose={() => setWaiterToast(null)}
+  />
+)}
     </div>
   )
 }
