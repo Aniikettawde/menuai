@@ -12,6 +12,8 @@ import {
   HandMetal,
   RefreshCw,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
 } from 'lucide-react'
 import { useDashboardContext } from '@/hooks/useDashboardContext'
@@ -29,6 +31,8 @@ type TableRequestRow = {
   accepted_at: string | null
   completed_at: string | null
 }
+
+const HISTORY_PAGE_SIZE = 10
 
 function money(v: number) {
   return `₹${Math.round(v / 100)}`
@@ -209,7 +213,10 @@ function HistoryRow({ req }: { req: TableRequestRow }) {
           <p className="mt-2 text-xs text-zinc-500">{timeAgo(req.created_at)}</p>
         </div>
 
-        <ChevronDown className="shrink-0 text-zinc-500 transition-transform duration-200 group-open:rotate-180" size={16} />
+        <ChevronDown
+          className="shrink-0 text-zinc-500 transition-transform duration-200 group-open:rotate-180"
+          size={16}
+        />
       </summary>
 
       <div className="mt-4 space-y-2">
@@ -240,6 +247,114 @@ function HistoryRow({ req }: { req: TableRequestRow }) {
   )
 }
 
+// ── Pagination bar ─────────────────────────────────────────────────────────────
+function PaginationBar({
+  page,
+  totalPages,
+  totalItems,
+  onPrev,
+  onNext,
+  onPage,
+}: {
+  page: number
+  totalPages: number
+  totalItems: number
+  onPrev: () => void
+  onNext: () => void
+  onPage: (p: number) => void
+}) {
+  // Show at most 5 page numbers centred on the current page
+  const pageNumbers = useMemo(() => {
+    const delta = 2
+    const start = Math.max(1, page - delta)
+    const end = Math.min(totalPages, page + delta)
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  }, [page, totalPages])
+
+  const startItem = (page - 1) * HISTORY_PAGE_SIZE + 1
+  const endItem = Math.min(page * HISTORY_PAGE_SIZE, totalItems)
+
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-3xl border border-white/5 bg-white/[0.03] px-4 py-3 sm:flex-row sm:justify-between">
+      {/* Range label */}
+      <p className="text-xs text-zinc-500">
+        Showing <span className="font-semibold text-zinc-300">{startItem}–{endItem}</span> of{' '}
+        <span className="font-semibold text-zinc-300">{totalItems}</span> orders
+      </p>
+
+      {/* Page controls */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onPrev}
+          disabled={page === 1}
+          aria-label="Previous page"
+          className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          <ChevronLeft size={14} />
+        </button>
+
+        {/* Page number buttons */}
+        {pageNumbers[0] > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => onPage(1)}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white"
+            >
+              1
+            </button>
+            {pageNumbers[0] > 2 && (
+              <span className="flex h-8 w-6 items-end justify-center pb-1 text-xs text-zinc-600">…</span>
+            )}
+          </>
+        )}
+
+        {pageNumbers.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onPage(p)}
+            className={`flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-semibold transition-colors ${
+              p === page
+                ? 'border-orange-500/40 bg-orange-500/15 text-orange-300'
+                : 'border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+
+        {pageNumbers[pageNumbers.length - 1] < totalPages && (
+          <>
+            {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
+              <span className="flex h-8 w-6 items-end justify-center pb-1 text-xs text-zinc-600">…</span>
+            )}
+            <button
+              type="button"
+              onClick={() => onPage(totalPages)}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white"
+            >
+              {totalPages}
+            </button>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={page === totalPages}
+          aria-label="Next page"
+          className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function OrdersPage() {
   const supabase = getSupabaseDashboardBrowser()
   const { context, loading: contextLoading } = useDashboardContext()
@@ -248,6 +363,7 @@ export default function OrdersPage() {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [requests, setRequests] = useState<TableRequestRow[]>([])
   const [error, setError] = useState('')
+  const [historyPage, setHistoryPage] = useState(1)
 
   const restaurantId = context?.restaurantId ?? null
   const restaurantName = context?.restaurantName ?? 'Restaurant'
@@ -319,14 +435,28 @@ export default function OrdersPage() {
   }, [restaurantId, load, supabase])
 
   const pendingCount = useMemo(() => requests.filter((r) => r.status === 'pending').length, [requests])
+
   const activeRequests = useMemo(
     () => requests.filter((r) => r.status === 'pending' || r.status === 'accepted'),
     [requests],
   )
+
   const historyRequests = useMemo(
     () => requests.filter((r) => r.status === 'completed' || r.status === 'cancelled'),
     [requests],
   )
+
+  const historyTotalPages = Math.max(1, Math.ceil(historyRequests.length / HISTORY_PAGE_SIZE))
+
+  // Clamp page if data changes (e.g. new load brings fewer results)
+  useEffect(() => {
+    setHistoryPage((prev) => Math.min(prev, historyTotalPages))
+  }, [historyTotalPages])
+
+  const paginatedHistory = useMemo(() => {
+    const start = (historyPage - 1) * HISTORY_PAGE_SIZE
+    return historyRequests.slice(start, start + HISTORY_PAGE_SIZE)
+  }, [historyPage, historyRequests])
 
   const updateStatus = useCallback(
     async (id: string, status: TableRequestRow['status']) => {
@@ -374,6 +504,7 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="rounded-3xl border border-white/5 bg-[#111111] p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -405,6 +536,7 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* Active orders */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-sm font-semibold text-white">Active orders</h2>
@@ -431,18 +563,32 @@ export default function OrdersPage() {
         )}
       </div>
 
+      {/* History */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-semibold text-white">History orders</h2>
-          <span className="text-xs text-zinc-500">{historyRequests.length}</span>
+          <h2 className="text-sm font-semibold text-white">Order history</h2>
+          <span className="text-xs text-zinc-500">{historyRequests.length} total</span>
         </div>
 
         {historyRequests.length > 0 ? (
-          <div className="space-y-3">
-            {historyRequests.map((req) => (
-              <HistoryRow key={req.id} req={req} />
-            ))}
-          </div>
+          <>
+            <div className="space-y-3">
+              {paginatedHistory.map((req) => (
+                <HistoryRow key={req.id} req={req} />
+              ))}
+            </div>
+
+            {historyTotalPages > 1 && (
+              <PaginationBar
+                page={historyPage}
+                totalPages={historyTotalPages}
+                totalItems={historyRequests.length}
+                onPrev={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                onNext={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+                onPage={setHistoryPage}
+              />
+            )}
+          </>
         ) : (
           <div className="rounded-3xl border border-white/5 bg-white/[0.03] p-8 text-center">
             <Clock3 size={20} className="mx-auto text-zinc-500" />

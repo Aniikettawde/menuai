@@ -1,4 +1,3 @@
-// store/app-store.ts
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { Restaurant, MenuCategory, MenuItem, ChatMessage } from '@/types'
@@ -82,7 +81,7 @@ export const useAppStore = create<AppStore>()(
     expandedItem: null,
     showRating: false,
     isOffline: false,
-    showChat: true,
+    showChat: false,
 
     setRestaurantData: ({ restaurant, categories, items }) =>
       set((state) => {
@@ -148,9 +147,6 @@ export const useAppStore = create<AppStore>()(
         }
 
         state.cartPulse += 1
-        // ✅ intentionally NOT closing the cart here —
-        // cart stays open so users can keep adding suggestions
-        // without losing their place
       }),
 
     increaseCartItem: (itemId) =>

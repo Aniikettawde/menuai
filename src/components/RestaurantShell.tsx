@@ -17,15 +17,48 @@ import { OfflineBanner } from './OfflineBanner'
 import { WaiterCalledToast } from './WaiterCalledToast'
 import { getPersistedOrder } from '@/lib/order-storage'
 
-
 interface Props {
   initialData: MenuPageData
+}
+
+// Shape of one tracked order
+interface OrderToastData {
+  tableNumber: number
+  orderId: string
+  orderCode: string
+  items: { id: string; name: string; qty: number; price: number; total: number }[]
+  subtotal: number
 }
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 )
+
+// localStorage key that holds a JSON array of active orderIds for this slug
+function activeOrdersKey(slug: string) {
+  return `dinezy_active_orders_${slug}`
+}
+
+function readPersistedOrderIds(slug: string): string[] {
+  try {
+    const raw = localStorage.getItem(activeOrdersKey(slug))
+    if (!raw) return []
+    return JSON.parse(raw) as string[]
+  } catch {
+    return []
+  }
+}
+
+function writePersistedOrderIds(slug: string, ids: string[]) {
+  try {
+    if (ids.length === 0) {
+      localStorage.removeItem(activeOrdersKey(slug))
+    } else {
+      localStorage.setItem(activeOrdersKey(slug), JSON.stringify(ids))
+    }
+  } catch {}
+}
 
 export function RestaurantShell({ initialData }: Props) {
   const searchParams = useSearchParams()
@@ -42,52 +75,62 @@ export function RestaurantShell({ initialData }: Props) {
     showRating,
   } = useAppStore()
 
-  const [waiterToast, setWaiterToast] = useState<{
-    tableNumber: number
-    orderId: string
-    orderCode: string
-    items: { id: string; name: string; qty: number; price: number; total: number }[]
-    subtotal: number
-  } | null>(null)
+  // Array of active orders; newest is appended to the end
+  const [waiterToasts, setWaiterToasts] = useState<OrderToastData[]>([])
+  // Which order is currently shown in the toast
+  const [activeToastIndex, setActiveToastIndex] = useState(0)
 
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Slug-scoped pointer key — stores only the orderId, not the full order
-  const ACTIVE_ORDER_KEY = `dinezy_active_order_${initialData.restaurant.slug}`
+  const slug = initialData.restaurant.slug
 
   usePWA()
 
-  // ── Restore toast after page refresh ──────────────────────────────────────────
+  // ── Restore toasts after page refresh ─────────────────────────────────────────
   useEffect(() => {
-    try {
-      const orderId = localStorage.getItem(ACTIVE_ORDER_KEY)
-      if (!orderId) return
+    const ids = readPersistedOrderIds(slug)
+    if (!ids.length) return
+
+    const restored: OrderToastData[] = []
+    const stillActive: string[] = []
+
+    for (const orderId of ids) {
       const saved = getPersistedOrder(orderId)
       if (saved) {
-        setWaiterToast({
+        restored.push({
           tableNumber: saved.tableNumber,
           orderId: saved.orderId,
           orderCode: saved.orderCode ?? saved.orderId.slice(0, 8).toUpperCase(),
           items: saved.items,
           subtotal: saved.subtotal,
         })
-      } else {
-        // Terminal state — clean up the pointer
-        localStorage.removeItem(ACTIVE_ORDER_KEY)
+        stillActive.push(orderId)
       }
-    } catch {}
+      // If getPersistedOrder returns null the order reached a terminal state
+      // and already cleaned itself up — just drop it from our list
+    }
+
+    if (restored.length) {
+      setWaiterToasts(restored)
+      // Show the newest order by default
+      setActiveToastIndex(restored.length - 1)
+    }
+
+    // Prune any dead ids from the pointer list
+    writePersistedOrderIds(slug, stillActive)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Table number from URL ──────────────────────────────────────────────────────
   useEffect(() => {
     const raw = searchParams.get('table')
     const n = raw ? Number(raw) : null
     setTableNumber(Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null)
   }, [searchParams, setTableNumber])
 
+  // ── Menu refresh helpers ───────────────────────────────────────────────────────
   const refreshMenu = useCallback(async () => {
     const restaurantId = initialData.restaurant.id
-    const slug = initialData.restaurant.slug
 
     try {
       const [{ data: restaurantRow }, { data: categories }, { data: items }] = await Promise.all([
@@ -119,22 +162,21 @@ export function RestaurantShell({ initialData }: Props) {
     } catch (err) {
       console.error('Failed to refresh menu:', err)
     }
-  }, [initialData.restaurant.id, initialData.restaurant.slug, setRestaurantData])
+  }, [initialData.restaurant.id, slug, setRestaurantData])
 
   useEffect(() => {
     setRestaurantData(initialData)
-    setCachedMenu(initialData.restaurant.slug, initialData)
-  }, [initialData, setRestaurantData])
+    setCachedMenu(slug, initialData)
+  }, [initialData, setRestaurantData, slug])
 
+  // ── Connectivity ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const cleanup = setupConnectivityListeners()
     const off = () => setIsOffline(true)
     const on = () => setIsOffline(false)
-
     window.addEventListener('offline', off)
     window.addEventListener('online', on)
     setIsOffline(!navigator.onLine)
-
     return () => {
       cleanup()
       window.removeEventListener('offline', off)
@@ -148,6 +190,7 @@ export function RestaurantShell({ initialData }: Props) {
     }
   }, [initialData.restaurant.id])
 
+  // ── Realtime menu updates ──────────────────────────────────────────────────────
   useEffect(() => {
     const restaurantId = initialData.restaurant.id
 
@@ -155,12 +198,7 @@ export function RestaurantShell({ initialData }: Props) {
       .channel(`restaurant-menu-${restaurantId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'menu_categories',
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
+        { event: '*', schema: 'public', table: 'menu_categories', filter: `restaurant_id=eq.${restaurantId}` },
         () => {
           if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
           refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
@@ -168,12 +206,7 @@ export function RestaurantShell({ initialData }: Props) {
       )
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'menu_items',
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
+        { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` },
         () => {
           if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
           refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
@@ -181,12 +214,7 @@ export function RestaurantShell({ initialData }: Props) {
       )
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'restaurants',
-          filter: `id=eq.${restaurantId}`,
-        },
+        { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` },
         () => {
           if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
           refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
@@ -200,9 +228,7 @@ export function RestaurantShell({ initialData }: Props) {
     }
   }, [initialData.restaurant.id, refreshMenu])
 
-  const handleOpenChat = useCallback(() => {
-    setShowChat(true)
-  }, [setShowChat])
+  const handleOpenChat = useCallback(() => setShowChat(true), [setShowChat])
 
   const handleAsk = useCallback(
     (text: string) => {
@@ -214,6 +240,7 @@ export function RestaurantShell({ initialData }: Props) {
     [setShowChat],
   )
 
+  // ── Place order ────────────────────────────────────────────────────────────────
   const handleCallWaiter = useCallback(
     async (payload: {
       items: { id: string; name: string; qty: number; price: number; total: number }[]
@@ -247,9 +274,7 @@ export function RestaurantShell({ initialData }: Props) {
           orderCode?: string
         }
 
-        if (!res.ok) {
-          throw new Error(data?.error ?? 'Failed to send waiter request')
-        }
+        if (!res.ok) throw new Error(data?.error ?? 'Failed to send waiter request')
 
         void track(restaurant.id, 'waiter_called', {
           metadata: {
@@ -265,15 +290,23 @@ export function RestaurantShell({ initialData }: Props) {
         clearCart()
 
         const orderId = String(data.orderId ?? '')
-        setWaiterToast({
+        const newOrder: OrderToastData = {
           tableNumber,
           orderId,
           orderCode: String(data.orderCode ?? orderId.slice(0, 8).toUpperCase()),
           items: payload.items,
           subtotal: payload.subtotal,
+        }
+
+        setWaiterToasts((prev) => {
+          const next = [...prev, newOrder]
+          writePersistedOrderIds(slug, next.map((o) => o.orderId))
+          // Set index here while we know the exact new length — avoids the
+          // off-by-one where setActiveToastIndex(prev+1) runs before the
+          // state update lands and index 1 points to nothing on order #1.
+          setActiveToastIndex(next.length - 1)
+          return next
         })
-        // Persist the orderId pointer so we can restore the toast after a refresh
-        try { localStorage.setItem(ACTIVE_ORDER_KEY, orderId) } catch {}
       } catch (err) {
         void track(restaurant.id, 'waiter_call_failed', {
           metadata: {
@@ -286,10 +319,27 @@ export function RestaurantShell({ initialData }: Props) {
         setWaiterLoading(false)
       }
     },
-    [restaurant, tableNumber, sessionId, clearCart, ACTIVE_ORDER_KEY],
+    [restaurant, tableNumber, sessionId, clearCart, slug],
+  )
+
+  // ── Remove one order from the list ────────────────────────────────────────────
+  const handleCloseToast = useCallback(
+    (orderId: string) => {
+      setWaiterToasts((prev) => {
+        const next = prev.filter((o) => o.orderId !== orderId)
+        writePersistedOrderIds(slug, next.map((o) => o.orderId))
+        // Clamp index inside the same updater so it's always in sync with
+        // the new array length — avoids the stale-closure problem.
+        setActiveToastIndex((idx) => Math.max(0, Math.min(idx, next.length - 1)))
+        return next
+      })
+    },
+    [slug],
   )
 
   if (!restaurant) return null
+
+  const activeOrder = waiterToasts[activeToastIndex] ?? null
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-bg)]">
@@ -312,19 +362,20 @@ export function RestaurantShell({ initialData }: Props) {
 
       {showRating && <RatingModal />}
 
-      {waiterToast && (
+      {activeOrder && (
         <WaiterCalledToast
+          key={activeOrder.orderId}   // re-mount per order so state is fresh
           supabase={supabase}
           restaurantSlug={restaurant.slug}
-          tableNumber={waiterToast.tableNumber}
-          orderId={waiterToast.orderId}
-          orderCode={waiterToast.orderCode}
-          items={waiterToast.items}
-          subtotal={waiterToast.subtotal}
-          onClose={() => {
-            try { localStorage.removeItem(ACTIVE_ORDER_KEY) } catch {}
-            setWaiterToast(null)
-          }}
+          tableNumber={activeOrder.tableNumber}
+          orderId={activeOrder.orderId}
+          orderCode={activeOrder.orderCode}
+          items={activeOrder.items}
+          subtotal={activeOrder.subtotal}
+          totalOrders={waiterToasts.length}
+          activeIndex={activeToastIndex}
+          onNavigate={setActiveToastIndex}
+          onClose={() => handleCloseToast(activeOrder.orderId)}
         />
       )}
     </div>

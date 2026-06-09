@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { MenuItemCard } from './MenuItemCard'
-import { HeroBanner } from './HeroBanner'
 import { FloatingCartBar } from './FloatingCartBar'
 import { ChefHat, Sparkles, ChevronRight, TrendingUp, Clock, Star } from 'lucide-react'
 import type { MenuItem } from '@/types'
@@ -30,6 +29,7 @@ function getBadge(item: MenuItem, catItems: MenuItem[]): Badge {
   const prices = catItems.map((i) => i.price).sort((a, b) => a - b)
   const median = prices[Math.floor(prices.length / 2)] ?? 0
   if (item.price > median * 1.3) return { kind: 'anchoring', label: "Chef's choice" }
+
   return { kind: 'none', label: '' }
 }
 
@@ -40,7 +40,7 @@ const BADGE_STYLES: Record<PsychKind, string> = {
   none: '',
 }
 
-const BADGE_ICONS: Record<PsychKind, React.ReactNode> = {
+const BADGE_ICONS: Record<PsychKind, ReactNode> = {
   social_proof: <TrendingUp size={9} />,
   anchoring: <Star size={9} />,
   scarcity: <Clock size={9} />,
@@ -49,6 +49,7 @@ const BADGE_ICONS: Record<PsychKind, React.ReactNode> = {
 
 function PsychBadge({ badge }: { badge: Badge }) {
   if (badge.kind === 'none') return null
+
   return (
     <span
       className={[
@@ -115,11 +116,12 @@ function CategorySection({
 }) {
   const chefsPick = showChefsPick ? getChefsPick(items) : null
   const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
+
   const imageUrl = category.image_url
-  ? category.image_url.startsWith('http')
-    ? category.image_url
-    : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/restaurant-assets/${category.image_url}`
-  : null
+    ? category.image_url.startsWith('http')
+      ? category.image_url
+      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/restaurant-assets/${category.image_url}`
+    : null
 
   return (
     <section
@@ -195,7 +197,7 @@ interface MenuGridProps {
     subtotal: number
   }) => void
   isWaiterLoading?: boolean
-  upsellCard?: React.ReactNode
+  upsellCard?: ReactNode
 }
 
 export function MenuGrid({
@@ -247,16 +249,7 @@ export function MenuGrid({
   return (
     <div className="relative w-full pb-36 pt-4">
       <div className="space-y-4">
-        {restaurant && (
-          <div className="animate-[fadeUp_400ms_ease-out]">
-            <HeroBanner
-              restaurant={restaurant}
-              items={items}
-              onAsk={onAsk ?? (() => {})}
-              onOpenChat={onOpenChat ?? (() => {})}
-            />
-          </div>
-        )}
+       
 
         {upsellCard && (
           <div className="animate-[fadeUp_420ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-sm">

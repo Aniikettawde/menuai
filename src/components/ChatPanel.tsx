@@ -1,6 +1,14 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback, useMemo, type FormEvent, type RefObject } from 'react'
+import {
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  type FormEvent,
+  type RefObject,
+} from 'react'
 import { X, Send, Sparkles } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { ChatMessage as ChatMessageComp } from './ChatMessage'
@@ -248,7 +256,9 @@ export function ChatPanel() {
   } = useAppStore()
 
   const [input, setInput] = useState('')
+  const [isExpanded, setIsExpanded] = useState(false)
   const [preference, setPreference] = useState<DiningPreference | null>(null)
+  const [showTooltip, setShowTooltip] = useState(true)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const desktopMessagesEndRef = useRef<HTMLDivElement>(null)
@@ -272,6 +282,11 @@ export function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     desktopMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isChatLoading])
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowTooltip(false), 5000)
+    return () => clearTimeout(t)
+  }, [])
 
   useEffect(() => {
     if (!restaurant) return
@@ -333,6 +348,8 @@ export function ChatPanel() {
       if (isMixedRestaurant && !activePreference) {
         addMessage(buildAssistantPreferencePrompt())
         setShowChat(true)
+        setIsExpanded(true)
+        setShowTooltip(false)
         return
       }
 
@@ -356,6 +373,8 @@ export function ChatPanel() {
 
       addMessage(userMsg)
       setIsChatLoading(true)
+      setIsExpanded(true)
+      setShowTooltip(false)
 
       const bestsellers = items.filter((i) => i.is_bestseller).map((i) => i.name)
       const available = items.map((i) => i.name)
@@ -497,7 +516,7 @@ export function ChatPanel() {
           },
         })
       }
-      sendMessage(`Tell me more about ${itemName}`)
+      void sendMessage(`Tell me more about ${itemName}`)
     },
     [restaurant, sendMessage],
   )
@@ -505,7 +524,7 @@ export function ChatPanel() {
   useEffect(() => {
     const handler = (e: Event) => {
       const { text } = (e as CustomEvent<{ text: string }>).detail
-      sendMessage(text)
+      void sendMessage(text)
     }
     window.addEventListener('menuai:ask', handler)
     return () => window.removeEventListener('menuai:ask', handler)
@@ -516,61 +535,174 @@ export function ChatPanel() {
     void sendMessage(input)
   }
 
+  const openChat = useCallback(() => {
+    setShowChat(true)
+    setIsExpanded(true)
+    setShowTooltip(false)
+  }, [setShowChat])
+
+  const closeChat = useCallback(() => {
+    setShowChat(false)
+    setIsExpanded(false)
+  }, [setShowChat])
+
   const isEmpty = messages.length === 0
 
   return (
     <>
-      {/* ─── MOBILE ─── */}
+      {/* MOBILE */}
       <div className="lg:hidden">
         {!showChat && (
-          <button
-            onClick={() => setShowChat(true)}
-            className="fixed bottom-5 right-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/25 transition-transform active:scale-95"
-            aria-label="Open AI chat"
-          >
-            <Sparkles size={22} />
-          </button>
+          <div className="fixed bottom-6 right-4 z-[70]">
+            {showTooltip && (
+              <div className="absolute bottom-16 right-0 w-[220px] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600 shadow-lg">
+                Tap the AI button for help choosing food
+                <div className="absolute -bottom-1.5 right-6 h-3 w-3 rotate-45 border-b border-r border-slate-200 bg-white" />
+              </div>
+            )}
+
+            <button
+              onClick={openChat}
+              className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/25 transition-transform active:scale-95"
+              aria-label="Open AI chat"
+            >
+              <Sparkles size={22} />
+            </button>
+          </div>
         )}
 
         {showChat && (
-          <div className="fixed inset-x-0 bottom-0 z-[70] flex h-[82dvh] flex-col rounded-t-[28px] border-t border-slate-200 bg-white/95 shadow-[0_-20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <div className="flex items-center gap-2">
+          <div
+            className={`fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-[28px] border-t border-slate-200 bg-white/95 shadow-[0_-20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-all duration-300 ${
+              isExpanded ? 'h-[82dvh]' : 'h-[58px]'
+            }`}
+          >
+            <div
+              className="relative flex cursor-pointer select-none items-center justify-between px-4 py-3"
+              onClick={() => setIsExpanded((e) => !e)}
+            >
+              <div className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-slate-200" />
+              <div className="mt-1 flex items-center gap-2">
                 <Sparkles size={15} className="text-blue-600" />
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">AI Waiter</p>
-                  <p className="text-[10px] text-slate-500">
-                    {showPreferenceGate ? 'Choose veg / non-veg first' : 'Ask about the menu'}
-                  </p>
-                </div>
+                <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
+                <span className="text-[10px] text-slate-500">
+                  · {showPreferenceGate ? 'Choose veg / non-veg first' : 'Ask about the menu'}
+                </span>
               </div>
-
               <button
-                onClick={() => setShowChat(false)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  closeChat()
+                }}
+                className="mt-1 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close chat"
               >
                 <X size={15} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 pb-2 pt-4">
+            {isExpanded && (
+              <>
+                <div className="flex-1 overflow-y-auto px-4 pb-2">
+                  {isEmpty ? (
+                    showPreferenceGate ? (
+                      <PreferencePrompt restaurantType={restaurantType} onPick={handlePreferencePick} />
+                    ) : (
+                      <StarterChips
+                        starters={starters}
+                        onSend={(text) => void sendMessage(text)}
+                        heading={
+                          restaurantType === 'veg'
+                            ? 'Start with veg recommendations:'
+                            : restaurantType === 'non_veg'
+                              ? 'Start with non-veg recommendations:'
+                              : 'Start with the best dishes:'
+                        }
+                      />
+                    )
+                  ) : (
+                    <>
+                      {messages.map((msg) => (
+                        <ChatMessageComp
+                          key={msg.id}
+                          message={msg as any}
+                          onSuggestionTap={(text) => void sendMessage(text)}
+                          onUpsellTap={handleUpsellTap}
+                        />
+                      ))}
+                      {isChatLoading && <TypingIndicator />}
+                      <div ref={messagesEndRef} />
+                    </>
+                  )}
+                </div>
+
+                <ChatInput
+                  input={input}
+                  setInput={setInput}
+                  onSubmit={handleSubmit}
+                  disabled={isChatLoading}
+                  inputRef={inputRef}
+                />
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* DESKTOP */}
+      <div className="hidden h-[calc(100vh-2rem)] w-[340px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm lg:sticky lg:top-4 lg:flex lg:flex-col xl:w-[380px]">
+        <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
+          <Sparkles size={15} className="text-blue-600" />
+          <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
+          <span className="ml-1 text-[11px] text-slate-500">Powered by Gemini</span>
+        </div>
+
+        {!showChat ? (
+          <div className="flex flex-1 flex-col items-center justify-center px-5 py-6 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/20">
+              <Sparkles size={22} />
+            </div>
+
+            <h3 className="mt-4 text-lg font-semibold text-slate-900">Ask the AI waiter</h3>
+            <p className="mt-2 max-w-[280px] text-sm leading-6 text-slate-500">
+              Get dish suggestions, complete meal ideas, and smart pairing help.
+            </p>
+
+            {showTooltip && (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-sm">
+                Tip: tap the AI button to start chatting
+              </div>
+            )}
+
+            <button
+              onClick={openChat}
+              className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              <Sparkles size={15} />
+              Open AI chat
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
               {isEmpty ? (
-                showPreferenceGate ? (
-                  <PreferencePrompt restaurantType={restaurantType} onPick={handlePreferencePick} />
-                ) : (
-                  <StarterChips
-                    starters={starters}
-                    onSend={(text) => void sendMessage(text)}
-                    heading={
-                      restaurantType === 'veg'
-                        ? 'Start with veg recommendations:'
-                        : restaurantType === 'non_veg'
-                          ? 'Start with non-veg recommendations:'
-                          : 'Start with the best dishes:'
-                    }
-                  />
-                )
+                <div className="space-y-3">
+                  {showPreferenceGate ? (
+                    <PreferencePrompt restaurantType={restaurantType} onPick={handlePreferencePick} />
+                  ) : (
+                    <StarterChips
+                      starters={starters}
+                      onSend={(text) => void sendMessage(text)}
+                      heading={
+                        restaurantType === 'veg'
+                          ? 'Start with veg recommendations:'
+                          : restaurantType === 'non_veg'
+                            ? 'Start with non-veg recommendations:'
+                            : 'Start with the best dishes:'
+                      }
+                    />
+                  )}
+                </div>
               ) : (
                 <>
                   {messages.map((msg) => (
@@ -582,7 +714,7 @@ export function ChatPanel() {
                     />
                   ))}
                   {isChatLoading && <TypingIndicator />}
-                  <div ref={messagesEndRef} />
+                  <div ref={desktopMessagesEndRef} />
                 </>
               )}
             </div>
@@ -592,61 +724,10 @@ export function ChatPanel() {
               setInput={setInput}
               onSubmit={handleSubmit}
               disabled={isChatLoading}
-              inputRef={inputRef}
+              inputRef={desktopInputRef}
             />
-          </div>
+          </>
         )}
-      </div>
-
-      {/* ─── DESKTOP ─── */}
-      <div className="hidden h-[calc(100vh-2rem)] w-[340px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm lg:sticky lg:top-4 lg:flex lg:flex-col xl:w-[380px]">
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
-          <Sparkles size={15} className="text-blue-600" />
-          <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
-          <span className="ml-1 text-[11px] text-slate-500">Powered by Gemini</span>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-3">
-          {isEmpty ? (
-            <div className="space-y-3">
-              <p className="pb-1 pt-2 text-center text-xs text-slate-500">
-                Ask me anything about the menu 👋
-              </p>
-              <StarterChips
-                starters={starters}
-                onSend={(text) => void sendMessage(text)}
-                heading={
-                  restaurantType === 'veg'
-                    ? 'Start with veg recommendations:'
-                    : restaurantType === 'non_veg'
-                      ? 'Start with non-veg recommendations:'
-                      : 'Start with the best dishes:'
-                }
-              />
-            </div>
-          ) : (
-            <>
-              {messages.map((msg) => (
-                <ChatMessageComp
-                  key={msg.id}
-                  message={msg as any}
-                  onSuggestionTap={(text) => void sendMessage(text)}
-                  onUpsellTap={handleUpsellTap}
-                />
-              ))}
-              {isChatLoading && <TypingIndicator />}
-              <div ref={desktopMessagesEndRef} />
-            </>
-          )}
-        </div>
-
-        <ChatInput
-          input={input}
-          setInput={setInput}
-          onSubmit={handleSubmit}
-          disabled={isChatLoading}
-          inputRef={desktopInputRef}
-        />
       </div>
     </>
   )
