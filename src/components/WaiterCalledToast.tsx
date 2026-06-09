@@ -179,9 +179,9 @@ export function WaiterCalledToast({
     if (status !== 'accepted' || !acceptedAt) return
 
     function calcSecondsLeft() {
-      const elapsed = (Date.now() - new Date(acceptedAt).getTime()) / 1000
-      return Math.max(0, Math.round(avgPrepTime * 60 - elapsed))
-    }
+  const elapsed = (Date.now() - new Date(acceptedAt!).getTime()) / 1000
+  return Math.max(0, Math.round(avgPrepTime * 60 - elapsed))
+}
 
     setSecondsLeft(calcSecondsLeft())
 
