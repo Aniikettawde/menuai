@@ -1,5 +1,7 @@
 'use client'
 
+import { getPersistedOrder, orderStorageKey as storageKey, type PersistedOrder } from '@/lib/order-storage'
+
 import { useEffect, useRef, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
@@ -34,35 +36,7 @@ interface Props {
   onClose: () => void
 }
 
-const storageKey = (orderId: string) => `dinezy_order_${orderId}`
 
-interface PersistedOrder {
-  orderId: string
-  status: OrderStatus
-  acceptedAt: string | null
-  tableNumber: number
-  restaurantSlug: string
-  items: CartItem[]
-  subtotal: number
-  orderCode?: string
-}
-
-export function getPersistedOrder(orderId: string): PersistedOrder | null {
-  try {
-    const raw = localStorage.getItem(storageKey(orderId))
-    if (!raw) return null
-
-    const data = JSON.parse(raw) as PersistedOrder
-    if (data.status === 'completed' || data.status === 'cancelled') {
-      localStorage.removeItem(storageKey(orderId))
-      return null
-    }
-
-    return data
-  } catch {
-    return null
-  }
-}
 
 export function WaiterCalledToast({
   supabase,

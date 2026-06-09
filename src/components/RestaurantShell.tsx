@@ -14,7 +14,9 @@ import { MenuGrid } from './MenuGrid'
 import { ChatPanel } from './ChatPanel'
 import { RatingModal } from './RatingModal'
 import { OfflineBanner } from './OfflineBanner'
-import { WaiterCalledToast, getPersistedOrder } from './WaiterCalledToast'
+import { WaiterCalledToast } from './WaiterCalledToast'
+import { getPersistedOrder } from '@/lib/order-storage'
+
 
 interface Props {
   initialData: MenuPageData
