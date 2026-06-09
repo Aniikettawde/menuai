@@ -29,6 +29,7 @@ type RestaurantForm = {
   slug: string
   description: string
   cuisine_type: string
+  restaurant_type: string
   address: string
   phone: string
   avg_prep_time: number
@@ -98,11 +99,25 @@ const [form, setForm] = useState<RestaurantForm>({
   slug: '',
   description: '',
   cuisine_type: '',
+  restaurant_type: 'Pure Veg',
   address: '',
   phone: '',
   avg_prep_time: 20,
   opening_hours: createDefaultHours(),
 })
+
+const RESTAURANT_TYPES = [
+  'Pure Veg',
+  'Veg + Non-Veg',
+  'Pure Non-Veg',
+  'Cafe',
+  'Bakery',
+  'Fast Food',
+  'Fine Dining',
+  'Cloud Kitchen',
+  'Dessert Shop',
+  'Other',
+]
 
   const [logoUrl, setLogoUrl] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
@@ -137,14 +152,15 @@ const { data, error } = await supabase
 
         if (data) {
           setRestaurant(data as Restaurant)
-          setForm({
+         setForm({
   name: data.name ?? '',
   slug: data.slug ?? '',
   description: data.description ?? '',
   cuisine_type: data.cuisine_type ?? '',
+  restaurant_type: data.restaurant_type ?? 'Pure Veg',
   address: data.address ?? '',
   phone: data.phone ?? '',
-  avg_prep_time: data.avg_prep_time ?? 20,  // ← add this
+  avg_prep_time: data.avg_prep_time ?? 20,
   opening_hours: (data.opening_hours as OpeningHours) ?? createDefaultHours(),
 })
           setLogoUrl(data.logo_url ?? '')
@@ -290,12 +306,12 @@ const { data, error } = await supabase
     const user = authData.user
     if (!user?.email) throw new Error('Not authenticated')
 
-    const payload = {
-      ...form,
-      slug: slugify(form.slug || form.name),
-      logo_url: logoUrl || null,
-      cover_url: coverUrl || null,
-    }
+   const payload = {
+  ...form,
+  slug: slugify(form.slug || form.name),
+  logo_url: logoUrl || null,
+  cover_url: coverUrl || null,
+}
 
     if (restaurant) {
       const { data, error } = await supabase
@@ -559,6 +575,31 @@ const { data, error } = await supabase
                 ))}
               </select>
             </Field>
+			
+			<Field label="Restaurant type">
+  <select
+    value={form.restaurant_type}
+    onChange={(e) => setForm((f) => ({ ...f, restaurant_type: e.target.value }))}
+    className={INPUT}
+  >
+    {RESTAURANT_TYPES.map((type) => (
+      <option key={type} value={type}>
+        {type}
+      </option>
+    ))}
+  </select>
+</Field>
+
+{form.restaurant_type === 'Other' && (
+  <Field label="Custom restaurant type">
+    <input
+      value={form.cuisine_type}
+      onChange={(e) => setForm((f) => ({ ...f, cuisine_type: e.target.value }))}
+      placeholder="e.g. Thali House, Momo Shop, Tea Stall"
+      className={INPUT}
+    />
+  </Field>
+)}
 
             <Field label="Phone">
               <input
