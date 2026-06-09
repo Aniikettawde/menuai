@@ -491,6 +491,25 @@ const { data, error } = await supabase
               required
             />
           </Field>
+		  
+		  <Field
+  label="Average preparation time (minutes)"
+  hint="Customers will see this on the menu page"
+>
+  <input
+    type="number"
+    min={5}
+    max={120}
+    value={form.avg_prep_time}
+    onChange={(e) =>
+      setForm((f) => ({
+        ...f,
+        avg_prep_time: Number(e.target.value),
+      }))
+    }
+    className={INPUT}
+  />
+</Field>
 
           <Field
             label="URL slug — customers visit /r/{slug}"
