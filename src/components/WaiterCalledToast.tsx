@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { BellRing, CheckCircle2, ChefHat, PartyPopper, X, ChevronUp, Armchair, ClipboardList } from 'lucide-react'
+import {
+  BellRing,
+  CheckCircle2,
+  ChefHat,
+  PartyPopper,
+  X,
+  ChevronUp,
+  Armchair,
+  ClipboardList,
+} from 'lucide-react'
 
 type CartItem = {
   id: string
@@ -25,6 +34,36 @@ interface Props {
   onClose: () => void
 }
 
+const storageKey = (orderId: string) => `dinezy_order_${orderId}`
+
+interface PersistedOrder {
+  orderId: string
+  status: OrderStatus
+  acceptedAt: string | null
+  tableNumber: number
+  restaurantSlug: string
+  items: CartItem[]
+  subtotal: number
+  orderCode?: string
+}
+
+export function getPersistedOrder(orderId: string): PersistedOrder | null {
+  try {
+    const raw = localStorage.getItem(storageKey(orderId))
+    if (!raw) return null
+
+    const data = JSON.parse(raw) as PersistedOrder
+    if (data.status === 'completed' || data.status === 'cancelled') {
+      localStorage.removeItem(storageKey(orderId))
+      return null
+    }
+
+    return data
+  } catch {
+    return null
+  }
+}
+
 export function WaiterCalledToast({
   supabase,
   tableNumber,
@@ -36,13 +75,63 @@ export function WaiterCalledToast({
   onClose,
 }: Props) {
   const displayCode = orderCode ?? orderId.slice(0, 8).toUpperCase()
+  const STORAGE_KEY = storageKey(orderId)
 
-  const [status, setStatus] = useState<OrderStatus>('pending')
+  const [status, setStatus] = useState<OrderStatus>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) return (JSON.parse(saved) as PersistedOrder).status
+    } catch {}
+    return 'pending'
+  })
+
+  const [acceptedAt, setAcceptedAt] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) return (JSON.parse(saved) as PersistedOrder).acceptedAt ?? null
+    } catch {}
+    return null
+  })
+
   const [avgPrepTime, setAvgPrepTime] = useState(20)
-  const [acceptedAt, setAcceptedAt] = useState<string | null>(null)
   const [minimized, setMinimized] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    try {
+      const payload: PersistedOrder = {
+        orderId,
+        status,
+        acceptedAt,
+        tableNumber,
+        restaurantSlug,
+        items,
+        subtotal,
+        orderCode,
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    } catch {}
+  }, [status, acceptedAt, orderId, tableNumber, restaurantSlug, items, subtotal, orderCode, STORAGE_KEY])
+
+  useEffect(() => {
+    if (status === 'completed' || status === 'cancelled') {
+      const t = setTimeout(() => {
+        try {
+          localStorage.removeItem(STORAGE_KEY)
+        } catch {}
+      }, 5000)
+
+      return () => clearTimeout(t)
+    }
+  }, [status, STORAGE_KEY])
+
+  function handleClose() {
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {}
+    onClose()
+  }
 
   useEffect(() => {
     async function fetchPrepTime() {
@@ -51,81 +140,86 @@ export function WaiterCalledToast({
         .select('avg_prep_time')
         .eq('slug', restaurantSlug)
         .single()
+
       if (data?.avg_prep_time) setAvgPrepTime(data.avg_prep_time)
     }
+
     void fetchPrepTime()
   }, [restaurantSlug, supabase])
 
   useEffect(() => {
-  const channel = supabase
-    .channel(`order-status-${orderId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'table_requests',
-        // no filter here — filter in callback instead
-      },
-      (payload) => {
-        const row = payload.new as {
-          id: string
-          status: OrderStatus
-          accepted_at: string | null
-        }
-        // only react to our specific order
-        if (row.id !== orderId) return
+    const channel = supabase
+      .channel(`order-status-${orderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'table_requests',
+        },
+        (payload) => {
+          const row = payload.new as {
+            id: string
+            status: OrderStatus
+            accepted_at: string | null
+          }
 
-        setStatus(row.status)
-        if (row.accepted_at) setAcceptedAt(row.accepted_at)
-        setMinimized(false)
-      },
-    )
-    .subscribe((status, err) => {
-      // log subscription health so you can see if it's actually connecting
-      console.log('[WaiterToast] channel status:', status, err ?? '')
-    })
+          if (row.id !== orderId) return
 
-  return () => { void supabase.removeChannel(channel) }
-}, [orderId, supabase])
+          setStatus(row.status)
+          if (row.accepted_at) setAcceptedAt(row.accepted_at)
+          setMinimized(false)
+        },
+      )
+      .subscribe((subStatus, err) => {
+        console.log('[WaiterToast] channel status:', subStatus, err ?? '')
+      })
 
-useEffect(() => {
-  if (status === 'completed' || status === 'cancelled') return
-
-  const interval = setInterval(async () => {
-    const { data } = await supabase
-      .from('table_requests')
-      .select('status, accepted_at')
-      .eq('id', orderId)
-      .single()
-
-    if (!data) return
-    if (data.status !== status) {
-      setStatus(data.status as OrderStatus)
-      if (data.accepted_at) setAcceptedAt(data.accepted_at)
-      setMinimized(false)
+    return () => {
+      void supabase.removeChannel(channel)
     }
-  }, 8000)
+  }, [orderId, supabase])
 
-  return () => clearInterval(interval)
-}, [orderId, status, supabase])
+  useEffect(() => {
+    if (status === 'completed' || status === 'cancelled') return
+
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from('table_requests')
+        .select('status, accepted_at')
+        .eq('id', orderId)
+        .single()
+
+      if (!data) return
+      if (data.status !== status) {
+        setStatus(data.status as OrderStatus)
+        if (data.accepted_at) setAcceptedAt(data.accepted_at)
+        setMinimized(false)
+      }
+    }, 8000)
+
+    return () => clearInterval(interval)
+  }, [orderId, status, supabase])
 
   useEffect(() => {
     if (status !== 'accepted' || !acceptedAt) return
 
     function calcSecondsLeft() {
-      const elapsed = (Date.now() - new Date(acceptedAt!).getTime()) / 1000
+      const elapsed = (Date.now() - new Date(acceptedAt).getTime()) / 1000
       return Math.max(0, Math.round(avgPrepTime * 60 - elapsed))
     }
 
     setSecondsLeft(calcSecondsLeft())
+
     timerRef.current = setInterval(() => {
       const left = calcSecondsLeft()
       setSecondsLeft(left)
-      if (left <= 0) clearInterval(timerRef.current!)
+      if (left <= 0 && timerRef.current) clearInterval(timerRef.current)
     }, 1000)
 
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
   }, [status, acceptedAt, avgPrepTime])
 
   function formatTime(secs: number) {
@@ -169,11 +263,14 @@ useEffect(() => {
 
   const cfg = stateConfig[status]
 
+  const toastPosition =
+    'fixed bottom-28 left-4 z-[80] w-[calc(100vw-2rem)] sm:bottom-6 sm:w-[320px]'
+
   if (minimized) {
     return (
       <>
         <div
-          className="fixed bottom-6 left-4 z-50 flex cursor-pointer items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 shadow-xl transition hover:bg-zinc-800"
+          className={`${toastPosition} flex cursor-pointer items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 shadow-xl shadow-black/30 transition hover:bg-zinc-800`}
           style={{ animation: 'toastIn 0.3s ease both' }}
           onClick={() => setMinimized(false)}
           role="button"
@@ -184,7 +281,9 @@ useEffect(() => {
               <svg className="-rotate-90" width="40" height="40" viewBox="0 0 44 44">
                 <circle cx="22" cy="22" r="20" fill="none" stroke="#27272a" strokeWidth="3" />
                 <circle
-                  cx="22" cy="22" r="20"
+                  cx="22"
+                  cy="22"
+                  r="20"
                   fill="none"
                   stroke="#f97316"
                   strokeWidth="3"
@@ -203,12 +302,15 @@ useEffect(() => {
               {cfg.icon}
             </div>
           )}
-          <div>
-            <p className="text-sm font-semibold text-white">{cfg.title}</p>
-            <p className="text-xs text-zinc-500">Table {tableNumber} · Tap to expand</p>
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">{cfg.title}</p>
+            <p className="truncate text-xs text-zinc-500">Table {tableNumber} · Tap to expand</p>
           </div>
-          <ChevronUp size={14} className="ml-1 text-zinc-500" />
+
+          <ChevronUp size={14} className="ml-auto shrink-0 text-zinc-500" />
         </div>
+
         <style>{`@keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
       </>
     )
@@ -217,19 +319,20 @@ useEffect(() => {
   return (
     <>
       <div
-        className="fixed bottom-6 left-4 z-50 w-[320px] rounded-3xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl"
+        className={`${toastPosition} rounded-3xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black/35`}
         style={{ animation: 'toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both' }}
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full ${cfg.ringClass}`}>
               {cfg.icon}
             </div>
-            <div>
-              <p className="font-semibold text-white">{cfg.title}</p>
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-white">{cfg.title}</p>
               <p className="mt-0.5 text-xs text-zinc-500">{cfg.sub}</p>
             </div>
           </div>
+
           <div className="flex gap-1">
             {status !== 'completed' && status !== 'cancelled' && (
               <button
@@ -241,7 +344,7 @@ useEffect(() => {
               </button>
             )}
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
               aria-label="Close"
             >
@@ -250,7 +353,6 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Step progress */}
         <div className="mt-4 flex gap-1.5">
           {(['pending', 'accepted', 'completed'] as const).map((s, i) => (
             <div
@@ -259,14 +361,15 @@ useEffect(() => {
                 i < stepIndex
                   ? 'bg-green-500'
                   : i === stepIndex
-                    ? status === 'completed' ? 'bg-green-500' : 'animate-pulse bg-orange-500'
+                    ? status === 'completed'
+                      ? 'bg-green-500'
+                      : 'animate-pulse bg-orange-500'
                     : 'bg-zinc-700'
               }`}
             />
           ))}
         </div>
 
-        {/* Pills */}
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-[11px] font-semibold text-orange-300">
             <Armchair size={11} />
@@ -278,7 +381,6 @@ useEffect(() => {
           </span>
         </div>
 
-        {/* Countdown */}
         {status === 'accepted' && secondsLeft !== null && (
           <div className="mt-3 flex items-center gap-2">
             <ChefHat size={13} className="text-orange-400" />
@@ -288,7 +390,6 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Items */}
         <div className="mt-4 space-y-1.5 border-t border-white/5 pt-3">
           {items.map((item) => (
             <div key={item.id} className="flex justify-between text-sm">
@@ -303,6 +404,7 @@ useEffect(() => {
           <span>₹{(subtotal / 100).toLocaleString('en-IN')}</span>
         </div>
       </div>
+
       <style>{`@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
     </>
   )

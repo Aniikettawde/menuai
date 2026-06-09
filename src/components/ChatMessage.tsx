@@ -1,9 +1,18 @@
 'use client'
 
-import type { ChatMessage as ChatMessageType, PsychTrigger, QuickReply } from '@/types'
-import { Sparkles, TrendingUp, ChefHat, Clock3, Flame, ShieldCheck, ArrowRight, Plus, Check } from 'lucide-react'
-import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import {
+  Sparkles,
+  TrendingUp,
+  ChefHat,
+  Clock3,
+  Flame,
+  ShieldCheck,
+  ArrowRight,
+  Plus,
+  Check,
+} from 'lucide-react'
+import type { ChatMessage as ChatMessageType, PsychTrigger, QuickReply, MenuItem } from '@/types'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
 
@@ -12,6 +21,7 @@ interface Props {
     psych_trigger?: string
     convo_stage?: string
     suggestions?: QuickReply[]
+    upsell_menu_items?: MenuItem[]
   }
   onSuggestionTap: (text: string) => void
   onUpsellTap?: (itemName: string, psychTrigger: PsychTrigger, stage?: string) => void
@@ -20,8 +30,10 @@ interface Props {
 function getImageUrl(imageUrl: string | null | undefined): string | null {
   if (!imageUrl) return null
   if (imageUrl.startsWith('http')) return imageUrl
+
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
+
   return `${base}/storage/v1/object/public/restaurant-assets/${imageUrl}`
 }
 
@@ -82,27 +94,36 @@ const PSYCH_BADGE: Record<
   },
 }
 
-function MenuItemCard({
+function SmartDishCard({
   item,
+  tag,
   onAdd,
+  onWhy,
 }: {
-  item: any
+  item: MenuItem
+  tag: string
   onAdd: () => void
+  onWhy?: () => void
 }) {
+  const imageUrl = getImageUrl(item.image_url)
+
   return (
     <div className="group flex w-full items-center gap-3 rounded-3xl border border-slate-200 bg-white/95 p-3 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
-        {item.image_url ? (
+      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
+        {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={getImageUrl(item.image_url)!}
-            alt={item.name}
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
+          <img src={imageUrl} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <span className="text-lg">{item.is_veg ? '🥗' : '🍖'}</span>
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-200 text-lg">
+            {item.is_veg ? '🥗' : '🍖'}
+          </div>
         )}
+
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-1.5 pb-1 pt-3">
+          <p className="truncate text-center text-[8px] font-bold uppercase tracking-wider text-white">
+            {tag}
+          </p>
+        </div>
       </div>
 
       <div className="min-w-0 flex-1">
@@ -122,25 +143,34 @@ function MenuItemCard({
         )}
 
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-blue-700">
-            {formatPrice(item.price)}
-          </span>
+          <span className="text-sm font-semibold text-blue-700">{formatPrice(item.price)}</span>
 
-          <button
-            type="button"
-            onClick={onAdd}
-            className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-blue-700 active:scale-95"
-          >
-            <Plus size={12} />
-            ADD
-          </button>
+          <div className="flex items-center gap-2">
+            {onWhy && (
+              <button
+                type="button"
+                onClick={onWhy}
+                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition hover:border-blue-200 hover:text-blue-700"
+              >
+                Why?
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onAdd}
+              className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-blue-700 active:scale-95"
+            >
+              <Plus size={12} />
+              ADD
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function UpsellCard({
+function UpsellTextCard({
   itemName,
   psychTrigger,
   onLearnMore,
@@ -192,14 +222,14 @@ export function ChatMessage({ message, onSuggestionTap, onUpsellTap }: Props) {
   const psychTrigger = (message.psych_trigger ?? 'none') as PsychTrigger
   const menuItems = message.menu_items ?? []
   const upsellItems = (message as any).upsell_items ?? []
+  const upsellMenuItems = message.upsell_menu_items ?? []
   const suggestions = message.suggestions ?? []
 
   const { restaurant, addToCart } = useAppStore()
   const [addingId, setAddingId] = useState<string | null>(null)
 
-  const handleAdd = (item: any) => {
-    setAddingId(item.id ?? item.name)
-
+  const handleAdd = (item: MenuItem, source: 'ai_suggestion' | 'ai_upsell' = 'ai_suggestion') => {
+    setAddingId(item.id)
     addToCart(item)
 
     if (restaurant) {
@@ -207,7 +237,7 @@ export function ChatMessage({ message, onSuggestionTap, onUpsellTap }: Props) {
         item_id: item.id,
         item_name: item.name,
         metadata: {
-          source: 'ai_suggestion',
+          source,
           price: item.price,
           is_bestseller: item.is_bestseller,
           is_special: item.is_special,
@@ -241,38 +271,58 @@ export function ChatMessage({ message, onSuggestionTap, onUpsellTap }: Props) {
         {isAI && suggestions.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s) => (
-              <QuickReplyChip
-                key={s.action}
-                label={s.label}
-                onClick={() => onSuggestionTap(s.action)}
-              />
+              <QuickReplyChip key={s.action} label={s.label} onClick={() => onSuggestionTap(s.action)} />
             ))}
           </div>
         )}
 
         {isAI && menuItems.length > 0 && (
           <div className="grid w-full grid-cols-1 gap-2">
-            {menuItems.slice(0, 3).map((item: any, idx: number) => (
-              <MenuItemCard
+            <p className="px-0.5 text-[11px] font-medium text-slate-400">Suggested dishes</p>
+            {menuItems.slice(0, 3).map((item: MenuItem, idx: number) => (
+              <SmartDishCard
                 key={item.id ?? `${item.name}-${idx}`}
                 item={item}
-                onAdd={() => handleAdd(item)}
+                tag="Suggested for you"
+                onAdd={() => handleAdd(item, 'ai_suggestion')}
+                onWhy={() => onUpsellTap?.(item.name, psychTrigger, message.convo_stage)}
               />
             ))}
           </div>
         )}
 
-        {isAI && upsellItems.length > 0 && (
+        {isAI && upsellMenuItems.length > 0 && (
           <div className="grid w-full grid-cols-1 gap-2">
-            <p className="px-0.5 text-[11px] font-medium text-slate-400">Pairs well with this</p>
+            <p className="px-0.5 text-[11px] font-medium text-slate-400">Perfect pairing</p>
+            {upsellMenuItems.slice(0, 2).map((item: MenuItem, idx: number) => (
+              <SmartDishCard
+                key={item.id ?? `${item.name}-${idx}`}
+                item={item}
+                tag="Pairs well with this"
+                onAdd={() => handleAdd(item, 'ai_upsell')}
+                onWhy={() => onUpsellTap?.(item.name, psychTrigger, message.convo_stage)}
+              />
+            ))}
+          </div>
+        )}
+
+        {isAI && upsellItems.length > 0 && upsellMenuItems.length === 0 && (
+          <div className="grid w-full grid-cols-1 gap-2">
+            <p className="px-0.5 text-[11px] font-medium text-slate-400">Perfect pairing</p>
             {upsellItems.slice(0, 2).map((itemName: string, idx: number) => (
-              <UpsellCard
+              <UpsellTextCard
                 key={`${itemName}-${idx}`}
                 itemName={itemName}
                 psychTrigger={psychTrigger}
                 onLearnMore={() => onUpsellTap?.(itemName, psychTrigger, message.convo_stage)}
               />
             ))}
+          </div>
+        )}
+
+        {isAI && addingId && (
+          <div className="px-0.5 text-[11px] font-medium text-emerald-600">
+            Added to cart ✓
           </div>
         )}
       </div>

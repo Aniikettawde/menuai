@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Minus, Plus, Trash2, HandMetal, Loader2, Sparkles, Star, Flame, TrendingUp } from 'lucide-react'
+import { X, Minus, Plus, Trash2, HandMetal, Loader2, Sparkles, TrendingUp, Coffee, IceCream } from 'lucide-react'
 import { useState } from 'react'
 import Image from 'next/image'
 import { useAppStore } from '@/store/app-store'
@@ -30,269 +30,198 @@ function getSocialCount(id: string): number {
   return 12 + (n % 41)
 }
 
-
-
-type CourseGroup = 'main' | 'bread' | 'rice' | 'starter' | 'dessert' | 'drink' | 'other'
-
-function normalizeText(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9₹]+/g, ' ').replace(/\s+/g, ' ').trim()
+function norm(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
-function getCourseGroup(item: MenuItem): CourseGroup {
-  const hay = normalizeText(
-    [
-      item.name ?? '',
-      item.description ?? '',
-      (item as any).course_type ?? '',
-      ...((item as any).tags ?? []),
-      ...((item as any).best_with ?? []),
-    ].join(' '),
+// ─── Drink / Dessert classifier ───────────────────────────────────────────────
+
+type UpsellType = 'drink' | 'dessert'
+
+const DRINK_RE =
+  /\b(drink|lassi|juice|shake|milkshake|coffee|tea|chai|mocktail|soda|buttermilk|chaas|lemonade|nimbu|water|cold drink|soft drink|smoothie|beverage|sherbet|sharbat|thandai|aam panna|jaljeera|rose milk|badam milk|mango drink|coconut water|nariyal|sprite|cola|pepsi|thumbs up|7up|fanta|maaza|limca)\b/
+
+const DESSERT_RE =
+  /\b(dessert|sweet|mithai|gulab jamun|rasgulla|rasmalai|kheer|halwa|payasam|ice cream|kulfi|cake|brownie|pudding|falooda|rabri|jalebi|ladoo|barfi|burfi|peda|modak|gajar halwa|moong dal halwa|shahi tukda|phirni|basundi|chenna|sandesh|mishti|doi|malpua|imarti|sohan|panjiri|pinni|til ladoo|chocolate|mousse|cheesecake|tiramisu|pastry|waffle|crepe)\b/
+
+function classifyUpsell(item: MenuItem): UpsellType | null {
+  const hay = norm(
+    [item.name, item.description ?? '', (item as any).course_type ?? '', ...((item as any).tags ?? [])].join(' '),
   )
-
-  if (/(dessert|sweet|gulab|jamun|kheer|ice cream|kulfi|cake|brownie|halwa|pudding|falooda)/.test(hay)) {
-    return 'dessert'
-  }
-  if (/(drink|lassi|juice|shake|coffee|tea|mocktail|soda|buttermilk|chaas)/.test(hay)) {
-    return 'drink'
-  }
-  if (/(bread|roti|naan|paratha|parotta|kulcha|phulka|chapati|tandoor)/.test(hay)) {
-    return 'bread'
-  }
-  if (/(rice|biryani|pulao|fried rice|jeera rice|plain rice|steam rice|steamed rice)/.test(hay)) {
-    return 'rice'
-  }
-  if (/(starter|appetizer|snack|tikka|pakora|salad|fries|chaat|kebab|kabab)/.test(hay)) {
-    return 'starter'
-  }
-  if (/(main|curry|gravy|masala|korma|butter|chicken|paneer|mutton|fish|dal|sabzi|thali|combo)/.test(hay)) {
-    return 'main'
-  }
-
-  return 'other'
+  if (DRINK_RE.test(hay)) return 'drink'
+  if (DESSERT_RE.test(hay)) return 'dessert'
+  return null
 }
 
-function pickPrimaryCartItem(cartItems: { item: MenuItem; quantity: number }[]): MenuItem | null {
-  if (cartItems.length === 0) return null
+// ─── Score upsell candidates ──────────────────────────────────────────────────
 
-  const rank: Record<CourseGroup, number> = {
-    main: 60,
-    rice: 50,
-    bread: 45,
-    starter: 35,
-    dessert: 20,
-    drink: 15,
-    other: 25,
+function scoreUpsellItem(
+  item: MenuItem,
+  type: UpsellType,
+  cartItems: { item: MenuItem; quantity: number }[],
+): number {
+  let score = 0
+  const hay = norm([item.name, item.description ?? ''].join(' '))
+
+  // Type match bonus
+  score += 20
+
+  // Affinity to cart contents
+  for (const { item: ci } of cartItems) {
+    const ciHay = norm(ci.name)
+    // Pair veg preference
+    if (ci.is_veg === item.is_veg) score += 2
+    // Price bracket affinity — suggest items roughly proportional to cart avg
+    const cartAvgPrice = cartItems.reduce((s, c) => s + c.item.price, 0) / cartItems.length
+    if (item.price <= cartAvgPrice * 0.6) score += 3 // cheap add-on feels easy to say yes to
   }
 
-  return cartItems
-    .slice()
-    .sort((a, b) => {
-      const ag = rank[getCourseGroup(a.item)] + a.quantity * 3 + (a.item.is_bestseller ? 2 : 0) + (a.item.is_special ? 1 : 0)
-      const bg = rank[getCourseGroup(b.item)] + b.quantity * 3 + (b.item.is_bestseller ? 2 : 0) + (b.item.is_special ? 1 : 0)
-      return bg - ag
-    })[0]?.item ?? null
+  if (type === 'drink') {
+    // Prefer refreshing, popular drinks over niche ones
+    if (/lassi|juice|shake|cold|lemonade|nimbu|soda|coffee|chaas|buttermilk/.test(hay)) score += 8
+    // Penalise plain water — low upsell value
+    if (/^water$|mineral water|packaged water/.test(hay)) score -= 12
+  }
+
+  if (type === 'dessert') {
+    if (/gulab|kulfi|ice cream|kheer|halwa|rasmalai|falooda|brownie|cake/.test(hay)) score += 8
+  }
+
+  if (item.is_bestseller) score += 5
+  if (item.is_special) score += 3
+  if (item.image_url) score += 2
+  // Penalise if already in cart (shouldn't happen due to filter, but safety)
+  if (cartItems.some((c) => c.item.id === item.id)) score -= 100
+
+  return score
 }
 
-function getDesiredGroups(anchor: MenuItem | null): CourseGroup[] {
-  if (!anchor) return ['main', 'bread', 'rice', 'starter', 'dessert', 'drink']
+// ─── Pick up to 2 drinks + 1 dessert (or 2 desserts if no drinks) ─────────────
 
-  const group = getCourseGroup(anchor)
-  const hay = normalizeText([anchor.name, anchor.description ?? '', (anchor as any).course_type ?? ''].join(' '))
+function getUpsells(
+  allItems: MenuItem[],
+  cartItems: { item: MenuItem; quantity: number }[],
+): { item: MenuItem; type: UpsellType }[] {
+  const cartIds = new Set(cartItems.map((c) => c.item.id))
 
-  if (group === 'main') {
-    if (/(biryani|pulao|fried rice|jeera rice|rice)/.test(hay)) {
-      return ['dessert', 'drink', 'starter', 'bread', 'main']
-    }
-    return ['bread', 'rice', 'starter', 'dessert', 'drink']
+  // Don't suggest a type the cart already has
+  const cartHasDrink = cartItems.some((c) => classifyUpsell(c.item) === 'drink')
+  const cartHasDessert = cartItems.some((c) => classifyUpsell(c.item) === 'dessert')
+
+  const candidates = allItems
+    .filter((item) => !cartIds.has(item.id))
+    .map((item) => ({ item, type: classifyUpsell(item) }))
+    .filter((x): x is { item: MenuItem; type: UpsellType } => x.type !== null)
+    // Exclude types already in cart
+    .filter(({ type }) => !(type === 'drink' && cartHasDrink))
+    .filter(({ type }) => !(type === 'dessert' && cartHasDessert))
+    .map(({ item, type }) => ({ item, type, score: scoreUpsellItem(item, type, cartItems) }))
+    .sort((a, b) => b.score - a.score)
+
+  const drinks = candidates.filter((c) => c.type === 'drink').slice(0, 2)
+  const desserts = candidates.filter((c) => c.type === 'dessert').slice(0, 1)
+
+  // If no drinks to suggest, allow up to 2 desserts
+  if (drinks.length === 0) {
+    return candidates.filter((c) => c.type === 'dessert').slice(0, 2)
   }
 
-  if (group === 'rice') {
-    return ['main', 'starter', 'dessert', 'drink', 'bread']
-  }
-
-  if (group === 'bread') {
-    return ['main', 'rice', 'starter', 'dessert', 'drink']
-  }
-
-  if (group === 'starter') {
-  return ['main', 'dessert', 'drink', 'bread', 'rice']
+  return [...drinks, ...desserts].slice(0, 3)
 }
 
-  if (group === 'dessert') {
-    return ['drink', 'starter', 'main', 'bread', 'rice']
-  }
 
-  if (group === 'drink') {
-    return ['starter', 'dessert', 'main', 'bread', 'rice']
-  }
+// ─── Dynamic upsell copy ──────────────────────────────────────────────────────
 
-  return ['main', 'bread', 'rice', 'starter', 'dessert', 'drink']
-}
+function getUpsellHeader(
+  cartItems: { item: MenuItem; quantity: number }[],
+  upsells: { item: MenuItem; type: UpsellType }[],
+): { badge: string; title: string; subtitle: string } {
+  // What does the cart already have?
+  const cartHasDrink = cartItems.some((c) => classifyUpsell(c.item) === 'drink')
+  const cartHasDessert = cartItems.some((c) => classifyUpsell(c.item) === 'dessert')
+  const cartHasFood = cartItems.some((c) => {
+    const hay = norm(c.item.name + (c.item.description ?? ''))
+    return /curry|gravy|biryani|rice|roti|naan|chicken|paneer|mutton|masala|dal|starter|tikka|kebab|snack/.test(hay)
+  })
 
-function pickBestByGroup(
-  items: MenuItem[],
-  desiredGroup: CourseGroup,
-  exclude: Set<string>,
-  anchor: MenuItem | null,
-): MenuItem | undefined {
-  const anchorNorm = anchor ? normalizeText(anchor.name) : ''
-  const anchorVeg = anchor?.is_veg
+  // What are we suggesting?
+  const drinkUpsell = upsells.find((u) => u.type === 'drink')
+  const dessertUpsell = upsells.find((u) => u.type === 'dessert')
+  const drinkName = drinkUpsell?.item.name ?? 'a refreshing drink'
+  const dessertName = dessertUpsell?.item.name ?? 'something sweet'
 
-  const scored = items
-    .filter((item) => !exclude.has(item.id))
-    .map((item) => {
-      const group = getCourseGroup(item)
-      const hay = normalizeText(
-        [
-          item.name ?? '',
-          item.description ?? '',
-          (item as any).course_type ?? '',
-          ...((item as any).tags ?? []),
-          ...((item as any).best_with ?? []),
-        ].join(' '),
-      )
-
-      let score = group === desiredGroup ? 20 : 0
-	  
-	  const itemCategoryName = normalizeText((item as any).category_name ?? '')
-const anchorCategoryName = anchor ? normalizeText((anchor as any).category_name ?? '') : ''
-if (anchorCategoryName && itemCategoryName === anchorCategoryName) score -= 15
-
-      if (desiredGroup === 'bread' && /roti|naan|kulcha|paratha|chapati|phulka|tandoor/.test(hay)) score += 12
-      if (desiredGroup === 'rice' && /rice|jeera|biryani|pulao|steam|plain/.test(hay)) score += 12
-      if (desiredGroup === 'starter' && /(tikka|starter|snack|salad|papad|chaat|kebab)/.test(hay)) score += 12
-      if (desiredGroup === 'dessert' && /gulab|jamun|kheer|ice cream|kulfi|sweet|dessert|halwa|pudding/.test(hay)) score += 12
-      if (desiredGroup === 'drink' && /tea|coffee|lassi|juice|shake|mocktail|buttermilk|chaas|soda/.test(hay)) score += 12
-      if (desiredGroup === 'main' && /(curry|gravy|masala|korma|butter|paneer|chicken|mutton|fish|dal|sabzi|thali|combo)/.test(hay)) score += 12
-	  if (group !== desiredGroup) score -= 10
-
-
-      if (anchorNorm && hay.includes(anchorNorm)) score += 8
-      if (((item as any).best_with ?? []).some((pair: string) => anchorNorm && normalizeText(pair).includes(anchorNorm))) score += 8
-      if (item.is_bestseller) score += 3
-      if (item.is_special) score += 2
-      if (item.image_url) score += 1
-
-      if (anchorVeg === true && item.is_veg) score += 2
-      if (anchorVeg === false && item.is_veg === false) score += 2
-      if (anchorVeg === true && item.is_veg === false) score -= 2
-
-      return { item, score }
-    })
-
-  scored.sort((a, b) => b.score - a.score)
-  return scored[0]?.item
-}
-
-function getRecommendations(allItems: MenuItem[], cartItems: { item: MenuItem; quantity: number }[]): MenuItem[] {
-  const cartItemIds = new Set(cartItems.map((c) => c.item.id))
-  const anchor = pickPrimaryCartItem(cartItems)
-  const desiredGroups = getDesiredGroups(anchor)
-  const picked: MenuItem[] = []
-  const exclude = new Set<string>(cartItemIds)
-
-  for (const group of desiredGroups) {
-    const best = pickBestByGroup(allItems, group, exclude, anchor)
-    if (best) {
-      picked.push(best)
-      exclude.add(best.id)
-    }
-    if (picked.length >= 3) break
-  }
-
-  if (picked.length < 3) {
-    const fallback = allItems
-      .filter((item) => !exclude.has(item.id))
-      .slice()
-      .sort((a, b) => {
-        return (
-          Number(b.is_special) - Number(a.is_special) ||
-          Number(b.is_bestseller) - Number(a.is_bestseller) ||
-          Number(Boolean(b.image_url)) - Number(Boolean(a.image_url))
-        )
-      })
-
-    for (const item of fallback) {
-      picked.push(item)
-      if (picked.length >= 3) break
-    }
-  }
-
-  return picked.slice(0, 3)
-}
-
-function buildRecommendationCopy(anchor: MenuItem | null, recs: MenuItem[]) {
-  const top = recs[0]?.name ?? 'the right add-on'
-  const second = recs[1]?.name
-  const group = anchor ? getCourseGroup(anchor) : 'other'
-  const anchorName = anchor?.name ?? 'your order'
-
-  if (group === 'main') {
+  // Cart already has a drink — only suggest dessert
+  if (cartHasDrink && !cartHasDessert && dessertUpsell) {
     return {
-      badge: "Chef's favorite pairing",
-      title: `Your ${anchorName} feels incomplete without ${top}.`,
-      subtitle: second
-        ? `Most tables finish this with ${top} and ${second}. You should not miss this.`
-        : `This is the kind of add-on that makes ${anchorName} feel complete.`,
+      badge: 'End on a high',
+      title: `Finish with ${dessertName}?`,
+      subtitle: `Most people skip dessert and regret it. One tap to add.`,
     }
   }
 
-  if (group === 'rice') {
+  // Cart already has a dessert — only suggest drink
+  if (cartHasDessert && !cartHasDrink && drinkUpsell) {
     return {
-      badge: 'Strong completion',
-      title: `This ${anchorName} gets much better with ${top}.`,
-      subtitle: second
-        ? `Add ${top} and ${second} to turn it into a proper meal.`
-        : `A small add-on can make this feel fuller and more satisfying.`,
+      badge: 'Pairs perfectly',
+      title: `${drinkName} goes great with that.`,
+      subtitle: `A drink makes the whole meal feel more complete. Quick add.`,
     }
   }
 
-  if (group === 'bread') {
+  // Cart has food — suggest drink + dessert
+  if (cartHasFood && drinkUpsell && dessertUpsell) {
     return {
-      badge: 'Must-try pairing',
-      title: `Your ${anchorName} is waiting for the right curry.`,
-      subtitle: second
-        ? `Pair it with ${top} or ${second} for a complete bite.`
-        : `You should not eat this bread without a proper curry beside it.`,
+      badge: 'Complete your meal',
+      title: `A drink and something sweet?`,
+      subtitle: `${drinkName} to wash it down, ${dessertName} to finish strong. Most tables add both.`,
     }
   }
 
-  if (group === 'dessert') {
+  // Cart has food — only drink available to suggest
+  if (cartHasFood && drinkUpsell && !dessertUpsell) {
     return {
-      badge: 'Finish strong',
-      title: `End this meal on a perfect note.`,
-      subtitle: second
-        ? `A cool drink with ${top} makes this a complete finish.`
-        : `A drink is the easiest way to balance dessert beautifully.`,
+      badge: 'Pairs perfectly',
+      title: `This meal needs a drink.`,
+      subtitle: `${drinkName} is the most ordered pairing with meals like yours.`,
     }
   }
 
-  if (group === 'drink') {
+  // Cart has food — only dessert available to suggest
+  if (cartHasFood && dessertUpsell && !drinkUpsell) {
     return {
-      badge: 'Round it out',
-      title: `This drink needs something to go with it.`,
-      subtitle: second
-        ? `Add ${top} and ${second} so the table feels complete.`
-        : `Pair it with a starter or dessert for a fuller order.`,
+      badge: 'End on a high',
+      title: `Save room for ${dessertName}.`,
+      subtitle: `It's the most skipped part of the meal that people regret skipping.`,
     }
   }
 
+  // Cart is drinks/snacks only — suggest dessert
+  if (!cartHasFood && !cartHasDrink && dessertUpsell) {
+    return {
+      badge: 'Add a sweet note',
+      title: `${dessertName} to go with that?`,
+      subtitle: `A quick dessert add while you're at it.`,
+    }
+  }
+
+  // Fallback
   return {
-    badge: "Don't miss this",
-    title: `Your meal gets better with ${top}.`,
-    subtitle: second
-      ? `We picked the most natural pairings so your order feels complete.`
-      : `A simple add-on can make the whole meal feel finished.`,
+    badge: 'You might like',
+    title: `One more thing before you order?`,
+    subtitle: `Small add-ons that make the meal feel complete.`,
   }
 }
 
-function RecommendationCard({ item }: { item: MenuItem }) {
+
+// ─── Upsell card ──────────────────────────────────────────────────────────────
+
+function UpsellCard({ item, type }: { item: MenuItem; type: UpsellType }) {
   const { addToCart, increaseCartItem, decreaseCartItem, cartItems, restaurant } = useAppStore()
   const [adding, setAdding] = useState(false)
 
   const cartEntry = cartItems.find((c) => c.item.id === item.id)
   const qtyInCart = cartEntry?.quantity ?? 0
-  const socialCount = item.is_bestseller ? getSocialCount(item.id) : null
+  const socialCount = getSocialCount(item.id)
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -303,86 +232,60 @@ function RecommendationCard({ item }: { item: MenuItem }) {
       void track(restaurant.id, 'cart_suggestion_accepted', {
         item_id: item.id,
         item_name: item.name,
-        metadata: {
-          source: 'cart_recommendation',
-          psych_trigger: 'completion',
-          price: item.price,
-          is_bestseller: item.is_bestseller,
-          is_special: item.is_special,
-        },
-      })
-
-      void track(restaurant.id, 'cart_item_added', {
-        item_id: item.id,
-        item_name: item.name,
-        metadata: {
-          source: 'suggestion',
-          psych_trigger: 'completion',
-          price: item.price,
-        },
+        metadata: { source: 'upsell', upsell_type: type, price: item.price },
       })
     }
 
     setTimeout(() => setAdding(false), 160)
   }
 
-  const handleInc = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    increaseCartItem(item.id)
-  }
+  const typeIcon = type === 'drink'
+    ? <Coffee size={10} className="text-blue-500" />
+    : <IceCream size={10} className="text-pink-500" />
 
-  const handleDec = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    decreaseCartItem(item.id)
-  }
+  const typeBadgeClass = type === 'drink'
+    ? 'border-blue-200 bg-blue-50 text-blue-700'
+    : 'border-pink-200 bg-pink-50 text-pink-700'
+
+  const typeLabel = type === 'drink' ? 'Drink' : 'Dessert'
 
   return (
-    <div className="group overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md">
+    <div className="group overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md">
       <div className="flex items-stretch gap-3 p-3">
         {item.image_url ? (
-          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
-            <Image
-              src={getImageUrl(item.image_url)!}
-              alt={item.name}
-              fill
-              className="object-cover"
-              sizes="64px"
-            />
+          <div className="relative h-[68px] w-[68px] shrink-0 overflow-hidden rounded-xl bg-slate-100">
+            <Image src={getImageUrl(item.image_url)!} alt={item.name} fill className="object-cover" sizes="68px" />
           </div>
         ) : (
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 text-2xl">
-            {item.is_veg ? '🥗' : '🍖'}
+          <div className="flex h-[68px] w-[68px] shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-50 to-amber-50 text-2xl">
+            {type === 'drink' ? '🥤' : '🍮'}
           </div>
         )}
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                <Sparkles size={10} />
-                You should not miss this
-              </div>
-
-              <p className="mt-1 truncate text-sm font-semibold text-slate-900">{item.name}</p>
-            </div>
-
+          {/* Type + bestseller badges */}
+          <div className="flex items-center gap-1.5">
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${typeBadgeClass}`}>
+              {typeIcon}
+              {typeLabel}
+            </span>
             {item.is_bestseller && (
-              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
                 Bestseller
               </span>
             )}
           </div>
 
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-            {item.description || 'This add-on makes the meal feel complete.'}
-          </p>
+          <p className="mt-1 truncate text-sm font-semibold text-slate-900">{item.name}</p>
 
-          {socialCount !== null && (
-            <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-              <TrendingUp size={9} />
-              {socialCount} ordered recently
-            </p>
+          {item.description && (
+            <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{item.description}</p>
           )}
+
+          <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+            <TrendingUp size={9} />
+            {socialCount} ordered recently
+          </p>
 
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-sm font-bold text-slate-900">{formatPrice(item.price)}</span>
@@ -392,19 +295,19 @@ function RecommendationCard({ item }: { item: MenuItem }) {
                 type="button"
                 onClick={handleAdd}
                 className={[
-                  'rounded-full border px-3 py-1 text-xs font-semibold transition-all',
+                  'rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
                   adding
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-600 hover:text-white',
+                    : 'border-orange-300 bg-orange-500 text-white hover:bg-orange-600',
                 ].join(' ')}
               >
-                {adding ? 'Added ✓' : '+ Add'}
+                {adding ? '✓ Added' : '+ Add'}
               </button>
             ) : (
               <div className="inline-flex items-center overflow-hidden rounded-full border border-orange-200 bg-orange-50">
                 <button
                   type="button"
-                  onClick={handleDec}
+                  onClick={(e) => { e.stopPropagation(); decreaseCartItem(item.id) }}
                   className="flex h-7 w-7 items-center justify-center text-orange-700 hover:bg-orange-100"
                 >
                   <Minus size={12} />
@@ -414,7 +317,7 @@ function RecommendationCard({ item }: { item: MenuItem }) {
                 </span>
                 <button
                   type="button"
-                  onClick={handleInc}
+                  onClick={(e) => { e.stopPropagation(); increaseCartItem(item.id) }}
                   className="flex h-7 w-7 items-center justify-center text-orange-700 hover:bg-orange-100"
                 >
                   <Plus size={12} />
@@ -427,6 +330,8 @@ function RecommendationCard({ item }: { item: MenuItem }) {
     </div>
   )
 }
+
+// ─── Main CartSheet ───────────────────────────────────────────────────────────
 
 export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
   const {
@@ -444,30 +349,22 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
   const subtotal = cartItems.reduce((sum, c) => sum + c.item.price * c.quantity, 0)
   const itemCount = cartItems.reduce((sum, c) => sum + c.quantity, 0)
 
-  const cartItemIds = new Set(cartItems.map((c) => c.item.id))
-  const cartCategoryIds = new Set(cartItems.map((c) => c.item.category_id))
-  const recommendations = getRecommendations(allItems, cartItems)
-const anchorItem = pickPrimaryCartItem(cartItems)
-const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
-
+  const upsells = getUpsells(allItems, cartItems)
+  const upsellHeader = cartItems.length > 0 && upsells.length > 0
+    ? getUpsellHeader(cartItems, upsells)
+    : null
 
   const handleRemove = (itemId: string, itemName: string) => {
     removeFromCart(itemId)
     if (restaurant) {
-      void track(restaurant.id, 'cart_item_removed', {
-        item_id: itemId,
-        item_name: itemName,
-      })
+      void track(restaurant.id, 'cart_item_removed', { item_id: itemId, item_name: itemName })
     }
   }
 
   const handleClearCart = () => {
     if (restaurant && cartItems.length > 0) {
       void track(restaurant.id, 'cart_cleared', {
-        metadata: {
-          item_count: cartItems.length,
-          subtotal,
-        },
+        metadata: { item_count: cartItems.length, subtotal },
       })
     }
     clearCart()
@@ -475,29 +372,20 @@ const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
 
   const handleCallWaiter = () => {
     if (!restaurant) return
-
-    // Track the button tap itself (before API call)
     void track(restaurant.id, 'cart_submitted', {
       metadata: {
         item_count: itemCount,
         subtotal,
         items: cartItems.map((c) => ({
-          id: c.item.id,
-          name: c.item.name,
-          qty: c.quantity,
-          price: c.item.price,
-          total: c.item.price * c.quantity,
+          id: c.item.id, name: c.item.name, qty: c.quantity,
+          price: c.item.price, total: c.item.price * c.quantity,
         })),
       },
     })
-
     onCallWaiter?.({
       items: cartItems.map((c) => ({
-        id: c.item.id,
-        name: c.item.name,
-        qty: c.quantity,
-        price: c.item.price,
-        total: c.item.price * c.quantity,
+        id: c.item.id, name: c.item.name, qty: c.quantity,
+        price: c.item.price, total: c.item.price * c.quantity,
       })),
       subtotal,
     })
@@ -511,6 +399,7 @@ const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
         isCartOpen ? 'pointer-events-auto' : 'pointer-events-none',
       ].join(' ')}
     >
+      {/* Backdrop */}
       <button
         type="button"
         onClick={closeCart}
@@ -521,6 +410,7 @@ const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
         aria-label="Close cart"
       />
 
+      {/* Sheet */}
       <div
         className={[
           'absolute inset-x-0 bottom-0 mx-auto w-full max-w-2xl',
@@ -533,9 +423,7 @@ const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
           <div>
             <p className="text-sm font-semibold text-slate-900">Your cart</p>
-            <p className="text-xs text-slate-500">
-              {itemCount} item{itemCount !== 1 ? 's' : ''}
-            </p>
+            <p className="text-xs text-slate-500">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
           </div>
           <button
             type="button"
@@ -548,6 +436,7 @@ const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
 
         {/* Scrollable body */}
         <div className="max-h-[62vh] overflow-y-auto">
+
           {/* Cart items */}
           <div className="px-4 py-4">
             {cartItems.length === 0 ? (
@@ -609,33 +498,32 @@ const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
             )}
           </div>
 
-          {/* Recommendations — only show when cart has items */}
-          {cartItems.length > 0 && recommendations.length > 0 && (
-  <div className="border-t border-slate-100 px-4 pb-4 pt-3">
-    <div className="mb-3 rounded-[28px] border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-4">
-      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-500">
-        <Sparkles size={12} />
-        Chef&apos;s favorite pairing
-      </div>
-      <h3 className="mt-2 text-base font-semibold text-slate-900">
-        {recommendationCopy.title}
-      </h3>
-      <p className="mt-1 text-sm leading-6 text-slate-600">
-        {recommendationCopy.subtitle}
-      </p>
-    </div>
+          {/* ── Upsell section — drinks & desserts only ── */}
+          {upsellHeader && upsells.length > 0 && (
+            <div className="border-t border-slate-100 px-4 pb-5 pt-3">
 
-    <div className="space-y-2.5">
-      {recommendations.map((item) => (
-        <RecommendationCard key={item.id} item={item} />
-      ))}
-    </div>
+              {/* Header card */}
+              <div className="mb-3 overflow-hidden rounded-[22px] bg-gradient-to-br from-slate-900 to-slate-800 px-4 py-4">
+                <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-orange-400">
+                  <Sparkles size={10} />
+                  {upsellHeader.badge}
+                </div>
+                <p className="text-[15px] font-semibold leading-snug text-white">
+                  {upsellHeader.title}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  {upsellHeader.subtitle}
+                </p>
+              </div>
 
-    <p className="mt-3 text-center text-[10px] text-slate-400">
-      A small add-on often turns a good order into a complete meal.
-    </p>
-  </div>
-)}
+              {/* Upsell cards */}
+              <div className="space-y-2.5">
+                {upsells.map(({ item, type }) => (
+                  <UpsellCard key={item.id} item={item} type={type} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -664,15 +552,9 @@ const recommendationCopy = buildRecommendationCopy(anchorItem, recommendations)
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isWaiterLoading ? (
-                <>
-                  <Loader2 size={15} className="animate-spin" />
-                  Notifying…
-                </>
+                <><Loader2 size={15} className="animate-spin" />Notifying…</>
               ) : (
-                <>
-                  <HandMetal size={16} />
-                  Call waiter
-                </>
+                <><HandMetal size={16} />Call waiter</>
               )}
             </button>
           </div>

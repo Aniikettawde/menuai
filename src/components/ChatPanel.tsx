@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useState, useCallback, useMemo, type FormEvent, type RefObject } from 'react'
 import { X, Send, Sparkles } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { ChatMessage as ChatMessageComp } from './ChatMessage'
@@ -8,29 +8,101 @@ import { track } from '@/lib/analytics'
 import type { ChatMessage, QuickReply, PsychTrigger } from '@/types'
 import { nanoid } from '@/lib/nanoid'
 
+type DiningPreference = 'veg' | 'non_veg'
+type RestaurantType = 'veg' | 'mixed' | 'non_veg'
+
 function normalizeText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9₹]+/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-function buildStarters(hasNonVeg: boolean): QuickReply[] {
-  const base: QuickReply[] = []
+function detectRestaurantType(rawType: string | null | undefined, items: { is_veg: boolean }[]): RestaurantType {
+  const raw = normalizeText(String(rawType ?? ''))
 
-  if (hasNonVeg) {
-    base.push(
-      { label: 'Veg only', action: 'I want veg food' },
-      { label: 'Non-veg', action: 'I want non-veg food' },
-    )
-  } else {
-    base.push({ label: 'Veg dishes', action: 'I want veg food' })
+  if (
+    raw.includes('veg/non veg') ||
+    raw.includes('veg/non-veg') ||
+    raw.includes('veg and non veg') ||
+    raw.includes('mixed') ||
+    raw.includes('both') ||
+    raw.includes('non veg') ||
+    raw.includes('non-veg')
+  ) {
+    return 'mixed'
   }
 
-  base.push(
+  if (
+    raw.includes('pure veg') ||
+    raw.includes('vegetarian') ||
+    (raw.includes('veg') && !raw.includes('non veg') && !raw.includes('non-veg'))
+  ) {
+    return 'veg'
+  }
+
+  if (
+    raw.includes('pure non veg') ||
+    raw.includes('pure non-veg') ||
+    raw.includes('non veg') ||
+    raw.includes('non-veg')
+  ) {
+    return 'non_veg'
+  }
+
+  const hasVeg = items.some((i) => i.is_veg)
+  const hasNonVeg = items.some((i) => !i.is_veg)
+
+  if (hasVeg && hasNonVeg) return 'mixed'
+  if (hasNonVeg) return 'non_veg'
+  return 'veg'
+}
+
+function inferPreference(text: string): DiningPreference | null {
+  const t = normalizeText(text)
+
+  if (/(^| )(veg|vegetarian|only veg|pure veg)( |$)/.test(t)) return 'veg'
+  if (/(^| )(non veg|non-veg|nonveg|chicken|mutton|fish|egg)( |$)/.test(t)) return 'non_veg'
+
+  return null
+}
+
+function buildStarters(args: {
+  restaurantType: RestaurantType
+  preference: DiningPreference | null
+}): QuickReply[] {
+  const { restaurantType, preference } = args
+
+  if (restaurantType === 'mixed' && !preference) {
+    return [
+      { label: 'Veg', action: 'I want veg food' },
+      { label: 'Non-veg', action: 'I want non-veg food' },
+      { label: 'Help me choose', action: 'Suggest a complete meal for me' },
+      { label: 'Best sellers', action: 'Show me your best selling dishes' },
+    ]
+  }
+
+  if (restaurantType === 'veg' || preference === 'veg') {
+    return [
+      { label: 'Best veg dishes', action: 'Show me your best veg dishes' },
+      { label: 'Veg complete meal', action: 'Suggest a complete veg meal for me' },
+      { label: 'Chef special', action: "What is today's special?" },
+      { label: 'Budget under ₹300', action: 'Suggest veg food under ₹300' },
+    ]
+  }
+
+  if (restaurantType === 'non_veg' || preference === 'non_veg') {
+    return [
+      { label: 'Best non-veg dishes', action: 'Show me your best non-veg dishes' },
+      { label: 'Complete meal', action: 'Suggest a complete meal for me' },
+      { label: 'Chef special', action: "What is today's special?" },
+      { label: 'Budget under ₹300', action: 'Suggest non-veg food under ₹300' },
+    ]
+  }
+
+  return [
     { label: 'Best sellers', action: 'Show me your best selling dishes' },
     { label: 'Chef special', action: "What is today's special?" },
     { label: 'Help me choose', action: 'Suggest a complete meal for me' },
-  )
-
-  return base.slice(0, 4)
+    { label: 'Budget under ₹300', action: 'Suggest food under ₹300' },
+  ]
 }
 
 function TypingIndicator() {
@@ -38,8 +110,14 @@ function TypingIndicator() {
     <div className="flex items-center gap-2 px-3 py-2">
       <div className="flex gap-1">
         <span className="h-2 w-2 animate-bounce rounded-full bg-blue-500" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-blue-500" style={{ animationDelay: '0.15s' }} />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-blue-500" style={{ animationDelay: '0.3s' }} />
+        <span
+          className="h-2 w-2 animate-bounce rounded-full bg-blue-500"
+          style={{ animationDelay: '0.15s' }}
+        />
+        <span
+          className="h-2 w-2 animate-bounce rounded-full bg-blue-500"
+          style={{ animationDelay: '0.3s' }}
+        />
       </div>
       <span className="text-xs text-slate-500">AI is thinking...</span>
     </div>
@@ -55,9 +133,9 @@ function ChatInput({
 }: {
   input: string
   setInput: (v: string) => void
-  onSubmit: (e: React.FormEvent) => void
+  onSubmit: (e: FormEvent) => void
   disabled: boolean
-  inputRef: React.RefObject<HTMLInputElement>
+  inputRef: RefObject<HTMLInputElement>
 }) {
   return (
     <form onSubmit={onSubmit} className="flex items-center gap-2 border-t border-slate-100 px-4 py-3">
@@ -82,20 +160,64 @@ function ChatInput({
   )
 }
 
+function PreferencePrompt({
+  restaurantType,
+  onPick,
+}: {
+  restaurantType: RestaurantType
+  onPick: (pref: DiningPreference) => void
+}) {
+  const title =
+    restaurantType === 'mixed'
+      ? 'Before I recommend anything, are you looking for veg or non-veg?'
+      : 'I can help you pick faster. Ask for best sellers, chef special, or a complete meal.'
+
+  const subtitle =
+    restaurantType === 'mixed'
+      ? 'Choosing once makes the suggestions much smarter.'
+      : 'I will keep the suggestions aligned to this menu.'
+
+  return (
+    <div className="space-y-3 rounded-[24px] border border-blue-100 bg-gradient-to-br from-blue-50 to-violet-50 p-4 shadow-sm">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">{subtitle}</p>
+      </div>
+
+      {restaurantType === 'mixed' ? (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => onPick('veg')}
+            className="rounded-2xl border border-green-200 bg-white px-3 py-3 text-sm font-semibold text-green-700 shadow-sm transition hover:-translate-y-0.5 hover:border-green-300"
+          >
+            Veg
+          </button>
+          <button
+            type="button"
+            onClick={() => onPick('non_veg')}
+            className="rounded-2xl border border-rose-200 bg-white px-3 py-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:-translate-y-0.5 hover:border-rose-300"
+          >
+            Non-veg
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function StarterChips({
   starters,
-  hasNonVeg,
   onSend,
+  heading,
 }: {
   starters: QuickReply[]
-  hasNonVeg: boolean
   onSend: (text: string) => void
+  heading: string
 }) {
   return (
     <div className="space-y-3 pt-2">
-      <p className="text-xs text-slate-500">
-        {hasNonVeg ? 'Start with a preference:' : 'Start with the best veg dishes:'}
-      </p>
+      <p className="text-xs text-slate-500">{heading}</p>
       <div className="flex flex-wrap gap-2">
         {starters.map((s) => (
           <button
@@ -126,25 +248,97 @@ export function ChatPanel() {
   } = useAppStore()
 
   const [input, setInput] = useState('')
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [preference, setPreference] = useState<DiningPreference | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const desktopMessagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const desktopInputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  const hasNonVeg = useMemo(() => items.some((i) => i.is_veg === false), [items])
-  const starters = useMemo(() => buildStarters(hasNonVeg), [hasNonVeg])
+  const restaurantType = useMemo<RestaurantType>(() => {
+    const rawType = (restaurant as any)?.restaurant_type ?? ''
+    return detectRestaurantType(rawType, items)
+  }, [restaurant, items])
+
+  const isMixedRestaurant = restaurantType === 'mixed'
+  const showPreferenceGate = isMixedRestaurant && !preference
+  const starters = useMemo(
+    () => buildStarters({ restaurantType, preference }),
+    [restaurantType, preference],
+  )
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     desktopMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isChatLoading])
 
+  useEffect(() => {
+    if (!restaurant) return
+
+    const key = `dinezy_pref_${restaurant.id}_${sessionId}`
+    try {
+      const saved = sessionStorage.getItem(key)
+      if (saved === 'veg' || saved === 'non_veg') {
+        setPreference(saved)
+      }
+    } catch {
+      // ignore
+    }
+  }, [restaurant, sessionId])
+
+  useEffect(() => {
+    if (!restaurant) return
+    if (!isMixedRestaurant) return
+
+    const key = `dinezy_pref_${restaurant.id}_${sessionId}`
+    try {
+      if (preference) sessionStorage.setItem(key, preference)
+      else sessionStorage.removeItem(key)
+    } catch {
+      // ignore
+    }
+  }, [preference, restaurant, sessionId, isMixedRestaurant])
+
+  const buildAssistantPreferencePrompt = useCallback(() => {
+    return {
+      id: nanoid(),
+      role: 'assistant' as const,
+      content:
+        restaurantType === 'mixed'
+          ? 'Before I suggest dishes, are you looking for veg or non-veg?'
+          : 'Tell me what you are in the mood for, and I will help you pick the best dishes.',
+      timestamp: Date.now(),
+      suggestions:
+        restaurantType === 'mixed'
+          ? [
+              { label: 'Veg', action: 'I want veg food' },
+              { label: 'Non-veg', action: 'I want non-veg food' },
+            ]
+          : [
+              { label: 'Best sellers', action: 'Show me your best selling dishes' },
+              { label: 'Chef special', action: "What is today's special?" },
+            ],
+    } as ChatMessage
+  }, [restaurantType])
+
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, forcedPreference: DiningPreference | null = null) => {
       const trimmed = text.trim()
       if (!trimmed || !restaurant || isChatLoading) return
+
+      const inferredPreference = inferPreference(trimmed)
+      const activePreference = forcedPreference ?? preference ?? inferredPreference ?? null
+
+      if (isMixedRestaurant && !activePreference) {
+        addMessage(buildAssistantPreferencePrompt())
+        setShowChat(true)
+        return
+      }
+
+      if (inferredPreference && !preference) {
+        setPreference(inferredPreference)
+      }
 
       setInput('')
 
@@ -162,15 +356,16 @@ export function ChatPanel() {
 
       addMessage(userMsg)
       setIsChatLoading(true)
-      setIsExpanded(true)
 
       const bestsellers = items.filter((i) => i.is_bestseller).map((i) => i.name)
       const available = items.map((i) => i.name)
       const categoryNames = categories.map((c) => c.name)
       const menuItems = items.map((item) => ({
+        id: item.id,
         name: item.name,
         description: item.description,
         price: item.price,
+        image_url: item.image_url,
         is_veg: item.is_veg,
         is_bestseller: item.is_bestseller,
         is_special: Boolean((item as any).is_special),
@@ -185,6 +380,8 @@ export function ChatPanel() {
         course_type: (item as any).course_type,
       }))
 
+      const menuItemMap = new Map(items.map((item) => [normalizeText(item.name), item]))
+
       try {
         abortRef.current?.abort()
         abortRef.current = new AbortController()
@@ -198,12 +395,20 @@ export function ChatPanel() {
             history: historyPayload,
             restaurant_id: restaurant.id,
             session_id: sessionId,
+            restaurant_type: restaurantType,
+            customer_preference: activePreference,
             menu_context: {
               restaurant_name: restaurant.name,
+              restaurant_type: restaurantType,
+              customer_preference: activePreference,
               categories: categoryNames,
               bestsellers,
               available_items: available,
               menu_items: menuItems,
+              recommendation_mode:
+                isMixedRestaurant && !activePreference
+                  ? 'ask_preference_first'
+                  : 'recommend_complete_meals',
             },
           }),
         })
@@ -214,6 +419,12 @@ export function ChatPanel() {
         const mentioned = new Set<string>((data.mentioned_items ?? []).map((x: string) => normalizeText(x)))
         const matchedMenuItems = items.filter((i) => mentioned.has(normalizeText(i.name)))
 
+        const upsellMenuItems = Array.isArray(data.upsell_items)
+          ? data.upsell_items
+              .map((name: string) => menuItemMap.get(normalizeText(name)))
+              .filter(Boolean)
+          : []
+
         const aiMsg: ChatMessage = {
           id: nanoid(),
           role: 'assistant',
@@ -221,6 +432,7 @@ export function ChatPanel() {
           timestamp: Date.now(),
           menu_items: matchedMenuItems.length ? matchedMenuItems : undefined,
           upsell_items: Array.isArray(data.upsell_items) ? data.upsell_items : [],
+          upsell_menu_items: upsellMenuItems.length ? upsellMenuItems : undefined,
           psych_trigger: data.psych_trigger ?? 'none',
           convo_stage: data.convo_stage ?? 'early',
           suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
@@ -249,7 +461,29 @@ export function ChatPanel() {
         setIsChatLoading(false)
       }
     },
-    [restaurant, items, categories, messages, isChatLoading, addMessage, setIsChatLoading, sessionId],
+    [
+      addMessage,
+      buildAssistantPreferencePrompt,
+      categories,
+      isChatLoading,
+      isMixedRestaurant,
+      items,
+      messages,
+      preference,
+      restaurant,
+      restaurantType,
+      sessionId,
+      setIsChatLoading,
+      setShowChat,
+    ],
+  )
+
+  const handlePreferencePick = useCallback(
+    (pref: DiningPreference) => {
+      setPreference(pref)
+      void sendMessage(pref === 'veg' ? 'I want veg food' : 'I want non-veg food', pref)
+    },
+    [sendMessage],
   )
 
   const handleUpsellTap = useCallback(
@@ -277,9 +511,9 @@ export function ChatPanel() {
     return () => window.removeEventListener('menuai:ask', handler)
   }, [sendMessage])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    sendMessage(input)
+    void sendMessage(input)
   }
 
   const isEmpty = messages.length === 0
@@ -291,7 +525,7 @@ export function ChatPanel() {
         {!showChat && (
           <button
             onClick={() => setShowChat(true)}
-            className="fixed bottom-6 right-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/25 transition-transform active:scale-95"
+            className="fixed bottom-5 right-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/25 transition-transform active:scale-95"
             aria-label="Open AI chat"
           >
             <Sparkles size={22} />
@@ -299,82 +533,104 @@ export function ChatPanel() {
         )}
 
         {showChat && (
-          <div
-            className={`fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-[28px] border-t border-slate-200 bg-white/95 shadow-[0_-20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-all duration-300 ${
-              isExpanded ? 'h-[82dvh]' : 'h-[58px]'
-            }`}
-          >
-            {/* drag handle / header */}
-            <div
-              className="flex cursor-pointer select-none items-center justify-between px-4 py-3"
-              onClick={() => setIsExpanded((e) => !e)}
-            >
-              <div className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-slate-200" />
-              <div className="mt-1 flex items-center gap-2">
+          <div className="fixed inset-x-0 bottom-0 z-[70] flex h-[82dvh] flex-col rounded-t-[28px] border-t border-slate-200 bg-white/95 shadow-[0_-20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <div className="flex items-center gap-2">
                 <Sparkles size={15} className="text-blue-600" />
-                <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
-                <span className="text-[10px] text-slate-500">· Ask about the menu</span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">AI Waiter</p>
+                  <p className="text-[10px] text-slate-500">
+                    {showPreferenceGate ? 'Choose veg / non-veg first' : 'Ask about the menu'}
+                  </p>
+                </div>
               </div>
+
               <button
-                onClick={(e) => { e.stopPropagation(); setShowChat(false) }}
-                className="mt-1 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                onClick={() => setShowChat(false)}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close chat"
               >
                 <X size={15} />
               </button>
             </div>
 
-            {isExpanded && (
-              <>
-                <div className="flex-1 overflow-y-auto px-4 pb-2">
-                  {isEmpty ? (
-                    <StarterChips starters={starters} hasNonVeg={hasNonVeg} onSend={sendMessage} />
-                  ) : (
-                    <>
-                      {messages.map((msg) => (
-                        <ChatMessageComp
-                          key={msg.id}
-                          message={msg as any}
-                          onSuggestionTap={sendMessage}
-                          onUpsellTap={handleUpsellTap}
-                        />
-                      ))}
-                      {isChatLoading && <TypingIndicator />}
-                      <div ref={messagesEndRef} />
-                    </>
-                  )}
-                </div>
-                <ChatInput input={input} setInput={setInput} onSubmit={handleSubmit} disabled={isChatLoading} inputRef={inputRef} />
-              </>
-            )}
+            <div className="flex-1 overflow-y-auto px-4 pb-2 pt-4">
+              {isEmpty ? (
+                showPreferenceGate ? (
+                  <PreferencePrompt restaurantType={restaurantType} onPick={handlePreferencePick} />
+                ) : (
+                  <StarterChips
+                    starters={starters}
+                    onSend={(text) => void sendMessage(text)}
+                    heading={
+                      restaurantType === 'veg'
+                        ? 'Start with veg recommendations:'
+                        : restaurantType === 'non_veg'
+                          ? 'Start with non-veg recommendations:'
+                          : 'Start with the best dishes:'
+                    }
+                  />
+                )
+              ) : (
+                <>
+                  {messages.map((msg) => (
+                    <ChatMessageComp
+                      key={msg.id}
+                      message={msg as any}
+                      onSuggestionTap={(text) => void sendMessage(text)}
+                      onUpsellTap={handleUpsellTap}
+                    />
+                  ))}
+                  {isChatLoading && <TypingIndicator />}
+                  <div ref={messagesEndRef} />
+                </>
+              )}
+            </div>
+
+            <ChatInput
+              input={input}
+              setInput={setInput}
+              onSubmit={handleSubmit}
+              disabled={isChatLoading}
+              inputRef={inputRef}
+            />
           </div>
         )}
       </div>
 
       {/* ─── DESKTOP ─── */}
-      <div className="hidden lg:flex lg:flex-col lg:shrink-0 sticky top-4 h-[calc(100vh-2rem)] w-[340px] xl:w-[380px] rounded-2xl border border-slate-200 bg-white/95 shadow-sm overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center gap-2.5 border-b border-slate-100 px-5 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-sm shadow-blue-500/20">
-            <Sparkles size={14} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">AI Waiter</p>
-            <p className="text-[11px] text-slate-400">Ask about the menu</p>
-          </div>
+      <div className="hidden h-[calc(100vh-2rem)] w-[340px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm lg:sticky lg:top-4 lg:flex lg:flex-col xl:w-[380px]">
+        <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
+          <Sparkles size={15} className="text-blue-600" />
+          <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
+          <span className="ml-1 text-[11px] text-slate-500">Powered by Gemini</span>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="flex-1 overflow-y-auto px-4 py-3">
           {isEmpty ? (
-            <StarterChips starters={starters} hasNonVeg={hasNonVeg} onSend={sendMessage} />
+            <div className="space-y-3">
+              <p className="pb-1 pt-2 text-center text-xs text-slate-500">
+                Ask me anything about the menu 👋
+              </p>
+              <StarterChips
+                starters={starters}
+                onSend={(text) => void sendMessage(text)}
+                heading={
+                  restaurantType === 'veg'
+                    ? 'Start with veg recommendations:'
+                    : restaurantType === 'non_veg'
+                      ? 'Start with non-veg recommendations:'
+                      : 'Start with the best dishes:'
+                }
+              />
+            </div>
           ) : (
             <>
               {messages.map((msg) => (
                 <ChatMessageComp
                   key={msg.id}
                   message={msg as any}
-                  onSuggestionTap={sendMessage}
+                  onSuggestionTap={(text) => void sendMessage(text)}
                   onUpsellTap={handleUpsellTap}
                 />
               ))}
@@ -384,8 +640,13 @@ export function ChatPanel() {
           )}
         </div>
 
-        {/* Input */}
-        <ChatInput input={input} setInput={setInput} onSubmit={handleSubmit} disabled={isChatLoading} inputRef={desktopInputRef} />
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          onSubmit={handleSubmit}
+          disabled={isChatLoading}
+          inputRef={desktopInputRef}
+        />
       </div>
     </>
   )

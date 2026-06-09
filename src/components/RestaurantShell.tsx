@@ -14,7 +14,7 @@ import { MenuGrid } from './MenuGrid'
 import { ChatPanel } from './ChatPanel'
 import { RatingModal } from './RatingModal'
 import { OfflineBanner } from './OfflineBanner'
-import { WaiterCalledToast } from './WaiterCalledToast'
+import { WaiterCalledToast, getPersistedOrder } from './WaiterCalledToast'
 
 interface Props {
   initialData: MenuPageData
@@ -51,7 +51,31 @@ export function RestaurantShell({ initialData }: Props) {
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Slug-scoped pointer key — stores only the orderId, not the full order
+  const ACTIVE_ORDER_KEY = `dinezy_active_order_${initialData.restaurant.slug}`
+
   usePWA()
+
+  // ── Restore toast after page refresh ──────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const orderId = localStorage.getItem(ACTIVE_ORDER_KEY)
+      if (!orderId) return
+      const saved = getPersistedOrder(orderId)
+      if (saved) {
+        setWaiterToast({
+          tableNumber: saved.tableNumber,
+          orderId: saved.orderId,
+          orderCode: saved.orderCode ?? saved.orderId.slice(0, 8).toUpperCase(),
+          items: saved.items,
+          subtotal: saved.subtotal,
+        })
+      } else {
+        // Terminal state — clean up the pointer
+        localStorage.removeItem(ACTIVE_ORDER_KEY)
+      }
+    } catch {}
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const raw = searchParams.get('table')
@@ -246,6 +270,8 @@ export function RestaurantShell({ initialData }: Props) {
           items: payload.items,
           subtotal: payload.subtotal,
         })
+        // Persist the orderId pointer so we can restore the toast after a refresh
+        try { localStorage.setItem(ACTIVE_ORDER_KEY, orderId) } catch {}
       } catch (err) {
         void track(restaurant.id, 'waiter_call_failed', {
           metadata: {
@@ -258,7 +284,7 @@ export function RestaurantShell({ initialData }: Props) {
         setWaiterLoading(false)
       }
     },
-    [restaurant, tableNumber, sessionId, clearCart],
+    [restaurant, tableNumber, sessionId, clearCart, ACTIVE_ORDER_KEY],
   )
 
   if (!restaurant) return null
@@ -284,18 +310,21 @@ export function RestaurantShell({ initialData }: Props) {
 
       {showRating && <RatingModal />}
 
-     {waiterToast && (
-  <WaiterCalledToast
-    supabase={supabase}
-    restaurantSlug={restaurant.slug}
-    tableNumber={waiterToast.tableNumber}
-    orderId={waiterToast.orderId}
-    orderCode={waiterToast.orderCode}
-    items={waiterToast.items}
-    subtotal={waiterToast.subtotal}
-    onClose={() => setWaiterToast(null)}
-  />
-)}
+      {waiterToast && (
+        <WaiterCalledToast
+          supabase={supabase}
+          restaurantSlug={restaurant.slug}
+          tableNumber={waiterToast.tableNumber}
+          orderId={waiterToast.orderId}
+          orderCode={waiterToast.orderCode}
+          items={waiterToast.items}
+          subtotal={waiterToast.subtotal}
+          onClose={() => {
+            try { localStorage.removeItem(ACTIVE_ORDER_KEY) } catch {}
+            setWaiterToast(null)
+          }}
+        />
+      )}
     </div>
   )
 }
