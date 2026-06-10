@@ -1,4 +1,3 @@
-
 import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
@@ -28,9 +27,7 @@ function makeOrderCode(tableNumber: number) {
 }
 
 function getFirebaseApp() {
-  if (getApps().length > 0) {
-    return getApps()[0]!
-  }
+  if (getApps().length > 0) return getApps()[0]!
 
   if (!firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
     throw new Error('Missing Firebase Admin env vars')
@@ -58,33 +55,62 @@ type PushSubscriptionRow = {
   keys: { p256dh: string; auth: string }
 }
 
-function sanitizeTopic(topic: string) {
-  return topic.replace(/[^a-zA-Z0-9._-]/g, '_')
+type AssignedStaff = {
+  id: string
+  restaurant_id: string
+  email: string
+  role: 'manager' | 'waiter'
+  active: boolean
+  table_start: number | null
+  table_end: number | null
 }
 
-async function sendWebPushToRestaurant(
+function matchesTable(staff: AssignedStaff, tableNumber: number) {
+  if (!staff.active) return false
+  if (staff.table_start == null || staff.table_end == null) return false
+  return tableNumber >= staff.table_start && tableNumber <= staff.table_end
+}
+
+async function getAssignedStaff(admin: SupabaseClient, restaurantId: string, tableNumber: number) {
+  const { data, error } = await admin
+    .from('restaurant_staff')
+    .select('id, restaurant_id, email, role, active, table_start, table_end')
+    .eq('restaurant_id', restaurantId)
+    .eq('active', true)
+
+  if (error) throw error
+
+  const staff = (data ?? []) as AssignedStaff[]
+  return staff.filter((row) => matchesTable(row, tableNumber))
+}
+
+async function sendWebPushToStaff(
   admin: SupabaseClient,
   restaurantId: string,
+  staffIds: string[],
   payload: {
     title: string
     body: string
     tableNumber: number
     requestId: string
     tag: string
-  }
+  },
 ) {
   if (!vapidPublicKey || !vapidPrivateKey) {
-    console.warn('[WebPush] VAPID keys not configured — skipping web push')
+    console.warn('[WebPush] VAPID keys not configured — skipping')
     return
   }
 
+  if (staffIds.length === 0) return
+
   const { data: subs, error } = await admin
     .from('push_subscriptions')
-    .select('endpoint, keys')
+    .select('endpoint, keys, staff_id')
     .eq('restaurant_id', restaurantId)
+    .in('staff_id', staffIds)
 
   if (error || !subs?.length) {
-    console.log('[WebPush] No subscriptions found for restaurant', restaurantId)
+    console.log('[WebPush] No staff subscriptions found for restaurant', restaurantId)
     return
   }
 
@@ -98,15 +124,12 @@ async function sendWebPushToRestaurant(
   })
 
   const results = await Promise.allSettled(
-    (subs as PushSubscriptionRow[]).map((sub) =>
+    (subs as Array<PushSubscriptionRow & { staff_id: string | null }>).map((sub) =>
       webpush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
-        },
-        notification
-      )
-    )
+        { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } },
+        notification,
+      ),
+    ),
   )
 
   const expiredEndpoints: string[] = []
@@ -115,7 +138,7 @@ async function sendWebPushToRestaurant(
     if (result.status === 'rejected') {
       const err = result.reason as { statusCode?: number }
       if (err?.statusCode === 410 || err?.statusCode === 404) {
-        expiredEndpoints.push((subs as PushSubscriptionRow[])[i].endpoint)
+        expiredEndpoints.push((subs as Array<PushSubscriptionRow>).at(i)!.endpoint)
       } else {
         console.error('[WebPush] Failed to send:', result.reason)
       }
@@ -127,67 +150,43 @@ async function sendWebPushToRestaurant(
   }
 }
 
-async function sendAndroidPushToRestaurant(
-  admin: SupabaseClient,
+async function sendAndroidPushWithTokens(
+  tokenList: string[],
   payload: {
-    restaurantSlug: string
     title: string
     body: string
     tableNumber: number
     requestId: string
-  }
+    items: RequestItem[]
+    subtotal: number
+  },
 ) {
   try {
-    console.log('[FCM] Starting send')
-    console.log('[FCM] Restaurant:', payload.restaurantSlug)
-
     const app = getFirebaseApp()
     const messaging = getMessaging(app)
 
-    const { data: tokens, error } = await admin
-      .from('device_tokens')
-      .select('fcm_token')
-      .eq('restaurant_slug', payload.restaurantSlug)
-
-    if (error) {
-      console.error('[FCM] Token query error:', error)
-      return
-    }
-
-    console.log('[FCM] Tokens found:', tokens?.length ?? 0)
-
-    if (!tokens?.length) {
-      console.log('[FCM] No device tokens found')
-      return
-    }
-
-    const tokenList = tokens.map((t) => t.fcm_token)
-
-    console.log('[FCM] Sending to:', tokenList)
-
     const result = await messaging.sendEachForMulticast({
       tokens: tokenList,
-      notification: {
+      data: {
         title: payload.title,
         body: payload.body,
-      },
-      data: {
-        url: '/dashboard/orders',
         tableNumber: String(payload.tableNumber),
         requestId: payload.requestId,
+        itemsJson: JSON.stringify(payload.items),
+        subtotal: String(payload.subtotal),
       },
       android: {
         priority: 'high',
-        notification: {
-          channelId: 'dinezydash_orders',
-          sound: 'default',
-        },
+        ttl: 10000,
       },
     })
 
-    console.log('[FCM] Success:', result.successCount)
-    console.log('[FCM] Failed:', result.failureCount)
-    console.log('[FCM] Full Result:', JSON.stringify(result))
+    console.log('[FCM] Success:', result.successCount, 'Failed:', result.failureCount)
+    result.responses.forEach((r, i) => {
+      if (!r.success) {
+        console.error('[FCM ERROR]', tokenList[i], r.error?.code, r.error?.message)
+      }
+    })
   } catch (err) {
     console.error('[FCM] SEND ERROR:', err)
   }
@@ -236,33 +235,35 @@ export async function POST(req: NextRequest) {
     if (restaurantError || !restaurant) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
-	
-const orderCode = makeOrderCode(tableNumber as number)
 
-   const { data: inserted, error: insertError } = await admin
-  .from('table_requests')
-  .insert({
-    restaurant_id: restaurant.id,
-    table_number: tableNumber,
-    session_id: sessionId,
-    items,
-    subtotal,
-    status: 'pending',
-    order_code: orderCode, // keep this only if you added the column
-  })
-  .select('*')
-  .single()
+    const orderCode = makeOrderCode(tableNumber as number)
+
+    const { data: inserted, error: insertError } = await admin
+      .from('table_requests')
+      .insert({
+        restaurant_id: restaurant.id,
+        table_number: tableNumber,
+        session_id: sessionId,
+        items,
+        subtotal,
+        status: 'pending',
+        order_code: orderCode,
+      })
+      .select('*')
+      .single()
 
     if (insertError) {
       console.error('table-request insert error:', insertError)
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
+    const assignedStaff = await getAssignedStaff(admin, restaurant.id, tableNumber as number)
+    const assignedStaffIds = assignedStaff.map((s) => s.id)
+
     const itemSummary = (items as RequestItem[])
       .slice(0, 2)
       .map((i) => `${i.name} ×${i.qty}`)
       .join(', ')
-
     const moreCount = (items as RequestItem[]).length - 2
     const bodyText =
       (items as RequestItem[]).length <= 2
@@ -271,44 +272,62 @@ const orderCode = makeOrderCode(tableNumber as number)
 
     const title = `🔔 Table ${tableNumber} — ${restaurant.name}`
 
+    const { data: fcmTokens } = await admin
+      .from('device_tokens')
+      .select('fcm_token, staff_id')
+      .eq('restaurant_slug', restaurantSlug)
+      .in('staff_id', assignedStaffIds)
+
+    const tokenList = (fcmTokens ?? [])
+      .map((t) => t.fcm_token)
+      .filter(Boolean)
+
     const [webPushResult, androidPushResult] = await Promise.allSettled([
-      sendWebPushToRestaurant(admin, restaurant.id, {
+      sendWebPushToStaff(admin, restaurant.id, assignedStaffIds, {
         title,
         body: bodyText,
         tableNumber: tableNumber as number,
         requestId: inserted.id,
         tag: `waiter-${restaurant.id}-table-${tableNumber}`,
       }),
-      sendAndroidPushToRestaurant(admin, {
-        restaurantSlug,
-        title,
-        body: bodyText,
-        tableNumber: tableNumber as number,
-        requestId: inserted.id,
-      }),
+      tokenList.length > 0
+        ? sendAndroidPushWithTokens(tokenList, {
+            title,
+            body: bodyText,
+            tableNumber: tableNumber as number,
+            requestId: inserted.id,
+            items: items as RequestItem[],
+            subtotal,
+          })
+        : Promise.resolve(),
     ])
 
     if (webPushResult.status === 'rejected') {
-      console.error('[WebPush] Background push error:', webPushResult.reason)
+      console.error('[WebPush] Error:', webPushResult.reason)
     }
-
     if (androidPushResult.status === 'rejected') {
-      console.error('[FCM] Android push error:', androidPushResult.reason)
+      console.error('[FCM] Error:', androidPushResult.reason)
     }
 
     return NextResponse.json({
-  ok: true,
-  request: inserted,
-  orderId: inserted.id,
-  orderCode: inserted.order_code ?? orderCode,
-  tableNumber,
-  restaurantSlug,
-})
+      ok: true,
+      request: inserted,
+      orderId: inserted.id,
+      orderCode: inserted.order_code ?? orderCode,
+      tableNumber,
+      restaurantSlug,
+      assignedStaff: assignedStaff.map((s) => ({
+        id: s.id,
+        email: s.email,
+        table_start: s.table_start,
+        table_end: s.table_end,
+      })),
+    })
   } catch (error) {
     console.error('table-request route error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Request failed' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

@@ -24,16 +24,47 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Dinezy — Smart Restaurant Menu',
-  description:
-    'Dinezy gives every table a beautiful QR menu, AI recommendations, waiter calling, analytics, and a premium guest experience.',
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'Dinezy',
+  metadataBase: new URL('https://dinezy.in'),
+
+  title: {
+    default: 'Dinezy - AI Powered QR Menu for Restaurants',
+    template: '%s | Dinezy',
   },
-  themeColor: '#f8fafc',
+
+  description:
+    'Dinezy helps restaurants create QR menus with AI recommendations, waiter calling, analytics and digital ordering.',
+
+  keywords: [
+    'QR menu',
+    'digital menu',
+    'restaurant QR code',
+    'AI restaurant menu',
+    'restaurant software India',
+    'digital menu India',
+    'restaurant ordering system',
+    'waiter calling system',
+  ],
+
+  openGraph: {
+    title: 'Dinezy - AI Powered QR Menu',
+    description:
+      'Modern QR menus, AI recommendations, waiter calling and analytics for restaurants.',
+    url: 'https://dinezy.in',
+    siteName: 'Dinezy',
+    type: 'website',
+  },
+
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Dinezy',
+    description:
+      'AI powered digital menu platform for restaurants.',
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+  },
 }
 
 export const viewport: Viewport = {

@@ -50,7 +50,7 @@ type BillingStatus = {
 } | null
 
 const QR_LIMITS: Record<BillingPlanKey, number> = {
-  trial: 10,
+  trial: Number.POSITIVE_INFINITY,
   small: 20,
   growth: 50,
   large: 200,
@@ -124,8 +124,10 @@ export default function QRPage() {
   const allowedQrLimit = useMemo(() => getPlanLimit(billing), [billing])
   const quotaLabel = useMemo(() => getPlanLabel(billing), [billing])
   const usedQrCount = getUsedQrCount(restaurant)
-  const remainingQrLimit = Math.max(0, allowedQrLimit - usedQrCount)
-  const isQuotaExhausted = remainingQrLimit === 0
+  const remainingQrLimit = Number.isFinite(allowedQrLimit)
+    ? Math.max(0, allowedQrLimit - usedQrCount)
+    : Number.POSITIVE_INFINITY
+  const isQuotaExhausted = Number.isFinite(allowedQrLimit) ? remainingQrLimit === 0 : false
 
   useEffect(() => {
     let mounted = true
@@ -616,7 +618,7 @@ export default function QRPage() {
             <div>
               <p className="text-sm font-semibold text-rose-300">QR limit reached</p>
               <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
-                Your {quotaLabel.toLowerCase()} plan allows {allowedQrLimit} QR codes total.
+                Your {quotaLabel.toLowerCase()} plan allows unlimited QR codes.
               </p>
             </div>
           </div>
@@ -629,7 +631,7 @@ export default function QRPage() {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Current plan</p>
           <p className="mt-2 text-sm font-semibold text-white">{quotaLabel}</p>
           <p className="mt-1 text-xs text-zinc-500">
-            Max QR allowed: <span className="text-orange-400">{allowedQrLimit}</span>
+            Max QR allowed: <span className="text-orange-400">{Number.isFinite(allowedQrLimit) ? allowedQrLimit : 'Unlimited'}</span>
           </p>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
@@ -657,7 +659,7 @@ export default function QRPage() {
             <input
               type="number"
               min={1}
-              max={Math.max(1, remainingQrLimit || 1)}
+              max={Number.isFinite(remainingQrLimit) ? Math.max(1, remainingQrLimit || 1) : 999999}
               value={tableCount}
               onChange={(e) => setTableCount(Number(e.target.value || 1))}
               disabled={isQuotaExhausted}
@@ -945,7 +947,7 @@ export default function QRPage() {
                 <p className="text-xs font-semibold text-blue-300">Plan QR limits</p>
                 <div className="mt-2 flex flex-col gap-1">
                   {[
-                    { plan: 'Trial', limit: '10 QR codes' },
+                    { plan: 'Trial', limit: 'Unlimited QR codes' },
                     { plan: 'Small', limit: '20 QR codes' },
                     { plan: 'Growth', limit: '50 QR codes' },
                     { plan: 'Large', limit: '200 QR codes' },

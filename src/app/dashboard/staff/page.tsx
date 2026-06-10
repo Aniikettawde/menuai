@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
+import { useEffect, useState } from 'react'
 import { Loader2, Plus, Trash2, Shield, Users, CheckCircle2, XCircle } from 'lucide-react'
 
 type TeamRole = 'manager' | 'waiter'
@@ -12,6 +11,8 @@ type StaffRow = {
   email: string
   role: TeamRole
   active: boolean
+  table_start: number | null
+  table_end: number | null
   created_at: string
   updated_at: string
 }
@@ -24,8 +25,12 @@ type DashboardContext = {
   email: string | null
 }
 
+function rangeLabel(row: StaffRow) {
+  if (row.table_start == null || row.table_end == null) return 'No table range'
+  return `${row.table_start} - ${row.table_end}`
+}
+
 export default function StaffPage() {
-  const supabase = useMemo(() => getSupabaseDashboardBrowser(), [])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -35,6 +40,8 @@ export default function StaffPage() {
 
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<TeamRole>('waiter')
+  const [tableStart, setTableStart] = useState<number | ''>('')
+  const [tableEnd, setTableEnd] = useState<number | ''>('')
 
   async function load() {
     setLoading(true)
@@ -68,14 +75,22 @@ export default function StaffPage() {
       const res = await fetch('/api/dashboard/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({
+          email,
+          role,
+          table_start: tableStart === '' ? null : Number(tableStart),
+          table_end: tableEnd === '' ? null : Number(tableEnd),
+        }),
       })
+
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Failed to add staff')
 
       setStaff((prev) => [data.staff as StaffRow, ...prev])
       setEmail('')
       setRole('waiter')
+      setTableStart('')
+      setTableEnd('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add staff')
     } finally {
@@ -153,7 +168,7 @@ export default function StaffPage() {
             </div>
             <h1 className="mt-3 text-2xl font-bold text-white">{context.restaurantName}</h1>
             <p className="mt-1 text-sm text-zinc-500">
-              Add managers and waiters who can use the dashboard.
+              Add managers and waiters, then assign the table range each one should receive notifications for.
             </p>
           </div>
         </div>
@@ -166,7 +181,7 @@ export default function StaffPage() {
       )}
 
       <form onSubmit={addStaff} className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
-        <div className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
+        <div className="grid gap-3 md:grid-cols-[1fr_150px_120px_120px_auto]">
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -175,6 +190,7 @@ export default function StaffPage() {
             required
             type="email"
           />
+
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as TeamRole)}
@@ -183,6 +199,25 @@ export default function StaffPage() {
             <option value="waiter">Waiter</option>
             <option value="manager">Manager</option>
           </select>
+
+          <input
+            type="number"
+            min={1}
+            value={tableStart}
+            onChange={(e) => setTableStart(e.target.value === '' ? '' : Number(e.target.value))}
+            placeholder="From"
+            className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-orange-500"
+          />
+
+          <input
+            type="number"
+            min={1}
+            value={tableEnd}
+            onChange={(e) => setTableEnd(e.target.value === '' ? '' : Number(e.target.value))}
+            placeholder="To"
+            className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-orange-500"
+          />
+
           <button
             type="submit"
             disabled={saving || !email.trim()}
@@ -192,6 +227,10 @@ export default function StaffPage() {
             Add staff
           </button>
         </div>
+
+        <p className="mt-3 text-xs text-zinc-500">
+          Example: Suraj = 1 to 10, Anil = 11 to 20.
+        </p>
       </form>
 
       <div className="grid gap-3">
@@ -203,7 +242,7 @@ export default function StaffPage() {
             <div>
               <p className="text-sm font-semibold text-white">{row.email}</p>
               <p className="mt-1 text-xs text-zinc-500">
-                Role: {row.role} · {row.active ? 'Active' : 'Inactive'}
+                Role: {row.role} · {row.active ? 'Active' : 'Inactive'} · Tables: {rangeLabel(row)}
               </p>
             </div>
 

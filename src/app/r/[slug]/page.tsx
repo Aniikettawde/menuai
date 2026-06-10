@@ -56,17 +56,77 @@ async function getMenuData(slug: string): Promise<MenuPageData | null> {
   }
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata(
+  { params }: PageProps
+): Promise<Metadata> {
   const data = await getMenuData(params.slug)
-  if (!data) return { title: 'Restaurant Not Found' }
+
+  if (!data) {
+    return {
+      title: 'Restaurant Not Found',
+      robots: {
+        index: false,
+        follow: false,
+      },
+    }
+  }
+
+  const title =
+    `${data.restaurant.name} Menu | Digital Menu & Ordering | Dinezy`
+
+  const description =
+    data.restaurant.description ||
+    `Browse ${data.restaurant.name}'s menu, prices and specials on Dinezy.`
+
+  const url =
+    `https://dinezy.in/r/${params.slug}`
 
   return {
-    title: `${data.restaurant.name} — Menu`,
-    description: data.restaurant.description,
+    title,
+    description,
+
+    keywords: [
+      data.restaurant.name,
+      `${data.restaurant.name} menu`,
+      `${data.restaurant.name} restaurant`,
+      'restaurant menu',
+      'digital menu',
+      'QR menu',
+    ],
+
+    alternates: {
+      canonical: url,
+    },
+
+    robots: {
+      index: true,
+      follow: true,
+    },
+
     openGraph: {
-      title: `${data.restaurant.name} — Menu`,
-      description: data.restaurant.description,
-      images: data.restaurant.cover_url ? [data.restaurant.cover_url] : [],
+      title,
+      description,
+      url,
+      siteName: 'Dinezy',
+      type: 'website',
+      images: data.restaurant.cover_url
+        ? [
+            {
+              url: data.restaurant.cover_url,
+              width: 1200,
+              height: 630,
+            },
+          ]
+        : [],
+    },
+
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: data.restaurant.cover_url
+        ? [data.restaurant.cover_url]
+        : [],
     },
   }
 }
