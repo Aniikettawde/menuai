@@ -21,7 +21,8 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 export type PushStatus = 'idle' | 'requesting' | 'granted' | 'denied' | 'unsupported'
 
-export function usePushNotifications(restaurantId: string | null | undefined) {
+export function usePushNotifications(restaurantId: string | null | undefined,  staffId: string | null | undefined
+) {
   const supabase = getSupabaseDashboardBrowser()
   const subscriptionRef = useRef<PushSubscription | null>(null)
   const [status, setStatus] = useState<PushStatus>('idle')
@@ -73,15 +74,16 @@ const sub =
       if (!user.user) return
 
       await supabase.from('push_subscriptions').upsert(
-        {
-          user_id: user.user.id,
-          restaurant_id: restaurantId,
-          endpoint: subJson.endpoint,
-          keys: subJson.keys,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'endpoint' }
-      )
+  {
+    user_id: user.user.id,
+    restaurant_id: restaurantId,
+    endpoint: subJson.endpoint,
+    keys: subJson.keys,
+    updated_at: new Date().toISOString(),
+    staff_id: staffId ?? null,   // ← ADD THIS
+  },
+  { onConflict: 'endpoint' }
+)
     } catch (err) {
       console.error('[Push] subscription failed:', err)
       setStatus('idle')

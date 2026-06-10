@@ -50,8 +50,8 @@ function getDisplayOrderId(req: TableRequestRow) {
   return req.order_code?.trim() || req.id.slice(0, 8).toUpperCase()
 }
 
-function PushToggle({ restaurantId }: { restaurantId: string | null }) {
-  const { status, subscribe } = usePushNotifications(restaurantId)
+function PushToggle({ restaurantId, staffId }: { restaurantId: string | null; staffId: string | null }) {
+  const { status, subscribe } = usePushNotifications(restaurantId, staffId)
 
   if (status === 'unsupported') return null
 
@@ -515,7 +515,7 @@ export default function OrdersPage() {
             <h1 className="mt-3 text-2xl font-bold text-white">{restaurantName}</h1>
             <p className="mt-1 text-sm text-zinc-500">Pending requests: {pendingCount}</p>
             <div className="mt-3">
-              <PushToggle restaurantId={restaurantId} />
+<PushToggle restaurantId={restaurantId} staffId={context.staffId ?? null} />
             </div>
           </div>
 
