@@ -15,6 +15,7 @@ import {
   Shield,
   ClipboardList,
   Users,
+  Home,
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import { TrialBanner } from '@/components/billing/TrialBanner'
@@ -66,7 +67,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
 const navItems = role ? getNavForRole(role) : (hasSub ? ALL_NAV : [])
   
-
+// add this near navItems
+const mobileNavItems: NavItem[] = [
+  { href: '/dashboard', label: 'Home', shortLabel: 'Home', icon: Home },
+  { href: '/dashboard/orders', label: 'Orders', shortLabel: 'Orders', icon: ClipboardList },
+  { href: '/dashboard/restaurant', label: 'Restaurant', shortLabel: 'Resto', icon: Store },
+  { href: '/dashboard/menu', label: 'Menu', shortLabel: 'Menu', icon: UtensilsCrossed },
+  { href: '/dashboard/staff', label: 'Staff', shortLabel: 'Staff', icon: Users },
+  { href: '/dashboard/billing', label: 'Billing', shortLabel: 'Billing', icon: CreditCard },
+]
 
   const activePage = useMemo(
     () => navItems.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`)),
@@ -556,36 +565,36 @@ useEffect(() => {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden">
-        <div className="border-t border-white/[0.07] bg-[#0c0c0c]/98 backdrop-blur-2xl">
-          <div className="grid grid-cols-6 gap-0 px-1 pt-1 pb-safe">
-            {navItems.slice(0, 6).map(({ href, shortLabel, icon: Icon }) => {
-              const active = isActive(href)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className="flex flex-col items-center justify-center gap-1 py-2 px-1"
-                >
-                  <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
-                      active ? 'bg-orange-500/15 scale-105' : 'bg-transparent hover:bg-white/[0.04] active:scale-95'
-                    }`}
-                  >
-                    <Icon size={18} className={`transition-colors ${active ? 'text-orange-400' : 'text-zinc-600'}`} />
-                  </div>
-                  <span
-                    className={`text-[9px] font-medium leading-none tracking-wide transition-colors ${
-                      active ? 'text-orange-400' : 'text-zinc-700'
-                    }`}
-                  >
-                    {shortLabel}
-                  </span>
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-      </nav>
+  <div className="border-t border-white/[0.07] bg-[#0c0c0c]/98 backdrop-blur-2xl">
+    <div className="grid grid-cols-6 gap-0 px-1 pt-1 pb-safe">
+      {mobileNavItems.map(({ href, shortLabel, icon: Icon }) => {
+        const active = isActive(href)
+        return (
+          <Link
+            key={href}
+            href={href}
+            className="flex flex-col items-center justify-center gap-1 py-2 px-1"
+          >
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
+                active ? 'bg-orange-500/15 scale-105' : 'bg-transparent hover:bg-white/[0.04] active:scale-95'
+              }`}
+            >
+              <Icon size={18} className={`transition-colors ${active ? 'text-orange-400' : 'text-zinc-600'}`} />
+            </div>
+            <span
+              className={`text-[9px] font-medium leading-none tracking-wide transition-colors ${
+                active ? 'text-orange-400' : 'text-zinc-700'
+              }`}
+            >
+              {shortLabel}
+            </span>
+          </Link>
+        )
+      })}
+    </div>
+  </div>
+</nav>
 
       <style jsx>{`
         .pb-safe {

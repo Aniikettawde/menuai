@@ -21,13 +21,16 @@ export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('authorization') ?? ''
     const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
 
-    if (bearerToken) {
-      const { data: { user }, error } = await getServiceClient().auth.getUser(bearerToken)
-      if (!error && user) {
-        userId = user.id
-        userEmail = user.email ?? null
-      }
-    }
+  if (bearerToken) {
+  const { data: { user }, error } = await getServiceClient().auth.getUser(bearerToken)
+  console.log('Bearer auth result:', { userId: user?.id, error: error?.message })
+  if (!error && user) {
+    userId = user.id
+    userEmail = user.email ?? null
+  }
+}
+	
+	
 
     // 2. Fall back to cookie session (web browser)
     if (!userId) {
