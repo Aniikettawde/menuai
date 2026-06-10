@@ -8,6 +8,8 @@ export type DashboardContext = {
   ownerId: string
   role: TeamRole
   email: string | null
+    staffId: string | null   // ← ADD THIS
+
 }
 
 export type SubscriptionState = {
@@ -56,6 +58,8 @@ export async function resolveDashboardContext(
       ownerId: userId,
       role: 'owner',
       email,
+	      staffId: null,   // ← ADD THIS
+
     }
   }
 
@@ -65,7 +69,7 @@ export async function resolveDashboardContext(
 
   const { data: staffRow, error: staffError } = await sb
     .from('restaurant_staff')
-    .select('restaurant_id, role, active')
+  .select('id, restaurant_id, role, active')   // ← add id here
     .eq('email', normalizedEmail)
     .eq('active', true)
     .limit(1)
@@ -90,6 +94,8 @@ export async function resolveDashboardContext(
     ownerId: restaurant.owner_id ?? '',
     role: staff.role as TeamRole,
     email,
+	  staffId: staff.id,   // ← ADD THIS
+
   }
 }
 
