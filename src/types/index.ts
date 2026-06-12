@@ -41,6 +41,8 @@ export interface Restaurant {
   opening_hours: OpeningHours
   created_at: string
   owner_id?: string | null
+    total_tables?: number | null   // ← add this
+
   
 }
 

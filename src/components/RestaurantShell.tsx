@@ -293,12 +293,7 @@ useEffect(() => {
     [slug],
   )
 
-  const handleSelectCategory = useCallback((categoryId: string) => {
-    const el = document.getElementById(`cat-${categoryId}`)
-    if (!el) return
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
-  }, [])
+  
 
   if (!restaurant) return null
 
@@ -310,7 +305,7 @@ useEffect(() => {
       <RestaurantHeader restaurant={restaurant} />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
-        <CategoryTabs onSelectCategory={handleSelectCategory} />
+<CategoryTabs />
 
         <MenuGrid
           onCallWaiter={handleCallWaiter}
