@@ -90,6 +90,8 @@ export async function resolveDashboardContext(
 
   return {
     restaurantId: restaurant.id,
+      restaurantSlug: restaurant.slug,
+
     restaurantName: restaurant.name,
     ownerId: restaurant.owner_id ?? '',
     role: staff.role as TeamRole,

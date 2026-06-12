@@ -530,7 +530,7 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
         metadata: {
           source: 'ai_cart_upsell',
           price: suggestion.price,
-          psych_trigger: suggestion.psych_trigger ?? null,
+          psych_trigger: suggestion.psych_trigger ?? undefined,
         },
       })
     }

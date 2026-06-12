@@ -27,6 +27,8 @@ type StaffRow = {
 
 type DashboardContext = {
   restaurantId: string
+    restaurantSlug: string
+
   restaurantName: string
   ownerId: string
   role: 'owner' | 'manager' | 'waiter'
