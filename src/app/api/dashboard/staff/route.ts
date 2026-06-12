@@ -135,8 +135,14 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error
 
-    const enriched = await enrichWithDeviceStatus(sb, ctx.restaurantSlug, data ?? [])
-    return NextResponse.json({ staff: enriched, context: ctx })
+const { data: restaurantRow } = await sb
+  .from('restaurants')
+  .select('slug')
+  .eq('id', ctx.restaurantId)
+  .single()
+
+const enriched = await enrichWithDeviceStatus(sb, restaurantRow?.slug ?? '', data ?? [])   
+ return NextResponse.json({ staff: enriched, context: ctx })
   } catch (err) {
     console.error('staff GET error:', err)
     return NextResponse.json(
