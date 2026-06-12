@@ -5,6 +5,11 @@ import { getSupabaseServer } from '@/lib/supabase'
 import type { MenuPageData } from '@/types'
 import { RestaurantShell } from '@/components/RestaurantShell'
 
+import { TableGuard } from '@/components/TableGuard'
+import { Suspense } from 'react'
+
+
+
 interface PageProps {
   params: { slug: string }
 }
@@ -135,7 +140,13 @@ export default async function RestaurantPage({ params }: PageProps) {
   const data = await getMenuData(params.slug)
   if (!data) notFound()
 
-  return <RestaurantShell initialData={data} />
+  return (
+    <Suspense fallback={null}>
+      <TableGuard restaurant={data.restaurant}>
+        <RestaurantShell initialData={data} />
+      </TableGuard>
+    </Suspense>
+  )
 }
 
 // IMPORTANT: do not cache this page

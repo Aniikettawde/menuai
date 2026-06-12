@@ -780,3 +780,16 @@ input {
     transform: translateY(0);
   }
 }
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 140px;
+}
+
+body {
+  background: linear-gradient(180deg, #fff 0%, #f8fbff 42%, #f3f7ff 100%);
+}

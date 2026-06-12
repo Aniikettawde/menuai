@@ -33,6 +33,7 @@ type RestaurantForm = {
   address: string
   phone: string
   avg_prep_time: number
+  total_tables: number
   opening_hours: OpeningHours
 }
 
@@ -103,6 +104,7 @@ const [form, setForm] = useState<RestaurantForm>({
   address: '',
   phone: '',
   avg_prep_time: 20,
+  total_tables: 20,
   opening_hours: createDefaultHours(),
 })
 
@@ -162,6 +164,7 @@ const { data, error } = await supabase
   phone: data.phone ?? '',
   avg_prep_time: data.avg_prep_time ?? 20,
   opening_hours: (data.opening_hours as OpeningHours) ?? createDefaultHours(),
+  total_tables: data.total_tables ?? 20,
 })
           setLogoUrl(data.logo_url ?? '')
           setCoverUrl(data.cover_url ?? '')
@@ -521,6 +524,24 @@ const { data, error } = await supabase
       setForm((f) => ({
         ...f,
         avg_prep_time: Number(e.target.value),
+      }))
+    }
+    className={INPUT}
+  />
+</Field>
+<Field
+  label="Total restaurant tables"
+  hint="Used for table assignment and waiter notifications"
+>
+  <input
+    type="number"
+    min={1}
+    max={500}
+    value={form.total_tables}
+    onChange={(e) =>
+      setForm((f) => ({
+        ...f,
+        total_tables: Number(e.target.value),
       }))
     }
     className={INPUT}

@@ -28,19 +28,15 @@ interface AppStore {
   showChat: boolean
 
   setRestaurantData: (data: { restaurant: Restaurant; categories: MenuCategory[]; items: MenuItem[] }) => void
-
   addMessage: (msg: ChatMessage) => void
   setIsChatLoading: (loading: boolean) => void
   clearMessages: () => void
-
   setActiveCategory: (id: string | null) => void
   setExpandedItem: (id: string | null) => void
   setShowRating: (show: boolean) => void
   setIsOffline: (offline: boolean) => void
   setShowChat: (show: boolean) => void
-
   setTableNumber: (tableNumber: number | null) => void
-
   addToCart: (item: MenuItem) => void
   increaseCartItem: (itemId: string) => void
   decreaseCartItem: (itemId: string) => void
@@ -139,13 +135,8 @@ export const useAppStore = create<AppStore>()(
     addToCart: (item) =>
       set((state) => {
         const existing = state.cartItems.find((c) => c.item.id === item.id)
-
-        if (existing) {
-          existing.quantity += 1
-        } else {
-          state.cartItems.push({ item, quantity: 1 })
-        }
-
+        if (existing) existing.quantity += 1
+        else state.cartItems.push({ item, quantity: 1 })
         state.cartPulse += 1
       }),
 
@@ -165,10 +156,7 @@ export const useAppStore = create<AppStore>()(
 
         const existing = state.cartItems[index]
         existing.quantity -= 1
-
-        if (existing.quantity <= 0) {
-          state.cartItems.splice(index, 1)
-        }
+        if (existing.quantity <= 0) state.cartItems.splice(index, 1)
       }),
 
     removeFromCart: (itemId) =>
@@ -196,5 +184,5 @@ export const useAppStore = create<AppStore>()(
       set((state) => {
         state.isCartOpen = !state.isCartOpen
       }),
-  }))
+  })),
 )

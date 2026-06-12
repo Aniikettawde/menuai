@@ -31,18 +31,19 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseServer()
 
     const { error } = await supabase
-      .from('analytics_events')
-      .insert(events.map(e => ({
-        restaurant_id: e.restaurant_id,
-        session_id: e.session_id,
-        event_type: e.event_type,
-        item_id: e.item_id ?? null,
-        item_name: e.item_name ?? null,
-        metadata: e.metadata ?? null,
-        timestamp: e.timestamp,
-        hour_of_day: e.hour_of_day,
-        day_of_week: e.day_of_week,
-      })))
+  .from('analytics_events')
+  .insert(events.map(e => ({
+    restaurant_id: e.restaurant_id,
+    session_id: e.session_id,
+    event_type: e.event_type,
+    item_id: e.item_id ?? null,
+    item_name: e.item_name ?? null,
+    metadata: e.metadata ?? null,
+    timestamp: e.timestamp,
+    hour_of_day: e.hour_of_day,
+    day_of_week: e.day_of_week,
+    table_number: (e.metadata as { table_number?: number } | null)?.table_number ?? null, // ← ADD
+  })))
 
     if (error) console.error('Analytics insert error:', error)
 

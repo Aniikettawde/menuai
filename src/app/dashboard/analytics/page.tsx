@@ -234,6 +234,18 @@ const upsellAcceptedEvents = events.filter((e) => e.event_type === 'ai_upsell_ac
 
 const triggerMap = new Map<string, { shown: number; accepted: number }>()
 
+const tableMap: Record<number, { views: number; orders: number; revenue: number }> = {}
+events.forEach((e) => {
+  const t = (e.metadata as { table_number?: number } | null)?.table_number
+  if (!t) return
+  if (!tableMap[t]) tableMap[t] = { views: 0, orders: 0, revenue: 0 }
+  if (e.event_type === 'item_view') tableMap[t].views++
+  if (e.event_type === 'waiter_called') {
+    tableMap[t].orders++
+    tableMap[t].revenue += (e.metadata as { subtotal?: number } | null)?.subtotal ?? 0
+  }
+})
+
 const bump = (trigger: string, key: 'shown' | 'accepted') => {
   const t = trigger || 'none'
   const current = triggerMap.get(t) ?? { shown: 0, accepted: 0 }

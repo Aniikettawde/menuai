@@ -1,25 +1,27 @@
 'use client'
 
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
+import { ChevronRight, ChefHat, Clock, Sparkles, Star, TrendingUp } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { MenuItemCard } from './MenuItemCard'
 import { FloatingCartBar } from './FloatingCartBar'
-import { ChefHat, Sparkles, ChevronRight, TrendingUp, Clock, Star } from 'lucide-react'
-import type { MenuItem } from '@/types'
+import type { MenuItem, MenuCategory } from '@/types'
+import type { ReactNode } from 'react'
 
 function formatPrice(paise: number) {
+  if (!paise || paise <= 0) return ''
   return `₹${Math.round(paise / 100)}`
-}
-
-function getChefsPick(items: MenuItem[]): MenuItem | null {
-  return items.find((i) => i.is_special) ?? items.find((i) => i.is_bestseller) ?? null
 }
 
 type PsychKind = 'social_proof' | 'anchoring' | 'scarcity' | 'none'
 
-interface Badge {
+type Badge = {
   kind: PsychKind
   label: string
+}
+
+function getChefsPick(items: MenuItem[]): MenuItem | null {
+  return items.find((i) => i.is_special) ?? items.find((i) => i.is_bestseller) ?? null
 }
 
 function getBadge(item: MenuItem, catItems: MenuItem[]): Badge {
@@ -63,12 +65,25 @@ function PsychBadge({ badge }: { badge: Badge }) {
   )
 }
 
-function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) => void }) {
+function ChefsPickCard({
+  item,
+  onAsk,
+}: {
+  item: MenuItem
+  onAsk?: (t: string) => void
+}) {
+  const price = formatPrice(item.price)
+
+  // Strip trailing comma/semicolon before ellipsis
+  const cleanDesc = item.description?.replace(/[,;:\s]+$/, '') ?? null
+
   return (
     <button
       type="button"
-      onClick={() => onAsk?.(`Tell me more about ${item.name} — why is it the chef's pick?`)}
-      className="group w-full rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-left transition-all duration-200 hover:bg-amber-100/60"
+      onClick={() =>
+        onAsk?.(`Tell me more about ${item.name} — why is it the chef's pick?`)
+      }
+      className="group w-full rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-4 text-left transition-all duration-200 hover:bg-amber-100/70 hover:shadow-sm"
     >
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-200 text-amber-900">
@@ -80,13 +95,15 @@ function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) =>
             Chef&apos;s pick
           </span>
           <p className="mt-1 text-sm font-semibold text-zinc-900">{item.name}</p>
-          {item.description && (
+          {cleanDesc && (
             <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-600">
-              {item.description}
+              {cleanDesc}
             </p>
           )}
           <div className="mt-2 flex items-center gap-3">
-            <span className="text-sm font-bold text-zinc-900">{formatPrice(item.price)}</span>
+            {price && (
+              <span className="text-sm font-bold text-zinc-900">{price}</span>
+            )}
             <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
               <Sparkles size={9} className="text-amber-500" />
               Tap to learn more
@@ -103,13 +120,23 @@ function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) =>
   )
 }
 
+/** Fallback SVG for category header when no image is set */
+function CategoryHeaderPlaceholder({ name }: { name: string }) {
+  const letter = name.trim()[0]?.toUpperCase() ?? '?'
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-stone-100">
+      <span className="text-lg font-semibold text-stone-400">{letter}</span>
+    </div>
+  )
+}
+
 function CategorySection({
   category,
   items,
   showChefsPick,
   onAsk,
 }: {
-  category: { id: string; name: string; description?: string; image_url?: string | null }
+  category: MenuCategory
   items: MenuItem[]
   showChefsPick: boolean
   onAsk?: (t: string) => void
@@ -126,9 +153,10 @@ function CategorySection({
   return (
     <section
       id={`cat-${category.id}`}
-      className="scroll-mt-28 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+      className="scroll-mt-36 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
     >
-      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3.5">
+      {/* Category header */}
+      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5">
         <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -139,15 +167,15 @@ function CategorySection({
               loading="lazy"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-xl">
-              🍱
-            </div>
+            <CategoryHeaderPlaceholder name={category.name} />
           )}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-base font-semibold text-slate-900">{category.name}</h2>
+            <h2 className="truncate text-base font-semibold text-slate-900">
+              {category.name}
+            </h2>
             {chefsPick && (
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                 Featured
@@ -155,19 +183,28 @@ function CategorySection({
             )}
           </div>
           {category.description ? (
-            <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{category.description}</p>
+            <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+              {category.description}
+            </p>
           ) : (
-            <p className="mt-0.5 text-xs text-slate-500">{items.length} items</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {items.length} {items.length === 1 ? 'item' : 'items'}
+            </p>
           )}
         </div>
 
         <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-500">
-          {items.length} items
+          {items.length} {items.length === 1 ? 'item' : 'items'}
         </span>
       </div>
 
-      <div className="space-y-3 p-4">
-        {chefsPick && <ChefsPickCard item={chefsPick} onAsk={onAsk} />}
+      {/* Items */}
+      <div className="divide-y divide-slate-100">
+        {chefsPick && (
+          <div className="px-4 py-3 sm:px-5">
+            <ChefsPickCard item={chefsPick} onAsk={onAsk} />
+          </div>
+        )}
 
         {otherItems.map((item) => {
           const badge = getBadge(item, items)
@@ -214,6 +251,18 @@ export function MenuGrid({
     [categories, items],
   )
 
+  const scrollToCategory = useCallback(
+    (categoryId: string) => {
+      const el = document.getElementById(`cat-${categoryId}`)
+      if (!el) return
+
+      setActiveCategory(categoryId)
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+    },
+    [setActiveCategory],
+  )
+
   useEffect(() => {
     if (categoriesWithItems.length === 0) return
 
@@ -233,8 +282,8 @@ export function MenuGrid({
         }
       },
       {
-        rootMargin: '-120px 0px -55% 0px',
-        threshold: [0.08, 0.18, 0.32],
+        rootMargin: '-140px 0px -55% 0px',
+        threshold: [0.1, 0.2, 0.35],
       },
     )
 
@@ -244,13 +293,12 @@ export function MenuGrid({
     })
 
     return () => observer.disconnect()
-  }, [activeCategory, categoriesWithItems, setActiveCategory])
+  }, [categoriesWithItems, activeCategory, setActiveCategory])
 
   return (
-    <div className="relative w-full pb-36 pt-4">
+    <div className="relative w-full pb-44 pt-4">
+      {/* Extra bottom padding (pb-44) prevents FAB from overlapping last ADD button */}
       <div className="space-y-4">
-       
-
         {upsellCard && (
           <div className="animate-[fadeUp_420ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-sm">
             {upsellCard}
@@ -266,10 +314,10 @@ export function MenuGrid({
               <div
                 key={cat.id}
                 className="animate-[fadeUp_500ms_ease-out_both]"
-                style={{ animationDelay: `${catIndex * 60}ms`, animationFillMode: 'both' }}
+                style={{ animationDelay: `${catIndex * 50}ms`, animationFillMode: 'both' }}
               >
                 <CategorySection
-                  category={cat as any}
+                  category={cat}
                   items={catItems}
                   showChefsPick={catIndex === 0 || catItems.some((i) => i.is_special)}
                   onAsk={onAsk}

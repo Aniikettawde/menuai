@@ -216,6 +216,8 @@ export interface AnalyticsEvent {
   timestamp: string           // ISO
   hour_of_day: number         // 0–23
   day_of_week: number         // 0=Sun, 6=Sat
+  table_number?: number | null
+
 }
 
 // ============================================================

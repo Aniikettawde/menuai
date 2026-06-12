@@ -4,6 +4,30 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { resolveMenuImageUrl } from '@/lib/resolve-image'
 
+/** Fallback SVG icon when a category has no image */
+function CategoryPlaceholder({ name }: { name: string }) {
+  const letter = name.trim()[0]?.toUpperCase() ?? '?'
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-stone-100">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full">
+        <rect width="48" height="48" fill="#f5f5f4" />
+        {/* Fork & knife icon */}
+        <text
+          x="24"
+          y="30"
+          textAnchor="middle"
+          fontSize="18"
+          fontWeight="600"
+          fontFamily="system-ui, sans-serif"
+          fill="#a8a29e"
+        >
+          {letter}
+        </text>
+      </svg>
+    </div>
+  )
+}
+
 export function CategoryTabs() {
   const { categories, activeCategory, setActiveCategory, items } = useAppStore()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -34,7 +58,7 @@ export function CategoryTabs() {
     <div className="relative">
       <div
         ref={scrollRef}
-        className="flex gap-2.5 overflow-x-auto scrollbar-none pb-0.5"
+        className="flex gap-2 overflow-x-auto scrollbar-none pb-1"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         role="tablist"
         aria-label="Menu categories"
@@ -58,12 +82,13 @@ export function CategoryTabs() {
                   const el = document.getElementById(`cat-${cat.id}`)
                   if (el) {
                     const headerOffset = 80
-                    const top = el.getBoundingClientRect().top + window.scrollY - headerOffset
+                    const top =
+                      el.getBoundingClientRect().top + window.scrollY - headerOffset
                     window.scrollTo({ top, behavior: 'smooth' })
                   }
                 }}
                 className={[
-                  'flex w-[80px] flex-col items-center gap-1.5 rounded-2xl border p-2 text-center transition-all duration-150',
+                  'flex w-[76px] flex-col items-center gap-1.5 rounded-2xl border px-1.5 py-2 text-center transition-all duration-150',
                   isActive
                     ? 'border-stone-900 bg-white shadow-md'
                     : 'border-stone-200 bg-white shadow-sm hover:border-stone-300 hover:shadow-md',
@@ -71,8 +96,10 @@ export function CategoryTabs() {
               >
                 <div
                   className={[
-                    'h-12 w-12 overflow-hidden rounded-xl bg-stone-100',
-                    isActive ? 'ring-2 ring-stone-900 ring-offset-1' : 'ring-1 ring-stone-100',
+                    'h-11 w-11 overflow-hidden rounded-xl',
+                    isActive
+                      ? 'ring-2 ring-stone-900 ring-offset-1'
+                      : 'ring-1 ring-stone-100',
                   ].join(' ')}
                 >
                   {imageUrl ? (
@@ -84,30 +111,33 @@ export function CategoryTabs() {
                       loading="lazy"
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xl">
-                      🍽️
-                    </div>
+                    <CategoryPlaceholder name={cat.name} />
                   )}
                 </div>
 
+                {/* Full name, wraps to 2 lines max — no "Main…" truncation */}
                 <p
                   className={[
-                    'line-clamp-1 w-full text-[11px] font-semibold leading-tight',
-                    isActive ? 'text-stone-900' : 'text-stone-600',
+                    'line-clamp-2 w-full text-[10px] font-semibold leading-tight',
+                    isActive ? 'text-stone-900' : 'text-stone-500',
                   ].join(' ')}
+                  title={cat.name}
                 >
                   {cat.name}
                 </p>
 
-                <p className="text-[9.5px] font-medium text-stone-400">{count} items</p>
+                <p className="text-[9px] font-medium text-stone-400 tabular-nums">
+                  {count} {count === 1 ? 'item' : 'items'}
+                </p>
               </button>
             </div>
           )
         })}
       </div>
 
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-5 bg-gradient-to-r from-[var(--surface-bg,#f5f5f4)] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-5 bg-gradient-to-l from-[var(--surface-bg,#f5f5f4)] to-transparent" />
+      {/* Fade edges to indicate scroll */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-[var(--surface-bg,#f5f5f4)] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[var(--surface-bg,#f5f5f4)] to-transparent" />
     </div>
   )
 }

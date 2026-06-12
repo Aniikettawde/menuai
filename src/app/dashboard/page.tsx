@@ -61,6 +61,8 @@ type RawEvent = {
   item_name: string | null
   session_id: string | null
   timestamp: string
+    metadata?: { table_number?: number } | null  // ← ADD if needed later
+
 }
 
 type TableRequestRow = {
