@@ -695,7 +695,7 @@ function parseStructuredReply(
     }
   }
 
-  const reply = sanitizeReply(String(parsed.reply ?? ''))
+  const reply = sanitizeReply(String(parsed.reply ?? '')) // ok
   const mentioned_items = normalizeMenuNames(parsed.mentioned_items, menuItems)
   const upsell_items = normalizeMenuNames(parsed.upsell_items, menuItems).filter(
     (name) => !mentioned_items.includes(name),
