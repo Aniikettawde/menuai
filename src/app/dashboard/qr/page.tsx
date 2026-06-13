@@ -272,6 +272,33 @@ function ScanHero({
   )
 }
 
+// ─── jsPDF loader (dynamic CDN fallback so no npm install required) ────────────
+async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
+  try {
+    // Try npm package first (works if jspdf is in node_modules)
+    const mod = await import('jspdf')
+    return mod.jsPDF
+  } catch {
+    // Fallback: load from CDN
+    return new Promise((resolve, reject) => {
+      if ((window as unknown as Record<string, unknown>).jspdf) {
+        resolve(((window as unknown as Record<string, unknown>).jspdf as { jsPDF: typeof import('jspdf').jsPDF }).jsPDF)
+        return
+      }
+      const script = document.createElement('script')
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+      script.onload = () => {
+        const w = window as unknown as Record<string, unknown>
+        const pkg = w.jspdf as { jsPDF: typeof import('jspdf').jsPDF } | undefined
+        if (pkg?.jsPDF) resolve(pkg.jsPDF)
+        else reject(new Error('jsPDF not found after CDN load'))
+      }
+      script.onerror = () => reject(new Error('Failed to load jsPDF from CDN'))
+      document.head.appendChild(script)
+    })
+  }
+}
+
 export default function QRPage() {
   const supabase = getSupabaseDashboardBrowser()
   const { context, loading: contextLoading } = useDashboardContext()
@@ -413,37 +440,26 @@ export default function QRPage() {
     [safeTableCount],
   )
 
-  /**
-   * Returns the secure URL for a table.
-   * If a token exists in the map, uses ?t=TOKEN.
-   * Falls back to ?table=N only while tokens haven't loaded yet (shown as a
-   * spinner in the preview instead — see tablePreviewMap effect).
-   */
   function getTableMenuUrl(tableNo: number): string {
     if (!menuUrl) return ''
     const token = tokenMap.get(tableNo)
     if (token) return `${menuUrl}?t=${token}`
-    // Token not yet minted — return empty so the QR shows a spinner
     return ''
   }
 
-  /**
-   * Ensures all requested table numbers have tokens, creating missing ones
-   * via the API route. Returns the refreshed token map.
-   */
   async function ensureTokens(tables: number[]): Promise<TokenMap> {
     if (!restaurantId) return tokenMap
     const missing = tables.filter((n) => !tokenMap.has(n))
     if (missing.length === 0) return tokenMap
 
-   const res = await fetch('/api/qr-tokens/upsert', {
-  method: 'POST',
-  credentials: 'include',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({ restaurantId, tableNumbers: tables }),
-})
+    const res = await fetch('/api/qr-tokens/upsert', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ restaurantId, tableNumbers: tables }),
+    })
 
     if (!res.ok) throw new Error(`Token upsert failed: ${res.status}`)
 
@@ -466,12 +482,9 @@ export default function QRPage() {
         return
       }
 
-      // Only build previews for tables that have a token
       const tablesWithTokens = tableNumbers.filter((n) => tokenMap.has(n))
 
       if (tablesWithTokens.length === 0) {
-        // Tokens haven't been minted yet — trigger minting, previews will
-        // rebuild once tokenMap updates via the state setter above.
         if (restaurantId) {
           ensureTokens(tableNumbers).catch(console.error)
         }
@@ -513,40 +526,15 @@ export default function QRPage() {
     setTimeout(() => setCopied(false), 2200)
   }
 
-  async function loadImage(url: string): Promise<HTMLImageElement | null> {
-    try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const objectUrl = URL.createObjectURL(blob)
-      return await new Promise((resolve) => {
-        const img = new Image()
-        img.crossOrigin = 'anonymous'
-        img.onload = () => { URL.revokeObjectURL(objectUrl); resolve(img) }
-        img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(null) }
-        img.src = objectUrl
-      })
-    } catch {
-      return null
-    }
-  }
-
-  function roundedRect(
-    ctx: CanvasRenderingContext2D,
-    x: number, y: number, w: number, h: number, r: number,
-  ) {
-    ctx.beginPath()
-    ctx.moveTo(x + r, y)
-    ctx.lineTo(x + w - r, y)
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r)
-    ctx.lineTo(x + w, y + h - r)
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-    ctx.lineTo(x + r, y + h)
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-    ctx.lineTo(x, y + r)
-    ctx.quadraticCurveTo(x, y, x + r, y)
-    ctx.closePath()
-  }
-
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PDF DOWNLOAD — A4, 4 cards per page (2 cols × 2 rows)
+  //
+  // A4 at 72 dpi in jsPDF units (points):  595.28 × 841.89 pt
+  // Page margin: 20pt each side
+  // Usable width: 555pt  → 2 cols → card width ≈ 267pt  (~94mm)
+  // Usable height per card: 380pt (~134mm)
+  // QR code inside card: 180pt square (~63mm) — ISO standard table QR is 60-80mm ✓
+  // ─────────────────────────────────────────────────────────────────────────────
   async function downloadTableSheet() {
     if (!restaurant || !menuUrl) return
     if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted for this plan.'); return }
@@ -555,214 +543,172 @@ export default function QRPage() {
     setBusy(true)
 
     try {
-      // Ensure all tokens exist before generating the download
+      // 1. Ensure all tokens exist
       const latestTokenMap = await ensureTokens(tableNumbers)
 
-      const tables = tableNumbers
-      const cardW = 900
-      const cardH = 1300
-      const gap = 56
-      const margin = 72
+      // 2. Load jsPDF
+      const JsPDF = await loadJsPDF()
+
+      // A4 in points (jsPDF default unit)
+      const pageW = 595.28
+      const pageH = 841.89
+      const margin = 24        // page margin (pt)
+      const gap = 14           // gap between cards (pt)
       const cols = 2
-      const rows = Math.ceil(tables.length / cols)
-      const W = margin * 2 + cols * cardW + (cols - 1) * gap
-      const H = margin * 2 + rows * cardH + (rows - 1) * gap
+      const rows = 2           // 4 cards per page
+      const cardsPerPage = cols * rows
 
-      const canvas = document.createElement('canvas')
-      canvas.width = W
-      canvas.height = H
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Canvas context unavailable')
+      const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols   // ≈ 266pt
+      const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows   // ≈ 389pt
 
-      ctx.fillStyle = '#F0EBE1'
-      ctx.fillRect(0, 0, W, H)
+      // QR size inside card: leave room for header + footer text
+      const qrSize = Math.floor(cardH * 0.46)   // ≈ 179pt (~63mm) — good scan size
 
-      for (let index = 0; index < tables.length; index++) {
-        const tableNo = tables[index]
+      const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
+
+      for (let i = 0; i < tableNumbers.length; i++) {
+        const tableNo = tableNumbers[i]
         const token = latestTokenMap.get(tableNo)
         if (!token) throw new Error(`Missing token for Table ${tableNo}`)
 
-        // Secure URL uses the token, not the table number
         const tableUrl = `${menuUrl}?t=${token}`
 
-        const row = Math.floor(index / cols)
-        const col = index % cols
+        // New page for every cardsPerPage (first page already exists)
+        if (i > 0 && i % cardsPerPage === 0) {
+          doc.addPage()
+        }
+
+        const posInPage = i % cardsPerPage
+        const col = posInPage % cols
+        const row = Math.floor(posInPage / cols)
+
         const x = margin + col * (cardW + gap)
         const y = margin + row * (cardH + gap)
 
-        ctx.save()
-        ctx.shadowColor = 'rgba(0,0,0,0.14)'
-        ctx.shadowBlur = 48
-        ctx.shadowOffsetY = 16
-        ctx.fillStyle = '#FDFAF5'
-        roundedRect(ctx, x, y, cardW, cardH, 40)
-        ctx.fill()
-        ctx.restore()
+        // ── Card background ────────────────────────────────────────────────
+        doc.setFillColor(253, 250, 245)   // #FDFAF5 warm white
+        doc.setDrawColor(220, 213, 200)
+        doc.setLineWidth(0.75)
+        doc.roundedRect(x, y, cardW, cardH, 8, 8, 'FD')
 
-        ctx.save()
-        roundedRect(ctx, x, y, cardW, cardH, 40)
-        ctx.clip()
+        // ── Header band ────────────────────────────────────────────────────
+        const headerH = cardH * 0.26   // ≈ 101pt
+        doc.setFillColor(27, 77, 74)    // #1B4D4A teal
+        doc.roundedRect(x, y, cardW, headerH + 8, 8, 8, 'F')
+        // Fill lower corners of header to make flat bottom
+        doc.setFillColor(27, 77, 74)
+        doc.rect(x, y + headerH, cardW, 8, 'F')
 
-        const headerH = 400
-        const hGrad = ctx.createLinearGradient(x, y, x + cardW, y + headerH)
-        hGrad.addColorStop(0, '#1B4D4A')
-        hGrad.addColorStop(1, '#163D3A')
-        ctx.fillStyle = hGrad
-        ctx.fillRect(x, y, cardW, headerH)
+        // Restaurant name
+        doc.setTextColor(255, 255, 255)
+        doc.setFont('helvetica', 'bold')
+        const nameFontSize = cardW > 250 ? 15 : 12
+        doc.setFontSize(nameFontSize)
+        doc.text(restaurant.name, x + cardW / 2, y + headerH * 0.42, { align: 'center', maxWidth: cardW - 20 })
 
-        const warmOrb = ctx.createRadialGradient(x + cardW, y, 0, x + cardW, y, 340)
-        warmOrb.addColorStop(0, 'rgba(232,136,58,0.18)')
-        warmOrb.addColorStop(1, 'rgba(232,136,58,0)')
-        ctx.fillStyle = warmOrb
-        ctx.fillRect(x, y, cardW, headerH)
-
-        ctx.fillStyle = '#FDFAF5'
-        ctx.fillRect(x, y + headerH, cardW, cardH - headerH)
-
-        ctx.restore()
-
-        const pillW = 200
-        const pillH = 52
+        // Table number pill
+        const pillText = `TABLE  ${tableNo}`
+        doc.setFontSize(9.5)
+        doc.setFont('helvetica', 'bold')
+        const pillW = doc.getTextWidth(pillText) + 22
+        const pillH = 16
         const pillX = x + (cardW - pillW) / 2
-        const pillY = y + 50
+        const pillY = y + headerH * 0.62
 
-        ctx.save()
-        ctx.fillStyle = 'rgba(255,255,255,0.12)'
-        roundedRect(ctx, pillX, pillY, pillW, pillH, 26)
-        ctx.fill()
-        ctx.strokeStyle = 'rgba(255,255,255,0.22)'
-        ctx.lineWidth = 1.5
-        ctx.stroke()
-        ctx.restore()
+        doc.setFillColor(255, 255, 255, 0.18)
+        doc.setDrawColor(255, 255, 255, 0.35)
+        doc.setLineWidth(0.5)
+        doc.roundedRect(pillX, pillY, pillW, pillH, 8, 8, 'FD')
+        doc.setTextColor(255, 255, 255)
+        doc.text(pillText, x + cardW / 2, pillY + 10.5, { align: 'center' })
 
-        ctx.fillStyle = '#FFFFFF'
-        ctx.font = '600 22px Arial, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText(`TABLE  ${tableNo}`, x + cardW / 2, pillY + 34)
+        // "Scan to get started" orange pill
+        const scanText = 'Scan to get started'
+        doc.setFontSize(8.5)
+        doc.setFont('helvetica', 'bold')
+        const scanW = doc.getTextWidth(scanText) + 24
+        const scanH = 15
+        const scanX = x + (cardW - scanW) / 2
+        const scanY = y + headerH * 0.84
 
-        ctx.fillStyle = '#FFFFFF'
-        ctx.font = 'bold 56px Georgia, serif'
-        ctx.textAlign = 'center'
-        ctx.fillText(restaurant.name, x + cardW / 2, y + 188)
+        doc.setFillColor(232, 136, 58)   // #E8883A orange
+        doc.setDrawColor(232, 136, 58)
+        doc.roundedRect(scanX, scanY, scanW, scanH, 7, 7, 'FD')
+        doc.setTextColor(255, 255, 255)
+        doc.text(scanText, x + cardW / 2, scanY + 10, { align: 'center' })
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(x + 160, y + 210)
-        ctx.lineTo(x + cardW - 160, y + 210)
-        ctx.stroke()
-
-        const actions = [
-          { emoji: '🍽', label: 'Browse menu' },
-          { emoji: '✅', label: 'Place order' },
-          { emoji: '🔔', label: 'Call waiter' },
-        ]
-        const actionW = (cardW - 80) / 3
-        actions.forEach((a, i) => {
-          const ax = x + 40 + i * actionW
-          ctx.fillStyle = 'rgba(255,255,255,0.55)'
-          ctx.font = '500 20px Arial, sans-serif'
-          ctx.textAlign = 'center'
-          ctx.fillText(`${a.emoji}  ${a.label}`, ax + actionW / 2, y + 272)
-        })
-
-        const scanPillW = 420
-        const scanPillH = 56
-        const scanPillX = x + (cardW - scanPillW) / 2
-        const scanPillY = y + 308
-
-        ctx.save()
-        const scanGrad = ctx.createLinearGradient(scanPillX, scanPillY, scanPillX + scanPillW, scanPillY)
-        scanGrad.addColorStop(0, '#E8883A')
-        scanGrad.addColorStop(1, '#D4742A')
-        ctx.shadowColor = 'rgba(232,136,58,0.4)'
-        ctx.shadowBlur = 18
-        ctx.fillStyle = scanGrad
-        roundedRect(ctx, scanPillX, scanPillY, scanPillW, scanPillH, 28)
-        ctx.fill()
-        ctx.restore()
-
-        ctx.fillStyle = '#FFFFFF'
-        ctx.font = 'bold 24px Arial, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText('📷  Scan to get started', x + cardW / 2, scanPillY + 38)
-
+        // ── QR Code ────────────────────────────────────────────────────────
+        // Generate high-res QR as PNG data URL (600px for crisp print)
         const qrDataUrl = await QRCode.toDataURL(tableUrl, {
           errorCorrectionLevel: 'H',
           margin: 2,
-          width: 1000,
+          width: 600,
           color: { dark: '#1B4D4A', light: '#ffffff' },
         })
-        const qrImg = await loadImage(qrDataUrl)
-        if (!qrImg) throw new Error(`Failed QR for Table ${tableNo}`)
 
-        const qrSize = 500
         const qrX = x + (cardW - qrSize) / 2
-        const qrY = y + headerH + 44
+        const qrY = y + headerH + 12
 
-        ctx.save()
-        ctx.shadowColor = 'rgba(0,0,0,0.10)'
-        ctx.shadowBlur = 32
-        ctx.shadowOffsetY = 10
-        ctx.fillStyle = '#FFFFFF'
-        roundedRect(ctx, qrX - 28, qrY - 28, qrSize + 56, qrSize + 56, 32)
-        ctx.fill()
-        ctx.restore()
+        // White background behind QR with subtle border
+        doc.setFillColor(255, 255, 255)
+        doc.setDrawColor(228, 220, 210)
+        doc.setLineWidth(0.75)
+        doc.roundedRect(qrX - 6, qrY - 6, qrSize + 12, qrSize + 12, 5, 5, 'FD')
 
-        ctx.strokeStyle = '#E8E0D4'
-        ctx.lineWidth = 1.5
-        roundedRect(ctx, qrX - 28, qrY - 28, qrSize + 56, qrSize + 56, 32)
-        ctx.stroke()
+        doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
 
-        ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize)
+        // ── Trust line ──────────────────────────────────────────────────────
+        const trustY = y + headerH + qrSize + 28
+        doc.setFontSize(7.5)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(130, 120, 110)
+        doc.text('No app  ·  No login  ·  Works on any phone', x + cardW / 2, trustY, { align: 'center' })
 
-        const trustY = y + headerH + qrSize + 100
-        ctx.fillStyle = '#9CA3AF'
-        ctx.font = '500 18px Arial, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText('No login · No app · Works on any phone', x + cardW / 2, trustY)
+        // ── URL ─────────────────────────────────────────────────────────────
+        const urlY = trustY + 13
+        const shortUrl = `dinezy.in/r/${restaurant.slug}?t=${token}`
+        doc.setFontSize(6.5)
+        doc.setFont('courier', 'normal')
+        doc.setTextColor(100, 90, 80)
+        doc.text(shortUrl, x + cardW / 2, urlY, { align: 'center', maxWidth: cardW - 20 })
 
-        // Show token in footer instead of the guessable table number
-        const urlY = trustY + 52
-        const urlPillW = 560
-        const urlPillH = 48
-        const urlPillX = x + (cardW - urlPillW) / 2
+        // ── Action badges row ────────────────────────────────────────────────
+        const badgeY = urlY + 14
+        const badges = ['Browse menu', 'Place order', 'Call waiter']
+        const totalBadgeW = cardW - 20
+        const badgeW = totalBadgeW / badges.length
+        doc.setFontSize(7)
+        doc.setFont('helvetica', 'normal')
+        badges.forEach((badge, bi) => {
+          const bx = x + 10 + bi * badgeW
+          doc.setFillColor(236, 253, 252)
+          doc.setDrawColor(180, 220, 218)
+          doc.setLineWidth(0.4)
+          doc.roundedRect(bx + 2, badgeY, badgeW - 4, 13, 3, 3, 'FD')
+          doc.setTextColor(27, 77, 74)
+          doc.text(badge, bx + badgeW / 2, badgeY + 8.5, { align: 'center' })
+        })
 
-        ctx.fillStyle = '#F5F0E8'
-        ctx.strokeStyle = '#DDD5C8'
-        ctx.lineWidth = 1
-        roundedRect(ctx, urlPillX, urlY, urlPillW, urlPillH, 24)
-        ctx.fill()
-        ctx.stroke()
+        // ── Footer strip ────────────────────────────────────────────────────
+        const footerH = 18
+        const footerY = y + cardH - footerH
+        doc.setFillColor(27, 77, 74)
+        // Clip to rounded bottom
+        doc.rect(x, footerY, cardW, footerH - 8, 'F')
+        doc.roundedRect(x, footerY, cardW, footerH, 0, 8, 'F')
 
-        ctx.fillStyle = '#7C6F61'
-        ctx.font = '500 15px "Courier New", monospace'
-        ctx.textAlign = 'center'
-        ctx.fillText(`dinezy.in/r/${restaurant.slug}?t=${token}`, x + cardW / 2, urlY + 31)
-
-        const stripH = 70
-        const stripY = y + cardH - stripH
-
-        ctx.save()
-        roundedRect(ctx, x, y, cardW, cardH, 40)
-        ctx.clip()
-        ctx.fillStyle = '#1B4D4A'
-        ctx.fillRect(x, stripY, cardW, stripH)
-        ctx.restore()
-
-        ctx.fillStyle = 'rgba(255,255,255,0.85)'
-        ctx.font = '500 16px Arial, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText('Powered by dinezy.in — digital menus for restaurants', x + cardW / 2, stripY + 42)
+        doc.setFontSize(6.5)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(180, 220, 218)
+        doc.text('Powered by dinezy.in — digital menus for restaurants', x + cardW / 2, footerY + 11, { align: 'center' })
       }
 
-      const link = document.createElement('a')
-      link.href = canvas.toDataURL('image/png')
-      link.download = `${restaurant.slug}-table-qr-sheet.png`
-      link.click()
+      // Save PDF
+      doc.save(`${restaurant.slug}-table-qr-sheet.pdf`)
+
     } catch (err) {
       console.error('Download table sheet error:', err)
-      alert('Could not generate QR image. Please try again.')
+      alert('Could not generate PDF. Please try again.')
     } finally {
       setBusy(false)
     }
@@ -929,7 +875,6 @@ export default function QRPage() {
 
                     <div className="px-5 py-5">
                       <div className="rounded-[28px] border border-[#E8E0D4] bg-white p-4 shadow-sm">
-                        {/* Show spinner while token is being minted */}
                         {tokensLoading || !tokenMap.has(tableNo) ? (
                           <div className="flex h-44 items-center justify-center sm:h-52">
                             <div className="h-5 w-5 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
@@ -984,12 +929,12 @@ export default function QRPage() {
               {busy ? (
                 <>
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Generating…
+                  Generating PDF…
                 </>
               ) : (
                 <>
                   <Download size={15} />
-                  Download Sheet
+                  Download PDF
                 </>
               )}
             </button>
@@ -1060,8 +1005,8 @@ export default function QRPage() {
             </div>
             <div className="space-y-3">
               {[
-                { icon: <Download size={13} />, text: 'Download the QR sheet above' },
-                { icon: <Printer size={13} />, text: 'Print and laminate — one per table' },
+                { icon: <Download size={13} />, text: 'Download the PDF — opens ready to print (A4, 4 cards per page)' },
+                { icon: <Printer size={13} />, text: 'Print at 100% scale and laminate — one card per table' },
                 { icon: <Smartphone size={13} />, text: 'Guests point their phone camera and tap the link' },
                 { icon: <BellRing size={13} />, text: 'Orders and waiter calls arrive on your dashboard' },
               ].map(({ icon, text }, i) => (
@@ -1188,7 +1133,7 @@ export default function QRPage() {
           <p className="text-xs leading-relaxed text-zinc-500">
             {isQuotaExhausted
               ? 'QR generation is disabled until the plan is upgraded.'
-              : `Generates QR cards for Table 1 – ${safeTableCount}. Each QR links directly to the menu with the table number pre-filled.`}
+              : `Generates QR cards for Table 1 – ${safeTableCount}. PDF downloads A4-ready with 4 cards per page (~63mm QR — optimal scan size).`}
           </p>
         </div>
       </div>
