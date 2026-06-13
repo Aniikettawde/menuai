@@ -58,21 +58,65 @@ function writePersistedOrderIds(slug: string, tableNumber: number | null, ids: s
 export function RestaurantShell({ initialData }: Props) {
   const searchParams = useSearchParams()
   const {
-    restaurant,
-    setRestaurantData,
-    setDishOptions,
-    setIsOffline,
-    setTableNumber,
-    tableNumber,
-    sessionId,
-    clearCart,
-    showRating,
-  } = useAppStore()
+  restaurant,
+  setRestaurantData,
+  setDishOptions,
+  setIsOffline,
+  setTableNumber,
+  tableNumber,
+  sessionId,
+  clearCart,
+  showRating,
+} = useAppStore()
 
   const [waiterToasts, setWaiterToasts] = useState<OrderToastData[]>([])
   const [activeToastIndex, setActiveToastIndex] = useState(0)
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  
+  
+  const tableToken = searchParams.get('t')
+const legacyTableParam = searchParams.get('table')
+
+useEffect(() => {
+  let mounted = true
+
+  async function resolveTable() {
+    if (!initialData.restaurant.id) return
+
+    // New secure QR flow: ?t=TOKEN
+    if (tableToken) {
+      const { data, error } = await supabase
+        .from('qr_tokens')
+        .select('table_number')
+        .eq('restaurant_id', initialData.restaurant.id)
+        .eq('token', tableToken)
+        .maybeSingle()
+
+      if (!mounted) return
+
+      if (error) {
+        console.error('Token resolve error:', error)
+        setTableNumber(null)
+        return
+      }
+
+      setTableNumber(data?.table_number ?? null)
+      return
+    }
+
+    // Legacy fallback only
+    const n = legacyTableParam ? Number(legacyTableParam) : null
+    const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
+    setTableNumber(resolved)
+  }
+
+  void resolveTable()
+
+  return () => {
+    mounted = false
+  }
+}, [tableToken, legacyTableParam, initialData.restaurant.id, setTableNumber])
 
   const slug = initialData.restaurant.slug
 
@@ -80,7 +124,7 @@ export function RestaurantShell({ initialData }: Props) {
 
   // ── Restore persisted orders ───────────────────────────────────────────────
   useEffect(() => {
-    if (tableNumber === undefined) return
+    if (tableNumber === null) return
 
     const ids = readPersistedOrderIds(slug, tableNumber)
     if (!ids.length) return
@@ -257,17 +301,53 @@ export function RestaurantShell({ initialData }: Props) {
 
   // ── Table number + page view tracking ─────────────────────────────────────
   useEffect(() => {
-    const raw = searchParams.get('table')
-    const n = raw ? Number(raw) : null
-    const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
+  const token = searchParams.get('t')
+  const rawTable = searchParams.get('table')
 
+  let mounted = true
+
+  async function resolveTableNumber() {
+    if (token) {
+      const { data, error } = await supabase
+        .from('qr_tokens')
+        .select('table_number')
+        .eq('restaurant_id', initialData.restaurant.id)
+        .eq('token', token)
+        .maybeSingle()
+
+      if (!mounted) return
+
+      if (error) {
+        console.error('Token resolve error:', error)
+        setTableNumber(null)
+        return
+      }
+
+      setTableNumber(data?.table_number ?? null)
+
+      if (!initialData.restaurant.id) return
+      void track(initialData.restaurant.id, 'page_view', {
+        metadata: { table_number: data?.table_number ?? null, table_token: token },
+      })
+      return
+    }
+
+    const n = rawTable ? Number(rawTable) : null
+    const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
     setTableNumber(resolved)
 
     if (!initialData.restaurant.id) return
     void track(initialData.restaurant.id, 'page_view', {
       metadata: { table_number: resolved },
     })
-  }, [searchParams, setTableNumber, initialData.restaurant.id])
+  }
+
+  void resolveTableNumber()
+
+  return () => {
+    mounted = false
+  }
+}, [searchParams, setTableNumber, initialData.restaurant.id])
 
   // ── Realtime menu changes ──────────────────────────────────────────────────
   useEffect(() => {
@@ -328,81 +408,88 @@ export function RestaurantShell({ initialData }: Props) {
   }, [initialData.restaurant.id, initialData.items, refreshMenu, fetchDishOptions])
 
   // ── Waiter call handler ────────────────────────────────────────────────────
-  const handleCallWaiter = useCallback(
-    async (payload: {
-      items: { id: string; name: string; qty: number; price: number; total: number }[]
-      subtotal: number
-    }) => {
-      if (!restaurant) return
-      if (!tableNumber) {
-        alert('Table number missing. Please scan the table QR again.')
-        return
-      }
+ const handleCallWaiter = useCallback(
+  async (payload: {
+    items: { id: string; name: string; qty: number; price: number; total: number }[]
+    subtotal: number
+  }) => {
+    if (!restaurant) return
 
-      setWaiterLoading(true)
-      try {
-        const res = await fetch('/api/table-request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            restaurantSlug: restaurant.slug,
-            tableNumber,
-            sessionId,
-            items: payload.items,
-            subtotal: payload.subtotal,
-          }),
-        })
+    const token = searchParams.get('t')
 
-        const data = (await res.json().catch(() => ({}))) as {
-          error?: string
-          orderId?: string
-          orderCode?: string
-        }
+    if (!tableNumber && !token) {
+      alert('Table number missing. Please scan the table QR again.')
+      return
+    }
 
-        if (!res.ok) throw new Error(data?.error ?? 'Failed to send waiter request')
+    setWaiterLoading(true)
 
-        void track(restaurant.id, 'waiter_called', {
-          metadata: {
-            table_number: tableNumber,
-            item_count: payload.items.reduce((s, i) => s + i.qty, 0),
-            subtotal: payload.subtotal,
-            items: payload.items,
-            order_id: data.orderId ?? null,
-            order_code: data.orderCode ?? null,
-          },
-        })
-
-        clearCart()
-
-        const orderId = String(data.orderId ?? '')
-        const newOrder: OrderToastData = {
+    try {
+      const res = await fetch('/api/table-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantSlug: restaurant.slug,
           tableNumber,
-          orderId,
-          orderCode: String(data.orderCode ?? orderId.slice(0, 8).toUpperCase()),
+          tableToken: token,
+          sessionId,
           items: payload.items,
           subtotal: payload.subtotal,
-        }
+        }),
+      })
 
-        setWaiterToasts((prev) => {
-          const next = [...prev, newOrder]
-          writePersistedOrderIds(slug, tableNumber, next.map((o) => o.orderId))
-          setActiveToastIndex(next.length - 1)
-          return next
-        })
-      } catch (err) {
-        void track(restaurant.id, 'waiter_call_failed', {
-          metadata: {
-            table_number: tableNumber,
-            error: err instanceof Error ? err.message : 'unknown',
-          },
-        })
-        alert(err instanceof Error ? err.message : 'Something went wrong')
-      } finally {
-        setWaiterLoading(false)
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        orderId?: string
+        orderCode?: string
       }
-    },
-    [restaurant, tableNumber, sessionId, clearCart, slug],
-  )
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Failed to send waiter request')
+      }
+
+      void track(restaurant.id, 'waiter_called', {
+        metadata: {
+          table_number: tableNumber,
+          item_count: payload.items.reduce((s, i) => s + i.qty, 0),
+          subtotal: payload.subtotal,
+          items: payload.items,
+          order_id: data.orderId ?? null,
+          order_code: data.orderCode ?? null,
+        },
+      })
+
+      clearCart()
+
+      const orderId = String(data.orderId ?? '')
+      const newOrder: OrderToastData = {
+        tableNumber: tableNumber ?? 0,
+        orderId,
+        orderCode: String(data.orderCode ?? orderId.slice(0, 8).toUpperCase()),
+        items: payload.items,
+        subtotal: payload.subtotal,
+      }
+
+      setWaiterToasts((prev) => {
+        const next = [...prev, newOrder]
+        writePersistedOrderIds(slug, tableNumber, next.map((o) => o.orderId))
+        setActiveToastIndex(next.length - 1)
+        return next
+      })
+    } catch (err) {
+      void track(restaurant.id, 'waiter_call_failed', {
+        metadata: {
+          table_number: tableNumber,
+          error: err instanceof Error ? err.message : 'unknown',
+        },
+      })
+      alert(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setWaiterLoading(false)
+    }
+  },
+  [restaurant, tableNumber, sessionId, clearCart, slug, searchParams],
+)
 
   const handleCloseToast = useCallback(
     (orderId: string, toastTableNumber: number) => {

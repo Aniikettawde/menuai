@@ -203,24 +203,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const { restaurantSlug, tableNumber, sessionId, items, subtotal } = body as {
-      restaurantSlug?: string
-      tableNumber?: number
-      sessionId?: string
-      items?: RequestItem[]
-      subtotal?: number
-    }
-
-    if (
-      !restaurantSlug ||
-      !Number.isInteger(tableNumber) ||
-      (tableNumber as number) < 1 ||
-      !sessionId ||
-      !Array.isArray(items) ||
-      typeof subtotal !== 'number'
-    ) {
-      return NextResponse.json({ error: 'Missing or invalid payload' }, { status: 400 })
-    }
+    const { restaurantSlug, tableNumber, tableToken, sessionId, items, subtotal } = body as {
+  restaurantSlug?: string
+  tableNumber?: number
+  tableToken?: string
+  sessionId?: string
+  items?: RequestItem[]
+  subtotal?: number
+}
+if (
+  !restaurantSlug ||
+  (!tableToken && !Number.isInteger(tableNumber)) ||
+  !sessionId ||
+  !Array.isArray(items) ||
+  typeof subtotal !== 'number'
+) {
+  return NextResponse.json(
+    { error: 'Missing or invalid payload' },
+    { status: 400 },
+  )
+}
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -236,13 +238,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
 
-    const orderCode = makeOrderCode(tableNumber as number)
+// Resolve actual table number from secure QR token
+let resolvedTableNumber = Number.isInteger(tableNumber)
+  ? Number(tableNumber)
+  : null
+
+if (tableToken) {
+  const { data: qrTokenRow, error: qrError } = await admin
+    .from('qr_tokens')
+    .select('table_number')
+    .eq('restaurant_id', restaurant.id)
+    .eq('token', tableToken)
+    .maybeSingle()
+
+  if (qrError) {
+    return NextResponse.json({ error: qrError.message }, { status: 500 })
+  }
+
+  if (!qrTokenRow) {
+    return NextResponse.json(
+      { error: 'Invalid table token' },
+      { status: 403 },
+    )
+  }
+
+  resolvedTableNumber = qrTokenRow.table_number
+}
+
+if (!resolvedTableNumber || resolvedTableNumber < 1) {
+  return NextResponse.json(
+    { error: 'Missing or invalid table number' },
+    { status: 400 },
+  )
+}
+
+const orderCode = makeOrderCode(resolvedTableNumber)
 
     const { data: inserted, error: insertError } = await admin
       .from('table_requests')
       .insert({
         restaurant_id: restaurant.id,
-        table_number: tableNumber,
+        table_number: resolvedTableNumber,
         session_id: sessionId,
         items,
         subtotal,
@@ -257,7 +293,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
-    const assignedStaff = await getAssignedStaff(admin, restaurant.id, tableNumber as number)
+    const assignedStaff = await getAssignedStaff(
+  admin,
+  restaurant.id,
+  resolvedTableNumber,
+)
     const assignedStaffIds = assignedStaff.map((s) => s.id)
 
     const itemSummary = (items as RequestItem[])
@@ -270,8 +310,7 @@ export async function POST(req: NextRequest) {
         ? itemSummary
         : `${itemSummary} +${moreCount} more`
 
-    const title = `🔔 Table ${tableNumber} — ${restaurant.name}`
-
+const title = `🔔 Table ${resolvedTableNumber} — ${restaurant.name}`
     const { data: fcmTokens } = await admin
       .from('device_tokens')
       .select('fcm_token, staff_id')
@@ -286,15 +325,15 @@ export async function POST(req: NextRequest) {
       sendWebPushToStaff(admin, restaurant.id, assignedStaffIds, {
         title,
         body: bodyText,
-        tableNumber: tableNumber as number,
+tableNumber: resolvedTableNumber,
         requestId: inserted.id,
-        tag: `waiter-${restaurant.id}-table-${tableNumber}`,
+        tag: `waiter-${restaurant.id}-table-${resolvedTableNumber}`,
       }),
       tokenList.length > 0
         ? sendAndroidPushWithTokens(tokenList, {
             title,
             body: bodyText,
-            tableNumber: tableNumber as number,
+tableNumber: resolvedTableNumber,
             requestId: inserted.id,
             items: items as RequestItem[],
             subtotal,
@@ -314,7 +353,7 @@ export async function POST(req: NextRequest) {
       request: inserted,
       orderId: inserted.id,
       orderCode: inserted.order_code ?? orderCode,
-      tableNumber,
+      tableNumber: resolvedTableNumber,
       restaurantSlug,
       assignedStaff: assignedStaff.map((s) => ({
         id: s.id,
