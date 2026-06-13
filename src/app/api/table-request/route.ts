@@ -109,10 +109,7 @@ async function sendWebPushToStaff(
     .eq('restaurant_id', restaurantId)
     .in('staff_id', staffIds)
 
-  if (error || !subs?.length) {
-    console.log('[WebPush] No staff subscriptions found for restaurant', restaurantId)
-    return
-  }
+    if (error || !subs?.length) return 
 
   const notification = JSON.stringify({
     title: payload.title,
@@ -151,6 +148,8 @@ async function sendWebPushToStaff(
 }
 
 async function sendAndroidPushWithTokens(
+  admin: SupabaseClient,
+
   tokenList: string[],
   payload: {
     title: string
@@ -180,6 +179,28 @@ async function sendAndroidPushWithTokens(
         ttl: 10000,
       },
     })
+	
+	const deadTokens: string[] = []
+result.responses.forEach((r, i) => {
+  if (!r.success) {
+    const code = r.error?.code
+    if (
+      code === 'messaging/registration-token-not-registered' ||
+      code === 'messaging/invalid-registration-token'
+    ) {
+      deadTokens.push(tokenList[i])
+    }
+  }
+})
+
+if (deadTokens.length > 0) {
+  // Need admin client here — pass it in or import at module level
+  await admin
+    .from('device_tokens')
+    .delete()
+    .in('fcm_token', deadTokens)
+  console.log('[FCM] Cleaned up dead tokens:', deadTokens.length)
+}
 
     console.log('[FCM] Success:', result.successCount, 'Failed:', result.failureCount)
     result.responses.forEach((r, i) => {
@@ -330,7 +351,7 @@ tableNumber: resolvedTableNumber,
         tag: `waiter-${restaurant.id}-table-${resolvedTableNumber}`,
       }),
       tokenList.length > 0
-        ? sendAndroidPushWithTokens(tokenList, {
+  ? sendAndroidPushWithTokens(admin, tokenList, {
             title,
             body: bodyText,
 tableNumber: resolvedTableNumber,

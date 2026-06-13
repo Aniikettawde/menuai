@@ -23,7 +23,10 @@ type RestaurantForm = {
   phone: string
   avg_prep_time: number
   total_tables: number
+      instagram_url: string   // ← add this
+
   opening_hours: OpeningHours
+
 }
 
 const DAYS: DayKey[] = [
@@ -76,6 +79,8 @@ export default function RestaurantPage() {
     name: '', slug: '', description: '', cuisine_type: '',
     restaurant_type: 'Pure Veg', address: '', phone: '',
     avg_prep_time: 20, total_tables: 20,
+	    instagram_url: '',
+
     opening_hours: createDefaultHours(),
   })
 
@@ -106,6 +111,8 @@ export default function RestaurantPage() {
             avg_prep_time: data.avg_prep_time ?? 20,
             opening_hours: (data.opening_hours as OpeningHours) ?? createDefaultHours(),
             total_tables: data.total_tables ?? 20,
+			            instagram_url: data.instagram_url ?? '',
+
           })
           setLogoUrl(data.logo_url ?? '')
           setCoverUrl(data.cover_url ?? '')
@@ -512,6 +519,24 @@ export default function RestaurantPage() {
               className={INPUT}
             />
           </Field>
+		  
+		  <Field label="Instagram" hint="e.g. https://instagram.com/yourrestaurant">
+  <div className="flex items-center gap-2">
+    <span className="shrink-0 text-sm text-zinc-500">instagram.com/</span>
+    <input
+      value={form.instagram_url.replace(/^https?:\/\/(www\.)?instagram\.com\/?/, '')}
+      onChange={(e) => {
+        const handle = e.target.value.replace(/^@/, '').trim()
+        setForm((f) => ({
+          ...f,
+          instagram_url: handle ? `https://instagram.com/${handle}` : '',
+        }))
+      }}
+      placeholder="yourhandle"
+      className={INPUT}
+    />
+  </div>
+</Field>
         </Section>
 
         {/* ── Opening Hours ── */}

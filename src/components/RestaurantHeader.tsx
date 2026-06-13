@@ -1,5 +1,4 @@
 'use client'
-
 import Image from 'next/image'
 import { MapPin, Star, Clock, Utensils, Award, ShieldCheck } from 'lucide-react'
 import type { Restaurant } from '@/types'
@@ -38,11 +37,6 @@ export function RestaurantHeader({ restaurant }: Props) {
     <header className="w-full">
       {hasBanner ? (
         <>
-          {/* ── Banner
-              Mobile  → square-ish: 100vw wide, 100vw tall (aspect-square)
-              Tablet+ → fixed 480 px tall, full width
-              This matches the tall "poster" look in the reference screenshot
-          ── */}
           <div className="relative w-full aspect-square sm:aspect-auto sm:h-[480px]">
             <Image
               src={restaurant.cover_url as string}
@@ -52,19 +46,10 @@ export function RestaurantHeader({ restaurant }: Props) {
               sizes="100vw"
               className="object-cover object-center"
             />
-
-            {/* Warm colour-grade overlay */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-900/20 via-transparent to-orange-900/15" />
-
-            {/* Top scrim — logo legibility */}
             <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 via-black/20 to-transparent" />
-
-            {/* Bottom fade → merges into the white badge row */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
-
-            {/* ── Name / cuisine + Logo — bottom overlay ── */}
             <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 px-4 pb-5 sm:px-6 sm:pb-7">
-              {/* Left: text */}
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300 drop-shadow sm:text-xs">
                   Welcome to
@@ -76,8 +61,6 @@ export function RestaurantHeader({ restaurant }: Props) {
                   {restaurant.cuisine_type} Restaurant
                 </p>
               </div>
-
-              {/* Right: logo */}
               {hasLogo && (
                 <div className="shrink-0">
                   <div className="relative h-16 w-16 overflow-hidden rounded-2xl border-2 border-white/90 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.40)] sm:h-20 sm:w-20 sm:rounded-3xl">
@@ -94,7 +77,6 @@ export function RestaurantHeader({ restaurant }: Props) {
             </div>
           </div>
 
-          {/* ── Three feature badges ── */}
           <div className="flex items-stretch justify-around divide-x divide-slate-100 border-b border-slate-100 bg-white px-2 py-3 sm:px-4">
             <FeatureBadge
               icon={<Utensils size={17} className="text-amber-500" />}
@@ -114,7 +96,6 @@ export function RestaurantHeader({ restaurant }: Props) {
           </div>
         </>
       ) : (
-        /* ── No-banner fallback ── */
         <div className="flex items-center gap-3 border-b border-slate-100 bg-gradient-to-b from-amber-50 to-white px-4 py-4 sm:px-5">
           {hasLogo ? (
             <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
@@ -184,6 +165,23 @@ export function RestaurantHeader({ restaurant }: Props) {
           <Clock size={11} />
           Today's live menu
         </span>
+
+        {/* Instagram */}
+        {restaurant.instagram_url && (
+          <a
+            href={restaurant.instagram_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-gradient-to-r from-pink-50 to-purple-50 px-3.5 py-1.5 text-xs font-semibold text-pink-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-95"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-pink-500">
+              <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+              <circle cx="12" cy="12" r="4"/>
+              <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+            </svg>
+            Follow us
+          </a>
+        )}
       </div>
     </header>
   )

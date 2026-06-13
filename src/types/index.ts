@@ -42,6 +42,7 @@ export interface Restaurant {
   created_at: string
   owner_id?: string | null
     total_tables?: number | null   // ← add this
+instagram_url?: string | null
 
   
 }
