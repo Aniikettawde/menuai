@@ -7,10 +7,13 @@ import type { MenuCategory, MenuItem, Restaurant } from '@/types'
 import {
   ArrowLeft, Camera, ChevronRight, Clock, ImagePlus, Loader2,
   MoreVertical, Pencil, Plus, Sparkles, Trash2, UtensilsCrossed,
-  X, ToggleLeft, ToggleRight, Flame, Leaf, Zap,
+  X, ToggleLeft, ToggleRight, Flame, Leaf, Zap, Settings2, GripVertical,
+  CheckSquare, Circle,
 } from 'lucide-react'
 
 const BOTTOM_NAV_H = 72
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type MenuItemForm = Partial<MenuItem> & { _open?: boolean }
 const EMPTY_ITEM: MenuItemForm = {
@@ -19,11 +22,64 @@ const EMPTY_ITEM: MenuItemForm = {
   is_special: false, tags: [], allergens: [], prep_time_minutes: undefined,
   calories: undefined, position: 0,
 }
+
+type DishOptionChoice = {
+  id: string
+  dish_option_id: string
+  name: string
+  extra_price: number
+  is_default: boolean
+  is_available: boolean
+  position: number
+}
+
+type DishOption = {
+  id: string
+  menu_item_id: string
+  name: string
+  is_required: boolean
+  min_selections: number
+  max_selections: number
+  position: number
+  choices: DishOptionChoice[]
+}
+
+// For local editing (before save)
+type DishOptionDraft = {
+  id?: string           // undefined = new
+  name: string
+  is_required: boolean
+  min_selections: number
+  max_selections: number
+  position: number
+  choices: DishOptionChoiceDraft[]
+}
+type DishOptionChoiceDraft = {
+  id?: string
+  name: string
+  extra_price: number   // in paise
+  is_default: boolean
+  is_available: boolean
+  position: number
+}
+
+function emptyOptionDraft(position: number): DishOptionDraft {
+  return {
+    name: '', is_required: false, min_selections: 0, max_selections: 1,
+    position, choices: [emptyChoiceDraft(0)],
+  }
+}
+function emptyChoiceDraft(position: number): DishOptionChoiceDraft {
+  return { name: '', extra_price: 0, is_default: false, is_available: true, position }
+}
+
 type MenuCategoryRow = MenuCategory
 type MenuItemRow = MenuItem
 type ParsedItem = { name: string; description?: string; price?: number; is_veg?: boolean; tags?: string[] }
 type ParsedCategory = { name: string; items: ParsedItem[] }
 type GeminiMenuResult = { categories: ParsedCategory[] }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toIntOrNull(value: unknown): number | null {
   if (value === '' || value === null || value === undefined) return null
@@ -49,6 +105,8 @@ function resolveMenuImageUrl(raw: unknown): string {
   if (!supabaseUrl) return value
   return `${supabaseUrl}/storage/v1/object/public/${MENU_ASSET_BUCKET}/${value.replace(/^\/+/, '')}`
 }
+
+// ─── BottomSheet ──────────────────────────────────────────────────────────────
 
 function BottomSheet({
   children, onClose, maxWidthClass = 'max-w-2xl', zIndex = 'z-[60]',
@@ -76,6 +134,8 @@ function BottomSheet({
     </div>
   )
 }
+
+// ─── Gemini / Import ──────────────────────────────────────────────────────────
 
 async function parseMenuWithGemini(base64Data: string, mimeType: string): Promise<GeminiMenuResult> {
   let safeMime = mimeType || ''
@@ -251,8 +311,11 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
   )
 }
 
-function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle }: {
-  item: MenuItemRow; onClose: () => void; onEdit: () => void; onDelete: () => void; onToggle: () => void
+// ─── ItemActionSheet ──────────────────────────────────────────────────────────
+
+function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle, onCustomize }: {
+  item: MenuItemRow; onClose: () => void; onEdit: () => void; onDelete: () => void
+  onToggle: () => void; onCustomize: () => void
 }) {
   return (
     <BottomSheet onClose={onClose} maxWidthClass="max-w-md">
@@ -283,6 +346,10 @@ function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle }: {
             <Pencil size={18} className="text-orange-400 shrink-0" />
             <div><p className="text-sm font-medium text-zinc-200">Edit Dish</p><p className="text-xs text-zinc-500">Update name, price, description…</p></div>
           </button>
+          <button onClick={() => { onCustomize(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/40 px-4 py-4 text-left hover:bg-zinc-800 active:scale-[0.99] transition">
+            <Settings2 size={18} className="text-purple-400 shrink-0" />
+            <div><p className="text-sm font-medium text-zinc-200">Customisation Options</p><p className="text-xs text-zinc-500">Add choices like base, size, extras</p></div>
+          </button>
           <button onClick={() => { onDelete(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-4 text-left hover:bg-red-500/10 active:scale-[0.99] transition">
             <Trash2 size={18} className="text-red-400 shrink-0" />
             <div><p className="text-sm font-medium text-zinc-200">Delete Dish</p><p className="text-xs text-zinc-500">This cannot be undone</p></div>
@@ -292,6 +359,236 @@ function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle }: {
     </BottomSheet>
   )
 }
+
+// ─── CustomiseOptionsModal ────────────────────────────────────────────────────
+
+function CustomiseOptionsModal({
+  item, onClose,
+  existingOptions, onSave,
+}: {
+  item: MenuItemRow
+  onClose: () => void
+  existingOptions: DishOption[]
+  onSave: (drafts: DishOptionDraft[]) => Promise<void>
+}) {
+  const [drafts, setDrafts] = useState<DishOptionDraft[]>(() =>
+    existingOptions.length > 0
+      ? existingOptions.map((opt) => ({
+          id: opt.id, name: opt.name, is_required: opt.is_required,
+          min_selections: opt.min_selections, max_selections: opt.max_selections,
+          position: opt.position,
+          choices: opt.choices.map((c) => ({
+            id: c.id, name: c.name, extra_price: c.extra_price,
+            is_default: c.is_default, is_available: c.is_available, position: c.position,
+          })),
+        }))
+      : []
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function addOption() {
+    setDrafts((prev) => [...prev, emptyOptionDraft(prev.length)])
+  }
+
+  function removeOption(idx: number) {
+    setDrafts((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  function updateOption(idx: number, patch: Partial<DishOptionDraft>) {
+    setDrafts((prev) => prev.map((d, i) => i === idx ? { ...d, ...patch } : d))
+  }
+
+  function addChoice(optIdx: number) {
+    setDrafts((prev) => prev.map((d, i) =>
+      i === optIdx ? { ...d, choices: [...d.choices, emptyChoiceDraft(d.choices.length)] } : d
+    ))
+  }
+
+  function removeChoice(optIdx: number, choiceIdx: number) {
+    setDrafts((prev) => prev.map((d, i) =>
+      i === optIdx ? { ...d, choices: d.choices.filter((_, ci) => ci !== choiceIdx) } : d
+    ))
+  }
+
+  function updateChoice(optIdx: number, choiceIdx: number, patch: Partial<DishOptionChoiceDraft>) {
+    setDrafts((prev) => prev.map((d, i) =>
+      i === optIdx ? {
+        ...d,
+        choices: d.choices.map((c, ci) => ci === choiceIdx ? { ...c, ...patch } : c),
+      } : d
+    ))
+  }
+
+  async function handleSave() {
+    setSaving(true); setError('')
+    try { await onSave(drafts); onClose() }
+    catch (err) { setError(err instanceof Error ? err.message : 'Failed to save options') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <BottomSheet onClose={onClose} zIndex="z-[80]" maxWidthClass="max-w-2xl">
+      <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-bold text-purple-400">
+            <Settings2 size={15} /> Customisation Options
+          </div>
+          <p className="mt-0.5 text-xs text-zinc-500 truncate max-w-[240px]">{item.name}</p>
+        </div>
+        <button onClick={onClose} className="rounded-xl p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Explainer */}
+        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3">
+          <p className="text-xs text-purple-300 font-medium">What are customisation options?</p>
+          <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
+            Let customers choose variations when ordering — e.g. "Choose base: Chapati / Roti / Bhakri" or "Add-ons: Extra cheese, Salad".
+            You can mark options as required or optional.
+          </p>
+        </div>
+
+        {drafts.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-zinc-700 p-8 text-center">
+            <Settings2 size={24} className="mx-auto text-zinc-600 mb-3" />
+            <p className="text-sm font-medium text-zinc-400">No options yet</p>
+            <p className="mt-1 text-xs text-zinc-600">Add option groups like "Choose base", "Size", "Extras"</p>
+          </div>
+        )}
+
+        {drafts.map((opt, optIdx) => (
+          <div key={optIdx} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
+            {/* Option group header */}
+            <div className="p-4 space-y-3 border-b border-zinc-800/60">
+              <div className="flex items-center gap-2">
+                <GripVertical size={16} className="text-zinc-600 shrink-0" />
+                <input
+                  value={opt.name}
+                  onChange={(e) => updateOption(optIdx, { name: e.target.value })}
+                  placeholder='Group name, e.g. "Choose base"'
+                  className={`${INPUT} flex-1`}
+                />
+                <button onClick={() => removeOption(optIdx)} className="shrink-0 rounded-xl p-2 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 transition">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Required toggle */}
+                <button
+                  onClick={() => updateOption(optIdx, { is_required: !opt.is_required })}
+                  className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${opt.is_required ? 'border-orange-500/40 bg-orange-500/15 text-orange-400' : 'border-zinc-700 bg-zinc-800/50 text-zinc-500'}`}
+                >
+                  {opt.is_required ? '★ Required' : '☆ Optional'}
+                </button>
+                {/* Type selector: single vs multi */}
+                <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-1">
+                  <button
+                    onClick={() => updateOption(optIdx, { max_selections: 1, min_selections: 0 })}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.max_selections === 1 ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    <Circle size={10} /> Single
+                  </button>
+                  <button
+                    onClick={() => updateOption(optIdx, { max_selections: Math.max(2, opt.choices.length) })}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.max_selections > 1 ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    <CheckSquare size={10} /> Multiple
+                  </button>
+                </div>
+                {opt.max_selections > 1 && (
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                    <span>Max</span>
+                    <input
+                      type="number" min={1} max={20}
+                      value={opt.max_selections}
+                      onChange={(e) => updateOption(optIdx, { max_selections: Math.max(1, parseInt(e.target.value) || 1) })}
+                      className="w-14 rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-1 text-center text-xs text-white focus:outline-none focus:border-purple-500/60"
+                    />
+                    <span>choices</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Choices list */}
+            <div className="p-3 space-y-2">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Choices</p>
+              {opt.choices.map((choice, choiceIdx) => (
+                <div key={choiceIdx} className="flex items-center gap-2">
+                  <GripVertical size={14} className="text-zinc-700 shrink-0" />
+                  {/* Veg/Non-veg dot as default indicator */}
+                  <button
+                    onClick={() => updateChoice(optIdx, choiceIdx, { is_default: !choice.is_default })}
+                    title={choice.is_default ? 'Default choice (click to unset)' : 'Set as default'}
+                    className={`h-5 w-5 shrink-0 rounded-full border-2 transition ${choice.is_default ? 'border-orange-500 bg-orange-500' : 'border-zinc-600 bg-transparent hover:border-orange-400'}`}
+                  />
+                  <input
+                    value={choice.name}
+                    onChange={(e) => updateChoice(optIdx, choiceIdx, { name: e.target.value })}
+                    placeholder={`Choice ${choiceIdx + 1}, e.g. Chapati`}
+                    className={`${INPUT} flex-1 min-w-0 py-2 text-xs`}
+                  />
+                  {/* Extra price */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-xs text-zinc-600">+₹</span>
+                    <input
+                      type="number" min={0}
+                      value={choice.extra_price ? (choice.extra_price / 100).toFixed(0) : ''}
+                      onChange={(e) => updateChoice(optIdx, choiceIdx, { extra_price: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 })}
+                      placeholder="0"
+                      className="w-14 rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-2 text-center text-xs text-white focus:outline-none focus:border-purple-500/60"
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeChoice(optIdx, choiceIdx)}
+                    disabled={opt.choices.length <= 1}
+                    className="shrink-0 rounded-lg p-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-30 transition"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => addChoice(optIdx)}
+                className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 py-2.5 text-xs font-medium text-zinc-500 hover:border-purple-500/40 hover:text-purple-400 transition"
+              >
+                <Plus size={12} /> Add choice
+              </button>
+            </div>
+
+            <div className="px-3 pb-3">
+              <p className="text-[10px] text-zinc-600">
+                {opt.max_selections === 1 ? '◉ Single select — customer picks one.' : `☑ Multi-select — customer picks up to ${opt.max_selections}.`}
+                {' '}{opt.is_required ? 'Selection is required.' : 'Selection is optional.'}
+                {' '}Filled circle = default pre-selected.
+              </p>
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={addOption}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-700 py-4 text-sm font-semibold text-zinc-500 hover:border-purple-500/40 hover:text-purple-400 transition"
+        >
+          <Plus size={16} /> Add option group
+        </button>
+      </div>
+
+      <div className="shrink-0 border-t border-white/[0.06] bg-[#111111] px-4 py-4">
+        {error && <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-200">{error}</div>}
+        <div className="flex gap-2.5">
+          <button onClick={onClose} className="flex-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-3.5 text-sm font-semibold text-zinc-300 hover:bg-zinc-700 active:scale-[0.98] transition">Cancel</button>
+          <button onClick={() => void handleSave()} disabled={saving} className="flex-[2] rounded-2xl bg-purple-600 py-3.5 text-sm font-bold text-white disabled:opacity-50 active:scale-[0.98] transition hover:bg-purple-500">
+            {saving ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" /> Saving…</span> : 'Save Options'}
+          </button>
+        </div>
+      </div>
+    </BottomSheet>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function MenuPage() {
   const supabase = getSupabaseDashboardBrowser()
@@ -311,6 +608,9 @@ export default function MenuPage() {
   const [showImport, setShowImport] = useState(false)
   const [catImageUploading, setCatImageUploading] = useState<string | null>(null)
   const [descriptionGenerating, setDescriptionGenerating] = useState(false)
+  // Options
+  const [customiseItem, setCustomiseItem] = useState<MenuItemRow | null>(null)
+  const [optionsByItem, setOptionsByItem] = useState<Record<string, DishOption[]>>({})
   const { context, loading: contextLoading } = useDashboardContext()
 
   useEffect(() => {
@@ -318,23 +618,39 @@ export default function MenuPage() {
     async function load() {
       try {
         if (contextLoading) return
-        if (!context?.restaurantId) {
-          setLoading(false)
-          return
-        }
-        const { data: r } = await supabase
-          .from('restaurants')
-          .select('*')
-          .eq('id', context.restaurantId)
-          .single()
+        if (!context?.restaurantId) { setLoading(false); return }
+        const { data: r } = await supabase.from('restaurants').select('*').eq('id', context.restaurantId).single()
         if (!r) { if (mounted) setLoading(false); return }
         const { data: cats } = await supabase.from('menu_categories').select('*').eq('restaurant_id', r.id).order('position')
         const { data: its } = await supabase.from('menu_items').select('*').eq('restaurant_id', r.id).order('position')
+
         if (!mounted) return
         const safeCats = (cats ?? []) as MenuCategoryRow[]
         const safeItems = (its ?? []) as MenuItemRow[]
         setRestaurant(r as Restaurant); setCategories(safeCats); setItems(safeItems)
         setActiveCat(safeCats[0]?.id ?? null)
+
+        // Load all options + choices for this restaurant's items
+        if (safeItems.length > 0) {
+          const itemIds = safeItems.map((i) => i.id)
+          const { data: opts } = await supabase.from('dish_options').select('*').in('menu_item_id', itemIds).order('position')
+          if (opts && opts.length > 0) {
+            const optIds = opts.map((o) => o.id)
+            const { data: choices } = await supabase.from('dish_option_choices').select('*').in('dish_option_id', optIds).order('position')
+            // Group
+            const choicesByOpt: Record<string, DishOptionChoice[]> = {}
+            for (const c of choices ?? []) {
+              if (!choicesByOpt[c.dish_option_id]) choicesByOpt[c.dish_option_id] = []
+              choicesByOpt[c.dish_option_id].push(c as DishOptionChoice)
+            }
+            const byItem: Record<string, DishOption[]> = {}
+            for (const opt of opts) {
+              if (!byItem[opt.menu_item_id]) byItem[opt.menu_item_id] = []
+              byItem[opt.menu_item_id].push({ ...opt, choices: choicesByOpt[opt.id] ?? [] } as DishOption)
+            }
+            if (mounted) setOptionsByItem(byItem)
+          }
+        }
       } catch (err) {
         console.error('Menu load error:', err)
         if (mounted) setError('Failed to load menu')
@@ -346,6 +662,57 @@ export default function MenuPage() {
 
   const catItems = useMemo(() => items.filter((x) => x.category_id === activeCat), [items, activeCat])
   const activeCatData = categories.find((c) => c.id === activeCat) ?? null
+
+  // ── Save dish options ──────────────────────────────────────────────────────
+
+  async function saveDishOptions(itemId: string, drafts: DishOptionDraft[]) {
+    // 1. Delete all existing options for this item (cascade deletes choices)
+    await supabase.from('dish_options').delete().eq('menu_item_id', itemId)
+
+    if (drafts.length === 0) {
+      setOptionsByItem((prev) => ({ ...prev, [itemId]: [] }))
+      return
+    }
+
+    // 2. Insert fresh option groups
+    const optPayloads = drafts.map((d, i) => ({
+      menu_item_id: itemId, name: d.name.trim() || 'Options',
+      is_required: d.is_required, min_selections: d.min_selections,
+      max_selections: d.max_selections, position: i,
+    }))
+    const { data: insertedOpts, error: optErr } = await supabase
+      .from('dish_options').insert(optPayloads).select()
+    if (optErr) throw optErr
+
+    // 3. Insert choices for each group
+    const allChoicePayloads = (insertedOpts ?? []).flatMap((opt, i) =>
+      (drafts[i]?.choices ?? []).map((c, ci) => ({
+        dish_option_id: opt.id, name: c.name.trim() || `Choice ${ci + 1}`,
+        extra_price: c.extra_price, is_default: c.is_default,
+        is_available: c.is_available, position: ci,
+      }))
+    )
+    let allChoices: DishOptionChoice[] = []
+    if (allChoicePayloads.length > 0) {
+      const { data: insertedChoices, error: choiceErr } = await supabase
+        .from('dish_option_choices').insert(allChoicePayloads).select()
+      if (choiceErr) throw choiceErr
+      allChoices = (insertedChoices ?? []) as DishOptionChoice[]
+    }
+
+    // 4. Update local state
+    const choicesByOpt: Record<string, DishOptionChoice[]> = {}
+    for (const c of allChoices) {
+      if (!choicesByOpt[c.dish_option_id]) choicesByOpt[c.dish_option_id] = []
+      choicesByOpt[c.dish_option_id].push(c)
+    }
+    const newOpts: DishOption[] = (insertedOpts ?? []).map((opt) => ({
+      ...opt, choices: choicesByOpt[opt.id] ?? [],
+    } as DishOption))
+    setOptionsByItem((prev) => ({ ...prev, [itemId]: newOpts }))
+  }
+
+  // ── Categories ─────────────────────────────────────────────────────────────
 
   async function addCategory(name?: string) {
     const catName = (name ?? newCatName).trim()
@@ -372,6 +739,8 @@ export default function MenuPage() {
       setItems((prev) => prev.filter((x) => x.category_id !== id))
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete category') }
   }
+
+  // ── Items ──────────────────────────────────────────────────────────────────
 
   async function saveItem() {
     if (!editingItem || !restaurant || !activeCat) return
@@ -494,6 +863,8 @@ export default function MenuPage() {
     }
   }
 
+  // ── Derived stats ──────────────────────────────────────────────────────────
+
   const totalDishes = items.length
   const totalCategories = categories.length
   const availableDishes = items.filter((x) => x.is_available).length
@@ -559,7 +930,6 @@ export default function MenuPage() {
                 const avail = items.filter((x) => x.category_id === cat.id && x.is_available).length
                 const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
                 return (
-                  // ── Mobile: plain <button> is fine here — no nested buttons inside ──
                   <button
                     key={cat.id}
                     onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
@@ -571,7 +941,6 @@ export default function MenuPage() {
                         ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
                         : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">🍱</div>
                       }
-                      {/* label is not a button — no nesting issue */}
                       <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
                         <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
                           {catImageUploading === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Camera size={9} />}
@@ -635,7 +1004,13 @@ export default function MenuPage() {
             ) : (
               <div className="space-y-2">
                 {catItems.map((item) => (
-                  <MobileItemRow key={item.id} item={item} onTap={() => setActionSheetItem(item)} onToggle={() => void toggleAvailable(item)} />
+                  <MobileItemRow
+                    key={item.id} item={item}
+                    optionCount={(optionsByItem[item.id] ?? []).length}
+                    onTap={() => setActionSheetItem(item)}
+                    onToggle={() => void toggleAvailable(item)}
+                    onCustomize={() => setCustomiseItem(item)}
+                  />
                 ))}
               </div>
             )}
@@ -674,7 +1049,6 @@ export default function MenuPage() {
                 const count = items.filter((x) => x.category_id === cat.id).length
                 const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
                 return (
-                  // ── FIX: outer is a <div>, not <button>, so the delete <button> inside is valid ──
                   <div key={cat.id} className="group relative">
                     <div
                       onClick={() => setActiveCat(cat.id)}
@@ -692,7 +1066,6 @@ export default function MenuPage() {
                       </div>
                       <span className="flex items-center gap-2 text-xs shrink-0">
                         <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
-                        {/* delete button is inside a <div>, not a <button> — no nesting violation */}
                         <button
                           onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
                           className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
@@ -701,7 +1074,6 @@ export default function MenuPage() {
                         </button>
                       </span>
                     </div>
-                    {/* camera upload label — also inside the <div> wrapper, not a button */}
                     <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
                       <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900/80 text-zinc-400 hover:bg-orange-500 hover:text-white transition">
                         {catImageUploading === cat.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
@@ -743,7 +1115,14 @@ export default function MenuPage() {
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {catItems.map((item) => (
-                      <DesktopItemCard key={item.id} item={item} onEdit={() => setEditingItem(item)} onDelete={() => void deleteItem(item.id)} onToggle={() => void toggleAvailable(item)} />
+                      <DesktopItemCard
+                        key={item.id} item={item}
+                        optionCount={(optionsByItem[item.id] ?? []).length}
+                        onEdit={() => setEditingItem(item)}
+                        onDelete={() => void deleteItem(item.id)}
+                        onToggle={() => void toggleAvailable(item)}
+                        onCustomize={() => setCustomiseItem(item)}
+                      />
                     ))}
                     <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-zinc-800 text-zinc-600 hover:border-orange-500/40 hover:text-orange-500/70 transition">
                       <Plus size={24} /><span className="text-sm">Add dish</span>
@@ -827,6 +1206,30 @@ export default function MenuPage() {
                 <ToggleRow label="Bestseller" description="Highlight as a top dish" checked={Boolean(editingItem.is_bestseller)} onChange={(checked) => setEditingItem((f) => (f ? { ...f, is_bestseller: checked } : f))} />
                 <ToggleRow label="Available" description="Show to customers" checked={Boolean(editingItem.is_available)} onChange={(checked) => setEditingItem((f) => (f ? { ...f, is_available: checked } : f))} />
               </div>
+
+              {/* Quick link to customise if editing existing item */}
+              {editingItem.id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fullItem = items.find((i) => i.id === editingItem.id)
+                    if (fullItem) { setEditingItem(null); setCustomiseItem(fullItem) }
+                  }}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3 text-left hover:bg-purple-500/15 transition"
+                >
+                  <Settings2 size={16} className="text-purple-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-purple-300">Customisation Options</p>
+                    <p className="text-xs text-zinc-500">
+                      {editingItem.id && (optionsByItem[editingItem.id] ?? []).length > 0
+                        ? `${(optionsByItem[editingItem.id] ?? []).length} option group(s) configured`
+                        : 'Add choices like base, size, extras…'}
+                    </p>
+                  </div>
+                  <ChevronRight size={14} className="text-zinc-600 shrink-0" />
+                </button>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Prep time (mins)">
                   <input type="number" min={0} value={editingItem.prep_time_minutes ?? ''} onChange={(e) => setEditingItem((f) => f ? { ...f, prep_time_minutes: e.target.value ? parseInt(e.target.value) : undefined } : f)} placeholder="20" className={INPUT} />
@@ -864,6 +1267,16 @@ export default function MenuPage() {
           onEdit={() => { setEditingItem(actionSheetItem); setActionSheetItem(null) }}
           onDelete={() => { void deleteItem(actionSheetItem.id); setActionSheetItem(null) }}
           onToggle={() => { void toggleAvailable(actionSheetItem); setActionSheetItem(null) }}
+          onCustomize={() => setCustomiseItem(actionSheetItem)}
+        />
+      )}
+
+      {customiseItem && (
+        <CustomiseOptionsModal
+          item={customiseItem}
+          onClose={() => setCustomiseItem(null)}
+          existingOptions={optionsByItem[customiseItem.id] ?? []}
+          onSave={(drafts) => saveDishOptions(customiseItem.id, drafts)}
         />
       )}
 
@@ -871,6 +1284,8 @@ export default function MenuPage() {
     </div>
   )
 }
+
+// ─── Small components ─────────────────────────────────────────────────────────
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <div><label className="mb-1.5 block text-xs font-semibold text-zinc-400">{label}</label>{children}</div>
@@ -910,9 +1325,10 @@ function DesktopStat({ value, label, icon, color, bg }: { value: number; label: 
   )
 }
 
-function MobileItemRow({ item, onTap, onToggle }: { item: MenuItemRow; onTap: () => void; onToggle: () => void }) {
+function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize }: {
+  item: MenuItemRow; optionCount: number; onTap: () => void; onToggle: () => void; onCustomize: () => void
+}) {
   return (
-    // ── outer is a plain <div> — the buttons inside are siblings, not nested ──
     <div className={`flex items-center gap-3 rounded-2xl border bg-zinc-900/80 p-3 transition active:scale-[0.99] ${item.is_available ? 'border-zinc-800' : 'border-zinc-800/40 opacity-50'}`}>
       <button onClick={onTap} className="shrink-0">
         {item.image_url
@@ -935,11 +1351,19 @@ function MobileItemRow({ item, onTap, onToggle }: { item: MenuItemRow; onTap: ()
           {item.is_bestseller && <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-semibold text-orange-400 ring-1 ring-orange-500/20">🔥 Best</span>}
           {typeof item.prep_time_minutes === 'number' && <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500"><Clock size={9} /> {item.prep_time_minutes}m</span>}
           {!item.is_available && <span className="inline-flex rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">Unavailable</span>}
+          {optionCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-semibold text-purple-400 ring-1 ring-purple-500/20">
+              <Settings2 size={8} /> {optionCount} opt
+            </span>
+          )}
         </div>
       </button>
-      <div className="flex shrink-0 flex-col items-center gap-2.5">
-        <button onClick={onToggle} className={`relative h-6 w-11 rounded-full transition-colors ${item.is_available ? 'bg-green-500' : 'bg-zinc-600'}`}>
+      <div className="flex shrink-0 flex-col items-center gap-2">
+        <button onClick={onToggle} className={`relative h-6 w-11 rounded-full ${item.is_available ? 'bg-green-500' : 'bg-zinc-600'}`}>
           <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${item.is_available ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </button>
+        <button onClick={onCustomize} className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition" title="Customisation options">
+          <Settings2 size={13} />
         </button>
         <button onClick={onTap} className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"><MoreVertical size={14} /></button>
       </div>
@@ -947,7 +1371,9 @@ function MobileItemRow({ item, onTap, onToggle }: { item: MenuItemRow; onTap: ()
   )
 }
 
-function DesktopItemCard({ item, onEdit, onDelete, onToggle }: { item: MenuItemRow; onEdit: () => void; onDelete: () => void; onToggle: () => void }) {
+function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCustomize }: {
+  item: MenuItemRow; optionCount: number; onEdit: () => void; onDelete: () => void; onToggle: () => void; onCustomize: () => void
+}) {
   return (
     <div className={`group relative overflow-hidden rounded-3xl border bg-zinc-900 transition hover:border-zinc-700 ${item.is_available ? 'border-zinc-800' : 'border-zinc-800/40 opacity-60'}`}>
       {item.image_url
@@ -958,6 +1384,7 @@ function DesktopItemCard({ item, onEdit, onDelete, onToggle }: { item: MenuItemR
       <div className="absolute left-3 top-3 flex flex-wrap gap-1">
         <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${item.is_veg ? 'bg-green-500/20 text-green-400 ring-green-500/30' : 'bg-red-500/20 text-red-400 ring-red-500/30'}`}>{item.is_veg ? '🌿 Veg' : '🍖 Non-veg'}</span>
         {item.is_bestseller && <span className="rounded-full bg-orange-500/20 px-2.5 py-1 text-[10px] font-bold text-orange-400 ring-1 ring-orange-500/30">🔥 Best</span>}
+        {optionCount > 0 && <span className="rounded-full bg-purple-500/20 px-2.5 py-1 text-[10px] font-bold text-purple-400 ring-1 ring-purple-500/30">⚙ {optionCount} opts</span>}
       </div>
       <button onClick={onToggle} className={`absolute right-3 top-3 h-6 w-11 rounded-full ${item.is_available ? 'bg-green-500' : 'bg-zinc-600'}`}>
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${item.is_available ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -974,6 +1401,7 @@ function DesktopItemCard({ item, onEdit, onDelete, onToggle }: { item: MenuItemR
         </div>
         <div className="flex gap-2">
           <button onClick={onEdit} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700"><Pencil size={12} /> Edit</button>
+          <button onClick={onCustomize} className="flex items-center justify-center rounded-xl bg-purple-500/10 px-3 py-2.5 text-purple-400 hover:bg-purple-500/20 transition" title="Options"><Settings2 size={13} /></button>
           <button onClick={onDelete} className="flex items-center justify-center rounded-xl bg-zinc-800 px-3 py-2.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400"><Trash2 size={13} /></button>
         </div>
       </div>

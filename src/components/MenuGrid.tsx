@@ -1,7 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo } from 'react'
-import { ChevronRight, ChefHat, Clock, Sparkles, Star, TrendingUp } from 'lucide-react'
+import {
+  ChevronRight,
+  ChefHat,
+  Clock,
+  Flame,
+  Sparkles,
+  Star,
+  TrendingUp,
+} from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { MenuItemCard } from './MenuItemCard'
 import { FloatingCartBar } from './FloatingCartBar'
@@ -73,8 +81,6 @@ function ChefsPickCard({
   onAsk?: (t: string) => void
 }) {
   const price = formatPrice(item.price)
-
-  // Strip trailing comma/semicolon before ellipsis
   const cleanDesc = item.description?.replace(/[,;:\s]+$/, '') ?? null
 
   return (
@@ -101,9 +107,7 @@ function ChefsPickCard({
             </p>
           )}
           <div className="mt-2 flex items-center gap-3">
-            {price && (
-              <span className="text-sm font-bold text-zinc-900">{price}</span>
-            )}
+            {price && <span className="text-sm font-bold text-zinc-900">{price}</span>}
             <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
               <Sparkles size={9} className="text-amber-500" />
               Tap to learn more
@@ -120,13 +124,60 @@ function ChefsPickCard({
   )
 }
 
-/** Fallback SVG for category header when no image is set */
+/** Category header fallback only. Item images intentionally have no fallback image. */
 function CategoryHeaderPlaceholder({ name }: { name: string }) {
   const letter = name.trim()[0]?.toUpperCase() ?? '?'
   return (
     <div className="flex h-full w-full items-center justify-center bg-stone-100">
       <span className="text-lg font-semibold text-stone-400">{letter}</span>
     </div>
+  )
+}
+
+function BestSellersSection({
+  items,
+}: {
+  items: MenuItem[]
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-b from-amber-50 via-white to-white shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-amber-100 px-4 py-4 sm:px-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <Flame size={16} className="text-amber-600" />
+            <h2 className="text-base font-semibold text-stone-900">Best sellers</h2>
+          </div>
+          <p className="mt-0.5 text-xs text-stone-500">
+            Most ordered dishes are shown first so customers can decide faster.
+          </p>
+        </div>
+
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-700 animate-pulse">
+          <Sparkles size={9} />
+          Popular now
+        </span>
+      </div>
+
+      <div className="divide-y divide-amber-100">
+        {items.slice(0, 4).map((item, index) => (
+          <div
+            key={item.id}
+            className="relative"
+            style={{ animationDelay: `${index * 60}ms` }}
+          >
+            <div className="absolute left-3 top-3 z-10">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 ring-1 ring-amber-200">
+                <TrendingUp size={8} />
+                Most ordered
+              </span>
+            </div>
+            <MenuItemCard item={item} />
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -155,7 +206,6 @@ function CategorySection({
       id={`cat-${category.id}`}
       className="scroll-mt-36 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
     >
-      {/* Category header */}
       <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5">
         <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
           {imageUrl ? (
@@ -182,6 +232,7 @@ function CategorySection({
               </span>
             )}
           </div>
+
           {category.description ? (
             <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
               {category.description}
@@ -198,7 +249,6 @@ function CategorySection({
         </span>
       </div>
 
-      {/* Items */}
       <div className="divide-y divide-slate-100">
         {chefsPick && (
           <div className="px-4 py-3 sm:px-5">
@@ -244,23 +294,21 @@ export function MenuGrid({
   isWaiterLoading = false,
   upsellCard,
 }: MenuGridProps = {}) {
-  const { restaurant, categories, items, activeCategory, setActiveCategory } = useAppStore()
+  const { categories, items, activeCategory, setActiveCategory } = useAppStore()
 
   const categoriesWithItems = useMemo(
     () => categories.filter((cat) => items.some((i) => i.category_id === cat.id)),
     [categories, items],
   )
 
-  const scrollToCategory = useCallback(
-    (categoryId: string) => {
-      const el = document.getElementById(`cat-${categoryId}`)
-      if (!el) return
-
-      setActiveCategory(categoryId)
-      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
-    },
-    [setActiveCategory],
+  const bestSellerItems = useMemo(
+    () =>
+      items
+        .filter((i) => i.is_available && i.is_bestseller)
+        .slice()
+        .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+        .slice(0, 4),
+    [items],
   )
 
   useEffect(() => {
@@ -297,13 +345,14 @@ export function MenuGrid({
 
   return (
     <div className="relative w-full pb-44 pt-4">
-      {/* Extra bottom padding (pb-44) prevents FAB from overlapping last ADD button */}
       <div className="space-y-4">
         {upsellCard && (
-          <div className="animate-[fadeUp_420ms_ease-out] rounded-2xl border border-stone-200 bg-white p-1 shadow-sm">
+          <div className="rounded-2xl border border-stone-200 bg-white p-1 shadow-sm">
             {upsellCard}
           </div>
         )}
+
+        <BestSellersSection items={bestSellerItems} />
 
         <div className="space-y-4">
           {categories.map((cat, catIndex) => {
@@ -313,8 +362,7 @@ export function MenuGrid({
             return (
               <div
                 key={cat.id}
-                className="animate-[fadeUp_500ms_ease-out_both]"
-                style={{ animationDelay: `${catIndex * 50}ms`, animationFillMode: 'both' }}
+                className="animate-none"
               >
                 <CategorySection
                   category={cat}

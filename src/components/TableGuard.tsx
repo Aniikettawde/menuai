@@ -13,10 +13,9 @@ export function TableGuard({ restaurant, children }: Props) {
   const rawTable = searchParams.get('table')
   const totalTables = restaurant.total_tables ?? 0
 
-  // If this restaurant has tables configured, enforce the table param
-  if (totalTables > 0) {
-    const tableNumber = rawTable ? parseInt(rawTable, 10) : NaN
-
+  // Only validate if a table param was actually provided AND restaurant has tables configured
+  if (totalTables > 0 && rawTable !== null) {
+    const tableNumber = parseInt(rawTable, 10)
     const isValid =
       !isNaN(tableNumber) &&
       Number.isInteger(tableNumber) &&
@@ -38,26 +37,16 @@ export function TableGuard({ restaurant, children }: Props) {
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M13.5 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5z"
+                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
               />
             </svg>
           </div>
-
-          <h1 className="text-xl font-semibold text-white">
-            {rawTable ? 'Invalid Table' : 'No Table Selected'}
-          </h1>
-
+          <h1 className="text-xl font-semibold text-white">Invalid Table</h1>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-zinc-400">
-            {rawTable
-              ? `Table ${rawTable} doesn't exist at ${restaurant.name}. Tables are numbered 1–${totalTables}.`
-              : `This menu is accessed via a table QR code at ${restaurant.name}.`}
+            Table <span className="font-semibold text-zinc-200">{rawTable}</span> doesn't exist at{' '}
+            <span className="font-semibold text-zinc-200">{restaurant.name}</span>.
+            Valid tables are numbered 1–{totalTables}.
           </p>
-
           <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-5">
             <p className="text-sm font-medium text-zinc-300">Please scan the QR code on your table</p>
             <p className="mt-1.5 text-xs text-zinc-500">
@@ -69,6 +58,9 @@ export function TableGuard({ restaurant, children }: Props) {
     }
   }
 
-  // totalTables === 0 means restaurant hasn't configured tables yet — allow through
+  // All other cases pass through:
+  // - No table param → browse mode (menu visible, call-waiter disabled upstream)
+  // - Valid table param → full dine-in mode
+  // - totalTables === 0 → restaurant hasn't configured tables yet
   return <>{children}</>
 }

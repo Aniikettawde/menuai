@@ -1,6 +1,7 @@
 'use client'
+
 import { useDashboardContext } from '@/hooks/useDashboardContext'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import * as QRCode from 'qrcode'
 import {
@@ -14,11 +15,13 @@ import {
   Globe,
   MessageCircle,
   QrCode,
-  Sparkles,
   Hash,
   Table,
   AlertTriangle,
   ShieldCheck,
+  ScanLine,
+  UtensilsCrossed,
+  BellRing,
 } from 'lucide-react'
 
 type RestaurantRecord = {
@@ -72,9 +75,7 @@ function getNumberField(record: RestaurantRecord | null, keys: string[]): number
   for (const key of keys) {
     const value = record[key]
     if (typeof value === 'number' && Number.isFinite(value)) return value
-    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
-      return Number(value)
-    }
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value)
   }
   return 0
 }
@@ -98,6 +99,176 @@ function getPlanLimit(status: BillingStatus): number {
   return QR_LIMITS[getEffectivePlan(status)]
 }
 
+function StepBadge({
+  step,
+  title,
+  desc,
+  icon,
+}: {
+  step: string
+  title: string
+  desc: string
+  icon: ReactNode
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-300 ring-1 ring-teal-400/20">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-teal-300">
+          {step}
+        </p>
+        <p className="mt-0.5 text-sm font-semibold text-white">{title}</p>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-400">{desc}</p>
+      </div>
+    </div>
+  )
+}
+
+function ScanHero({
+  restaurantName,
+  qrDataUrl,
+}: {
+  restaurantName: string
+  qrDataUrl: string
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-[32px] border border-teal-400/15 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.20),_transparent_42%),linear-gradient(180deg,#0f172a_0%,#07111c_100%)] p-5 shadow-2xl">
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.05),transparent)] opacity-40" />
+
+      <div className="relative">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-teal-200">
+              <ScanLine size={12} />
+              Scan menu
+            </p>
+            <h2 className="mt-3 text-2xl font-black tracking-tight text-white sm:text-3xl">
+              Point your camera here
+            </h2>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-300">
+              No app. No login. Just open the phone camera and scan this code to see the menu,
+              order food, or call a waiter.
+            </p>
+          </div>
+
+          <div className="hidden sm:flex flex-col items-end gap-2">
+            <span className="rounded-full bg-teal-400/10 px-3 py-1 text-[10px] font-semibold text-teal-200 ring-1 ring-teal-400/20">
+              Works on any phone
+            </span>
+            <span className="rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-semibold text-orange-200 ring-1 ring-orange-400/20">
+              Scan → Menu → Order
+            </span>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[28px] border border-white/10 bg-white/5 p-4 backdrop-blur">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                  Scan target
+                </p>
+                <p className="mt-1 text-sm font-semibold text-white">{restaurantName}</p>
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-zinc-200">
+                Menu + waiter
+              </div>
+            </div>
+
+            <div className="mt-4 grid place-items-center rounded-[28px] bg-[radial-gradient(circle_at_center,_rgba(20,184,166,0.10),_transparent_62%)] p-4">
+              <div className="relative">
+                <div className="absolute inset-0 -z-10 animate-pulse rounded-[34px] bg-teal-400/10 blur-2xl" />
+                <div className="absolute -inset-3 rounded-[40px] border border-teal-300/20" />
+                <div className="absolute -inset-6 rounded-[48px] border border-teal-300/10" />
+
+                <div className="relative rounded-[30px] bg-white p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
+                  {qrDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrDataUrl}
+                      alt="QR code to scan menu"
+                      className="h-56 w-56 rounded-2xl object-cover sm:h-64 sm:w-64"
+                    />
+                  ) : (
+                    <div className="flex h-56 w-56 items-center justify-center rounded-2xl bg-white sm:h-64 sm:w-64">
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-600 border-t-transparent" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="absolute -right-3 top-8 hidden rounded-2xl border border-white/10 bg-slate-950/90 px-3 py-2 text-[10px] font-semibold text-zinc-200 shadow-lg sm:block">
+                  Scan with camera
+                </div>
+                <div className="absolute -left-3 bottom-8 hidden rounded-2xl border border-white/10 bg-slate-950/90 px-3 py-2 text-[10px] font-semibold text-zinc-200 shadow-lg sm:block">
+                  Menu opens instantly
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-zinc-200">
+                No app needed
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-zinc-200">
+                No login
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-zinc-200">
+                Browse menu
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-zinc-200">
+                Call waiter
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <StepBadge
+              step="Step 1"
+              title="Open the camera"
+              desc="Most guests already know this. The phone sees the code and shows the menu link automatically."
+              icon={<Smartphone size={18} />}
+            />
+            <StepBadge
+              step="Step 2"
+              title="Browse the menu"
+              desc="Guests land on a clean menu page with photos, prices, and best sellers."
+              icon={<UtensilsCrossed size={18} />}
+            />
+            <StepBadge
+              step="Step 3"
+              title="Order or call waiter"
+              desc="Make the next action obvious so guests move from curiosity to action fast."
+              icon={<BellRing size={18} />}
+            />
+
+            <div className="rounded-3xl border border-orange-400/15 bg-gradient-to-b from-orange-500/10 to-white/5 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-200">
+                Why they scan
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-200">
+                Make the QR feel like the easiest way to eat: faster than waiting, easier than asking,
+                and instantly useful.
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="rounded-2xl bg-black/20 p-3">
+                  <p className="text-[10px] text-zinc-400">Faster</p>
+                  <p className="mt-1 text-sm font-semibold text-white">Instant menu access</p>
+                </div>
+                <div className="rounded-2xl bg-black/20 p-3">
+                  <p className="text-[10px] text-zinc-400">Easier</p>
+                  <p className="mt-1 text-sm font-semibold text-white">No explanation needed</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function QRPage() {
   const supabase = getSupabaseDashboardBrowser()
   const { context, loading: contextLoading } = useDashboardContext()
@@ -111,6 +282,7 @@ export default function QRPage() {
   const [busy, setBusy] = useState(false)
   const [tableCount, setTableCount] = useState(10)
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
+  const [heroQrUrl, setHeroQrUrl] = useState('')
 
   useEffect(() => {
     setBaseUrl(window.location.origin)
@@ -131,18 +303,23 @@ export default function QRPage() {
 
   useEffect(() => {
     let mounted = true
+
     async function load() {
       try {
         if (!restaurantId) {
           if (mounted) setLoading(false)
           return
         }
+
         const [restaurantResult, billingRes] = await Promise.all([
           supabase.from('restaurants').select('*').eq('id', restaurantId).single(),
           fetch('/api/billing/status', { cache: 'no-store' }),
         ])
+
         const billingData = billingRes.ok ? await billingRes.json().catch(() => ({})) : {}
+
         if (!mounted) return
+
         setRestaurant((restaurantResult.data as RestaurantRecord | null) ?? null)
         setBilling((billingData.status as BillingStatus) ?? null)
       } catch (err) {
@@ -151,8 +328,11 @@ export default function QRPage() {
         if (mounted) setLoading(false)
       }
     }
+
     void load()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [restaurantId, supabase])
 
   useEffect(() => {
@@ -163,14 +343,44 @@ export default function QRPage() {
     })
   }, [remainingQrLimit])
 
+  useEffect(() => {
+    let mounted = true
+
+    async function buildHeroQr() {
+      if (!menuUrl) {
+        setHeroQrUrl('')
+        return
+      }
+
+      try {
+        const qr = await QRCode.toDataURL(menuUrl, {
+          errorCorrectionLevel: 'H',
+          margin: 2,
+          width: 1024,
+          color: { dark: '#1B4D4A', light: '#ffffff' },
+        })
+        if (mounted) setHeroQrUrl(qr)
+      } catch (err) {
+        console.error('Hero QR error:', err)
+        if (mounted) setHeroQrUrl('')
+      }
+    }
+
+    void buildHeroQr()
+    return () => {
+      mounted = false
+    }
+  }, [menuUrl])
+
   const safeTableCount = useMemo(() => {
     if (remainingQrLimit <= 0) return 0
     return clamp(Number(tableCount) || 1, 1, remainingQrLimit)
   }, [tableCount, remainingQrLimit])
 
-  const tableNumbers = useMemo(() => {
-    return Array.from({ length: safeTableCount }, (_, i) => i + 1)
-  }, [safeTableCount])
+  const tableNumbers = useMemo(
+    () => Array.from({ length: safeTableCount }, (_, i) => i + 1),
+    [safeTableCount],
+  )
 
   const getTableMenuUrl = (tableNo: number) => {
     if (!menuUrl) return ''
@@ -179,32 +389,39 @@ export default function QRPage() {
 
   useEffect(() => {
     let mounted = true
+
     async function buildTablePreviews() {
       if (!menuUrl) return
+
       try {
         if (tableNumbers.length === 0) {
           if (mounted) setTablePreviewMap({})
           return
         }
+
         const entries = await Promise.all(
           tableNumbers.map(async (tableNo) => {
             const qr = await QRCode.toDataURL(getTableMenuUrl(tableNo), {
               errorCorrectionLevel: 'H',
               margin: 2,
               width: 420,
-              color: { dark: '#0f172a', light: '#ffffff' },
+              color: { dark: '#1B4D4A', light: '#ffffff' },
             })
             return [tableNo, qr] as const
           }),
         )
+
         if (!mounted) return
         setTablePreviewMap(Object.fromEntries(entries))
       } catch (err) {
         console.error('Table preview error:', err)
       }
     }
+
     void buildTablePreviews()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [menuUrl, tableNumbers])
 
   async function copyLink() {
@@ -222,16 +439,28 @@ export default function QRPage() {
       return await new Promise((resolve) => {
         const img = new Image()
         img.crossOrigin = 'anonymous'
-        img.onload = () => { URL.revokeObjectURL(objectUrl); resolve(img) }
-        img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(null) }
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl)
+          resolve(img)
+        }
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl)
+          resolve(null)
+        }
         img.src = objectUrl
       })
-    } catch { return null }
+    } catch {
+      return null
+    }
   }
 
   function roundedRect(
     ctx: CanvasRenderingContext2D,
-    x: number, y: number, w: number, h: number, r: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number,
   ) {
     ctx.beginPath()
     ctx.moveTo(x + r, y)
@@ -246,20 +475,25 @@ export default function QRPage() {
     ctx.closePath()
   }
 
-  // ─── Premium QR sheet download ───────────────────────────────────────────
   async function downloadTableSheet() {
     if (!restaurant || !menuUrl) return
-    if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted for this plan.'); return }
-    if (tableNumbers.length === 0) { alert('Please choose at least one table.'); return }
+    if (remainingQrLimit <= 0) {
+      alert('Your QR limit is exhausted for this plan.')
+      return
+    }
+    if (tableNumbers.length === 0) {
+      alert('Please choose at least one table.')
+      return
+    }
 
     setBusy(true)
 
     try {
       const tables = tableNumbers
       const cardW = 900
-      const cardH = 1200
-      const gap = 48
-      const margin = 64
+      const cardH = 1300
+      const gap = 56
+      const margin = 72
       const cols = 2
       const rows = Math.ceil(tables.length / cols)
       const W = margin * 2 + cols * cardW + (cols - 1) * gap
@@ -271,8 +505,7 @@ export default function QRPage() {
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('Canvas context unavailable')
 
-      // Page bg
-      ctx.fillStyle = '#e8edf5'
+      ctx.fillStyle = '#F0EBE1'
       ctx.fillRect(0, 0, W, H)
 
       for (let index = 0; index < tables.length; index++) {
@@ -282,241 +515,169 @@ export default function QRPage() {
         const x = margin + col * (cardW + gap)
         const y = margin + row * (cardH + gap)
 
-        // ── Card drop shadow ──
         ctx.save()
-        ctx.shadowColor = 'rgba(0,0,0,0.22)'
-        ctx.shadowBlur = 56
-        ctx.shadowOffsetY = 20
-        ctx.fillStyle = '#ffffff'
+        ctx.shadowColor = 'rgba(0,0,0,0.14)'
+        ctx.shadowBlur = 48
+        ctx.shadowOffsetY = 16
+        ctx.fillStyle = '#FDFAF5'
         roundedRect(ctx, x, y, cardW, cardH, 40)
         ctx.fill()
         ctx.restore()
 
-        // ── Clip to card shape ──
         ctx.save()
         roundedRect(ctx, x, y, cardW, cardH, 40)
         ctx.clip()
 
-        // Dark gradient header (top 38%)
-        const headerH = 456
+        const headerH = 400
         const hGrad = ctx.createLinearGradient(x, y, x + cardW, y + headerH)
-        hGrad.addColorStop(0, '#0f172a')
-        hGrad.addColorStop(0.55, '#1e1b4b')
-        hGrad.addColorStop(1, '#2e1065')
+        hGrad.addColorStop(0, '#1B4D4A')
+        hGrad.addColorStop(1, '#163D3A')
         ctx.fillStyle = hGrad
         ctx.fillRect(x, y, cardW, headerH)
 
-        // Dot-grid texture on header
-        ctx.fillStyle = 'rgba(255,255,255,0.025)'
-        for (let dx = 12; dx < cardW; dx += 30) {
-          for (let dy = 12; dy < headerH; dy += 30) {
-            ctx.beginPath()
-            ctx.arc(x + dx, y + dy, 1.8, 0, Math.PI * 2)
-            ctx.fill()
-          }
-        }
-
-        // Glowing orb top-right
-        const orbGrad = ctx.createRadialGradient(
-          x + cardW - 60, y + 60, 0,
-          x + cardW - 60, y + 60, 180,
-        )
-        orbGrad.addColorStop(0, 'rgba(124,58,237,0.25)')
-        orbGrad.addColorStop(1, 'rgba(124,58,237,0)')
-        ctx.fillStyle = orbGrad
+        const warmOrb = ctx.createRadialGradient(x + cardW, y, 0, x + cardW, y, 340)
+        warmOrb.addColorStop(0, 'rgba(232,136,58,0.18)')
+        warmOrb.addColorStop(1, 'rgba(232,136,58,0)')
+        ctx.fillStyle = warmOrb
         ctx.fillRect(x, y, cardW, headerH)
 
-        // White body
-        ctx.fillStyle = '#ffffff'
+        ctx.fillStyle = '#FDFAF5'
         ctx.fillRect(x, y + headerH, cardW, cardH - headerH)
 
         ctx.restore()
 
-        // ── Table badge ──
-        const badgeW = 230
-        const badgeH = 60
-        const badgeX = x + (cardW - badgeW) / 2
-        const badgeY = y + 48
+        const pillW = 200
+        const pillH = 52
+        const pillX = x + (cardW - pillW) / 2
+        const pillY = y + 50
 
         ctx.save()
-        ctx.shadowColor = 'rgba(249,115,22,0.55)'
-        ctx.shadowBlur = 22
-        const bGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeW, badgeY)
-        bGrad.addColorStop(0, '#f97316')
-        bGrad.addColorStop(1, '#fb923c')
-        ctx.fillStyle = bGrad
-        roundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 30)
+        ctx.fillStyle = 'rgba(255,255,255,0.12)'
+        roundedRect(ctx, pillX, pillY, pillW, pillH, 26)
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+        ctx.restore()
+
+        ctx.fillStyle = '#FFFFFF'
+        ctx.font = '600 22px Arial, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText(`TABLE  ${tableNo}`, x + cardW / 2, pillY + 34)
+
+        ctx.fillStyle = '#FFFFFF'
+        ctx.font = 'bold 56px Georgia, serif'
+        ctx.textAlign = 'center'
+        ctx.fillText(restaurant.name, x + cardW / 2, y + 188)
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(x + 160, y + 210)
+        ctx.lineTo(x + cardW - 160, y + 210)
+        ctx.stroke()
+
+        const actions = [
+          { emoji: '🍽', label: 'Browse menu' },
+          { emoji: '✅', label: 'Place order' },
+          { emoji: '🔔', label: 'Call waiter' },
+        ]
+        const actionW = (cardW - 80) / 3
+        actions.forEach((a, i) => {
+          const ax = x + 40 + i * actionW
+          ctx.fillStyle = 'rgba(255,255,255,0.55)'
+          ctx.font = '500 20px Arial, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText(`${a.emoji}  ${a.label}`, ax + actionW / 2, y + 272)
+        })
+
+        const scanPillW = 420
+        const scanPillH = 56
+        const scanPillX = x + (cardW - scanPillW) / 2
+        const scanPillY = y + 308
+
+        ctx.save()
+        const scanGrad = ctx.createLinearGradient(scanPillX, scanPillY, scanPillX + scanPillW, scanPillY)
+        scanGrad.addColorStop(0, '#E8883A')
+        scanGrad.addColorStop(1, '#D4742A')
+        ctx.shadowColor = 'rgba(232,136,58,0.4)'
+        ctx.shadowBlur = 18
+        ctx.fillStyle = scanGrad
+        roundedRect(ctx, scanPillX, scanPillY, scanPillW, scanPillH, 28)
         ctx.fill()
         ctx.restore()
 
-        ctx.fillStyle = '#ffffff'
-        ctx.font = 'bold 27px Arial, sans-serif'
+        ctx.fillStyle = '#FFFFFF'
+        ctx.font = 'bold 24px Arial, sans-serif'
         ctx.textAlign = 'center'
-        ctx.fillText(`TABLE  ${tableNo}`, x + cardW / 2, badgeY + 40)
+        ctx.fillText('📷  Scan to get started', x + cardW / 2, scanPillY + 38)
 
-        // ── Restaurant name ──
-        ctx.fillStyle = '#ffffff'
-        ctx.font = 'bold 50px Georgia, serif'
-        ctx.textAlign = 'center'
-        ctx.fillText(restaurant.name, x + cardW / 2, y + 186)
-
-        // ── Main tagline ──
-        ctx.fillStyle = 'rgba(255,255,255,0.70)'
-        ctx.font = '500 24px Arial, sans-serif'
-        ctx.fillText('Scan Our Digital AI Menu', x + cardW / 2, y + 232)
-
-        // ── Sub-tagline ──
-        ctx.fillStyle = 'rgba(255,255,255,0.42)'
-        ctx.font = '18px Arial, sans-serif'
-        ctx.fillText('to Order & Call Waiter', x + cardW / 2, y + 264)
-
-        // ── Feature pills ──
-        const pills = [
-          { label: 'Call Waiter', color0: '#f97316', color1: '#fb923c' },
-          { label: 'Order', color0: '#6366f1', color1: '#818cf8' },
-          { label: 'Ask AI', color0: '#10b981', color1: '#34d399' },
-        ]
-        const pillH = 40
-        const pillPad = 28
-        const pillGap = 14
-        // Measure widths
-        ctx.font = 'bold 17px Arial, sans-serif'
-        const pillWs = pills.map(p => {
-          ctx.font = 'bold 17px Arial, sans-serif'
-          return ctx.measureText(p.label).width + pillPad * 2
-        })
-        const totalPW = pillWs.reduce((a, b) => a + b, 0) + pillGap * (pills.length - 1)
-        let pX = x + (cardW - totalPW) / 2
-        const pY = y + 296
-
-        pills.forEach((p, pi) => {
-          const pw = pillWs[pi]
-          ctx.save()
-          ctx.shadowColor = 'rgba(0,0,0,0.2)'
-          ctx.shadowBlur = 8
-          const pg = ctx.createLinearGradient(pX, pY, pX + pw, pY)
-          pg.addColorStop(0, p.color0 + 'cc')
-          pg.addColorStop(1, p.color1 + 'cc')
-          ctx.fillStyle = pg
-          roundedRect(ctx, pX, pY, pw, pillH, 20)
-          ctx.fill()
-          ctx.restore()
-
-          ctx.fillStyle = '#ffffff'
-          ctx.font = 'bold 17px Arial, sans-serif'
-          ctx.textAlign = 'center'
-          ctx.fillText(p.label, pX + pw / 2, pY + 27)
-          pX += pw + pillGap
-        })
-
-        // ── Divider ──
-        ctx.strokeStyle = 'rgba(255,255,255,0.10)'
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(x + 100, y + 370)
-        ctx.lineTo(x + cardW - 100, y + 370)
-        ctx.stroke()
-
-        // ── "Powered by Dinezy" ──
-        ctx.fillStyle = 'rgba(255,255,255,0.30)'
-        ctx.font = '16px Arial, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText('Powered by  dinezy.in', x + cardW / 2, y + 410)
-
-        // ── QR code ──
         const qrDataUrl = await QRCode.toDataURL(getTableMenuUrl(tableNo), {
           errorCorrectionLevel: 'H',
           margin: 2,
           width: 1000,
-          color: { dark: '#0f172a', light: '#ffffff' },
+          color: { dark: '#1B4D4A', light: '#ffffff' },
         })
         const qrImg = await loadImage(qrDataUrl)
         if (!qrImg) throw new Error(`Failed QR for Table ${tableNo}`)
 
-        const qrSize = 470
+        const qrSize = 500
         const qrX = x + (cardW - qrSize) / 2
-        const qrY = y + headerH + 36
+        const qrY = y + headerH + 44
 
-        // QR card shadow
         ctx.save()
-        ctx.shadowColor = 'rgba(0,0,0,0.12)'
-        ctx.shadowBlur = 28
+        ctx.shadowColor = 'rgba(0,0,0,0.10)'
+        ctx.shadowBlur = 32
         ctx.shadowOffsetY = 10
-        ctx.fillStyle = '#ffffff'
-        roundedRect(ctx, qrX - 22, qrY - 22, qrSize + 44, qrSize + 44, 30)
+        ctx.fillStyle = '#FFFFFF'
+        roundedRect(ctx, qrX - 28, qrY - 28, qrSize + 56, qrSize + 56, 32)
         ctx.fill()
         ctx.restore()
 
-        // QR border
-        ctx.strokeStyle = '#e2e8f0'
-        ctx.lineWidth = 2
-        roundedRect(ctx, qrX - 22, qrY - 22, qrSize + 44, qrSize + 44, 30)
+        ctx.strokeStyle = '#E8E0D4'
+        ctx.lineWidth = 1.5
+        roundedRect(ctx, qrX - 28, qrY - 28, qrSize + 56, qrSize + 56, 32)
         ctx.stroke()
 
         ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize)
 
-        // ── "No login required" trust line ──
-        const trustY = y + headerH + qrSize + 80
-
-        const trustPillW = 590
-        const trustPillH = 52
-        const trustPillX = x + (cardW - trustPillW) / 2
-
-        ctx.fillStyle = '#f0fdf4'
-        ctx.strokeStyle = '#bbf7d0'
-        ctx.lineWidth = 1.5
-        roundedRect(ctx, trustPillX, trustY, trustPillW, trustPillH, 26)
-        ctx.fill()
-        ctx.stroke()
-
-        ctx.fillStyle = '#15803d'
-        ctx.font = '600 18px Arial, sans-serif'
+        const trustY = y + headerH + qrSize + 100
+        ctx.fillStyle = '#9CA3AF'
+        ctx.font = '500 18px Arial, sans-serif'
         ctx.textAlign = 'center'
-        ctx.fillText(
-          '✓  No login    ·    ✓  No WhatsApp    ·    ✓  No app needed',
-          x + cardW / 2,
-          trustY + 34,
-        )
+        ctx.fillText('No login · No app · Works on any phone', x + cardW / 2, trustY)
 
-        // ── URL bar ──
-        const urlY = y + headerH + qrSize + 156
-        const displayUrl = `dinezy.in/r/${restaurant.slug}?table=${tableNo}`
+        const urlY = trustY + 52
+        const urlPillW = 560
+        const urlPillH = 48
+        const urlPillX = x + (cardW - urlPillW) / 2
 
-        ctx.fillStyle = '#f8fafc'
-        ctx.strokeStyle = '#e2e8f0'
+        ctx.fillStyle = '#F5F0E8'
+        ctx.strokeStyle = '#DDD5C8'
         ctx.lineWidth = 1
-        roundedRect(ctx, x + 90, urlY, cardW - 180, 52, 26)
+        roundedRect(ctx, urlPillX, urlY, urlPillW, urlPillH, 24)
         ctx.fill()
         ctx.stroke()
 
-        ctx.fillStyle = '#94a3b8'
+        ctx.fillStyle = '#7C6F61'
         ctx.font = '500 15px "Courier New", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText(displayUrl, x + cardW / 2, urlY + 34)
+        ctx.fillText(`dinezy.in/r/${restaurant.slug}?table=${tableNo}`, x + cardW / 2, urlY + 31)
 
-        // ── Bottom brand strip (gradient) ──
-        const stripH = 88
+        const stripH = 70
         const stripY = y + cardH - stripH
 
         ctx.save()
         roundedRect(ctx, x, y, cardW, cardH, 40)
         ctx.clip()
-        const sGrad = ctx.createLinearGradient(x, stripY, x + cardW, stripY)
-        sGrad.addColorStop(0, '#f97316')
-        sGrad.addColorStop(0.5, '#a855f7')
-        sGrad.addColorStop(1, '#6366f1')
-        ctx.fillStyle = sGrad
+        ctx.fillStyle = '#1B4D4A'
         ctx.fillRect(x, stripY, cardW, stripH)
         ctx.restore()
 
-        ctx.fillStyle = 'rgba(255,255,255,0.92)'
-        ctx.font = 'bold 28px Arial, sans-serif'
+        ctx.fillStyle = 'rgba(255,255,255,0.85)'
+        ctx.font = '500 16px Arial, sans-serif'
         ctx.textAlign = 'center'
-        ctx.fillText('dinezy.in', x + cardW / 2, stripY + 36)
-
-        ctx.fillStyle = 'rgba(255,255,255,0.52)'
-        ctx.font = '15px Arial, sans-serif'
-        ctx.fillText('AI-powered digital menus for modern restaurants', x + cardW / 2, stripY + 62)
+        ctx.fillText('Powered by dinezy.in — digital menus for restaurants', x + cardW / 2, stripY + 42)
       }
 
       const link = document.createElement('a')
@@ -540,13 +701,14 @@ export default function QRPage() {
           text: `Check out the menu for ${restaurant.name}`,
           url: menuUrl,
         })
-      } catch { /* cancelled */ }
+      } catch {
+        // cancelled
+      }
     } else {
       await copyLink()
     }
   }
 
-  // ─── Loading / empty states ──────────────────────────────────────────────
   if (contextLoading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-6">
@@ -601,99 +763,56 @@ export default function QRPage() {
     )
   }
 
-  // ─── Main render ─────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
       <div className="mb-7">
         <h1 className="text-2xl font-bold text-white">Table QR Codes</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Generate branded table QR cards and keep your QR usage within plan limits.
+          Make scanning feel obvious. Guests should instantly understand: scan → menu → order → call waiter.
         </p>
       </div>
 
-      {isQuotaExhausted && (
-        <div className="mb-5 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle size={16} className="mt-0.5 text-rose-400" />
-            <div>
-              <p className="text-sm font-semibold text-rose-300">QR limit reached</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
-                Your {quotaLabel.toLowerCase()} plan allows unlimited QR codes.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      <ScanHero restaurantName={restaurant.name} qrDataUrl={heroQrUrl} />
 
-      {/* Stats row */}
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Current plan</p>
-          <p className="mt-2 text-sm font-semibold text-white">{quotaLabel}</p>
-          <p className="mt-1 text-xs text-zinc-500">
-            Max QR allowed: <span className="text-orange-400">{Number.isFinite(allowedQrLimit) ? allowedQrLimit : 'Unlimited'}</span>
-          </p>
-        </div>
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Used QR</p>
-          <p className="mt-2 text-sm font-semibold text-white">{usedQrCount}</p>
-          <p className="mt-1 text-xs text-zinc-500">
-            Remaining: <span className="text-orange-400">{remainingQrLimit}</span>
-          </p>
-        </div>
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Menu link</p>
-          <p className="mt-2 break-all font-mono text-xs text-orange-400">{menuUrl}</p>
-        </div>
-      </div>
-
-      {/* Table count input */}
-      <div className="mb-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Hash size={14} className="text-zinc-500" />
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">How many tables?</p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="w-full sm:max-w-xs">
-            <label className="mb-2 block text-xs text-zinc-500">Table count</label>
-            <input
-              type="number"
-              min={1}
-              max={Number.isFinite(remainingQrLimit) ? Math.max(1, remainingQrLimit || 1) : 999999}
-              value={tableCount}
-              onChange={(e) => setTableCount(Number(e.target.value || 1))}
-              disabled={isQuotaExhausted}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
-            />
-          </div>
-          <div className="text-xs leading-relaxed text-zinc-500">
-            {isQuotaExhausted ? (
-              <span>QR generation is disabled until the plan is upgraded.</span>
-            ) : (
-              <span>
-                Generates QR cards for Table 1 to Table {safeTableCount}. Each QR opens the menu with the table number pre-selected.
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
-
-        {/* QR Preview grid */}
-        <div className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900">
-          <div className="bg-[#f1f5f9] p-4 sm:p-6">
-            <div className="mb-4 flex items-center justify-between">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
+        <div className="overflow-hidden rounded-[30px] border border-zinc-800 bg-zinc-900">
+          <div className="border-b border-zinc-800 px-4 py-4 sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-zinc-800">Table QR Preview</p>
-                <p className="text-xs text-zinc-500">Each card includes the table number, AI menu tagline, and trust badges.</p>
+                <p className="text-sm font-semibold text-white">Print preview</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Designed so even first-time users immediately understand that this is the menu scanner.
+                </p>
               </div>
-              <div className="rounded-full bg-orange-500/10 px-3 py-1 text-[11px] font-semibold text-orange-500">
-                {tableNumbers.length} tables
+
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-teal-500/10 px-3 py-1 text-[11px] font-semibold text-teal-300 ring-1 ring-teal-400/20">
+                  Scan menu
+                </span>
+                <span className="rounded-full bg-orange-500/10 px-3 py-1 text-[11px] font-semibold text-orange-300 ring-1 ring-orange-400/20">
+                  Call waiter
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[#F0EBE1] p-4 sm:p-6">
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">1. Scan</p>
+                <p className="mt-1 text-sm font-semibold text-zinc-900">Point camera</p>
+              </div>
+              <div className="rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">2. Menu</p>
+                <p className="mt-1 text-sm font-semibold text-zinc-900">Browse dishes</p>
+              </div>
+              <div className="rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">3. Action</p>
+                <p className="mt-1 text-sm font-semibold text-zinc-900">Order / waiter</p>
               </div>
             </div>
 
-            <div className="grid max-h-[820px] grid-cols-1 gap-5 overflow-auto pr-1 sm:grid-cols-2">
+            <div className="grid max-h-[860px] grid-cols-1 gap-5 overflow-auto pr-1 sm:grid-cols-2">
               {tableNumbers.length === 0 ? (
                 <div className="col-span-full rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center">
                   <Table size={20} className="mx-auto text-zinc-400" />
@@ -702,107 +821,71 @@ export default function QRPage() {
                 </div>
               ) : (
                 tableNumbers.map((tableNo) => (
-                  <div
-                    key={tableNo}
-                    className="overflow-hidden rounded-2xl shadow-lg"
-                    style={{ background: '#ffffff' }}
-                  >
-                    {/* Dark header */}
-                    <div
-                      className="flex flex-col items-center gap-2 px-4 pb-5 pt-5"
-                      style={{
-                        background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #2e1065 100%)',
-                      }}
-                    >
-                      {/* Table badge */}
-                      <div
-                        className="rounded-full px-5 py-1.5 text-xs font-bold uppercase tracking-widest text-white shadow-lg"
-                        style={{ background: 'linear-gradient(90deg, #f97316, #fb923c)', boxShadow: '0 4px 14px rgba(249,115,22,0.45)' }}
-                      >
-                        Table {tableNo}
+                  <div key={tableNo} className="overflow-hidden rounded-3xl bg-[#FDFAF5] shadow-xl">
+                    <div className="px-5 pt-5">
+                      <div className="rounded-[28px] bg-[linear-gradient(135deg,#1B4D4A_0%,#163D3A_100%)] px-4 py-5 text-center text-white">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]">
+                          <ScanLine size={11} />
+                          Scan menu
+                        </div>
+
+                        <p className="mt-3 text-[15px] font-semibold text-white/90">Table {tableNo}</p>
+                        <p
+                          className="mt-1 text-center text-xl font-bold tracking-tight text-white sm:text-2xl"
+                          style={{ fontFamily: 'Georgia, serif' }}
+                        >
+                          {restaurant.name}
+                        </p>
+
+                        <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-white/70">
+                          <span>Browse menu</span>
+                          <span>•</span>
+                          <span>Place order</span>
+                          <span>•</span>
+                          <span>Call waiter</span>
+                        </div>
+
+                        <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-2 text-[11px] font-bold text-white shadow-lg shadow-orange-500/20">
+                          📷 Scan to get started
+                        </div>
                       </div>
-
-                      {/* Restaurant name */}
-                      <p
-                        className="mt-1 text-center text-[15px] font-bold text-white leading-tight"
-                        style={{ fontFamily: 'Georgia, serif' }}
-                      >
-                        {restaurant.name}
-                      </p>
-
-                      {/* Main tagline */}
-                      <p className="text-center text-[11px] font-medium text-white/70 leading-snug">
-                        Scan Our Digital AI Menu
-                      </p>
-                      <p className="text-center text-[10px] text-white/40">
-                        to Order & Call Waiter
-                      </p>
-
-                      {/* Feature pills */}
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap justify-center">
-                        {[
-                          { label: 'Call Waiter', bg: 'rgba(249,115,22,0.8)' },
-                          { label: 'Order', bg: 'rgba(99,102,241,0.8)' },
-                          { label: 'Ask AI', bg: 'rgba(16,185,129,0.8)' },
-                        ].map((p) => (
-                          <span
-                            key={p.label}
-                            className="rounded-full px-2.5 py-0.5 text-[10px] font-bold text-white"
-                            style={{ background: p.bg }}
-                          >
-                            {p.label}
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* Divider */}
-                      <div className="w-full border-t border-white/10 mt-1" />
-
-                      {/* Powered by */}
-                      <p className="text-[9px] text-white/25 tracking-wide">Powered by dinezy.in</p>
                     </div>
 
-                    {/* QR + trust + url */}
-                    <div className="flex flex-col items-center px-4 py-4 bg-white">
-                      {/* QR code */}
-                      <div className="rounded-2xl bg-white p-3 shadow-md ring-1 ring-zinc-200">
+                    <div className="px-5 py-5">
+                      <div className="rounded-[28px] border border-[#E8E0D4] bg-white p-4 shadow-sm">
                         {tablePreviewMap[tableNo] ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={tablePreviewMap[tableNo]}
                             alt={`Table ${tableNo} QR`}
-                            className="h-36 w-36"
+                            className="mx-auto h-44 w-44 rounded-2xl object-cover sm:h-52 sm:w-52"
                           />
                         ) : (
-                          <div className="flex h-36 w-36 items-center justify-center">
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+                          <div className="flex h-44 items-center justify-center sm:h-52">
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
                           </div>
                         )}
                       </div>
 
-                      {/* Trust badges */}
-                      <div className="mt-3 flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 flex-wrap justify-center">
-                        {['No login', 'No WhatsApp', 'No app'].map((t, i) => (
-                          <span key={t} className="flex items-center gap-1 text-[10px] text-zinc-600">
-                            {i > 0 && <span className="text-zinc-300">·</span>}
-                            <span className="text-emerald-600 font-bold">✓</span>
-                            <span>{t}</span>
-                          </span>
-                        ))}
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                        <span className="rounded-full bg-teal-500/10 px-3 py-1 text-[11px] font-medium text-teal-700">
+                          No app needed
+                        </span>
+                        <span className="rounded-full bg-teal-500/10 px-3 py-1 text-[11px] font-medium text-teal-700">
+                          No login
+                        </span>
+                        <span className="rounded-full bg-teal-500/10 px-3 py-1 text-[11px] font-medium text-teal-700">
+                          Works on any phone
+                        </span>
                       </div>
 
-                      {/* URL */}
-                      <p className="mt-2.5 max-w-full truncate rounded-full bg-zinc-100 px-3 py-1 text-[10px] font-mono text-zinc-500">
-                        {getTableMenuUrl(tableNo)}
+                      <p className="mt-3 text-center text-[10px] text-zinc-400">
+                        Open camera, scan, and start ordering in seconds.
                       </p>
                     </div>
 
-                    {/* Bottom brand strip */}
-                    <div
-                      className="py-2 text-center text-[10px] font-bold text-white"
-                      style={{ background: 'linear-gradient(90deg, #f97316, #a855f7, #6366f1)' }}
-                    >
-                      dinezy.in — AI-powered menus
+                    <div className="bg-[#1B4D4A] py-2 text-center text-[9px] font-medium tracking-wide text-white/75">
+                      Powered by dinezy.in
                     </div>
                   </div>
                 ))
@@ -810,12 +893,12 @@ export default function QRPage() {
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="grid grid-cols-2 gap-3 border-t border-zinc-800 p-4">
+          <div className="grid gap-5 border-t border-zinc-800 p-4 sm:p-6 lg:grid-cols-2">
             <button
               onClick={downloadTableSheet}
               disabled={busy || isQuotaExhausted || tableNumbers.length === 0}
-              className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #1B4D4A, #163D3A)' }}
             >
               {busy ? (
                 <>
@@ -829,72 +912,100 @@ export default function QRPage() {
                 </>
               )}
             </button>
+
             <button
               onClick={shareMenu}
-              className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-800 py-3.5 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700"
             >
               <Share2 size={15} />
-              Share
+              Share Link
             </button>
           </div>
         </div>
 
-        {/* Right sidebar */}
         <div className="flex flex-col gap-4">
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">
+              What guests should understand
+            </p>
+            <div className="mt-4 space-y-3">
+              <StepBadge
+                step="Start"
+                title="Scan the code"
+                desc="This is the fastest way to open the menu."
+                icon={<ScanLine size={18} />}
+              />
+              <StepBadge
+                step="Then"
+                title="Browse dishes"
+                desc="Make the menu feel easy, visual, and immediate."
+                icon={<UtensilsCrossed size={18} />}
+              />
+              <StepBadge
+                step="Finally"
+                title="Order or call waiter"
+                desc="Keep the next action visible so users feel confident."
+                icon={<BellRing size={18} />}
+              />
+            </div>
+          </div>
 
-          {/* Menu link */}
+          <div className="rounded-3xl border border-teal-500/15 bg-teal-500/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-300">
+              Trust cues
+            </p>
+            <div className="mt-3 space-y-2 text-sm text-zinc-300">
+              <div className="flex items-center gap-2">
+                <Check size={14} className="text-teal-400" /> No app download
+              </div>
+              <div className="flex items-center gap-2">
+                <Check size={14} className="text-teal-400" /> No login required
+              </div>
+              <div className="flex items-center gap-2">
+                <Check size={14} className="text-teal-400" /> Works on any phone camera
+              </div>
+              <div className="flex items-center gap-2">
+                <Check size={14} className="text-teal-400" /> Menu opens instantly
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="mb-2 flex items-center gap-2">
-              <Globe size={13} className="text-zinc-500" />
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Your menu link</p>
+            <div className="mb-3 flex items-center gap-2">
+              <Printer size={13} className="text-zinc-500" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                How to set up
+              </p>
             </div>
-            <p className="mb-3 break-all font-mono text-sm text-orange-400">{menuUrl}</p>
-            <button
-              onClick={copyLink}
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition ${
-                copied
-                  ? 'border border-green-500/30 bg-green-500/15 text-green-400'
-                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-              }`}
-            >
-              {copied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy Link</>}
-            </button>
-          </div>
-
-          {/* No login callout */}
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15">
-                <ShieldCheck size={14} className="text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-emerald-300">Zero friction for guests</p>
-                <div className="mt-2 flex flex-col gap-1">
-                  {[
-                    'No login or account required',
-                    'No WhatsApp or phone number',
-                    'No app to download',
-                    'Works in any mobile browser',
-                  ].map((t) => (
-                    <div key={t} className="flex items-center gap-2">
-                      <span className="text-emerald-500 text-xs font-bold">✓</span>
-                      <span className="text-xs text-zinc-400">{t}</span>
-                    </div>
-                  ))}
+            <div className="space-y-3">
+              {[
+                { icon: <Download size={13} />, text: 'Download the QR sheet above' },
+                { icon: <Printer size={13} />, text: 'Print and laminate — one per table' },
+                { icon: <Smartphone size={13} />, text: 'Guests point their phone camera and tap the link' },
+                { icon: <BellRing size={13} />, text: 'Orders and waiter calls arrive on your dashboard' },
+              ].map(({ icon, text }, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400">
+                    {icon}
+                  </span>
+                  <p className="text-xs leading-relaxed text-zinc-400">{text}</p>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Share via */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="mb-3 flex items-center gap-2">
               <Share2 size={13} className="text-zinc-500" />
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Share via</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                Share the link
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <a
-                href={`https://wa.me/?text=${encodeURIComponent(`🍽️ Check out our menu!\n${menuUrl}`)}`}
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `Here's our menu — browse, order, or call us right from your phone!\n${menuUrl}`,
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 rounded-xl border border-green-600/20 bg-green-600/10 py-2.5 text-xs font-medium text-green-400 transition hover:bg-green-600/20"
@@ -914,43 +1025,19 @@ export default function QRPage() {
             </div>
           </div>
 
-          {/* How to use */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Printer size={13} className="text-zinc-500" />
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">How to use</p>
-            </div>
-            <div className="space-y-3">
-              {[
-                { icon: <Download size={13} />, text: 'Download the branded QR sheet' },
-                { icon: <Printer size={13} />, text: 'Print and place on each table' },
-                { icon: <Smartphone size={13} />, text: 'Guests scan with phone camera — no app needed' },
-                { icon: <Sparkles size={13} />, text: 'Menu opens instantly with AI assistant ready' },
-              ].map(({ icon, text }, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-orange-400">
-                    {icon}
-                  </span>
-                  <p className="text-xs leading-relaxed text-zinc-400">{text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Plan limits */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/15">
-                <Hash size={14} className="text-blue-400" />
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-800">
+                <Hash size={14} className="text-zinc-400" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-blue-300">Plan QR limits</p>
+                <p className="text-xs font-semibold text-zinc-300">Plan QR limits</p>
                 <div className="mt-2 flex flex-col gap-1">
                   {[
-                    { plan: 'Trial', limit: 'Unlimited QR codes' },
-                    { plan: 'Small', limit: '20 QR codes' },
-                    { plan: 'Growth', limit: '50 QR codes' },
-                    { plan: 'Large', limit: '200 QR codes' },
+                    { plan: 'Trial', limit: 'Unlimited' },
+                    { plan: 'Small', limit: '20 codes' },
+                    { plan: 'Growth', limit: '50 codes' },
+                    { plan: 'Large', limit: '200 codes' },
                   ].map(({ plan, limit }) => (
                     <div key={plan} className="flex justify-between text-xs">
                       <span className="text-zinc-500">{plan}</span>
@@ -961,7 +1048,67 @@ export default function QRPage() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
 
+      {isQuotaExhausted && (
+        <div className="mt-5 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={16} className="mt-0.5 text-rose-400" />
+            <div>
+              <p className="text-sm font-semibold text-rose-300">QR limit reached</p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Upgrade your plan to generate more table QR codes.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Current plan</p>
+          <p className="mt-2 text-sm font-semibold text-white">{quotaLabel}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Max QR: <span className="text-teal-400">{Number.isFinite(allowedQrLimit) ? allowedQrLimit : 'Unlimited'}</span>
+          </p>
+        </div>
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Used QR</p>
+          <p className="mt-2 text-sm font-semibold text-white">{usedQrCount}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Remaining: <span className="text-teal-400">{Number.isFinite(remainingQrLimit) ? remainingQrLimit : '∞'}</span>
+          </p>
+        </div>
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Menu link</p>
+          <p className="mt-2 break-all font-mono text-xs text-teal-400">{menuUrl}</p>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Hash size={14} className="text-zinc-500" />
+          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">How many tables?</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="w-full sm:max-w-xs">
+            <label className="mb-2 block text-xs text-zinc-500">Table count</label>
+            <input
+              type="number"
+              min={1}
+              max={Number.isFinite(remainingQrLimit) ? Math.max(1, remainingQrLimit || 1) : 999999}
+              value={tableCount}
+              onChange={(e) => setTableCount(Number(e.target.value || 1))}
+              disabled={isQuotaExhausted}
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-teal-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+          <p className="text-xs leading-relaxed text-zinc-500">
+            {isQuotaExhausted
+              ? 'QR generation is disabled until the plan is upgraded.'
+              : `Generates QR cards for Table 1 – ${safeTableCount}. Each QR links directly to the menu with the table number pre-filled.`}
+          </p>
         </div>
       </div>
     </div>

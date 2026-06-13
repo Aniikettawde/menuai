@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { MapPin, Star, Clock } from 'lucide-react'
+import { MapPin, Star, Clock, Utensils, Award, ShieldCheck } from 'lucide-react'
 import type { Restaurant } from '@/types'
 import { useAppStore } from '@/store/app-store'
 
@@ -23,116 +23,188 @@ function isOpenNow(hours: Restaurant['opening_hours']): boolean {
   return nowMin >= oh * 60 + om && nowMin <= ch * 60 + cm
 }
 
+function formatRatings(count: number): string {
+  if (count > 999) return `${(count / 1000).toFixed(1)}k`
+  return String(count)
+}
+
 export function RestaurantHeader({ restaurant }: Props) {
   const { setShowRating } = useAppStore()
   const open = isOpenNow(restaurant.opening_hours)
   const hasBanner = Boolean(restaurant.cover_url?.trim())
+  const hasLogo = Boolean(restaurant.logo_url?.trim())
 
   return (
-    <header className="relative overflow-hidden">
+    <header className="w-full">
       {hasBanner ? (
-        <div className="relative h-64 lg:h-80">
-          <Image
-            src={restaurant.cover_url as string}
-            alt={restaurant.name}
-            fill
-            priority
-            sizes="100vw"
-            className="object-cover object-center scale-[1.03]"
-          />
+        <>
+          {/* ── Banner
+              Mobile  → square-ish: 100vw wide, 100vw tall (aspect-square)
+              Tablet+ → fixed 480 px tall, full width
+              This matches the tall "poster" look in the reference screenshot
+          ── */}
+          <div className="relative w-full aspect-square sm:aspect-auto sm:h-[480px]">
+            <Image
+              src={restaurant.cover_url as string}
+              alt={`${restaurant.name} cover`}
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover object-center"
+            />
 
-          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-white/95" />
-          <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/20 to-transparent" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_32%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.16),transparent_28%)]" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.18)_100%)]" />
+            {/* Warm colour-grade overlay */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-900/20 via-transparent to-orange-900/15" />
 
-          <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/35 to-transparent" />
-        </div>
-      ) : (
-        <div className="h-28 bg-gradient-to-b from-slate-100 via-white to-white" />
-      )}
+            {/* Top scrim — logo legibility */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 via-black/20 to-transparent" />
 
-      <div
-        className={[
-          'relative z-10 px-4 pb-5',
-          hasBanner ? '-mt-14' : 'pt-4',
-        ].join(' ')}
-      >
-        <div className="relative overflow-hidden rounded-[32px] border border-white/70 bg-white/88 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.14)] backdrop-blur-2xl sm:p-5">
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.65)_0%,rgba(255,255,255,0.18)_38%,rgba(255,255,255,0.06)_100%)]" />
-          <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-500/10 blur-3xl" />
-          <div className="pointer-events-none absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-amber-400/10 blur-3xl" />
+            {/* Bottom fade → merges into the white badge row */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
 
-          <div className="relative flex items-end gap-3 sm:gap-4">
-            {restaurant.logo_url ? (
-              <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-[24px] border border-white/90 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.15)] ring-1 ring-slate-200/70">
-                <Image
-                  src={restaurant.logo_url}
-                  alt={restaurant.name}
-                  width={72}
-                  height={72}
-                  className="h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 rounded-[24px] ring-1 ring-white/40" />
+            {/* ── Name / cuisine + Logo — bottom overlay ── */}
+            <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 px-4 pb-5 sm:px-6 sm:pb-7">
+              {/* Left: text */}
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300 drop-shadow sm:text-xs">
+                  Welcome to
+                </p>
+                <h1 className="mt-1 text-[2rem] font-extrabold uppercase leading-[1.05] tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)] sm:text-[2.6rem]">
+                  {restaurant.name}
+                </h1>
+                <p className="mt-1 text-sm font-medium text-white/75 drop-shadow sm:text-[15px]">
+                  {restaurant.cuisine_type} Restaurant
+                </p>
               </div>
-            ) : (
-              <div className="flex h-18 w-18 shrink-0 items-center justify-center rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 text-2xl font-bold text-slate-900 shadow-[0_12px_30px_rgba(15,23,42,0.12)]">
-                {restaurant.name?.[0]?.toUpperCase() ?? 'R'}
-              </div>
-            )}
 
-            <div className="min-w-0 flex-1 pb-1">
-              <h1 className="truncate text-[1.35rem] font-semibold tracking-tight text-slate-900 sm:text-[1.55rem] lg:text-[1.85rem]">
-                {restaurant.name}
-              </h1>
-              <p className="mt-0.5 truncate text-sm text-slate-500 sm:text-[15px]">
-                {restaurant.cuisine_type}
-              </p>
+              {/* Right: logo */}
+              {hasLogo && (
+                <div className="shrink-0">
+                  <div className="relative h-16 w-16 overflow-hidden rounded-2xl border-2 border-white/90 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.40)] sm:h-20 sm:w-20 sm:rounded-3xl">
+                    <Image
+                      src={restaurant.logo_url as string}
+                      alt={`${restaurant.name} logo`}
+                      fill
+                      sizes="80px"
+                      className="object-contain p-1"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="relative mt-4 flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setShowRating(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3.5 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-95"
-              aria-label="Rate this restaurant"
-            >
-              <Star size={13} className="fill-amber-400 text-amber-400" />
-              <span>{restaurant.avg_rating.toFixed(1)}</span>
-              <span className="text-slate-400">
-                ({restaurant.total_ratings > 999
-                  ? `${(restaurant.total_ratings / 1000).toFixed(1)}k`
-                  : restaurant.total_ratings})
-              </span>
-            </button>
-
-            <span
-              className={[
-                'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium shadow-sm',
-                open
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'border-rose-200 bg-rose-50 text-rose-700',
-              ].join(' ')}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${open ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              {open ? 'Open now' : 'Closed'}
-            </span>
-
-            {restaurant.address && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-600 shadow-sm">
-                <MapPin size={11} />
-                <span className="max-w-[170px] truncate">{restaurant.address}</span>
-              </span>
-            )}
-
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-2 text-xs font-medium text-blue-700 shadow-sm">
-              <Clock size={11} />
-              Today’s live menu
-            </span>
+          {/* ── Three feature badges ── */}
+          <div className="flex items-stretch justify-around divide-x divide-slate-100 border-b border-slate-100 bg-white px-2 py-3 sm:px-4">
+            <FeatureBadge
+              icon={<Utensils size={17} className="text-amber-500" />}
+              title={restaurant.cuisine_type ?? 'Multi Cuisine'}
+              subtitle="Flavors for every mood"
+            />
+            <FeatureBadge
+              icon={<Award size={17} className="text-amber-500" />}
+              title="Best Quality"
+              subtitle="Fresh & premium ingredients"
+            />
+            <FeatureBadge
+              icon={<ShieldCheck size={17} className="text-amber-500" />}
+              title="Hygienic Food"
+              subtitle="Prepared with care & love"
+            />
+          </div>
+        </>
+      ) : (
+        /* ── No-banner fallback ── */
+        <div className="flex items-center gap-3 border-b border-slate-100 bg-gradient-to-b from-amber-50 to-white px-4 py-4 sm:px-5">
+          {hasLogo ? (
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
+              <Image
+                src={restaurant.logo_url as string}
+                alt={`${restaurant.name} logo`}
+                fill
+                sizes="64px"
+                className="object-contain p-1"
+              />
+            </div>
+          ) : (
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 text-2xl font-extrabold text-amber-700 shadow-sm">
+              {restaurant.name?.[0]?.toUpperCase() ?? 'R'}
+            </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              {restaurant.name}
+            </h1>
+            <p className="mt-0.5 truncate text-sm text-slate-500">{restaurant.cuisine_type}</p>
           </div>
         </div>
+      )}
+
+      {/* ── Meta pills ── */}
+      <div className="flex flex-wrap items-center gap-2 bg-white px-4 py-3 sm:px-5">
+        {/* Rating */}
+        <button
+          onClick={() => setShowRating(true)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-sm font-semibold text-amber-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-95"
+          aria-label="Rate this restaurant"
+        >
+          <Star size={13} className="fill-amber-400 text-amber-400" />
+          <span>{restaurant.avg_rating.toFixed(1)}</span>
+          <span className="font-normal text-amber-600">({formatRatings(restaurant.total_ratings)})</span>
+        </button>
+
+        {/* Open / Closed */}
+        <span
+          className={[
+            'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold shadow-sm',
+            open
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-rose-200 bg-rose-50 text-rose-700',
+          ].join(' ')}
+        >
+          <span
+            className={[
+              'h-1.5 w-1.5 rounded-full',
+              open ? 'animate-pulse bg-emerald-500' : 'bg-rose-500',
+            ].join(' ')}
+          />
+          {open ? 'Open now' : 'Closed'}
+        </span>
+
+        {/* Address */}
+        {restaurant.address && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+            <MapPin size={11} className="shrink-0" />
+            <span className="max-w-[160px] truncate">{restaurant.address}</span>
+          </span>
+        )}
+
+        {/* Live menu */}
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3.5 py-1.5 text-xs font-medium text-blue-700 shadow-sm">
+          <Clock size={11} />
+          Today's live menu
+        </span>
       </div>
     </header>
+  )
+}
+
+function FeatureBadge({
+  icon,
+  title,
+  subtitle,
+}: {
+  icon: React.ReactNode
+  title: string
+  subtitle: string
+}) {
+  return (
+    <div className="flex flex-1 flex-col items-center gap-0.5 px-2 text-center">
+      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-50">
+        {icon}
+      </div>
+      <span className="mt-1 text-[11px] font-semibold leading-tight text-slate-800">{title}</span>
+      <span className="text-[10px] leading-tight text-slate-400">{subtitle}</span>
+    </div>
   )
 }

@@ -46,6 +46,39 @@ export interface Restaurant {
   
 }
 
+export interface DishOptionChoice {
+  id: string
+  dish_option_id: string
+  name: string
+  extra_price: number   // paise
+  is_default: boolean
+  is_available: boolean
+  position: number
+}
+
+export interface DishOption {
+  id: string
+  menu_item_id: string
+  name: string
+  is_required: boolean
+  min_selections: number
+  max_selections: number
+  position: number
+  choices: DishOptionChoice[]
+}
+ 
+// Stored inside a CartItem to record what the customer chose
+export interface SelectedOption {
+  option_id: string
+  option_name: string
+  choices: {
+    choice_id: string
+    choice_name: string
+    extra_price: number  // paise
+  }[]
+}
+ 
+
 export interface OpeningHours {
   [day: string]: { open: string; close: string; closed?: boolean }
 }
@@ -185,6 +218,7 @@ export type EventType =
   | 'upsell_accepted'
   | 'upsell_ignored'
   | 'ai_upsell_impression'
+  | 'upsell_shown'          // ← add this line
   | 'ai_upsell_shown'
   | 'ai_upsell_accepted'
   | 'bestseller_shown'

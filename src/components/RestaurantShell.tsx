@@ -4,7 +4,7 @@ import { useEffect, useCallback, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { useAppStore } from '@/store/app-store'
-import type { MenuPageData } from '@/types'
+import type { MenuPageData, DishOption } from '@/types'
 import { setCachedMenu } from '@/lib/cache'
 import { setupConnectivityListeners, track } from '@/lib/analytics'
 import { usePWA } from '@/hooks/usePWA'
@@ -60,6 +60,7 @@ export function RestaurantShell({ initialData }: Props) {
   const {
     restaurant,
     setRestaurantData,
+    setDishOptions,
     setIsOffline,
     setTableNumber,
     tableNumber,
@@ -73,11 +74,11 @@ export function RestaurantShell({ initialData }: Props) {
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-
   const slug = initialData.restaurant.slug
 
   usePWA()
 
+  // ── Restore persisted orders ───────────────────────────────────────────────
   useEffect(() => {
     if (tableNumber === undefined) return
 
@@ -110,8 +111,82 @@ export function RestaurantShell({ initialData }: Props) {
     writePersistedOrderIds(slug, tableNumber, stillActive)
   }, [slug, tableNumber])
 
-  
+  // ── Fetch dish options for all menu items ──────────────────────────────────
+  // We load this once on mount (and after a menu refresh) so the
+  // CustomiseSheet has data available instantly when opened.
+  const fetchDishOptions = useCallback(
+    async (itemIds: string[]) => {
+      if (itemIds.length === 0) return
 
+      try {
+        // Fetch all option groups for this restaurant's items
+        const { data: optionRows, error: optErr } = await supabase
+          .from('dish_options')
+          .select('*')
+          .in('menu_item_id', itemIds)
+          .order('position')
+
+        if (optErr || !optionRows || optionRows.length === 0) return
+
+        const optionIds = optionRows.map((o: any) => o.id)
+
+        // Fetch all choices for these option groups
+        const { data: choiceRows, error: chErr } = await supabase
+          .from('dish_option_choices')
+          .select('*')
+          .in('dish_option_id', optionIds)
+          .eq('is_available', true)
+          .order('position')
+
+        if (chErr) return
+
+        // Group choices by option_id
+        const choicesByOption = new Map<string, any[]>()
+        for (const choice of choiceRows ?? []) {
+          const existing = choicesByOption.get(choice.dish_option_id) ?? []
+          existing.push(choice)
+          choicesByOption.set(choice.dish_option_id, existing)
+        }
+
+        // Build the DishOption[] structure grouped by menu_item_id
+        const optionsByItem: Record<string, DishOption[]> = {}
+        for (const opt of optionRows) {
+          const choices = (choicesByOption.get(opt.id) ?? []).map((c: any) => ({
+            id: c.id,
+            dish_option_id: c.dish_option_id,
+            name: c.name,
+            extra_price: c.extra_price ?? 0,
+            is_default: c.is_default ?? false,
+            is_available: c.is_available ?? true,
+            position: c.position ?? 0,
+          }))
+
+          const dishOption: DishOption = {
+            id: opt.id,
+            menu_item_id: opt.menu_item_id,
+            name: opt.name,
+            is_required: opt.is_required ?? false,
+            min_selections: opt.min_selections ?? 0,
+            max_selections: opt.max_selections ?? 1,
+            position: opt.position ?? 0,
+            choices,
+          }
+
+          if (!optionsByItem[opt.menu_item_id]) {
+            optionsByItem[opt.menu_item_id] = []
+          }
+          optionsByItem[opt.menu_item_id].push(dishOption)
+        }
+
+        setDishOptions(optionsByItem)
+      } catch (err) {
+        console.error('Failed to fetch dish options:', err)
+      }
+    },
+    [setDishOptions],
+  )
+
+  // ── Refresh menu data ──────────────────────────────────────────────────────
   const refreshMenu = useCallback(async () => {
     const restaurantId = initialData.restaurant.id
 
@@ -142,16 +217,28 @@ export function RestaurantShell({ initialData }: Props) {
 
       setRestaurantData(nextData)
       setCachedMenu(slug, nextData)
+
+      // Re-fetch options when menu refreshes (items may have changed)
+      if (items && items.length > 0) {
+        void fetchDishOptions(items.map((i: any) => i.id))
+      }
     } catch (err) {
       console.error('Failed to refresh menu:', err)
     }
-  }, [initialData.restaurant.id, slug, setRestaurantData])
+  }, [initialData.restaurant.id, slug, setRestaurantData, fetchDishOptions])
 
+  // ── Initial data hydration ─────────────────────────────────────────────────
   useEffect(() => {
     setRestaurantData(initialData)
     setCachedMenu(slug, initialData)
-  }, [initialData, setRestaurantData, slug])
 
+    // Kick off dish options fetch in background
+    if (initialData.items.length > 0) {
+      void fetchDishOptions(initialData.items.map((i) => i.id))
+    }
+  }, [initialData, setRestaurantData, slug, fetchDishOptions])
+
+  // ── Connectivity listeners ─────────────────────────────────────────────────
   useEffect(() => {
     const cleanup = setupConnectivityListeners()
     const off = () => setIsOffline(true)
@@ -167,44 +254,80 @@ export function RestaurantShell({ initialData }: Props) {
       window.removeEventListener('online', on)
     }
   }, [setIsOffline])
-useEffect(() => {
-  const raw = searchParams.get('table')
-  const n = raw ? Number(raw) : null
-  const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
 
-  setTableNumber(resolved)
+  // ── Table number + page view tracking ─────────────────────────────────────
+  useEffect(() => {
+    const raw = searchParams.get('table')
+    const n = raw ? Number(raw) : null
+    const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
 
-  if (!initialData.restaurant.id) return
-  void track(initialData.restaurant.id, 'page_view', {
-    metadata: { table_number: resolved },
-  })
-}, [searchParams, setTableNumber, initialData.restaurant.id])
+    setTableNumber(resolved)
 
+    if (!initialData.restaurant.id) return
+    void track(initialData.restaurant.id, 'page_view', {
+      metadata: { table_number: resolved },
+    })
+  }, [searchParams, setTableNumber, initialData.restaurant.id])
+
+  // ── Realtime menu changes ──────────────────────────────────────────────────
   useEffect(() => {
     const restaurantId = initialData.restaurant.id
 
     const channel = supabase
       .channel(`restaurant-menu-${restaurantId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_categories', filter: `restaurant_id=eq.${restaurantId}` }, () => {
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` }, () => {
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` }, () => {
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-        refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
-      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'menu_categories', filter: `restaurant_id=eq.${restaurantId}` },
+        () => {
+          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+          refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` },
+        () => {
+          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+          refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` },
+        () => {
+          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+          refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120)
+        },
+      )
+      // Also listen for dish_options / dish_option_choices changes so the
+      // customise sheet updates live (e.g. owner disables a choice)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dish_options' },
+        () => {
+          if (initialData.items.length > 0) {
+            void fetchDishOptions(initialData.items.map((i) => i.id))
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dish_option_choices' },
+        () => {
+          if (initialData.items.length > 0) {
+            void fetchDishOptions(initialData.items.map((i) => i.id))
+          }
+        },
+      )
       .subscribe()
 
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
       void supabase.removeChannel(channel)
     }
-  }, [initialData.restaurant.id, refreshMenu])
+  }, [initialData.restaurant.id, initialData.items, refreshMenu, fetchDishOptions])
 
+  // ── Waiter call handler ────────────────────────────────────────────────────
   const handleCallWaiter = useCallback(
     async (payload: {
       items: { id: string; name: string; qty: number; price: number; total: number }[]
@@ -293,8 +416,6 @@ useEffect(() => {
     [slug],
   )
 
-  
-
   if (!restaurant) return null
 
   const activeOrder = waiterToasts[activeToastIndex] ?? null
@@ -305,8 +426,7 @@ useEffect(() => {
       <RestaurantHeader restaurant={restaurant} />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
-<CategoryTabs />
-
+        <CategoryTabs />
         <MenuGrid
           onCallWaiter={handleCallWaiter}
           isWaiterLoading={waiterLoading}

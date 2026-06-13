@@ -1,10 +1,14 @@
+'use client'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { Restaurant, MenuCategory, MenuItem, ChatMessage } from '@/types'
+import type { Restaurant, MenuCategory, MenuItem, ChatMessage, DishOption, SelectedOption } from '@/types'
 
-type CartItem = {
+export type CartItem = {
   item: MenuItem
   quantity: number
+  selectedOptions?: SelectedOption[]   // ← NEW: chosen customisations
+  // Computed key so two identical items with different options are separate entries
+  cartKey: string
 }
 
 interface AppStore {
@@ -12,10 +16,16 @@ interface AppStore {
   categories: MenuCategory[]
   items: MenuItem[]
 
+  // ── NEW: dish options map (populated by RestaurantShell on load) ──────────
+  dishOptions: Record<string, DishOption[]>   // key = menu_item_id
+
   cartItems: CartItem[]
   isCartOpen: boolean
   cartPulse: number
   tableNumber: number | null
+
+  // ── NEW: customise sheet state ────────────────────────────────────────────
+  customiseItemId: string | null   // if set, show CustomiseSheet for this item
 
   messages: ChatMessage[]
   isChatLoading: boolean
@@ -28,6 +38,8 @@ interface AppStore {
   showChat: boolean
 
   setRestaurantData: (data: { restaurant: Restaurant; categories: MenuCategory[]; items: MenuItem[] }) => void
+  setDishOptions: (options: Record<string, DishOption[]>) => void   // NEW
+
   addMessage: (msg: ChatMessage) => void
   setIsChatLoading: (loading: boolean) => void
   clearMessages: () => void
@@ -37,22 +49,36 @@ interface AppStore {
   setIsOffline: (offline: boolean) => void
   setShowChat: (show: boolean) => void
   setTableNumber: (tableNumber: number | null) => void
-  addToCart: (item: MenuItem) => void
-  increaseCartItem: (itemId: string) => void
-  decreaseCartItem: (itemId: string) => void
-  removeFromCart: (itemId: string) => void
+
+  // Cart
+  addToCart: (item: MenuItem, selectedOptions?: SelectedOption[], quantity?: number) => void  // UPDATED signature
+  increaseCartItem: (cartKey: string) => void    // now uses cartKey
+  decreaseCartItem: (cartKey: string) => void    // now uses cartKey
+  removeFromCart: (cartKey: string) => void      // now uses cartKey
   clearCart: () => void
   openCart: () => void
   closeCart: () => void
   toggleCart: () => void
+
+  // Customise sheet
+  openCustomiseSheet: (itemId: string) => void   // NEW
+  closeCustomiseSheet: () => void                // NEW
+}
+
+function makeCartKey(itemId: string, selectedOptions?: SelectedOption[]): string {
+  if (!selectedOptions || selectedOptions.length === 0) return itemId
+  // Stable key: sort option_ids + choice_ids so ordering doesn't matter
+  const parts = selectedOptions
+    .map((o) => `${o.option_id}:${o.choices.map((c) => c.choice_id).sort().join('+')}`)
+    .sort()
+    .join('|')
+  return `${itemId}__${parts}`
 }
 
 function getSessionId() {
   if (typeof window === 'undefined') return 'ssr'
-
   const existing = sessionStorage.getItem('menuai_sid')
   if (existing) return existing
-
   const id = crypto.randomUUID()
   sessionStorage.setItem('menuai_sid', id)
   return id
@@ -63,11 +89,14 @@ export const useAppStore = create<AppStore>()(
     restaurant: null,
     categories: [],
     items: [],
+    dishOptions: {},
 
     cartItems: [],
     isCartOpen: false,
     cartPulse: 0,
     tableNumber: null,
+
+    customiseItemId: null,
 
     messages: [],
     isChatLoading: false,
@@ -85,6 +114,11 @@ export const useAppStore = create<AppStore>()(
         state.categories = categories
         state.items = items
         state.activeCategory = categories[0]?.id ?? null
+      }),
+
+    setDishOptions: (options) =>
+      set((state) => {
+        state.dishOptions = options
       }),
 
     addMessage: (msg) =>
@@ -132,36 +166,46 @@ export const useAppStore = create<AppStore>()(
         state.tableNumber = tableNumber
       }),
 
-    addToCart: (item) =>
+    // ── Cart ─────────────────────────────────────────────────────────────────
+
+    addToCart: (item, selectedOptions, quantity = 1) =>
       set((state) => {
-        const existing = state.cartItems.find((c) => c.item.id === item.id)
-        if (existing) existing.quantity += 1
-        else state.cartItems.push({ item, quantity: 1 })
+        const key = makeCartKey(item.id, selectedOptions)
+        const existing = state.cartItems.find((c) => c.cartKey === key)
+        if (existing) {
+          existing.quantity += quantity
+        } else {
+          state.cartItems.push({
+            item,
+            quantity,
+            selectedOptions: selectedOptions && selectedOptions.length > 0 ? selectedOptions : undefined,
+            cartKey: key,
+          })
+        }
         state.cartPulse += 1
       }),
 
-    increaseCartItem: (itemId) =>
+    increaseCartItem: (cartKey) =>
       set((state) => {
-        const existing = state.cartItems.find((c) => c.item.id === itemId)
+        const existing = state.cartItems.find((c) => c.cartKey === cartKey)
         if (existing) {
           existing.quantity += 1
           state.cartPulse += 1
         }
       }),
 
-    decreaseCartItem: (itemId) =>
+    decreaseCartItem: (cartKey) =>
       set((state) => {
-        const index = state.cartItems.findIndex((c) => c.item.id === itemId)
+        const index = state.cartItems.findIndex((c) => c.cartKey === cartKey)
         if (index === -1) return
-
         const existing = state.cartItems[index]
         existing.quantity -= 1
         if (existing.quantity <= 0) state.cartItems.splice(index, 1)
       }),
 
-    removeFromCart: (itemId) =>
+    removeFromCart: (cartKey) =>
       set((state) => {
-        state.cartItems = state.cartItems.filter((c) => c.item.id !== itemId)
+        state.cartItems = state.cartItems.filter((c) => c.cartKey !== cartKey)
       }),
 
     clearCart: () =>
@@ -183,6 +227,16 @@ export const useAppStore = create<AppStore>()(
     toggleCart: () =>
       set((state) => {
         state.isCartOpen = !state.isCartOpen
+      }),
+
+    openCustomiseSheet: (itemId) =>
+      set((state) => {
+        state.customiseItemId = itemId
+      }),
+
+    closeCustomiseSheet: () =>
+      set((state) => {
+        state.customiseItemId = null
       }),
   })),
 )
