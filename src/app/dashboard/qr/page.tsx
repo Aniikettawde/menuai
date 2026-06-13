@@ -550,19 +550,20 @@ export default function QRPage() {
       const JsPDF = await loadJsPDF()
 
       // A4 in points (jsPDF default unit)
-      const pageW = 595.28
-      const pageH = 841.89
-      const margin = 24        // page margin (pt)
-      const gap = 14           // gap between cards (pt)
-      const cols = 2
-      const rows = 2           // 4 cards per page
-      const cardsPerPage = cols * rows
+     // A4 in points (jsPDF default unit)
+const pageW = 595.28
+const pageH = 841.89
+const margin = 18        // page margin (pt)
+const gap = 10           // gap between cards (pt)
+const cols = 2
+const rows = 3           // 6 cards per page
+const cardsPerPage = cols * rows
 
-      const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols   // ≈ 266pt
-      const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows   // ≈ 389pt
+const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols   // ≈ 275pt
+const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows   // ≈ 254pt
 
-      // QR size inside card: leave room for header + footer text
-      const qrSize = Math.floor(cardH * 0.46)   // ≈ 179pt (~63mm) — good scan size
+// QR size inside card: leave room for header + footer text
+const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at table distance
 
       const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
 
@@ -592,7 +593,7 @@ export default function QRPage() {
         doc.roundedRect(x, y, cardW, cardH, 8, 8, 'FD')
 
         // ── Header band ────────────────────────────────────────────────────
-        const headerH = cardH * 0.26   // ≈ 101pt
+        const headerH = cardH * 0.30   // ≈ 101pt
         doc.setFillColor(27, 77, 74)    // #1B4D4A teal
         doc.roundedRect(x, y, cardW, headerH + 8, 8, 8, 'F')
         // Fill lower corners of header to make flat bottom
@@ -603,12 +604,12 @@ export default function QRPage() {
         doc.setTextColor(255, 255, 255)
         doc.setFont('helvetica', 'bold')
         const nameFontSize = cardW > 250 ? 15 : 12
-        doc.setFontSize(nameFontSize)
+        doc.setFontSize(11)
         doc.text(restaurant.name, x + cardW / 2, y + headerH * 0.42, { align: 'center', maxWidth: cardW - 20 })
 
         // Table number pill
         const pillText = `TABLE  ${tableNo}`
-        doc.setFontSize(9.5)
+        doc.setFontSize(8)
         doc.setFont('helvetica', 'bold')
         const pillW = doc.getTextWidth(pillText) + 22
         const pillH = 16
@@ -624,7 +625,7 @@ export default function QRPage() {
 
         // "Scan to get started" orange pill
         const scanText = 'Scan to get started'
-        doc.setFontSize(8.5)
+        doc.setFontSize(7.5)
         doc.setFont('helvetica', 'bold')
         const scanW = doc.getTextWidth(scanText) + 24
         const scanH = 15
@@ -658,14 +659,14 @@ export default function QRPage() {
         doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
 
         // ── Trust line ──────────────────────────────────────────────────────
-        const trustY = y + headerH + qrSize + 28
+        const trustY = y + headerH + qrSize + 20 
         doc.setFontSize(7.5)
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(130, 120, 110)
         doc.text('No app  ·  No login  ·  Works on any phone', x + cardW / 2, trustY, { align: 'center' })
 
         // ── URL ─────────────────────────────────────────────────────────────
-        const urlY = trustY + 13
+        const badgeY = urlY + 12
         const shortUrl = `dinezy.in/r/${restaurant.slug}?t=${token}`
         doc.setFontSize(6.5)
         doc.setFont('courier', 'normal')
@@ -690,7 +691,7 @@ export default function QRPage() {
         })
 
         // ── Footer strip ────────────────────────────────────────────────────
-        const footerH = 18
+        const footerH = 16
         const footerY = y + cardH - footerH
         doc.setFillColor(27, 77, 74)
         // Clip to rounded bottom
