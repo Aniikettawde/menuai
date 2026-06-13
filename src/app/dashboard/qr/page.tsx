@@ -52,6 +52,9 @@ type BillingStatus = {
   trial_end?: string | null
 } | null
 
+// token map: tableNumber → token string (e.g. "4K7M9X2P")
+type TokenMap = Map<number, string>
+
 const QR_LIMITS: Record<BillingPlanKey, number> = {
   trial: Number.POSITIVE_INFINITY,
   small: 20,
@@ -284,6 +287,10 @@ export default function QRPage() {
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
   const [heroQrUrl, setHeroQrUrl] = useState('')
 
+  // NEW: token map loaded from / saved to Supabase
+  const [tokenMap, setTokenMap] = useState<TokenMap>(new Map())
+  const [tokensLoading, setTokensLoading] = useState(false)
+
   useEffect(() => {
     setBaseUrl(window.location.origin)
   }, [])
@@ -301,6 +308,7 @@ export default function QRPage() {
     : Number.POSITIVE_INFINITY
   const isQuotaExhausted = Number.isFinite(allowedQrLimit) ? remainingQrLimit === 0 : false
 
+  // ── Load restaurant + billing ──────────────────────────────────────────────
   useEffect(() => {
     let mounted = true
 
@@ -330,9 +338,37 @@ export default function QRPage() {
     }
 
     void load()
-    return () => {
-      mounted = false
+    return () => { mounted = false }
+  }, [restaurantId, supabase])
+
+  // ── Load existing tokens from Supabase once restaurant is known ────────────
+  useEffect(() => {
+    let mounted = true
+
+    async function loadTokens() {
+      if (!restaurantId) return
+      setTokensLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('qr_tokens')
+          .select('table_number, token')
+          .eq('restaurant_id', restaurantId)
+
+        if (error) { console.error('Token load error:', error); return }
+        if (!mounted) return
+
+        const map = new Map<number, string>()
+        for (const row of data ?? []) {
+          map.set(row.table_number, row.token)
+        }
+        setTokenMap(map)
+      } finally {
+        if (mounted) setTokensLoading(false)
+      }
     }
+
+    void loadTokens()
+    return () => { mounted = false }
   }, [restaurantId, supabase])
 
   useEffect(() => {
@@ -343,15 +379,12 @@ export default function QRPage() {
     })
   }, [remainingQrLimit])
 
+  // ── Hero QR (general menu, no table) ──────────────────────────────────────
   useEffect(() => {
     let mounted = true
 
     async function buildHeroQr() {
-      if (!menuUrl) {
-        setHeroQrUrl('')
-        return
-      }
-
+      if (!menuUrl) { setHeroQrUrl(''); return }
       try {
         const qr = await QRCode.toDataURL(menuUrl, {
           errorCorrectionLevel: 'H',
@@ -367,9 +400,7 @@ export default function QRPage() {
     }
 
     void buildHeroQr()
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, [menuUrl])
 
   const safeTableCount = useMemo(() => {
@@ -382,26 +413,77 @@ export default function QRPage() {
     [safeTableCount],
   )
 
-  const getTableMenuUrl = (tableNo: number) => {
+  /**
+   * Returns the secure URL for a table.
+   * If a token exists in the map, uses ?t=TOKEN.
+   * Falls back to ?table=N only while tokens haven't loaded yet (shown as a
+   * spinner in the preview instead — see tablePreviewMap effect).
+   */
+  function getTableMenuUrl(tableNo: number): string {
     if (!menuUrl) return ''
-    return `${menuUrl}?table=${tableNo}`
+    const token = tokenMap.get(tableNo)
+    if (token) return `${menuUrl}?t=${token}`
+    // Token not yet minted — return empty so the QR shows a spinner
+    return ''
   }
 
+  /**
+   * Ensures all requested table numbers have tokens, creating missing ones
+   * via the API route. Returns the refreshed token map.
+   */
+  async function ensureTokens(tables: number[]): Promise<TokenMap> {
+    if (!restaurantId) return tokenMap
+    const missing = tables.filter((n) => !tokenMap.has(n))
+    if (missing.length === 0) return tokenMap
+
+   const res = await fetch('/api/qr-tokens/upsert', {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ restaurantId, tableNumbers: tables }),
+})
+
+    if (!res.ok) throw new Error(`Token upsert failed: ${res.status}`)
+
+    const { tokens } = await res.json() as { tokens: { table_number: number; token: string }[] }
+    const updated = new Map(tokenMap)
+    for (const row of tokens) {
+      updated.set(row.table_number, row.token)
+    }
+    setTokenMap(updated)
+    return updated
+  }
+
+  // ── Build preview QRs whenever table list or token map changes ─────────────
   useEffect(() => {
     let mounted = true
 
     async function buildTablePreviews() {
-      if (!menuUrl) return
+      if (!menuUrl || tableNumbers.length === 0) {
+        if (mounted) setTablePreviewMap({})
+        return
+      }
+
+      // Only build previews for tables that have a token
+      const tablesWithTokens = tableNumbers.filter((n) => tokenMap.has(n))
+
+      if (tablesWithTokens.length === 0) {
+        // Tokens haven't been minted yet — trigger minting, previews will
+        // rebuild once tokenMap updates via the state setter above.
+        if (restaurantId) {
+          ensureTokens(tableNumbers).catch(console.error)
+        }
+        return
+      }
 
       try {
-        if (tableNumbers.length === 0) {
-          if (mounted) setTablePreviewMap({})
-          return
-        }
-
         const entries = await Promise.all(
-          tableNumbers.map(async (tableNo) => {
-            const qr = await QRCode.toDataURL(getTableMenuUrl(tableNo), {
+          tablesWithTokens.map(async (tableNo) => {
+            const url = getTableMenuUrl(tableNo)
+            if (!url) return null
+            const qr = await QRCode.toDataURL(url, {
               errorCorrectionLevel: 'H',
               margin: 2,
               width: 420,
@@ -412,17 +494,17 @@ export default function QRPage() {
         )
 
         if (!mounted) return
-        setTablePreviewMap(Object.fromEntries(entries))
+        const filtered = entries.filter(Boolean) as [number, string][]
+        setTablePreviewMap(Object.fromEntries(filtered))
       } catch (err) {
         console.error('Table preview error:', err)
       }
     }
 
     void buildTablePreviews()
-    return () => {
-      mounted = false
-    }
-  }, [menuUrl, tableNumbers])
+    return () => { mounted = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuUrl, tableNumbers, tokenMap])
 
   async function copyLink() {
     if (!menuUrl) return
@@ -439,14 +521,8 @@ export default function QRPage() {
       return await new Promise((resolve) => {
         const img = new Image()
         img.crossOrigin = 'anonymous'
-        img.onload = () => {
-          URL.revokeObjectURL(objectUrl)
-          resolve(img)
-        }
-        img.onerror = () => {
-          URL.revokeObjectURL(objectUrl)
-          resolve(null)
-        }
+        img.onload = () => { URL.revokeObjectURL(objectUrl); resolve(img) }
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(null) }
         img.src = objectUrl
       })
     } catch {
@@ -456,11 +532,7 @@ export default function QRPage() {
 
   function roundedRect(
     ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    r: number,
+    x: number, y: number, w: number, h: number, r: number,
   ) {
     ctx.beginPath()
     ctx.moveTo(x + r, y)
@@ -477,18 +549,15 @@ export default function QRPage() {
 
   async function downloadTableSheet() {
     if (!restaurant || !menuUrl) return
-    if (remainingQrLimit <= 0) {
-      alert('Your QR limit is exhausted for this plan.')
-      return
-    }
-    if (tableNumbers.length === 0) {
-      alert('Please choose at least one table.')
-      return
-    }
+    if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted for this plan.'); return }
+    if (tableNumbers.length === 0) { alert('Please choose at least one table.'); return }
 
     setBusy(true)
 
     try {
+      // Ensure all tokens exist before generating the download
+      const latestTokenMap = await ensureTokens(tableNumbers)
+
       const tables = tableNumbers
       const cardW = 900
       const cardH = 1300
@@ -510,6 +579,12 @@ export default function QRPage() {
 
       for (let index = 0; index < tables.length; index++) {
         const tableNo = tables[index]
+        const token = latestTokenMap.get(tableNo)
+        if (!token) throw new Error(`Missing token for Table ${tableNo}`)
+
+        // Secure URL uses the token, not the table number
+        const tableUrl = `${menuUrl}?t=${token}`
+
         const row = Math.floor(index / cols)
         const col = index % cols
         const x = margin + col * (cardW + gap)
@@ -612,7 +687,7 @@ export default function QRPage() {
         ctx.textAlign = 'center'
         ctx.fillText('📷  Scan to get started', x + cardW / 2, scanPillY + 38)
 
-        const qrDataUrl = await QRCode.toDataURL(getTableMenuUrl(tableNo), {
+        const qrDataUrl = await QRCode.toDataURL(tableUrl, {
           errorCorrectionLevel: 'H',
           margin: 2,
           width: 1000,
@@ -647,6 +722,7 @@ export default function QRPage() {
         ctx.textAlign = 'center'
         ctx.fillText('No login · No app · Works on any phone', x + cardW / 2, trustY)
 
+        // Show token in footer instead of the guessable table number
         const urlY = trustY + 52
         const urlPillW = 560
         const urlPillH = 48
@@ -662,7 +738,7 @@ export default function QRPage() {
         ctx.fillStyle = '#7C6F61'
         ctx.font = '500 15px "Courier New", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText(`dinezy.in/r/${restaurant.slug}?table=${tableNo}`, x + cardW / 2, urlY + 31)
+        ctx.fillText(`dinezy.in/r/${restaurant.slug}?t=${token}`, x + cardW / 2, urlY + 31)
 
         const stripH = 70
         const stripY = y + cardH - stripH
@@ -853,7 +929,12 @@ export default function QRPage() {
 
                     <div className="px-5 py-5">
                       <div className="rounded-[28px] border border-[#E8E0D4] bg-white p-4 shadow-sm">
-                        {tablePreviewMap[tableNo] ? (
+                        {/* Show spinner while token is being minted */}
+                        {tokensLoading || !tokenMap.has(tableNo) ? (
+                          <div className="flex h-44 items-center justify-center sm:h-52">
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
+                          </div>
+                        ) : tablePreviewMap[tableNo] ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={tablePreviewMap[tableNo]}
