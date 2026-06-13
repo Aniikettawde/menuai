@@ -12,13 +12,11 @@ import {
   ExternalLink,
   Smartphone,
   Printer,
-  Globe,
   MessageCircle,
   QrCode,
   Hash,
   Table,
   AlertTriangle,
-  ShieldCheck,
   ScanLine,
   UtensilsCrossed,
   BellRing,
@@ -52,7 +50,6 @@ type BillingStatus = {
   trial_end?: string | null
 } | null
 
-// token map: tableNumber → token string (e.g. "4K7M9X2P")
 type TokenMap = Map<number, string>
 
 const QR_LIMITS: Record<BillingPlanKey, number> = {
@@ -137,22 +134,21 @@ function ScanHero({
   qrDataUrl: string
 }) {
   return (
-    <div className="relative overflow-hidden rounded-[32px] border border-teal-400/15 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.20),_transparent_42%),linear-gradient(180deg,#0f172a_0%,#07111c_100%)] p-5 shadow-2xl">
-      <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.05),transparent)] opacity-40" />
+    <div className="relative overflow-hidden rounded-[32px] border border-teal-400/15 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.22),_transparent_42%),linear-gradient(180deg,#0f172a_0%,#07111c_100%)] p-5 shadow-2xl">
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.06),transparent)] opacity-40" />
 
       <div className="relative">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-teal-200">
               <ScanLine size={12} />
-              Scan menu
+              Unlock the table
             </p>
             <h2 className="mt-3 text-2xl font-black tracking-tight text-white sm:text-3xl">
-              Point your camera here
+              There’s more behind this code.
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-300">
-              No app. No login. Just open the phone camera and scan this code to see the menu,
-              order food, or call a waiter.
+              No app. No signup. Just scan to reveal the menu, bestsellers, and waiter access in one clean flow.
             </p>
           </div>
 
@@ -161,7 +157,7 @@ function ScanHero({
               Works on any phone
             </span>
             <span className="rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-semibold text-orange-200 ring-1 ring-orange-400/20">
-              Scan → Menu → Order
+              Scan → Reveal → Order
             </span>
           </div>
         </div>
@@ -191,7 +187,7 @@ function ScanHero({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={qrDataUrl}
-                      alt="QR code to scan menu"
+                      alt="QR code to reveal menu"
                       className="h-56 w-56 rounded-2xl object-cover sm:h-64 sm:w-64"
                     />
                   ) : (
@@ -202,7 +198,7 @@ function ScanHero({
                 </div>
 
                 <div className="absolute -right-3 top-8 hidden rounded-2xl border border-white/10 bg-slate-950/90 px-3 py-2 text-[10px] font-semibold text-zinc-200 shadow-lg sm:block">
-                  Scan with camera
+                  Point camera here
                 </div>
                 <div className="absolute -left-3 bottom-8 hidden rounded-2xl border border-white/10 bg-slate-950/90 px-3 py-2 text-[10px] font-semibold text-zinc-200 shadow-lg sm:block">
                   Menu opens instantly
@@ -230,38 +226,37 @@ function ScanHero({
             <StepBadge
               step="Step 1"
               title="Open the camera"
-              desc="Most guests already know this. The phone sees the code and shows the menu link automatically."
+              desc="Most guests already know this motion. It feels effortless and familiar."
               icon={<Smartphone size={18} />}
             />
             <StepBadge
               step="Step 2"
-              title="Browse the menu"
-              desc="Guests land on a clean menu page with photos, prices, and best sellers."
+              title="Reveal the menu"
+              desc="The next screen should feel like a little discovery, not a form or login wall."
               icon={<UtensilsCrossed size={18} />}
             />
             <StepBadge
               step="Step 3"
               title="Order or call waiter"
-              desc="Make the next action obvious so guests move from curiosity to action fast."
+              desc="Keep the action obvious so the guest feels in control from the first second."
               icon={<BellRing size={18} />}
             />
 
             <div className="rounded-3xl border border-orange-400/15 bg-gradient-to-b from-orange-500/10 to-white/5 p-4">
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-200">
-                Why they scan
+                Why people scan
               </p>
               <p className="mt-2 text-sm leading-relaxed text-zinc-200">
-                Make the QR feel like the easiest way to eat: faster than waiting, easier than asking,
-                and instantly useful.
+                This feels faster than waiting, easier than asking, and more interesting than a plain paper menu.
               </p>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <div className="rounded-2xl bg-black/20 p-3">
                   <p className="text-[10px] text-zinc-400">Faster</p>
-                  <p className="mt-1 text-sm font-semibold text-white">Instant menu access</p>
+                  <p className="mt-1 text-sm font-semibold text-white">Instant access</p>
                 </div>
                 <div className="rounded-2xl bg-black/20 p-3">
-                  <p className="text-[10px] text-zinc-400">Easier</p>
-                  <p className="mt-1 text-sm font-semibold text-white">No explanation needed</p>
+                  <p className="text-[10px] text-zinc-400">Curious</p>
+                  <p className="mt-1 text-sm font-semibold text-white">Feels like a reveal</p>
                 </div>
               </div>
             </div>
@@ -275,11 +270,9 @@ function ScanHero({
 // ─── jsPDF loader (dynamic CDN fallback so no npm install required) ────────────
 async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
   try {
-    // Try npm package first (works if jspdf is in node_modules)
     const mod = await import('jspdf')
     return mod.jsPDF
   } catch {
-    // Fallback: load from CDN
     return new Promise((resolve, reject) => {
       if ((window as unknown as Record<string, unknown>).jspdf) {
         resolve(((window as unknown as Record<string, unknown>).jspdf as { jsPDF: typeof import('jspdf').jsPDF }).jsPDF)
@@ -314,7 +307,6 @@ export default function QRPage() {
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
   const [heroQrUrl, setHeroQrUrl] = useState('')
 
-  // NEW: token map loaded from / saved to Supabase
   const [tokenMap, setTokenMap] = useState<TokenMap>(new Map())
   const [tokensLoading, setTokensLoading] = useState(false)
 
@@ -335,7 +327,6 @@ export default function QRPage() {
     : Number.POSITIVE_INFINITY
   const isQuotaExhausted = Number.isFinite(allowedQrLimit) ? remainingQrLimit === 0 : false
 
-  // ── Load restaurant + billing ──────────────────────────────────────────────
   useEffect(() => {
     let mounted = true
 
@@ -365,10 +356,11 @@ export default function QRPage() {
     }
 
     void load()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [restaurantId, supabase])
 
-  // ── Load existing tokens from Supabase once restaurant is known ────────────
   useEffect(() => {
     let mounted = true
 
@@ -381,7 +373,10 @@ export default function QRPage() {
           .select('table_number, token')
           .eq('restaurant_id', restaurantId)
 
-        if (error) { console.error('Token load error:', error); return }
+        if (error) {
+          console.error('Token load error:', error)
+          return
+        }
         if (!mounted) return
 
         const map = new Map<number, string>()
@@ -395,7 +390,9 @@ export default function QRPage() {
     }
 
     void loadTokens()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [restaurantId, supabase])
 
   useEffect(() => {
@@ -406,12 +403,14 @@ export default function QRPage() {
     })
   }, [remainingQrLimit])
 
-  // ── Hero QR (general menu, no table) ──────────────────────────────────────
   useEffect(() => {
     let mounted = true
 
     async function buildHeroQr() {
-      if (!menuUrl) { setHeroQrUrl(''); return }
+      if (!menuUrl) {
+        setHeroQrUrl('')
+        return
+      }
       try {
         const qr = await QRCode.toDataURL(menuUrl, {
           errorCorrectionLevel: 'H',
@@ -427,7 +426,9 @@ export default function QRPage() {
     }
 
     void buildHeroQr()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [menuUrl])
 
   const safeTableCount = useMemo(() => {
@@ -463,7 +464,7 @@ export default function QRPage() {
 
     if (!res.ok) throw new Error(`Token upsert failed: ${res.status}`)
 
-    const { tokens } = await res.json() as { tokens: { table_number: number; token: string }[] }
+    const { tokens } = (await res.json()) as { tokens: { table_number: number; token: string }[] }
     const updated = new Map(tokenMap)
     for (const row of tokens) {
       updated.set(row.table_number, row.token)
@@ -472,7 +473,6 @@ export default function QRPage() {
     return updated
   }
 
-  // ── Build preview QRs whenever table list or token map changes ─────────────
   useEffect(() => {
     let mounted = true
 
@@ -515,7 +515,9 @@ export default function QRPage() {
     }
 
     void buildTablePreviews()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuUrl, tableNumbers, tokenMap])
 
@@ -526,44 +528,34 @@ export default function QRPage() {
     setTimeout(() => setCopied(false), 2200)
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // PDF DOWNLOAD — A4, 4 cards per page (2 cols × 2 rows)
-  //
-  // A4 at 72 dpi in jsPDF units (points):  595.28 × 841.89 pt
-  // Page margin: 20pt each side
-  // Usable width: 555pt  → 2 cols → card width ≈ 267pt  (~94mm)
-  // Usable height per card: 380pt (~134mm)
-  // QR code inside card: 180pt square (~63mm) — ISO standard table QR is 60-80mm ✓
-  // ─────────────────────────────────────────────────────────────────────────────
   async function downloadTableSheet() {
     if (!restaurant || !menuUrl) return
-    if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted for this plan.'); return }
-    if (tableNumbers.length === 0) { alert('Please choose at least one table.'); return }
+    if (remainingQrLimit <= 0) {
+      alert('Your QR limit is exhausted for this plan.')
+      return
+    }
+    if (tableNumbers.length === 0) {
+      alert('Please choose at least one table.')
+      return
+    }
 
     setBusy(true)
 
     try {
-      // 1. Ensure all tokens exist
       const latestTokenMap = await ensureTokens(tableNumbers)
-
-      // 2. Load jsPDF
       const JsPDF = await loadJsPDF()
 
-      // A4 in points (jsPDF default unit)
-     // A4 in points (jsPDF default unit)
-const pageW = 595.28
-const pageH = 841.89
-const margin = 18        // page margin (pt)
-const gap = 10           // gap between cards (pt)
-const cols = 2
-const rows = 3           // 6 cards per page
-const cardsPerPage = cols * rows
+      const pageW = 595.28
+      const pageH = 841.89
+      const margin = 24
+      const gap = 14
+      const cols = 2
+      const rows = 2
+      const cardsPerPage = cols * rows
 
-const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols   // ≈ 275pt
-const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows   // ≈ 254pt
-
-// QR size inside card: leave room for header + footer text
-const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at table distance
+      const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols
+      const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows
+      const qrSize = Math.floor(cardH * 0.46)
 
       const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
 
@@ -574,7 +566,6 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
 
         const tableUrl = `${menuUrl}?t=${token}`
 
-        // New page for every cardsPerPage (first page already exists)
         if (i > 0 && i % cardsPerPage === 0) {
           doc.addPage()
         }
@@ -586,30 +577,28 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
         const x = margin + col * (cardW + gap)
         const y = margin + row * (cardH + gap)
 
-        // ── Card background ────────────────────────────────────────────────
-        doc.setFillColor(253, 250, 245)   // #FDFAF5 warm white
+        doc.setFillColor(253, 250, 245)
         doc.setDrawColor(220, 213, 200)
         doc.setLineWidth(0.75)
         doc.roundedRect(x, y, cardW, cardH, 8, 8, 'FD')
 
-        // ── Header band ────────────────────────────────────────────────────
-        const headerH = cardH * 0.30   // ≈ 101pt
-        doc.setFillColor(27, 77, 74)    // #1B4D4A teal
+        const headerH = cardH * 0.26
+        doc.setFillColor(27, 77, 74)
         doc.roundedRect(x, y, cardW, headerH + 8, 8, 8, 'F')
-        // Fill lower corners of header to make flat bottom
         doc.setFillColor(27, 77, 74)
         doc.rect(x, y + headerH, cardW, 8, 'F')
 
-        // Restaurant name
         doc.setTextColor(255, 255, 255)
         doc.setFont('helvetica', 'bold')
         const nameFontSize = cardW > 250 ? 15 : 12
-        doc.setFontSize(11)
-        doc.text(restaurant.name, x + cardW / 2, y + headerH * 0.42, { align: 'center', maxWidth: cardW - 20 })
+        doc.setFontSize(nameFontSize)
+        doc.text(restaurant.name, x + cardW / 2, y + headerH * 0.42, {
+          align: 'center',
+          maxWidth: cardW - 20,
+        })
 
-        // Table number pill
         const pillText = `TABLE  ${tableNo}`
-        doc.setFontSize(8)
+        doc.setFontSize(9.5)
         doc.setFont('helvetica', 'bold')
         const pillW = doc.getTextWidth(pillText) + 22
         const pillH = 16
@@ -623,23 +612,20 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
         doc.setTextColor(255, 255, 255)
         doc.text(pillText, x + cardW / 2, pillY + 10.5, { align: 'center' })
 
-        // "Scan to get started" orange pill
-        const scanText = 'Scan to get started'
-        doc.setFontSize(7.5)
+        const scanText = 'Scan to reveal'
+        doc.setFontSize(8.5)
         doc.setFont('helvetica', 'bold')
         const scanW = doc.getTextWidth(scanText) + 24
         const scanH = 15
         const scanX = x + (cardW - scanW) / 2
         const scanY = y + headerH * 0.84
 
-        doc.setFillColor(232, 136, 58)   // #E8883A orange
+        doc.setFillColor(232, 136, 58)
         doc.setDrawColor(232, 136, 58)
         doc.roundedRect(scanX, scanY, scanW, scanH, 7, 7, 'FD')
         doc.setTextColor(255, 255, 255)
         doc.text(scanText, x + cardW / 2, scanY + 10, { align: 'center' })
 
-        // ── QR Code ────────────────────────────────────────────────────────
-        // Generate high-res QR as PNG data URL (600px for crisp print)
         const qrDataUrl = await QRCode.toDataURL(tableUrl, {
           errorCorrectionLevel: 'H',
           margin: 2,
@@ -650,7 +636,6 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
         const qrX = x + (cardW - qrSize) / 2
         const qrY = y + headerH + 12
 
-        // White background behind QR with subtle border
         doc.setFillColor(255, 255, 255)
         doc.setDrawColor(228, 220, 210)
         doc.setLineWidth(0.75)
@@ -658,24 +643,23 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
 
         doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
 
-        // ── Trust line ──────────────────────────────────────────────────────
-        const trustY = y + headerH + qrSize + 20 
+        const trustY = y + headerH + qrSize + 28
         doc.setFontSize(7.5)
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(130, 120, 110)
-        doc.text('No app  ·  No login  ·  Works on any phone', x + cardW / 2, trustY, { align: 'center' })
+        doc.text('No app  ·  No login  ·  Instant access', x + cardW / 2, trustY, {
+          align: 'center',
+        })
 
-        // ── URL ─────────────────────────────────────────────────────────────
-        const badgeY = urlY + 12
+        const urlY = trustY + 13
         const shortUrl = `dinezy.in/r/${restaurant.slug}?t=${token}`
         doc.setFontSize(6.5)
         doc.setFont('courier', 'normal')
         doc.setTextColor(100, 90, 80)
         doc.text(shortUrl, x + cardW / 2, urlY, { align: 'center', maxWidth: cardW - 20 })
 
-        // ── Action badges row ────────────────────────────────────────────────
         const badgeY = urlY + 14
-        const badges = ['Browse menu', 'Place order', 'Call waiter']
+        const badges = ['Open menu', 'Order fast', 'Call waiter']
         const totalBadgeW = cardW - 20
         const badgeW = totalBadgeW / badges.length
         doc.setFontSize(7)
@@ -690,23 +674,21 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
           doc.text(badge, bx + badgeW / 2, badgeY + 8.5, { align: 'center' })
         })
 
-        // ── Footer strip ────────────────────────────────────────────────────
-        const footerH = 16
+        const footerH = 18
         const footerY = y + cardH - footerH
         doc.setFillColor(27, 77, 74)
-        // Clip to rounded bottom
         doc.rect(x, footerY, cardW, footerH - 8, 'F')
         doc.roundedRect(x, footerY, cardW, footerH, 0, 8, 'F')
 
         doc.setFontSize(6.5)
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(180, 220, 218)
-        doc.text('Powered by dinezy.in — digital menus for restaurants', x + cardW / 2, footerY + 11, { align: 'center' })
+        doc.text('Powered by dinezy.in — digital menus for restaurants', x + cardW / 2, footerY + 11, {
+          align: 'center',
+        })
       }
 
-      // Save PDF
       doc.save(`${restaurant.slug}-table-qr-sheet.pdf`)
-
     } catch (err) {
       console.error('Download table sheet error:', err)
       alert('Could not generate PDF. Please try again.')
@@ -791,7 +773,7 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
       <div className="mb-7">
         <h1 className="text-2xl font-bold text-white">Table QR Codes</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Make scanning feel obvious. Guests should instantly understand: scan → menu → order → call waiter.
+          Make scanning feel like a discovery. The guest should instantly feel there is something worth opening.
         </p>
       </div>
 
@@ -804,13 +786,13 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
               <div>
                 <p className="text-sm font-semibold text-white">Print preview</p>
                 <p className="mt-1 text-xs text-zinc-500">
-                  Designed so even first-time users immediately understand that this is the menu scanner.
+                  Designed so guests feel curious first, then immediately understand what happens next.
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
                 <span className="rounded-full bg-teal-500/10 px-3 py-1 text-[11px] font-semibold text-teal-300 ring-1 ring-teal-400/20">
-                  Scan menu
+                  Reveal menu
                 </span>
                 <span className="rounded-full bg-orange-500/10 px-3 py-1 text-[11px] font-semibold text-orange-300 ring-1 ring-orange-400/20">
                   Call waiter
@@ -826,8 +808,8 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
                 <p className="mt-1 text-sm font-semibold text-zinc-900">Point camera</p>
               </div>
               <div className="rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">2. Menu</p>
-                <p className="mt-1 text-sm font-semibold text-zinc-900">Browse dishes</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">2. Reveal</p>
+                <p className="mt-1 text-sm font-semibold text-zinc-900">See the menu</p>
               </div>
               <div className="rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">3. Action</p>
@@ -849,7 +831,7 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
                       <div className="rounded-[28px] bg-[linear-gradient(135deg,#1B4D4A_0%,#163D3A_100%)] px-4 py-5 text-center text-white">
                         <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]">
                           <ScanLine size={11} />
-                          Scan menu
+                          Reveal menu
                         </div>
 
                         <p className="mt-3 text-[15px] font-semibold text-white/90">Table {tableNo}</p>
@@ -869,7 +851,7 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
                         </div>
 
                         <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-2 text-[11px] font-bold text-white shadow-lg shadow-orange-500/20">
-                          📷 Scan to get started
+                          📷 Scan to reveal
                         </div>
                       </div>
                     </div>
@@ -907,7 +889,7 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
                       </div>
 
                       <p className="mt-3 text-center text-[10px] text-zinc-400">
-                        Open camera, scan, and start ordering in seconds.
+                        Open camera, scan, and see everything in seconds.
                       </p>
                     </div>
 
@@ -958,20 +940,20 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
             <div className="mt-4 space-y-3">
               <StepBadge
                 step="Start"
-                title="Scan the code"
-                desc="This is the fastest way to open the menu."
+                title="Curiosity first"
+                desc="The QR should feel like a reveal, not just a technical step."
                 icon={<ScanLine size={18} />}
               />
               <StepBadge
                 step="Then"
-                title="Browse dishes"
-                desc="Make the menu feel easy, visual, and immediate."
+                title="Instant reward"
+                desc="The menu appears quickly, which makes scanning feel worth it."
                 icon={<UtensilsCrossed size={18} />}
               />
               <StepBadge
                 step="Finally"
-                title="Order or call waiter"
-                desc="Keep the next action visible so users feel confident."
+                title="Fast action"
+                desc="Guests should see that ordering or calling a waiter is the next move."
                 icon={<BellRing size={18} />}
               />
             </div>
@@ -1028,23 +1010,32 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
                 Share the link
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <button
+                onClick={copyLink}
+                className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-xs font-medium text-zinc-300 transition hover:bg-zinc-700 sm:col-span-1"
+              >
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+                {copied ? 'Copied' : 'Copy link'}
+              </button>
+
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(
-                  `Here's our menu — browse, order, or call us right from your phone!\n${menuUrl}`,
+                  `Here’s our menu — browse, order, or call us right from your phone!\n${menuUrl}`,
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-green-600/20 bg-green-600/10 py-2.5 text-xs font-medium text-green-400 transition hover:bg-green-600/20"
+                className="flex items-center justify-center gap-2 rounded-xl border border-green-600/20 bg-green-600/10 py-2.5 text-xs font-medium text-green-400 transition hover:bg-green-600/20 sm:col-span-1"
               >
                 <MessageCircle size={13} />
                 WhatsApp
               </a>
+
               <a
                 href={menuUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-xs font-medium text-zinc-300 transition hover:bg-zinc-700"
+                className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-xs font-medium text-zinc-300 transition hover:bg-zinc-700 sm:col-span-1"
               >
                 <ExternalLink size={13} />
                 Open Menu
@@ -1104,7 +1095,10 @@ const qrSize = Math.floor(cardH * 0.42)   // ≈ 107pt (~38mm) — scannable at 
           <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Used QR</p>
           <p className="mt-2 text-sm font-semibold text-white">{usedQrCount}</p>
           <p className="mt-1 text-xs text-zinc-500">
-            Remaining: <span className="text-teal-400">{Number.isFinite(remainingQrLimit) ? remainingQrLimit : '∞'}</span>
+            Remaining:{' '}
+            <span className="text-teal-400">
+              {Number.isFinite(remainingQrLimit) ? remainingQrLimit : '∞'}
+            </span>
           </p>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
