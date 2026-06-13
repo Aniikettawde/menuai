@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface CartItem {
   id: string
   name: string
@@ -36,648 +38,352 @@ export interface SuggestedItem {
   is_veg?: boolean
   is_bestseller?: boolean
   description?: string
-  reason: string
-  hook: string
-  urgency?: string
-  psych_trigger?: string
+  reason: string       // short copy shown under the card
+  hook: string         // bold label at the top of the card e.g. "Goes best with"
+  fomo: string         // FOMO line shown in a badge / pill
+  slot: 'complement' | 'closer' // which of the 2 slots this fills
 }
+
+// ─── Course detection ─────────────────────────────────────────────────────────
 
 type Course =
-  | 'main'
-  | 'thali'
-  | 'curry'
-  | 'bread'
-  | 'rice'
-  | 'raita'
-  | 'papad'
-  | 'salad'
-  | 'dessert'
-  | 'drink'
-  | 'starter'
-  | 'sandwich'
-  | 'pizza'
-  | 'pasta'
-  | 'other'
-
-type MealMode = 'thali' | 'curry' | 'bread' | 'rice' | 'starter' | 'drink' | 'default'
-
-const MAX_SUGGESTIONS = 4
-
-function normalizeText(value: string) {
-  return value
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
-}
-
-function sameName(a: string, b: string) {
-  return normalizeText(a) === normalizeText(b)
-}
-
-function containsAny(text: string, terms: string[]) {
-  const hay = normalizeText(text)
-  return terms.some((term) => hay.includes(normalizeText(term)))
-}
-
-function getCombinedText(item: {
-  name: string
-  description?: string
-  tags?: string[]
-  course_type?: string
-  best_with?: string[]
-}) {
-  return [
-    item.name,
-    item.description ?? '',
-    item.course_type ?? '',
-    ...(item.tags ?? []),
-    ...(item.best_with ?? []),
-  ].join(' ')
-}
-
-function stableHash(seed: string) {
-  let hash = 0
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
-  }
-  return hash
-}
-
-function pickStable(seed: string, values: string[]) {
-  if (values.length === 0) return ''
-  return values[stableHash(seed) % values.length]!
-}
+  | 'thali' | 'curry' | 'bread' | 'rice' | 'raita'
+  | 'papad' | 'salad' | 'dessert' | 'drink' | 'starter'
+  | 'sandwich' | 'pizza' | 'pasta' | 'main' | 'other'
 
 const COURSE_KEYWORDS: Record<Course, string[]> = {
-  thali: ['thali', 'meal', 'platter', 'plate', 'बसेक', 'भोजन'],
-  curry: [
-    'curry',
-    'masala',
-    'gravy',
-    'rassa',
-    'रस्सा',
-    'tamda',
-    'tambda',
-    'alni',
-    'pandhra',
-    'kolhapuri',
-    'handi',
-    'korma',
-    'sukka',
-  ],
-  bread: [
-    'bhakri',
-    'भाकरी',
-    'chapati',
-    'चपाती',
-    'chapati',
-    'roti',
-    'रोटी',
-    'naan',
-    'paratha',
-    'thepla',
-    'phulka',
-    'kulcha',
-    'puri',
-    'bhatura',
-    'tandoor bread',
-  ],
-  rice: ['rice', 'jeera rice', 'steam rice', 'bhat', 'भात', 'pulao', 'biryani', 'khichdi'],
-  raita: ['raita', 'dahi', 'curd', 'yogurt', 'boondi raita', 'cucumber raita', 'ताक', 'tak'],
-  papad: ['papad', 'pappad', 'पापड', 'masala papad', 'roasted papad', 'papad fry'],
-  salad: ['salad', 'kachumber', 'kachumbar', 'koshimbir', 'onion salad', 'cucumber salad'],
-  dessert: [
-    'dessert',
-    'sweet',
-    'gulab jamun',
-    'rasmalai',
-    'kulfi',
-    'ice cream',
-    'kheer',
-    'payasam',
-    'jalebi',
-    'halwa',
-    'basundi',
-    'rabri',
-    'pudding',
-    'cake',
-    'brownie',
-  ],
-  drink: [
-    'drink',
-    'juice',
-    'shake',
-    'coffee',
-    'tea',
-    'chai',
-    'lassi',
-    'chaas',
-    'buttermilk',
-    'lemonade',
-    'soda',
-    'beverage',
-    'mocktail',
-    'smoothie',
-  ],
-  starter: [
-    'starter',
-    'appetizer',
-    'snack',
-    'soup',
-    'tikka',
-    'kebab',
-    'kabab',
-    'pakora',
-    'pakoda',
-    'chaat',
-    'fries',
-    'momos',
-    'samosa',
-    'kachori',
-    'aloo tikki',
-    'wings',
-    'drumstick',
-    'fry',
-    'fried',
-    'roast',
-    'crispy',
-  ],
+  thali:    ['thali', 'meal', 'platter', 'plate'],
+  curry:    ['curry', 'masala', 'gravy', 'rassa', 'tamda', 'tambda', 'alni', 'pandhra', 'kolhapuri', 'handi', 'korma', 'sukka', 'रस्सा'],
+  bread:    ['bhakri', 'bhakari', 'chapati', 'chapathi', 'roti', 'naan', 'paratha', 'thepla', 'phulka', 'kulcha', 'puri', 'bhatura', 'tandoor bread', 'tawa roti', 'tandoori roti', 'भाकरी', 'चपाती', 'रोटी'],
+  rice:     ['rice', 'jeera rice', 'steam rice', 'bhat', 'pulao', 'biryani', 'khichdi', 'भात'],
+  raita:    ['raita', 'dahi', 'curd', 'yogurt', 'boondi', 'tak', 'ताक'],
+  papad:    ['papad', 'pappad', 'papadum', 'पापड'],
+  salad:    ['salad', 'kachumber', 'kachumbar', 'koshimbir'],
+  dessert:  ['dessert', 'sweet', 'gulab jamun', 'rasmalai', 'kulfi', 'ice cream', 'kheer', 'payasam', 'jalebi', 'halwa', 'basundi', 'rabri', 'pudding', 'cake', 'brownie', 'mithai'],
+  drink:    ['drink', 'juice', 'shake', 'coffee', 'tea', 'chai', 'lassi', 'chaas', 'buttermilk', 'lemonade', 'soda', 'beverage', 'mocktail', 'smoothie', 'water', 'nimbu'],
+  starter:  ['starter', 'appetizer', 'snack', 'soup', 'tikka', 'kebab', 'kabab', 'pakora', 'pakoda', 'chaat', 'fries', 'momos', 'samosa', 'kachori', 'aloo tikki', 'wings', 'tandoor'],
   sandwich: ['sandwich', 'wrap', 'roll', 'burger', 'sub', 'panini', 'frankie', 'quesadilla', 'taco'],
-  pizza: ['pizza', 'calzone', 'flatbread pizza'],
-  pasta: ['pasta', 'noodle', 'spaghetti', 'penne', 'fettuccine', 'linguine', 'maggi', 'chowmein', 'hakka'],
-  main: [],
-  other: [],
+  pizza:    ['pizza', 'calzone'],
+  pasta:    ['pasta', 'noodle', 'spaghetti', 'penne', 'fettuccine', 'linguine', 'maggi', 'chowmein', 'hakka'],
+  main:     [],
+  other:    [],
 }
 
+// Order matters — first match wins
 const COURSE_ORDER: Course[] = [
-  'thali',
-  'curry',
-  'bread',
-  'rice',
-  'raita',
-  'papad',
-  'salad',
-  'drink',
-  'dessert',
-  'starter',
-  'sandwich',
-  'pizza',
-  'pasta',
-  'main',
-  'other',
+  'thali', 'curry', 'bread', 'rice', 'raita', 'papad', 'salad',
+  'drink', 'dessert', 'starter', 'sandwich', 'pizza', 'pasta', 'main', 'other',
 ]
 
-function getCourse(item: {
-  name: string
-  description?: string
-  course_type?: string
-  tags?: string[]
-}): Course {
-  if (item.course_type) {
-    const ct = normalizeText(item.course_type)
-    for (const course of COURSE_ORDER) {
-      const keywords = COURSE_KEYWORDS[course]
-      if (keywords.length > 0 && containsAny(ct, keywords)) return course
-    }
-  }
+function normalize(s: string) {
+  return s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+}
 
-  const hay = normalizeText(getCombinedText(item))
+function hasAny(text: string, terms: string[]) {
+  const hay = normalize(text)
+  return terms.some(t => hay.includes(normalize(t)))
+}
+
+function itemText(item: { name: string; description?: string; course_type?: string; tags?: string[]; best_with?: string[] }) {
+  return [item.name, item.description ?? '', item.course_type ?? '', ...(item.tags ?? []), ...(item.best_with ?? [])].join(' ')
+}
+
+function getCourse(item: { name: string; description?: string; course_type?: string; tags?: string[] }): Course {
+  const hay = normalize(itemText(item))
   for (const course of COURSE_ORDER) {
-    const keywords = COURSE_KEYWORDS[course]
-    if (keywords.length > 0 && containsAny(hay, keywords)) return course
+    const kw = COURSE_KEYWORDS[course]
+    if (kw.length > 0 && hasAny(hay, kw)) return course
   }
-
   return 'main'
 }
 
-function isMainLike(course: Course) {
-  return ['main', 'thali', 'curry', 'sandwich', 'pizza', 'pasta'].includes(course)
+// ─── Anchor analysis ──────────────────────────────────────────────────────────
+
+function getAnchorItem(cartItems: CartItem[]): CartItem {
+  // prefer the most "prominent" item: thali > curry/main > starter > bread > other
+  const priority: Course[] = ['thali', 'curry', 'main', 'pizza', 'pasta', 'sandwich', 'starter', 'bread', 'rice']
+  for (const c of priority) {
+    const found = cartItems.find(i => getCourse(i) === c)
+    if (found) return found
+  }
+  return cartItems[0]!
 }
 
-function getPrimaryCartItem(cartItems: CartItem[]) {
-  const primary =
-    cartItems.find((item) => {
-      const course = getCourse(item)
-      return course === 'thali' || course === 'curry' || course === 'main'
-    }) ??
-    cartItems.find((item) => isMainLike(getCourse(item)))
-
-  return primary ?? cartItems[0] ?? null
+function isSpicy(text: string) {
+  return hasAny(text, ['spicy', 'masala', 'rassa', 'tamda', 'tambda', 'alni', 'pandhra', 'kolhapuri', 'chilli', 'mirchi', 'hot'])
 }
 
-function getMealMode(cartItems: CartItem[]): MealMode {
-  const courses = new Set(cartItems.map((item) => getCourse(item)))
+// ─── FOMO copy pool ───────────────────────────────────────────────────────────
+// Each entry: [fomo badge text, short reason copy]
+// Picked deterministically by item name hash so it never flickers
 
-  if (courses.has('thali')) return 'thali'
-  if (courses.has('curry') || courses.has('main')) return 'curry'
-  if (courses.has('bread')) return 'bread'
-  if (courses.has('rice')) return 'rice'
-  if (courses.has('starter')) return 'starter'
-  if (courses.has('drink')) return 'drink'
-  return 'default'
+function stableIdx(seed: string, len: number) {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return h % len
 }
 
-function getPriorityCourses(mode: MealMode): Course[] {
-  switch (mode) {
-    case 'thali':
-      return ['bread', 'rice', 'raita', 'papad', 'salad', 'drink', 'dessert']
+function pickFrom<T>(seed: string, arr: T[]): T {
+  return arr[stableIdx(seed, arr.length)]!
+}
+
+// ─── Complement slot (food that pairs with the anchor) ────────────────────────
+
+/**
+ * Returns the best food complement course(s) for the anchor item.
+ * Deliberately narrow — we want ONE confident pick, not a buffet.
+ */
+function getComplementCourses(anchorCourse: Course, anchorText: string, cartCourses: Set<Course>): Course[] {
+  const already = (c: Course) => cartCourses.has(c)
+
+  switch (anchorCourse) {
     case 'curry':
-      return ['bread', 'rice', 'raita', 'papad', 'salad', 'drink', 'dessert', 'starter']
-    case 'bread':
-      return ['curry', 'rice', 'raita', 'papad', 'drink', 'dessert', 'salad']
-    case 'rice':
-      return ['curry', 'bread', 'raita', 'papad', 'drink', 'dessert', 'salad']
+    case 'thali': {
+      const order: Course[] = ['bread', 'rice', 'raita', 'papad', 'salad']
+      return order.filter(c => !already(c))
+    }
     case 'starter':
-      return ['drink', 'curry', 'bread', 'rice', 'raita', 'dessert']
-    case 'drink':
-      return ['starter', 'curry', 'bread', 'rice', 'dessert']
+    case 'sandwich':
+    case 'pizza':
+    case 'pasta': {
+      // biryani/rice base gets raita; otherwise go bread/rice
+      if (hasAny(anchorText, ['biryani', 'pulao'])) return ['raita', 'papad'].filter(c => !already(c as Course)) as Course[]
+      const order: Course[] = ['curry', 'raita', 'bread']
+      return order.filter(c => !already(c))
+    }
+    case 'bread': {
+      const order: Course[] = ['curry', 'raita']
+      return order.filter(c => !already(c))
+    }
+    case 'rice': {
+      const order: Course[] = ['curry', 'raita', 'papad']
+      return order.filter(c => !already(c))
+    }
     default:
-      return ['thali', 'curry', 'bread', 'rice', 'raita', 'papad', 'salad', 'drink', 'dessert', 'starter']
+      return (['curry', 'bread', 'rice'] as Course[]).filter(c => !already(c))
   }
 }
 
-function getRoleBonus(course: Course, hay: string) {
-  let score = 0
+// ─── Closer slot (drink or dessert) ──────────────────────────────────────────
 
-  switch (course) {
-    case 'bread':
-      if (containsAny(hay, ['bhakri', 'भाकरी'])) score += 60
-      if (containsAny(hay, ['chapati', 'चपाती', 'roti', 'रोटी'])) score += 52
-      if (containsAny(hay, ['naan', 'kulcha'])) score += 38
-      if (containsAny(hay, ['paratha', 'thepla', 'phulka'])) score += 24
-      break
+const CLOSER_COURSES: Course[] = ['drink', 'dessert']
 
-    case 'rice':
-      if (containsAny(hay, ['jeera rice', 'steam rice'])) score += 55
-      if (containsAny(hay, ['bhat', 'भात', 'rice'])) score += 44
-      if (containsAny(hay, ['pulao', 'biryani', 'khichdi'])) score += 26
-      break
+// ─── Scoring ──────────────────────────────────────────────────────────────────
 
-    case 'raita':
-      if (containsAny(hay, ['raita'])) score += 62
-      if (containsAny(hay, ['boondi raita', 'cucumber raita'])) score += 50
-      if (containsAny(hay, ['dahi', 'curd', 'yogurt', 'tak', 'ताक'])) score += 32
-      break
+function scoreItem(item: MenuItem, targetCourse: Course, anchorText: string, cartItems: CartItem[]): number {
+  if (getCourse(item) !== targetCourse) return -1
+  const cartIds = new Set(cartItems.map(c => c.id))
+  if (cartIds.has(item.id)) return -1
 
-    case 'papad':
-      if (containsAny(hay, ['masala papad'])) score += 60
-      if (containsAny(hay, ['roasted papad', 'papad fry'])) score += 42
-      if (containsAny(hay, ['papad', 'pappad', 'पापड'])) score += 34
-      break
+  let score = 100
 
-    case 'salad':
-      if (containsAny(hay, ['koshimbir'])) score += 46
-      if (containsAny(hay, ['kachumber', 'kachumbar'])) score += 40
-      if (containsAny(hay, ['salad'])) score += 30
-      break
-
-    case 'curry':
-      if (containsAny(hay, ['tambda', 'tamda', 'alni', 'pandhra', 'rassa', 'रस्सा'])) score += 60
-      if (containsAny(hay, ['curry', 'masala', 'gravy', 'handi', 'kolhapuri', 'korma', 'sukka'])) score += 42
-      break
-
-    case 'thali':
-      if (containsAny(hay, ['thali', 'meal', 'platter', 'plate'])) score += 52
-      break
-
-    case 'drink':
-      if (containsAny(hay, ['lassi'])) score += 42
-      if (containsAny(hay, ['chaas', 'buttermilk', 'tak', 'ताक'])) score += 38
-      if (containsAny(hay, ['juice', 'lemonade', 'mocktail', 'smoothie'])) score += 24
-      break
-
-    case 'dessert':
-      if (containsAny(hay, ['gulab jamun', 'rasmalai', 'kulfi', 'ice cream'])) score += 52
-      if (containsAny(hay, ['kheer', 'payasam', 'jalebi', 'halwa', 'basundi', 'rabri'])) score += 38
-      break
-
-    case 'starter':
-      if (containsAny(hay, ['momos', 'samosa', 'kachori'])) score += 40
-      if (containsAny(hay, ['tikka', 'kebab', 'kabab', 'pakora', 'pakoda', 'soup', 'fries'])) score += 32
-      if (containsAny(hay, ['fry', 'fried', 'crispy', 'roast'])) score += 20
-      break
-
-    default:
-      break
-  }
-
-  return score
-}
-
-function getContextBonus(course: Course, mode: MealMode, cartItems: CartItem[], anchorName: string) {
-  const hayAnchor = normalizeText(anchorName)
-  const cartHay = normalizeText(cartItems.map((i) => getCombinedText(i)).join(' '))
-  const spicySignals = ['spicy', 'masala', 'rassa', 'रस्सा', 'tamda', 'tambda', 'alni', 'pandhra', 'kolhapuri', 'gravy', 'chilli', 'mirchi']
-  const cartLooksSpicy = containsAny(cartHay, spicySignals) || containsAny(hayAnchor, spicySignals)
-
-  let score = 0
-
-  if (course === 'bread' && (mode === 'curry' || mode === 'thali')) score += 50
-  if (course === 'rice' && (mode === 'curry' || mode === 'thali')) score += 44
-  if (course === 'raita' && cartLooksSpicy) score += 58
-  if (course === 'papad' && (mode === 'curry' || mode === 'thali')) score += 34
-  if (course === 'salad' && (mode === 'curry' || mode === 'thali')) score += 20
-  if (course === 'drink' && (cartLooksSpicy || mode === 'curry' || mode === 'starter')) score += 28
-  if (course === 'dessert' && (mode === 'curry' || mode === 'thali' || mode === 'rice' || mode === 'bread')) score += 22
-  if (course === 'starter' && (mode === 'default' || mode === 'drink')) score += 14
-  if (course === 'thali' && (mode === 'bread' || mode === 'rice')) score += 28
-  if (course === 'curry' && (mode === 'bread' || mode === 'rice')) score += 22
-
-  if (containsAny(hayAnchor, ['chicken curry', 'chicken masala', 'chicken fry', 'mutton', 'paneer']) && course === 'bread') score += 28
-  if (containsAny(hayAnchor, ['chicken curry', 'chicken masala', 'mutton curry', 'paneer curry', 'thali']) && course === 'raita') score += 30
-  if (containsAny(hayAnchor, ['chicken curry', 'mutton curry', 'thali']) && course === 'papad') score += 18
-  if (containsAny(hayAnchor, ['chicken curry', 'mutton curry', 'thali']) && course === 'rice') score += 18
-  if (containsAny(hayAnchor, ['biryani', 'pulao']) && course === 'raita') score += 25
-
-  return score
-}
-
-function getBestWithBonus(item: MenuItem, cartItems: CartItem[]) {
-  if (!Array.isArray(item.best_with) || item.best_with.length === 0) return 0
-
-  const cartHay = cartItems.map((c) => getCombinedText(c)).join(' ')
-  const cartText = normalizeText(cartHay)
-
-  const matched = item.best_with.some((hint) => cartText.includes(normalizeText(hint)))
-  return matched ? 30 : 0
-}
-
-function getBestsellerBonus(item: MenuItem) {
-  let score = 0
-  if (item.is_bestseller) score += 24
+  // Bestseller / special
+  if (item.is_bestseller) score += 30
   if (item.is_special) score += 10
-  return score
-}
 
-function getPsychCopy(course: Course, itemName: string) {
-  const poolByCourse: Record<Course, string[]> = {
-    bread: ['Made for your curry.', 'This completes the bite.', 'Don’t leave the gravy behind.'],
-    rice: ['Turns it into a full meal.', 'A natural match for curry.', 'Keeps the plate balanced.'],
-    raita: ['Cools the spice nicely.', 'Perfect with a spicy plate.', 'A refreshing side choice.'],
-    papad: ['A crisp side that works.', 'Easy extra with a thali.', 'A simple add-on that fits.'],
-    salad: ['Freshens the whole meal.', 'A light side that helps.', 'Great for balance.'],
-    curry: ['A proper meal upgrade.', 'A strong core dish.', 'Feels complete with this.'],
-    thali: ['A full plate in one go.', 'Popular when customers want variety.', 'Feels complete fast.'],
-    drink: ['Keeps the meal fresh.', 'Pairs well with every bite.', 'A smart finishing touch.'],
-    dessert: ['A sweet finish feels right.', 'Worth saving room for.', 'A nice ending choice.'],
-    starter: ['Good to begin with.', 'A strong first choice.', 'Great while the mains cook.'],
-    sandwich: ['A quick filling choice.', 'Simple and satisfying.', 'Easy to add on.'],
-    pizza: ['A popular comfort pick.', 'A natural shareable choice.', 'Good if they want something bigger.'],
-    pasta: ['A creamy comfort pick.', 'A solid meal on its own.', 'A popular crowd pleaser.'],
-    main: ['A natural meal choice.', 'Feels complete on its own.', 'A dependable favorite.'],
-    other: ['A natural add-on.', 'Feels complete with this.', 'A small upgrade that fits.'],
+  // best_with match
+  if (Array.isArray(item.best_with) && item.best_with.length > 0) {
+    const cartHay = normalize(cartItems.map(c => itemText(c)).join(' '))
+    if (item.best_with.some(h => cartHay.includes(normalize(h)))) score += 40
   }
 
-  const pool = poolByCourse[course] ?? poolByCourse.other
-  return pickStable(`${course}:${itemName}`, pool)
-}
+  // Role specificity — prefer the more characterful version
+  const hay = normalize(itemText(item))
 
-function buildReason(course: Course, item: MenuItem, anchorName: string) {
-  switch (course) {
-    case 'bread':
-      return `${item.name} is the best match with ${anchorName}. It helps soak up the curry or rassa and makes the plate feel complete.`
-    case 'rice':
-      return `${item.name} works very well with ${anchorName}. It gives the gravy a proper rice pairing and makes the meal fuller.`
-    case 'raita':
-      return `${item.name} balances ${anchorName} nicely. It cools the spice and makes a thali feel more complete.`
-    case 'papad':
-      return `${item.name} is a simple but strong add-on with ${anchorName}. It adds crunch and fits naturally with a full meal.`
-    case 'salad':
-      return `${item.name} adds freshness with ${anchorName}. It gives the order a lighter side and better balance.`
-    case 'drink':
-      return `${item.name} keeps ${anchorName} feeling fresh. It is an easy extra that pairs well with the meal.`
-    case 'dessert':
-      return `${item.name} is a nice finish after ${anchorName}. It gives the meal a sweet ending without feeling heavy.`
-    case 'starter':
-      return `${item.name} is a good way to begin with ${anchorName}. It keeps the table going while the main order is on the way.`
-    case 'curry':
-      return `${item.name} works as a strong core dish alongside ${anchorName}. It makes the meal feel richer and more complete.`
-    case 'thali':
-      return `${item.name} is a full meal choice that fits naturally after ${anchorName}. It gives the customer variety in one plate.`
-    default:
-      return `${item.name} is a good add-on with ${anchorName}. It fits the order naturally and makes the meal feel more complete.`
-  }
-}
-
-function buildHook(course: Course) {
-  switch (course) {
-    case 'bread':
-      return 'Best with your curry'
-    case 'rice':
-      return 'Makes it a full meal'
-    case 'raita':
-      return 'Cools the spice'
-    case 'papad':
-      return 'Adds a crisp side'
-    case 'salad':
-      return 'Adds freshness'
-    case 'drink':
-      return 'Keeps it fresh'
-    case 'dessert':
-      return 'Nice sweet finish'
-    case 'starter':
-      return 'Good to start'
-    case 'curry':
-      return 'Core meal item'
-    case 'thali':
-      return 'Full plate choice'
-    default:
-      return 'Nice extra choice'
-  }
-}
-
-function buildUrgency(course: Course) {
-  switch (course) {
-    case 'bread':
-      return 'Most people add this with curry'
-    case 'rice':
-      return 'Popular with gravy dishes'
-    case 'raita':
-      return 'Great with spicy food'
-    case 'papad':
-      return 'Easy extra with thali'
-    case 'salad':
-      return 'Fresh side for balance'
-    case 'drink':
-      return 'Helps balance the meal'
-    case 'dessert':
-      return 'Good way to finish'
-    case 'starter':
-      return 'Good while the kitchen works'
-    case 'curry':
-      return 'Strong meal base'
-    case 'thali':
-      return 'Full meal option'
-    default:
-      return 'A natural match'
-  }
-}
-
-function scoreItemForSuggestion(
-  item: MenuItem,
-  targetCourse: Course,
-  cartItems: CartItem[],
-  mode: MealMode,
-  anchorName: string,
-) {
-  const course = getCourse(item)
-  const hay = normalizeText(getCombinedText(item))
-  const cartNames = cartItems.map((c) => c.name)
-
-  if (cartNames.some((name) => sameName(name, item.name))) {
-    return -9999
+  if (targetCourse === 'bread') {
+    if (hasAny(hay, ['bhakri', 'bhakari'])) score += 50
+    else if (hasAny(hay, ['tandoori roti', 'tawa roti', 'chapati', 'roti'])) score += 40
+    else if (hasAny(hay, ['naan', 'kulcha'])) score += 28
+    else if (hasAny(hay, ['paratha', 'thepla'])) score += 18
   }
 
-  let score = 0
-
-  if (course !== targetCourse) return -9999
-
-  score += 100
-  score += getRoleBonus(targetCourse, hay)
-  score += getContextBonus(targetCourse, mode, cartItems, anchorName)
-  score += getBestWithBonus(item, cartItems)
-  score += getBestsellerBonus(item)
-
-  if (targetCourse === 'bread' && containsAny(anchorName, ['chicken curry', 'chicken masala', 'mutton curry', 'paneer curry', 'alni rassa', 'tamda rassa', 'tambda rassa', 'thali'])) {
-    score += 22
+  if (targetCourse === 'raita') {
+    if (hasAny(hay, ['boondi raita', 'cucumber raita'])) score += 40
+    else if (hasAny(hay, ['raita'])) score += 30
   }
 
-  if (targetCourse === 'raita' && containsAny(anchorName, ['chicken', 'mutton', 'masala', 'rassa', 'curry', 'spicy', 'thali', 'biryani'])) {
-    score += 20
+  if (targetCourse === 'papad') {
+    if (hasAny(hay, ['masala papad'])) score += 40
+    else if (hasAny(hay, ['roasted papad', 'papad fry'])) score += 28
   }
 
-  if (targetCourse === 'papad' && containsAny(anchorName, ['thali', 'curry', 'rassa', 'masala'])) {
-    score += 16
+  if (targetCourse === 'drink') {
+    if (hasAny(hay, ['lassi', 'chaas', 'buttermilk'])) score += 35
+    else if (hasAny(hay, ['juice', 'lemonade', 'mocktail'])) score += 20
   }
 
-  if (targetCourse === 'rice' && containsAny(anchorName, ['curry', 'rassa', 'masala', 'thali'])) {
-    score += 16
+  if (targetCourse === 'dessert') {
+    if (hasAny(hay, ['gulab jamun', 'rasmalai', 'kulfi'])) score += 35
+    else if (hasAny(hay, ['kheer', 'jalebi', 'halwa', 'basundi'])) score += 22
   }
 
-  if (targetCourse === 'drink' && containsAny(anchorName, ['spicy', 'curry', 'rassa', 'masala', 'thali'])) {
-    score += 12
-  }
-
-  if (targetCourse === 'dessert' && containsAny(anchorName, ['thali', 'curry', 'rice', 'bread'])) {
-    score += 10
-  }
-
-  if (targetCourse === 'starter' && containsAny(anchorName, ['thali', 'curry', 'main'])) {
-    score += 8
+  // Spicy cart → raita & cold drink score higher
+  if (isSpicy(anchorText)) {
+    if (targetCourse === 'raita') score += 30
+    if (targetCourse === 'drink' && hasAny(hay, ['lassi', 'chaas', 'lemonade', 'juice'])) score += 20
   }
 
   return score
 }
 
-function getAnchorName(cartItems: CartItem[]) {
-  const primary = getPrimaryCartItem(cartItems)
-  return primary?.name ?? 'your order'
+// ─── FOMO copy ────────────────────────────────────────────────────────────────
+
+interface SuggestionCopy {
+  hook: string
+  reason: string
+  fomo: string
 }
+
+const COMPLEMENT_COPY: Record<Course, SuggestionCopy[]> = {
+  bread: [
+    { hook: 'Essential with curry', reason: 'Every great curry deserves something to scoop it with.', fomo: '8 in 10 tables order this together' },
+    { hook: 'Perfect pair', reason: 'The gravy has nowhere to go without this.', fomo: 'Most ordered combo tonight' },
+    { hook: 'Don\'t leave it on the plate', reason: 'That sauce is too good to waste — this soaks up every drop.', fomo: 'Ordered together 90% of the time' },
+  ],
+  raita: [
+    { hook: 'Cool it down', reason: 'Cuts the heat and makes every bite better.', fomo: 'Added by most who order this' },
+    { hook: 'The secret balance', reason: 'One spoon of this and the spice hits different — in a good way.', fomo: 'Top add-on for spicy orders' },
+    { hook: 'The smart order', reason: 'Regulars never skip this with a spicy dish.', fomo: 'Almost always ordered with this' },
+  ],
+  papad: [
+    { hook: 'The crunchy must-have', reason: 'A thali without papad is a thali missing its crunch.', fomo: '7 in 10 add this' },
+    { hook: 'Instant upgrade', reason: 'Costs very little, adds a lot to the plate.', fomo: 'Most popular side today' },
+  ],
+  rice: [
+    { hook: 'Make it a full meal', reason: 'The curry is best when it has rice to land on.', fomo: 'Ordered together by most tables' },
+    { hook: 'The natural partner', reason: 'This gravy was made for rice — don\'t separate them.', fomo: 'Top combo at this restaurant' },
+  ],
+  curry: [
+    { hook: 'Add depth to the plate', reason: 'A second curry turns a meal into a spread.', fomo: 'Popular with regulars' },
+    { hook: 'The missing piece', reason: 'This pairs so well, most people don\'t order without it.', fomo: 'Frequently ordered together' },
+  ],
+  salad: [
+    { hook: 'Add some freshness', reason: 'Cuts through the richness and keeps the meal balanced.', fomo: 'Light add-on most people love' },
+  ],
+  drink:    [], dessert: [], starter: [], thali: [], sandwich: [], pizza: [], pasta: [], main: [], other: [],
+}
+
+const CLOSER_COPY: Record<'drink' | 'dessert', SuggestionCopy[]> = {
+  drink: [
+    { hook: 'Wash it down right', reason: 'A cold drink at the end of a spicy meal just hits.', fomo: 'Ordered with almost every meal here' },
+    { hook: 'The finishing touch', reason: 'Don\'t let a great meal end without something to sip.', fomo: '3 out of 4 tables get a drink' },
+    { hook: 'Almost everyone gets one', reason: 'It\'s the most common add-on — there\'s a reason for that.', fomo: 'Top beverage pick right now' },
+  ],
+  dessert: [
+    { hook: 'End on a sweet note', reason: 'You\'ve done the hard work — this is the reward.', fomo: 'Most popular dessert this week' },
+    { hook: 'The sweet finish', reason: 'People who skip dessert always regret it. Don\'t be that table.', fomo: 'Running low on stock today' },
+    { hook: 'Don\'t leave without this', reason: 'The regulars already know — this is the best bite on the menu.', fomo: 'Sells out almost every evening' },
+  ],
+}
+
+function getSuggestionCopy(course: Course, itemName: string, slot: 'complement' | 'closer'): SuggestionCopy {
+  const seed = `${slot}:${course}:${itemName}`
+  if (slot === 'complement') {
+    const pool = COMPLEMENT_COPY[course]
+    if (pool && pool.length > 0) return pickFrom(seed, pool)
+  } else {
+    if (course === 'drink' || course === 'dessert') return pickFrom(seed, CLOSER_COPY[course])
+  }
+  return { hook: 'Great with your order', reason: 'A natural match for what you\'re having.', fomo: 'Frequently ordered together' }
+}
+
+// ─── Main builder ─────────────────────────────────────────────────────────────
 
 function buildSuggestions(cartItems: CartItem[], allItems: MenuItem[]): SuggestedItem[] {
-  const cartIds = new Set(cartItems.map((item) => item.id))
-  const cartNames = cartItems.map((item) => item.name)
-  const cartHasNonVeg = cartItems.some((item) => item.is_veg === false)
-  const cartHasVegOnly = !cartHasNonVeg
-  const mode = getMealMode(cartItems)
-  const anchorName = getAnchorName(cartItems)
+  const cartIds = new Set(cartItems.map(i => i.id))
+  const cartNames = new Set(cartItems.map(i => normalize(i.name)))
+  const cartCourses = new Set(cartItems.map(i => getCourse(i)))
+  const cartIsVegOnly = !cartItems.some(i => i.is_veg === false)
 
-  const candidates = allItems.filter((item) => {
+  const anchor = getAnchorItem(cartItems)
+  const anchorCourse = getCourse(anchor)
+  const anchorText = normalize(itemText(anchor))
+
+  // Eligible pool: not in cart, veg constraint, not same-name
+  const pool = allItems.filter(item => {
     if (cartIds.has(item.id)) return false
-    if (cartHasVegOnly && item.is_veg === false) return false
-    if (cartNames.some((name) => sameName(name, item.name))) return false
+    if (cartNames.has(normalize(item.name))) return false
+    if (cartIsVegOnly && item.is_veg === false) return false
     return true
   })
 
-  const priorityCourses = getPriorityCourses(mode)
-  const usedIds = new Set<string>()
-  const usedCourses = new Set<Course>()
   const suggestions: SuggestedItem[] = []
 
-  for (const targetCourse of priorityCourses) {
-    if (suggestions.length >= MAX_SUGGESTIONS) break
+  // ── Slot 1: complement (food) ─────────────────────────────────────────────
+  const complementCourses = getComplementCourses(anchorCourse, anchorText, cartCourses)
 
-    const pool = candidates.filter((item) => {
-      const course = getCourse(item)
-      return course === targetCourse && !usedIds.has(item.id)
-    })
-
-    if (pool.length === 0) continue
-
-    const ranked = pool
-      .map((item) => ({
-        item,
-        score: scoreItemForSuggestion(item, targetCourse, cartItems, mode, anchorName),
-      }))
+  for (const targetCourse of complementCourses) {
+    const scored = pool
+      .map(item => ({ item, score: scoreItem(item, targetCourse, anchorText, cartItems) }))
+      .filter(e => e.score > 0)
       .sort((a, b) => b.score - a.score)
 
-    const best = ranked[0]
-    if (!best || best.score < 20) continue
+    if (scored.length === 0) continue
 
-    usedIds.add(best.item.id)
-    usedCourses.add(targetCourse)
+    const { item } = scored[0]!
+    const copy = getSuggestionCopy(targetCourse, item.name, 'complement')
+
     suggestions.push({
-      id: best.item.id,
-      name: best.item.name,
-      price: best.item.price,
-      is_veg: best.item.is_veg,
-      is_bestseller: best.item.is_bestseller,
-      description: best.item.description,
-      reason: buildReason(targetCourse, best.item, anchorName),
-      hook: buildHook(targetCourse),
-      urgency: buildUrgency(targetCourse),
-      psych_trigger: getPsychCopy(targetCourse, best.item.name),
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      is_veg: item.is_veg,
+      is_bestseller: item.is_bestseller,
+      description: item.description,
+      hook: copy.hook,
+      reason: copy.reason,
+      fomo: copy.fomo,
+      slot: 'complement',
     })
+    break // one food complement only
   }
 
-  if (suggestions.length < MAX_SUGGESTIONS) {
-    const fallback = candidates
-      .filter((item) => !usedIds.has(item.id))
-      .map((item) => {
-        const course = getCourse(item)
-        const score = scoreItemForSuggestion(item, course, cartItems, mode, anchorName)
-        return { item, course, score }
-      })
-      .filter((entry) => entry.score >= 25)
+  // ── Slot 2: closer (drink or dessert) ─────────────────────────────────────
+  // Prefer drink if cart is spicy or heavy, dessert otherwise
+  const closerOrder: ('drink' | 'dessert')[] =
+    isSpicy(anchorText) || hasAny(anchorText, ['thali', 'biryani', 'pulao'])
+      ? ['drink', 'dessert']
+      : ['dessert', 'drink']
+
+  for (const targetCourse of closerOrder) {
+    if (cartCourses.has(targetCourse)) continue // already have one
+
+    const scored = pool
+      .map(item => ({ item, score: scoreItem(item, targetCourse, anchorText, cartItems) }))
+      .filter(e => e.score > 0)
       .sort((a, b) => b.score - a.score)
 
-    for (const entry of fallback) {
-      if (suggestions.length >= MAX_SUGGESTIONS) break
-      if (usedIds.has(entry.item.id)) continue
-      if (usedCourses.has(entry.course) && suggestions.length >= 2) continue
+    if (scored.length === 0) continue
 
-      usedIds.add(entry.item.id)
-      usedCourses.add(entry.course)
-      suggestions.push({
-        id: entry.item.id,
-        name: entry.item.name,
-        price: entry.item.price,
-        is_veg: entry.item.is_veg,
-        is_bestseller: entry.item.is_bestseller,
-        description: entry.item.description,
-        reason: buildReason(entry.course, entry.item, anchorName),
-        hook: buildHook(entry.course),
-        urgency: buildUrgency(entry.course),
-        psych_trigger: getPsychCopy(entry.course, entry.item.name),
-      })
-    }
+    const { item } = scored[0]!
+    const copy = getSuggestionCopy(targetCourse, item.name, 'closer')
+
+    suggestions.push({
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      is_veg: item.is_veg,
+      is_bestseller: item.is_bestseller,
+      description: item.description,
+      hook: copy.hook,
+      reason: copy.reason,
+      fomo: copy.fomo,
+      slot: 'closer',
+    })
+    break
   }
 
-  return suggestions.slice(0, MAX_SUGGESTIONS)
+  return suggestions
 }
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as CartSuggestRequest
     const { cart_items, all_items } = body
 
-    if (
-      !Array.isArray(cart_items) ||
-      !Array.isArray(all_items) ||
-      cart_items.length === 0 ||
-      all_items.length === 0
-    ) {
+    if (!Array.isArray(cart_items) || !Array.isArray(all_items) || cart_items.length === 0 || all_items.length === 0) {
       return NextResponse.json({ suggestions: [] })
     }
 

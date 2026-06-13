@@ -1,5 +1,6 @@
 'use client'
 
+import { Download } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   Loader2, Plus, Trash2, Shield, Users, CheckCircle2, XCircle,
@@ -19,16 +20,15 @@ type StaffRow = {
   active: boolean
   table_start: number | null
   table_end: number | null
-  has_device: boolean        // derived: does a device_token row exist for this staff_id?
-  last_seen_at: string | null // from device_tokens or a last_active column
+  has_device: boolean
+  last_seen_at: string | null
   created_at: string
   updated_at: string
 }
 
 type DashboardContext = {
   restaurantId: string
-    restaurantSlug: string
-
+  restaurantSlug: string
   restaurantName: string
   ownerId: string
   role: 'owner' | 'manager' | 'waiter'
@@ -174,7 +174,6 @@ export default function StaffPage() {
 
   useEffect(() => { void load() }, [])
 
-  // ── Add staff ──────────────────────────────────────────────────────────────
   async function addStaff(e: React.FormEvent) {
     e.preventDefault()
     if (inviteMode === 'password' && !tempPass.trim()) {
@@ -200,7 +199,6 @@ export default function StaffPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Failed to add staff')
-
       setStaff((prev) => [data.staff as StaffRow, ...prev])
       setName(''); setEmail(''); setPhone(''); setRole('waiter')
       setTableStart(''); setTableEnd(''); setTempPass('')
@@ -211,7 +209,6 @@ export default function StaffPage() {
     }
   }
 
-  // ── Toggle active ──────────────────────────────────────────────────────────
   async function toggleActive(row: StaffRow) {
     setError('')
     try {
@@ -230,7 +227,6 @@ export default function StaffPage() {
     }
   }
 
-  // ── Update table range ─────────────────────────────────────────────────────
   async function updateTableRange(id: string, start: number | null, end: number | null) {
     setError('')
     try {
@@ -251,7 +247,6 @@ export default function StaffPage() {
     }
   }
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
   async function deleteStaff(id: string) {
     if (!confirm('Remove this staff account from the restaurant?')) return
     setDeletingId(id)
@@ -272,7 +267,6 @@ export default function StaffPage() {
     }
   }
 
-  // ── Reset password ─────────────────────────────────────────────────────────
   async function resetPassword(row: StaffRow) {
     const newPass = prompt(`Set a new temporary password for ${row.name ?? row.email}:`)
     if (!newPass?.trim()) return
@@ -316,6 +310,7 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-4">
+
       {/* ── Header ── */}
       <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
         <div className="flex items-start justify-between gap-4">
@@ -351,6 +346,43 @@ export default function StaffPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Download app banner ── */}
+      <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {/* Android robot icon */}
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
+              <svg viewBox="0 0 24 24" className="h-6 w-6 fill-emerald-400" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17.523 15.341a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-11.046 0a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM2.4 8.4h19.2v8.4A2.4 2.4 0 0 1 19.2 19.2H4.8A2.4 2.4 0 0 1 2.4 16.8V8.4Zm1.08-1.2L5.04 3.96a.6.6 0 0 1 1.02.636L4.8 7.2h14.4l-1.26-2.604a.6.6 0 0 1 1.02-.636l1.56 3.24H21.6A1.2 1.2 0 0 1 22.8 8.4v.012H1.2V8.4A1.2 1.2 0 0 1 2.4 7.2h1.08Z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">DinezyDash — Staff App</p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Install on Android to receive order alerts &amp; manage tables
+              </p>
+            </div>
+          </div>
+
+          <a
+            href={process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? '#'}
+            download="dinezy-dash.apk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/20 px-4 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/30"
+          >
+            <Download size={13} />
+            Download APK
+          </a>
+        </div>
+
+        <p className="mt-3 rounded-xl bg-white/[0.03] px-3 py-2 text-[11px] text-zinc-500">
+          Enable{' '}
+          <span className="text-zinc-300">Install from unknown sources</span>{' '}
+          on Android before installing · Settings → Security → Unknown apps
+        </p>
       </div>
 
       {error && (
@@ -507,7 +539,6 @@ export default function StaffPage() {
             {/* Top row: identity + actions */}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                {/* Avatar initial */}
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-500/10 text-sm font-bold text-orange-300">
                   {(row.name ?? row.email).charAt(0).toUpperCase()}
                 </div>
@@ -568,7 +599,6 @@ export default function StaffPage() {
 
             {/* Bottom row: chips */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {/* Role badge */}
               <span className={`rounded-xl border px-2.5 py-1 text-[11px] font-medium ${
                 row.role === 'manager'
                   ? 'border-purple-500/20 bg-purple-500/10 text-purple-300'
@@ -577,10 +607,8 @@ export default function StaffPage() {
                 {row.role}
               </span>
 
-              {/* Table range — inline editable */}
               <TableRangeEditor row={row} onSave={updateTableRange} />
 
-              {/* Push notification status */}
               {row.has_device ? (
                 <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
                   <SmartphoneNfc size={11} />
