@@ -17,6 +17,7 @@ import {
   ClipboardList,
   Download,
 } from 'lucide-react'
+
 import { useDashboardContext } from '@/hooks/useDashboardContext'
 
 type TableRequestRow = {
@@ -547,7 +548,8 @@ export default function OrdersPage() {
           </div>
 
           
-            href={process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? '#'}
+          <a
+		  href={process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? '#'}
             download="dinezy-dash.apk"
             target="_blank"
             rel="noopener noreferrer"
