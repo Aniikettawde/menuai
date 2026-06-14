@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Download,
 } from 'lucide-react'
 import { useDashboardContext } from '@/hooks/useDashboardContext'
 
@@ -529,7 +530,35 @@ export default function OrdersPage() {
           </button>
         </div>
       </div>
+ <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
+              <svg viewBox="0 0 24 24" className="h-6 w-6 fill-emerald-400" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17.523 15.341a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-11.046 0a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM2.4 8.4h19.2v8.4A2.4 2.4 0 0 1 19.2 19.2H4.8A2.4 2.4 0 0 1 2.4 16.8V8.4Zm1.08-1.2L5.04 3.96a.6.6 0 0 1 1.02.636L4.8 7.2h14.4l-1.26-2.604a.6.6 0 0 1 1.02-.636l1.56 3.24H21.6A1.2 1.2 0 0 1 22.8 8.4v.012H1.2V8.4A1.2 1.2 0 0 1 2.4 7.2h1.08Z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">DinezyDash — Staff App</p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Install on Android to receive order alerts &amp; manage tables
+              </p>
+            </div>
+          </div>
 
+          
+            href={process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? '#'}
+            download="dinezy-dash.apk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/20 px-4 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/30"
+          >
+            <Download size={13} />
+            Download APK
+          </a>
+        </div>
+      </div>
+	  
       {error && (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
           {error}
