@@ -67,7 +67,8 @@ type AssignedStaff = {
 
 function matchesTable(staff: AssignedStaff, tableNumber: number) {
   if (!staff.active) return false
-  if (staff.table_start == null || staff.table_end == null) return false
+  // No range set = "All tables" — match every table
+  if (staff.table_start == null || staff.table_end == null) return true
   return tableNumber >= staff.table_start && tableNumber <= staff.table_end
 }
 

@@ -4,8 +4,7 @@ import { useDashboardContext } from '@/hooks/useDashboardContext'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import type { Restaurant } from '@/types'
-import { Camera, ImagePlus, X } from 'lucide-react'
-
+import { Camera, ImagePlus, X, Gift } from 'lucide-react'
 type DayKey =
   | 'monday' | 'tuesday' | 'wednesday' | 'thursday'
   | 'friday' | 'saturday' | 'sunday'
@@ -26,6 +25,7 @@ type RestaurantForm = {
       instagram_url: string   // ← add this
 
   opening_hours: OpeningHours
+
 
 }
 
@@ -82,6 +82,7 @@ export default function RestaurantPage() {
 	    instagram_url: '',
 
     opening_hours: createDefaultHours(),
+	
   })
 
   const [logoUrl, setLogoUrl] = useState('')
@@ -112,6 +113,7 @@ export default function RestaurantPage() {
             opening_hours: (data.opening_hours as OpeningHours) ?? createDefaultHours(),
             total_tables: data.total_tables ?? 20,
 			            instagram_url: data.instagram_url ?? '',
+						
 
           })
           setLogoUrl(data.logo_url ?? '')
@@ -583,6 +585,7 @@ export default function RestaurantPage() {
             })}
           </div>
         </Section>
+		
 
         <button
           type="submit"
