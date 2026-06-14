@@ -9,7 +9,6 @@ import { setCachedMenu } from '@/lib/cache'
 import { setupConnectivityListeners, track } from '@/lib/analytics'
 import { usePWA } from '@/hooks/usePWA'
 import { RestaurantHeader } from './RestaurantHeader'
-import { CategoryTabs } from './CategoryTabs'
 import { MenuGrid } from './MenuGrid'
 import { RatingModal } from './RatingModal'
 import { OfflineBanner } from './OfflineBanner'
@@ -513,7 +512,6 @@ useEffect(() => {
       <RestaurantHeader restaurant={restaurant} />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
-        <CategoryTabs />
         <MenuGrid
           onCallWaiter={handleCallWaiter}
           isWaiterLoading={waiterLoading}

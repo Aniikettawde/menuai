@@ -612,6 +612,67 @@ export default function MenuPage() {
   const [customiseItem, setCustomiseItem] = useState<MenuItemRow | null>(null)
   const [optionsByItem, setOptionsByItem] = useState<Record<string, DishOption[]>>({})
   const { context, loading: contextLoading } = useDashboardContext()
+  
+  const [draggedCatId, setDraggedCatId] = useState<string | null>(null)
+const orderedCategories = useMemo(() => {
+  return [...categories].sort(
+    (a, b) => (Number(a.position) || 0) - (Number(b.position) || 0),
+  )
+}, [categories])
+
+function normalizeCategoryPositions(next: MenuCategoryRow[]) {
+  return next.map((cat, index) => ({
+    ...cat,
+    position: index,
+  }))
+}
+
+function moveCategoryLocal(fromId: string, toId: string) {
+  setCategories((prev) => {
+    const current = [...prev].sort(
+      (a, b) => (Number(a.position) || 0) - (Number(b.position) || 0),
+    )
+
+    const fromIndex = current.findIndex((c) => c.id === fromId)
+    const toIndex = current.findIndex((c) => c.id === toId)
+
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return prev
+
+    const next = [...current]
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+
+    return normalizeCategoryPositions(next) as MenuCategoryRow[]
+  })
+}
+
+async function saveCategoryOrder() {
+  try {
+    const currentOrder = [...categories].sort(
+      (a, b) => (Number(a.position) || 0) - (Number(b.position) || 0),
+    )
+
+    const updates = currentOrder.map((cat, index) =>
+      supabase
+        .from('menu_categories')
+        .update({ position: index })
+        .eq('id', cat.id),
+    )
+
+    const results = await Promise.all(updates)
+
+    const failed = results.find((r) => r.error)?.error
+    if (failed) throw failed
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'Failed to save category order',
+    )
+  } finally {
+    setDraggedCatId(null)
+  }
+}
 
   useEffect(() => {
     let mounted = true
@@ -661,8 +722,7 @@ export default function MenuPage() {
   }, [supabase, context?.restaurantId, contextLoading])
 
   const catItems = useMemo(() => items.filter((x) => x.category_id === activeCat), [items, activeCat])
-  const activeCatData = categories.find((c) => c.id === activeCat) ?? null
-
+const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
   // ── Save dish options ──────────────────────────────────────────────────────
 
   async function saveDishOptions(itemId: string, drafts: DishOptionDraft[]) {
@@ -721,7 +781,7 @@ export default function MenuPage() {
     try {
       const { data, error: insertError } = await supabase
         .from('menu_categories')
-        .insert({ restaurant_id: restaurant.id, name: catName, position: categories.length, is_active: true })
+        .insert({ restaurant_id: restaurant.id, name: catName, position: orderedCategories.length, is_active: true })
         .select().single()
       if (insertError) throw insertError
       if (data) { setCategories((prev) => [...prev, data as MenuCategoryRow]); setActiveCat((data as MenuCategoryRow).id); setNewCatName('') }
@@ -838,7 +898,7 @@ export default function MenuPage() {
 
   async function handleGeminiImport(result: GeminiMenuResult) {
     if (!restaurant) throw new Error('No restaurant found')
-    const basePosition = categories.length
+    const basePosition = orderedCategories.length
     for (let i = 0; i < result.categories.length; i++) {
       const parsedCat = result.categories[i]
       const { data: catData, error: catError } = await supabase.from('menu_categories')
@@ -917,46 +977,70 @@ export default function MenuPage() {
 
         {mobileView === 'categories' && (
           <div className="space-y-2">
-            {categories.length === 0 ? (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center">
-                <p className="text-2xl">🗂️</p>
-                <p className="mt-2 text-sm font-semibold text-white">No categories yet</p>
-                <p className="mt-1 text-xs text-zinc-500">Import your menu with AI or add manually</p>
-                <button onClick={() => setShowImport(true)} className="mt-4 rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-2.5 text-sm font-semibold text-orange-400">Import with AI</button>
-              </div>
-            ) : (
-              categories.map((cat) => {
-                const count = items.filter((x) => x.category_id === cat.id).length
-                const avail = items.filter((x) => x.category_id === cat.id && x.is_available).length
-                const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
-                    className="group flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left active:scale-[0.99] transition"
-                  >
-                    <div className="relative shrink-0">
-                      {catWithImage.image_url
-                        // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
-                        : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">🍱</div>
-                      }
-                      <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
-                          {catImageUploading === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Camera size={9} />}
-                        </div>
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
-                      </label>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-zinc-100">{cat.name}</p>
-                      <p className="text-xs text-zinc-500">{count} dishes · {avail} available</p>
-                    </div>
-                    <ChevronRight size={16} className="text-zinc-600 shrink-0" />
-                  </button>
-                )
-              })
-            )}
+         {categories.length === 0 ? (
+  <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center">
+    <p className="text-2xl">🗂️</p>
+    <p className="mt-2 text-sm font-semibold text-white">No categories yet</p>
+    <p className="mt-1 text-xs text-zinc-500">Import your menu with AI or add manually</p>
+    <button onClick={() => setShowImport(true)} className="mt-4 rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-2.5 text-sm font-semibold text-orange-400">Import with AI</button>
+  </div>
+) : (
+  <>
+    {orderedCategories.map((cat) => {
+      const count = items.filter((x) => x.category_id === cat.id).length
+      const avail = items.filter((x) => x.category_id === cat.id && x.is_available).length
+      const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
+
+      return (
+        <div
+          key={cat.id}
+          draggable
+          onDragStart={() => setDraggedCatId(cat.id)}
+          onDragOver={(e) => {
+            e.preventDefault()
+            if (!draggedCatId || draggedCatId === cat.id) return
+            moveCategoryLocal(draggedCatId, cat.id)
+          }}
+          onDrop={(e) => { e.preventDefault(); void saveCategoryOrder() }}
+          onDragEnd={() => { if (draggedCatId) void saveCategoryOrder() }}
+          className="group"
+        >
+          <button
+            onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
+            className={[
+              'group flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left active:scale-[0.99] transition',
+              draggedCatId === cat.id ? 'ring-2 ring-orange-500/40 opacity-80' : '',
+            ].join(' ')}
+          >
+            <div className="flex items-center gap-2 shrink-0 text-zinc-600">
+              <GripVertical size={15} />
+            </div>
+            <div className="relative shrink-0">
+              {catWithImage.image_url
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
+                : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">🍱</div>
+              }
+              <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
+                  {catImageUploading === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Camera size={9} />}
+                </div>
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
+              </label>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-zinc-100">{cat.name}</p>
+              <p className="text-xs text-zinc-500">{count} dishes · {avail} available</p>
+            </div>
+            <ChevronRight size={16} className="text-zinc-600 shrink-0" />
+          </button>
+        </div>
+      )
+    })}
+  </>
+)}
+            
 
             <div className="rounded-2xl border border-white/[0.07] bg-[#111111] p-4 space-y-2.5 mt-2">
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">New Category</p>
@@ -1044,45 +1128,80 @@ export default function MenuPage() {
               <p className="text-xs text-zinc-500">{categories.length}</p>
             </div>
             <div className="space-y-1">
-              {categories.map((cat) => {
-                const active = activeCat === cat.id
-                const count = items.filter((x) => x.category_id === cat.id).length
-                const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
-                return (
-                  <div key={cat.id} className="group relative">
-                    <div
-                      onClick={() => setActiveCat(cat.id)}
-                      className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-3 transition ${
-                        active ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        {catWithImage.image_url
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-8 w-8 rounded-xl object-cover shrink-0" />
-                          : <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-sm shrink-0">🍱</div>
-                        }
-                        <span className="truncate text-sm">{cat.name}</span>
-                      </div>
-                      <span className="flex items-center gap-2 text-xs shrink-0">
-                        <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
-                          className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </span>
-                    </div>
-                    <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900/80 text-zinc-400 hover:bg-orange-500 hover:text-white transition">
-                        {catImageUploading === cat.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
-                      </div>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
-                    </label>
-                  </div>
-                )
-              })}
+             {orderedCategories.map((cat) => {
+  const active = activeCat === cat.id
+  const count = items.filter((x) => x.category_id === cat.id).length
+  const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
+
+  return (
+    <div
+      key={cat.id}
+      className="group relative"
+      draggable
+      onDragStart={() => setDraggedCatId(cat.id)}
+      onDragOver={(e) => {
+        e.preventDefault()
+        if (!draggedCatId || draggedCatId === cat.id) return
+        moveCategoryLocal(draggedCatId, cat.id)
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        void saveCategoryOrder()
+      }}
+      onDragEnd={() => {
+        if (draggedCatId) void saveCategoryOrder()
+      }}
+    >
+      <div
+        onClick={() => setActiveCat(cat.id)}
+        className={[
+          `flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-3 transition ${
+            active ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+          }`,
+          draggedCatId === cat.id ? 'ring-2 ring-orange-500/40 opacity-80' : '',
+        ].join(' ')}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex items-center justify-center text-zinc-600 shrink-0">
+            <GripVertical size={14} />
+          </span>
+
+          {catWithImage.image_url
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-8 w-8 rounded-xl object-cover shrink-0" />
+            : <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-sm shrink-0">🍱</div>
+          }
+          <span className="truncate text-sm">{cat.name}</span>
+        </div>
+
+        <span className="flex items-center gap-2 text-xs shrink-0">
+          <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
+            className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+          >
+            <Trash2 size={14} />
+          </button>
+        </span>
+      </div>
+
+      <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
+        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900/80 text-zinc-400 hover:bg-orange-500 hover:text-white transition">
+          {catImageUploading === cat.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
+        </div>
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void uploadCategoryImage(cat.id, f)
+          }}
+        />
+      </label>
+    </div>
+  )
+})}
             </div>
             <div className="mt-4 space-y-2">
               <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder="New category name…" className={INPUT} />
