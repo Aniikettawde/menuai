@@ -517,14 +517,11 @@ useEffect(() => {
       <RestaurantHeader restaurant={restaurant} />
 
       
-	  
-	  <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
+	 <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
   <MenuGrid
     onCallWaiter={handleCallWaiter}
     isWaiterLoading={waiterLoading}
   />
-
-  <RatingsFeed restaurantId={restaurant.id} />
 </main>
 
       {showRating && <RatingModal />}

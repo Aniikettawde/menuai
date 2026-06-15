@@ -231,6 +231,7 @@ export type EventType =
   | 'meal_builder_add'
   | 'rating_submitted'
   | 'session_start'
+  | 'upsell_intercept_shown'
   | 'session_end'
   // cart funnel
   | 'cart_opened'

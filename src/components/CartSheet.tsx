@@ -1,28 +1,18 @@
 'use client'
-import type { PsychTrigger } from '@/types'
-import { computeItemUnitPrice } from '@/lib/pricing'
 
+import { computeItemUnitPrice } from '@/lib/pricing'
 import {
-  X,
-  Minus,
-  Plus,
-  Trash2,
-  HandMetal,
-  Loader2,
-  Sparkles,
-  Flame,
-  TrendingUp,
-  Star,
-  Zap,
-  ShoppingBag,
-  ChevronDown,
-  ChevronUp,
+  X, Minus, Plus, Trash2, HandMetal, Loader2, Sparkles,
+  Flame, TrendingUp, Star, Zap, ShoppingBag, ChevronDown,
+  ChevronUp, AlertCircle, Clock,
 } from 'lucide-react'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Image from 'next/image'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
 import type { MenuItem } from '@/types'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Props = {
   onCallWaiter?: (payload: {
@@ -45,35 +35,24 @@ interface AISuggestion {
   urgency?: string
   psych_trigger?: string
   psych_trigger_type?: string
+  fomo?: string
 }
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 
-interface CacheEntry {
-  suggestions: AISuggestion[]
-  ts: number
-}
-
+interface CacheEntry { suggestions: AISuggestion[]; ts: number }
 const SUGGESTION_CACHE = new Map<string, CacheEntry>()
 const CACHE_TTL_MS = 10 * 60 * 1000
 
-// Key is based on unique item IDs in cart (not cart keys — same item different options
-// still means the same set of candidate suggestions)
 function getCacheKey(cartItems: { item: { id: string } }[]) {
-  const uniqueIds = [...new Set(cartItems.map((c) => c.item.id))].sort()
-  return uniqueIds.join(',')
+  return [...new Set(cartItems.map((c) => c.item.id))].sort().join(',')
 }
-
 function getCached(key: string): AISuggestion[] | null {
   const entry = SUGGESTION_CACHE.get(key)
   if (!entry) return null
-  if (Date.now() - entry.ts > CACHE_TTL_MS) {
-    SUGGESTION_CACHE.delete(key)
-    return null
-  }
+  if (Date.now() - entry.ts > CACHE_TTL_MS) { SUGGESTION_CACHE.delete(key); return null }
   return entry.suggestions
 }
-
 function setCache(key: string, suggestions: AISuggestion[]) {
   SUGGESTION_CACHE.set(key, { suggestions, ts: Date.now() })
 }
@@ -93,7 +72,6 @@ function buildGenericSuggestions(
   const BREAD_RE = /\b(roti|naan|paratha|kulcha|phulka|chapati|rumali|lachha|garlic\s*bread|pita|bun)\b/i
   const RICE_RE = /\b(rice|biryani|pulao|fried\s*rice|jeera\s*rice)\b/i
   const STARTER_RE = /\b(starter|tikka|kebab|pakora|chaat|salad|fries|soup|momos|spring\s*roll|samosa|wings)\b/i
-  const SANDWICH_RE = /\b(sandwich|wrap|roll|burger|sub|panini|frankie|quesadilla)\b/i
 
   const getCourse = (item: MenuItem) => {
     const hay = [item.name, item.description ?? ''].join(' ')
@@ -102,33 +80,41 @@ function buildGenericSuggestions(
     if (BREAD_RE.test(hay)) return 'bread'
     if (RICE_RE.test(hay)) return 'rice'
     if (STARTER_RE.test(hay)) return 'starter'
-    if (SANDWICH_RE.test(hay)) return 'sandwich'
     return 'main'
   }
 
   const cartCourses = new Set(cartItems.map((c) => getCourse(c.item)))
   const primary = cartItems[0]?.item.name ?? 'your order'
-  const ALWAYS_EXCLUDE_IF_PRESENT = new Set(['drink', 'dessert', 'bread', 'rice', 'starter'])
 
-  const PSYCH: Record<string, { type: string; copy: string }> = {
-    drink: { type: 'completion', copy: "92% of diners regret skipping a drink. Don't be that 8%." },
-    dessert: { type: 'reward', copy: 'The best part of any meal is the ending.' },
-    bread: { type: 'social_proof', copy: 'Every last drop of the gravy deserves this.' },
-    rice: { type: 'completion', copy: 'The combination people keep coming back for.' },
-    starter: { type: 'scarcity', copy: "Best decision you'll make today." },
-    default: { type: 'social_proof', copy: 'Your order feels incomplete without this.' },
+  // Stable FOMO numbers per item id
+  const stableFomoCount = (id: string, min: number, max: number) => {
+    const n = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+    return min + (n % (max - min + 1))
+  }
+
+  const FOMO: Record<string, string[]> = {
+    drink:   ['Added by {n} tables today', '{n} people ordered this in the last hour', 'Most tables add a drink'],
+    dessert: ['Only {n} left tonight', '{n} ordered this dessert today', 'Sells out before 9 PM'],
+    bread:   ['{n} tables ordered this with same dish', 'Ordered together {n} out of 10 times', 'Most popular pairing here'],
+    rice:    ['{n} orders today', 'The combo regulars swear by', '{n} tables picked this pair'],
+    starter: ['{n} people ordered this today', 'Goes fast on busy nights', 'Top pick before mains'],
+    default: ['{n} people ordered this today', 'Popular add-on right now', '{n} tables chose this'],
+  }
+
+  const pickFomo = (course: string, id: string) => {
+    const pool = FOMO[course] ?? FOMO.default
+    const idx = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % pool.length
+    const n = stableFomoCount(id, 14, 47)
+    return pool[idx]!.replace('{n}', String(n))
   }
 
   const candidates = allItems
     .filter((i) => !cartIds.has(i.id))
     .filter((i) => !cartIsVeg || i.is_veg !== false)
-    .filter((i) => {
-      const norm = i.name.toLowerCase().trim()
-      return !cartNames.some((cn) => cn.toLowerCase().trim() === norm)
-    })
+    .filter((i) => !cartNames.some((cn) => cn.toLowerCase().trim() === i.name.toLowerCase().trim()))
     .map((item) => {
       const course = getCourse(item)
-      if (ALWAYS_EXCLUDE_IF_PRESENT.has(course) && cartCourses.has(course)) {
+      if (['drink', 'dessert', 'bread', 'rice', 'starter'].includes(course) && cartCourses.has(course)) {
         return { item, course, score: -1 }
       }
       let score = 0
@@ -137,7 +123,7 @@ function buildGenericSuggestions(
       if ((item as any).is_special) score += 4
       if (course === 'drink' && !cartCourses.has('drink')) score += 12
       if (course === 'dessert' && !cartCourses.has('dessert')) score += 8
-      if (course === 'bread' && !cartCourses.has('bread') && (cartCourses.has('main') || cartCourses.has('sandwich'))) score += 11
+      if (course === 'bread' && !cartCourses.has('bread') && (cartCourses.has('main') || cartCourses.has('starter'))) score += 11
       if (course === 'rice' && !cartCourses.has('rice') && !cartCourses.has('bread') && cartCourses.has('main')) score += 7
       if (course === 'starter' && !cartCourses.has('starter') && cartCourses.has('main')) score += 6
       return { item, course, score }
@@ -148,7 +134,7 @@ function buildGenericSuggestions(
   const picked: typeof candidates = []
   const pickedCourses = new Set<string>()
   for (const entry of candidates) {
-    if (picked.length >= 3) break
+    if (picked.length >= 2) break   // MAX 2 — focused upsell, not a buffet
     if (pickedCourses.has(entry.course)) continue
     picked.push(entry)
     pickedCourses.add(entry.course)
@@ -158,30 +144,29 @@ function buildGenericSuggestions(
     let hook = ''
     let reason = ''
     let urgency: string | undefined
-    const psych = PSYCH[course] ?? PSYCH.default
 
     if (course === 'drink') {
-      hook = 'Refreshes every bite'
-      reason = `${item.name} pairs perfectly with ${primary} — cuts through the richness and keeps every mouthful fresh.`
-      urgency = 'Most tables add a drink'
+      hook = 'Wash it down'
+      reason = `${item.name} cuts through the richness of ${primary} and makes every bite taste better.`
+      urgency = item.is_bestseller ? 'Most ordered drink tonight' : undefined
     } else if (course === 'dessert') {
-      hook = 'The perfect ending'
-      reason = `End on a high note — ${item.name} is the most-loved dessert here. Regulars never skip it after ${primary}.`
-      urgency = item.is_bestseller ? 'Often sold out by evening' : undefined
+      hook = 'The sweet finish'
+      reason = `Regulars never leave without ${item.name} after ${primary}. You'll understand why after the first bite.`
+      urgency = 'Often sold out by evening'
     } else if (course === 'bread') {
       hook = `Made for ${primary}`
-      reason = `${item.name} is the go-to pairing — scoop up every last drop of ${primary} the way the chef intended.`
+      reason = `${item.name} is how you get every last drop of ${primary} — the way it was meant to be eaten.`
       urgency = 'Ordered together 8 of 10 times'
     } else if (course === 'rice') {
       hook = 'Completes the plate'
-      reason = `${item.name} turns ${primary} into a full, satisfying meal — the combination regulars swear by.`
+      reason = `${item.name} turns ${primary} into a full meal — the combination locals swear by.`
     } else if (course === 'starter') {
       hook = 'While you wait'
-      reason = `Kick things off with ${item.name} — arrives fast and keeps hunger at bay while ${primary} is prepared.`
+      reason = `${item.name} arrives fast and keeps hunger at bay — the smart order before mains.`
     } else {
-      hook = (item as any).is_special ? "Chef's pick" : 'Crowd favourite'
-      reason = `${item.name} is a standout alongside ${primary} — quietly the most popular add-on here.`
-      urgency = item.is_bestseller ? 'Most ordered item today' : undefined
+      hook = (item as any).is_special ? "Chef's pick tonight" : 'Crowd favourite'
+      reason = `${item.name} is quietly the most popular add-on here. Most people who try it order it every time.`
+      urgency = item.is_bestseller ? 'Most ordered today' : undefined
     }
 
     return {
@@ -195,8 +180,9 @@ function buildGenericSuggestions(
       reason,
       hook,
       urgency,
-      psych_trigger: psych.copy,
-      psych_trigger_type: psych.type,
+      fomo: pickFomo(course, item.id),
+      psych_trigger: undefined,
+      psych_trigger_type: course,
     }
   })
 }
@@ -213,226 +199,233 @@ function formatPrice(paise: number) {
   return `₹${Math.round(paise / 100)}`
 }
 
-// ─── Psych Badge ──────────────────────────────────────────────────────────────
+// ─── Pulsing Live Dot ─────────────────────────────────────────────────────────
 
-function PsychBadge({ text }: { text: string }) {
+function LiveDot() {
   return (
-    <div className="mt-2 flex items-start gap-1.5 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 px-2.5 py-2 ring-1 ring-amber-100">
-      <span className="mt-px text-[11px]">💡</span>
-      <p className="text-[11px] font-medium leading-[1.45] text-amber-800 italic">"{text}"</p>
-    </div>
+    <span className="relative flex h-2 w-2">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+    </span>
   )
 }
 
-// ─── Item Tags ────────────────────────────────────────────────────────────────
+// ─── Compact Upsell Strip Card (used in sticky footer area) ───────────────────
 
-function ItemTags({ suggestion }: { suggestion: AISuggestion }) {
-  const tags: { label: string; style: string; icon: React.ReactNode }[] = []
-
-  if (suggestion.is_special) {
-    tags.push({
-      label: 'Must try',
-      style: 'bg-red-50 text-red-600 ring-1 ring-red-200',
-      icon: <Zap size={9} />,
-    })
-  }
-  if (suggestion.is_bestseller) {
-    tags.push({
-      label: 'Bestseller',
-      style: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-      icon: <Star size={9} />,
-    })
-  }
-  if (
-    suggestion.urgency?.toLowerCase().includes('today') ||
-    suggestion.urgency?.toLowerCase().includes('trending')
-  ) {
-    tags.push({
-      label: 'Trending today',
-      style: 'bg-orange-50 text-orange-600 ring-1 ring-orange-200',
-      icon: <TrendingUp size={9} />,
-    })
-  }
-  if (
-    suggestion.urgency?.toLowerCase().includes('sold out') ||
-    suggestion.urgency?.toLowerCase().includes('limited')
-  ) {
-    tags.push({
-      label: 'Selling fast',
-      style: 'bg-rose-50 text-rose-600 ring-1 ring-rose-200',
-      icon: <Flame size={9} />,
-    })
-  }
-
-  if (tags.length === 0) return null
-
-  return (
-    <div className="flex flex-wrap gap-1 mb-1.5">
-      {tags.slice(0, 2).map((tag) => (
-        <span
-          key={tag.label}
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${tag.style}`}
-        >
-          {tag.icon}
-          {tag.label}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-// ─── AI Suggestion Card ───────────────────────────────────────────────────────
-
-function AISuggestionCard({
+function UpsellStripCard({
   suggestion,
   menuItem,
   onAdd,
+  isAdded,
 }: {
   suggestion: AISuggestion
   menuItem?: MenuItem
   onAdd: () => void
+  isAdded: boolean
 }) {
-  const { cartItems, increaseCartItem, decreaseCartItem } = useAppStore()
-  const [adding, setAdding] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-
-  // Sum qty across all cart entries for this item (different option combos)
-  const qtyInCart = cartItems
-    .filter((c) => c.item.id === suggestion.id)
-    .reduce((s, c) => s + c.quantity, 0)
-
-  // Primary cart entry for the suggestion (first found)
-  const primaryEntry = cartItems.find((c) => c.item.id === suggestion.id)
-
   const imageUrl = menuItem ? getImageUrl(menuItem.image_url) : null
 
-  const handleAdd = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setAdding(true)
-    onAdd()
-    setTimeout(() => setAdding(false), 700)
-  }
-
-  const showUrgencyInline =
-    suggestion.urgency &&
-    !suggestion.urgency.toLowerCase().includes('today') &&
-    !suggestion.urgency.toLowerCase().includes('trending') &&
-    !suggestion.urgency.toLowerCase().includes('sold out') &&
-    !suggestion.urgency.toLowerCase().includes('limited')
-
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition-all duration-200 hover:border-orange-200 hover:shadow-md">
-      <div className="flex items-center gap-3 p-3">
-        {/* Image */}
-        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-amber-50 to-orange-50">
-          {imageUrl ? (
-            <Image src={imageUrl} alt={suggestion.name} fill className="object-cover" sizes="56px" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-xl">
-              {suggestion.is_veg ? '🥗' : '🍖'}
-            </div>
-          )}
-          <div
-            className={`absolute left-1 top-1 h-3 w-3 rounded-sm border-[1.5px] bg-white ${
-              suggestion.is_veg ? 'border-emerald-500' : 'border-red-500'
-            }`}
-          >
-            <div className={`m-px h-1.5 w-1.5 rounded-full ${suggestion.is_veg ? 'bg-emerald-500' : 'bg-red-500'}`} />
+    <div className={[
+      'flex items-center gap-2.5 rounded-2xl border p-2.5 transition-all duration-200',
+      isAdded
+        ? 'border-emerald-200 bg-emerald-50'
+        : 'border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50',
+    ].join(' ')}>
+      {/* Image */}
+      <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-orange-100">
+        {imageUrl ? (
+          <Image src={imageUrl} alt={suggestion.name} fill className="object-cover" sizes="44px" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-lg">
+            {suggestion.is_veg ? '🥗' : '🍖'}
           </div>
-        </div>
-
-        {/* Content */}
-        <div className="min-w-0 flex-1">
-          <ItemTags suggestion={suggestion} />
-          <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-200">
-            <Sparkles size={8} />
-            {suggestion.hook}
-          </div>
-          <p className="text-sm font-semibold leading-tight text-slate-900 truncate">{suggestion.name}</p>
-          <div className="mt-0.5 flex items-center gap-2">
-            <span className="text-sm font-bold text-slate-900">{formatPrice(suggestion.price)}</span>
-            {showUrgencyInline && (
-              <span className="text-[10px] font-medium text-amber-600">{suggestion.urgency}</span>
-            )}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {qtyInCart === 0 ? (
-            <button
-              type="button"
-              onClick={handleAdd}
-              className={[
-                'rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all duration-150',
-                adding
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'border-orange-400 bg-orange-500 text-white hover:bg-orange-600 active:scale-95',
-              ].join(' ')}
-            >
-              {adding ? '✓ Added' : '+ Add'}
-            </button>
-          ) : (
-            <div className="inline-flex items-center overflow-hidden rounded-full border border-orange-200 bg-orange-50">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (primaryEntry) decreaseCartItem(primaryEntry.cartKey)
-                }}
-                className="flex h-7 w-7 items-center justify-center text-orange-700 hover:bg-orange-100"
-              >
-                <Minus size={12} />
-              </button>
-              <span className="min-w-5 px-1 text-center text-xs font-semibold text-orange-700">
-                {qtyInCart}
-              </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (primaryEntry) increaseCartItem(primaryEntry.cartKey)
-                }}
-                className="flex h-7 w-7 items-center justify-center text-orange-700 hover:bg-orange-100"
-              >
-                <Plus size={12} />
-              </button>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-0.5 text-[10px] text-slate-400 hover:text-slate-600"
-          >
-            {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-            {expanded ? 'Less' : 'Why?'}
-          </button>
+        )}
+        {/* Veg dot */}
+        <div className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-sm border bg-white ${suggestion.is_veg ? 'border-emerald-500' : 'border-red-500'}`}>
+          <div className={`m-px h-1.5 w-1.5 rounded-full ${suggestion.is_veg ? 'bg-emerald-500' : 'bg-red-500'}`} />
         </div>
       </div>
 
-      {expanded && (
-        <div className="border-t border-slate-50 px-3 pb-3 pt-2">
-          <p className="text-[11px] leading-[1.5] text-slate-500">{suggestion.reason}</p>
-          {suggestion.psych_trigger && <PsychBadge text={suggestion.psych_trigger} />}
+      {/* Info */}
+      <div className="min-w-0 flex-1">
+        {/* Hook pill */}
+        <div className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-orange-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-orange-600">
+          <Zap size={7} />
+          {suggestion.hook}
         </div>
-      )}
+        <p className="truncate text-[12px] font-semibold text-slate-900">{suggestion.name}</p>
+        {/* FOMO line */}
+        <div className="mt-0.5 flex items-center gap-1">
+          <LiveDot />
+          <span className="text-[10px] font-medium text-slate-500">{suggestion.fomo ?? suggestion.urgency}</span>
+        </div>
+      </div>
+
+      {/* Price + Add */}
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <span className="text-[11px] font-bold text-slate-800">{formatPrice(suggestion.price)}</span>
+        {isAdded ? (
+          <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-white">✓ Added</span>
+        ) : (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="rounded-full bg-orange-500 px-3 py-1 text-[11px] font-bold text-white shadow-sm shadow-orange-200 transition active:scale-95 hover:bg-orange-600"
+          >
+            + Add
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
-// ─── Skeleton ──────────────────────────────────────────────────────────────────
+// ─── Checkout Intercept Modal ─────────────────────────────────────────────────
+// Fires BEFORE waiter is called. Customer must explicitly skip or add.
 
-function SuggestionSkeleton() {
+function CheckoutInterceptModal({
+  suggestions,
+  allItems,
+  onSkip,
+  onAddAndProceed,
+  onProceed,
+}: {
+  suggestions: AISuggestion[]
+  allItems: MenuItem[]
+  onSkip: () => void
+  onAddAndProceed: (ids: string[]) => void
+  onProceed: () => void
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const menuItemMap = new Map(allItems.map((i) => [i.id, i]))
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleConfirm = () => {
+    if (selected.size > 0) onAddAndProceed([...selected])
+    else onProceed()
+  }
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-      <div className="flex items-center gap-3 p-3">
-        <div className="h-14 w-14 shrink-0 animate-pulse rounded-xl bg-slate-100" />
-        <div className="flex-1 space-y-2">
-          <div className="h-3 w-20 animate-pulse rounded-full bg-slate-100" />
-          <div className="h-3.5 w-28 animate-pulse rounded bg-slate-100" />
-          <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
+    // Backdrop
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 backdrop-blur-sm px-0">
+      <div className="w-full max-w-2xl animate-in slide-in-from-bottom duration-300 rounded-t-[28px] bg-white shadow-2xl">
+
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="h-1 w-10 rounded-full bg-slate-200" />
         </div>
-        <div className="h-8 w-16 shrink-0 animate-pulse rounded-full bg-slate-100" />
+
+        {/* Header */}
+        <div className="px-5 pb-3 pt-1">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-500">
+              <Sparkles size={14} className="text-white" />
+            </div>
+            <p className="text-base font-bold text-slate-900">Before you call the waiter…</p>
+          </div>
+          <p className="text-[12px] text-slate-500 leading-relaxed">
+            Most tables add one of these. Takes 2 seconds — tap to select, then confirm.
+          </p>
+        </div>
+
+        {/* Suggestion cards */}
+        <div className="px-4 space-y-2.5 pb-4">
+          {suggestions.map((s) => {
+            const menuItem = menuItemMap.get(s.id)
+            const imageUrl = menuItem ? getImageUrl(menuItem.image_url) : null
+            const isSelected = selected.has(s.id)
+
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => toggle(s.id)}
+                className={[
+                  'w-full flex items-center gap-3 rounded-2xl border-2 p-3 text-left transition-all duration-150 active:scale-[0.99]',
+                  isSelected
+                    ? 'border-orange-400 bg-orange-50 shadow-md shadow-orange-100'
+                    : 'border-slate-100 bg-slate-50 hover:border-orange-200',
+                ].join(' ')}
+              >
+                {/* Image */}
+                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-orange-50">
+                  {imageUrl ? (
+                    <Image src={imageUrl} alt={s.name} fill className="object-cover" sizes="56px" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-2xl">
+                      {s.is_veg ? '🥗' : '🍖'}
+                    </div>
+                  )}
+                  <div className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-sm border bg-white ${s.is_veg ? 'border-emerald-500' : 'border-red-500'}`}>
+                    <div className={`m-px h-1.5 w-1.5 rounded-full ${s.is_veg ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  </div>
+                </div>
+
+                {/* Text */}
+                <div className="min-w-0 flex-1">
+                  {/* Hook */}
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-orange-500 mb-0.5">{s.hook}</p>
+                  <p className="text-[13px] font-semibold text-slate-900 leading-tight">{s.name}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{s.reason}</p>
+                  {/* FOMO */}
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <LiveDot />
+                    <span className="text-[10px] font-semibold text-slate-600">{s.fomo ?? s.urgency}</span>
+                  </div>
+                </div>
+
+                {/* Price + Checkbox */}
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <span className="text-sm font-bold text-slate-900">{formatPrice(s.price)}</span>
+                  <div className={[
+                    'h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all',
+                    isSelected ? 'border-orange-500 bg-orange-500' : 'border-slate-300 bg-white',
+                  ].join(' ')}>
+                    {isSelected && (
+                      <svg viewBox="0 0 10 8" className="h-3 w-3 fill-white">
+                        <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Actions */}
+        <div className="border-t border-slate-100 px-4 py-4 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className={[
+              'w-full rounded-2xl py-3.5 text-sm font-bold transition-all',
+              selected.size > 0
+                ? 'bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-200 hover:-translate-y-0.5'
+                : 'bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-200 hover:-translate-y-0.5',
+            ].join(' ')}
+          >
+            {selected.size > 0
+              ? `Add ${selected.size} item${selected.size > 1 ? 's' : ''} & call waiter`
+              : 'Call waiter · place order as is'}
+          </button>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="w-full rounded-2xl py-2.5 text-[12px] font-medium text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            Skip — I'm good with what I have
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -451,40 +444,23 @@ function CartItemRow({
   onDecrease: () => void
   onRemove: () => void
 }) {
-	
-	  const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])  // ← add this
-
-  // Build a compact label for the chosen options (e.g. "Chapati, Extra Cheese")
+  const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])
   const optionSummary =
     c.selectedOptions && c.selectedOptions.length > 0
-      ? c.selectedOptions
-          .flatMap((o) => o.choices.map((ch) => ch.choice_name))
-          .join(', ')
+      ? c.selectedOptions.flatMap((o) => o.choices.map((ch) => ch.choice_name)).join(', ')
       : null
 
   return (
     <div className="flex items-center gap-2.5 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-      <div
-        className={`h-3.5 w-3.5 shrink-0 rounded-sm border-2 bg-white ${
-          c.item.is_veg ? 'border-emerald-500' : 'border-red-500'
-        }`}
-      >
+      <div className={`h-3.5 w-3.5 shrink-0 rounded-sm border-2 bg-white ${c.item.is_veg ? 'border-emerald-500' : 'border-red-500'}`}>
         <div className={`m-px h-1.5 w-1.5 rounded-full ${c.item.is_veg ? 'bg-emerald-500' : 'bg-red-500'}`} />
       </div>
-
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-slate-900">{c.item.name}</p>
-        {optionSummary && (
-          <p className="mt-0.5 truncate text-[10px] text-slate-400">{optionSummary}</p>
-        )}
-       <p className="mt-0.5 text-xs text-slate-400">{formatPrice(unitPrice)} each</p>
-
+        {optionSummary && <p className="mt-0.5 truncate text-[10px] text-slate-400">{optionSummary}</p>}
+        <p className="mt-0.5 text-xs text-slate-400">{formatPrice(unitPrice)} each</p>
       </div>
-
-      <span className="shrink-0 text-sm font-bold text-slate-900">
-  {formatPrice(unitPrice * c.quantity)}
-</span>
-
+      <span className="shrink-0 text-sm font-bold text-slate-900">{formatPrice(unitPrice * c.quantity)}</span>
       <div className="inline-flex shrink-0 items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50">
         <button type="button" onClick={onDecrease} className="flex h-7 w-7 items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200">
           <Minus size={12} />
@@ -494,7 +470,6 @@ function CartItemRow({
           <Plus size={12} />
         </button>
       </div>
-
       <button
         type="button"
         onClick={onRemove}
@@ -506,50 +481,66 @@ function CartItemRow({
   )
 }
 
+// ─── Skeleton ──────────────────────────────────────────────────────────────────
+
+function SuggestionSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+      <div className="flex items-center gap-3 p-2.5">
+        <div className="h-11 w-11 shrink-0 animate-pulse rounded-xl bg-slate-100" />
+        <div className="flex-1 space-y-1.5">
+          <div className="h-2.5 w-16 animate-pulse rounded-full bg-slate-100" />
+          <div className="h-3 w-24 animate-pulse rounded bg-slate-100" />
+          <div className="h-2.5 w-20 animate-pulse rounded bg-slate-100" />
+        </div>
+        <div className="h-7 w-14 shrink-0 animate-pulse rounded-full bg-slate-100" />
+      </div>
+    </div>
+  )
+}
+
 // ─── Main CartSheet ────────────────────────────────────────────────────────────
 
 export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
   const {
-    cartItems,
-    items: allItems,
-    isCartOpen,
-    closeCart,
-    increaseCartItem,
-    decreaseCartItem,
-    removeFromCart,
-    clearCart,
-    addToCart,
-    restaurant,
+    cartItems, items: allItems, isCartOpen, closeCart,
+    increaseCartItem, decreaseCartItem, removeFromCart,
+    clearCart, addToCart, restaurant,
   } = useAppStore()
 
   const subtotal = cartItems.reduce((sum, c) => {
-  const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])
-  return sum + unitPrice * c.quantity
-}, 0)
+    const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])
+    return sum + unitPrice * c.quantity
+  }, 0)
   const itemCount = cartItems.reduce((sum, c) => sum + c.quantity, 0)
 
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([])
   const [aiLoading, setAiLoading] = useState(false)
+  // Track which suggestion ids have been added from the strip
+  const [addedFromStrip, setAddedFromStrip] = useState<Set<string>>(new Set())
+  // Intercept modal visibility
+  const [showIntercept, setShowIntercept] = useState(false)
 
   const fetchedKeyRef = useRef<string>('')
   const networkAttemptedRef = useRef<Set<string>>(new Set())
   const shownTrackedRef = useRef<Set<string>>(new Set())
+
+  // Reset strip added state when cart changes
+  useEffect(() => {
+    setAddedFromStrip(new Set())
+  }, [cartItems.length])
 
   useEffect(() => {
     if (!isCartOpen || cartItems.length === 0 || allItems.length === 0) {
       setAiSuggestions([])
       return
     }
-
     const key = getCacheKey(cartItems)
     if (fetchedKeyRef.current === key) return
     fetchedKeyRef.current = key
 
     const cached = getCached(key)
-    if (cached) {
-      setAiSuggestions(cached)
-      return
-    }
+    if (cached) { setAiSuggestions(cached); return }
 
     const generic = buildGenericSuggestions(cartItems, allItems)
     setAiSuggestions(generic)
@@ -565,322 +556,285 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             cart_items: cartItems.map((c) => ({
-              id: c.item.id,
-              name: c.item.name,
-              price: c.item.price,
-              is_veg: c.item.is_veg,
-              description: c.item.description,
-              course_type: (c.item as any).course_type,
-              tags: c.item.tags,
+              id: c.item.id, name: c.item.name, price: c.item.price,
+              is_veg: c.item.is_veg, description: c.item.description,
+              course_type: (c.item as any).course_type, tags: c.item.tags,
             })),
             all_items: allItems.map((item) => ({
-              id: item.id,
-              name: item.name,
-              price: item.price,
-              is_veg: item.is_veg,
-              is_bestseller: item.is_bestseller,
-              is_special: (item as any).is_special,
-              description: item.description,
-              course_type: (item as any).course_type,
-              tags: item.tags,
+              id: item.id, name: item.name, price: item.price,
+              is_veg: item.is_veg, is_bestseller: item.is_bestseller,
+              is_special: (item as any).is_special, description: item.description,
+              course_type: (item as any).course_type, tags: item.tags,
               best_with: (item as any).best_with,
             })),
           }),
         })
-
         if (!res.ok) return
         const data = await res.json()
         const suggestions: AISuggestion[] = data.suggestions ?? []
         if (suggestions.length > 0) {
           setCache(key, suggestions)
-          if (fetchedKeyRef.current === key) {
-            setAiSuggestions(suggestions)
-          }
+          if (fetchedKeyRef.current === key) setAiSuggestions(suggestions)
         }
-      } catch {
-        // Network error — generic already showing
-      } finally {
-        setAiLoading(false)
-      }
+      } catch { /* generic already showing */ }
+      finally { setAiLoading(false) }
     }
-
     void fetchAI()
   }, [isCartOpen, cartItems, allItems])
 
-  // ── Fire upsell_shown once per unique (session × cart-key) ────────────────
+  // Track upsell shown
   useEffect(() => {
     if (!isCartOpen || !restaurant || aiSuggestions.length === 0) return
-
     const key = getCacheKey(cartItems)
     const trackingKey = `${restaurant.id}:${key}`
     if (shownTrackedRef.current.has(trackingKey)) return
     shownTrackedRef.current.add(trackingKey)
-
     void track(restaurant.id, 'upsell_shown', {
       metadata: {
         suggestion_count: aiSuggestions.length,
         cart_item_ids: cartItems.map((c) => c.item.id),
         suggestions: aiSuggestions.map((s) => ({
-          item_id: s.id,
-          item_name: s.name,
-          hook: s.hook,
-          psych_trigger_type: s.psych_trigger_type ?? null,
-          price: s.price,
+          item_id: s.id, item_name: s.name, hook: s.hook,
+          psych_trigger_type: s.psych_trigger_type ?? null, price: s.price,
         })),
       },
     })
   }, [isCartOpen, aiSuggestions, restaurant, cartItems])
 
-  const prevCartOpenRef = useRef(false)
-  useEffect(() => {
-    const justOpened = isCartOpen && !prevCartOpenRef.current
-    prevCartOpenRef.current = isCartOpen
-
-    if (!justOpened || !restaurant || aiSuggestions.length === 0) return
-
-    const key = getCacheKey(cartItems)
-    if (fetchedKeyRef.current !== key) return
-
-    void track(restaurant.id, 'upsell_shown', {
-      metadata: {
-        suggestion_count: aiSuggestions.length,
-        cart_item_ids: cartItems.map((c) => c.item.id),
-        suggestions: aiSuggestions.map((s) => ({
-          item_id: s.id,
-          item_name: s.name,
-          hook: s.hook,
-          psych_trigger_type: s.psych_trigger_type ?? null,
-          price: s.price,
-        })),
-        is_reopen: true,
-      },
-    })
-  }, [isCartOpen]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const handleRemove = (cartKey: string, itemName: string) => {
     removeFromCart(cartKey)
     fetchedKeyRef.current = ''
-    if (restaurant) {
-      void track(restaurant.id, 'cart_item_removed', { item_name: itemName })
-    }
+    if (restaurant) void track(restaurant.id, 'cart_item_removed', { item_name: itemName })
   }
 
   const handleClearCart = () => {
     if (restaurant && cartItems.length > 0) {
-      void track(restaurant.id, 'cart_cleared', {
-        metadata: { item_count: cartItems.length, subtotal },
-      })
+      void track(restaurant.id, 'cart_cleared', { metadata: { item_count: cartItems.length, subtotal } })
     }
     clearCart()
     fetchedKeyRef.current = ''
     networkAttemptedRef.current.clear()
     shownTrackedRef.current.clear()
     setAiSuggestions([])
+    setAddedFromStrip(new Set())
   }
 
-  const handleCallWaiter = () => {
-    if (!restaurant) return
-
-    const itemsWithSource = cartItems.map((c) => ({
-      id: c.item.id,
-      name: c.item.name,
-      qty: c.quantity,
-      price: c.item.price,
-      total: c.item.price * c.quantity,
-    }))
-
-    void track(restaurant.id, 'cart_submitted', {
-      metadata: { item_count: itemCount, subtotal, items: itemsWithSource },
-    })
-    onCallWaiter?.({ items: itemsWithSource, subtotal })
-    closeCart()
-  }
-
-  const handleAddSuggestion = (suggestion: AISuggestion) => {
+  const handleAddFromStrip = (suggestion: AISuggestion) => {
     const full = allItems.find((i) => i.id === suggestion.id)
     if (!full) return
-    // Suggestions add without customisation (no options chosen)
     addToCart(full)
+    setAddedFromStrip((prev) => new Set([...prev, suggestion.id]))
     fetchedKeyRef.current = ''
-
     if (restaurant) {
       void track(restaurant.id, 'upsell_accepted', {
-        item_id: suggestion.id,
-        item_name: suggestion.name,
+        item_id: suggestion.id, item_name: suggestion.name,
         metadata: {
-          price: suggestion.price,
-          hook: suggestion.hook,
+          price: suggestion.price, hook: suggestion.hook,
           psych_trigger_type: suggestion.psych_trigger_type ?? null,
+          source: 'strip',
           triggered_by_cart_items: cartItems.map((c) => ({ id: c.item.id, name: c.item.name })),
-          upsell_revenue: suggestion.price,
-        },
-      })
-
-      void track(restaurant.id, 'cart_item_added', {
-        item_id: suggestion.id,
-        item_name: suggestion.name,
-        metadata: {
-          source: 'suggestion',
-          price: suggestion.price,
-          psych_trigger_type: suggestion.psych_trigger_type ?? null,
         },
       })
     }
   }
 
+  // Called when user clicks "Call waiter" — show intercept if suggestions exist and none were added
+  const handleCallWaiterClick = () => {
+    const unaddedSuggestions = aiSuggestions.filter((s) => !addedFromStrip.has(s.id))
+    if (unaddedSuggestions.length > 0) {
+      setShowIntercept(true)
+      if (restaurant) {
+        void track(restaurant.id, 'upsell_intercept_shown', {
+          metadata: { suggestion_count: unaddedSuggestions.length },
+        })
+      }
+    } else {
+      proceedToCallWaiter()
+    }
+  }
+
+  const proceedToCallWaiter = useCallback(() => {
+    if (!restaurant) return
+    const itemsWithSource = cartItems.map((c) => ({
+      id: c.item.id, name: c.item.name, qty: c.quantity,
+      price: c.item.price, total: c.item.price * c.quantity,
+    }))
+    void track(restaurant.id, 'cart_submitted', {
+      metadata: { item_count: itemCount, subtotal, items: itemsWithSource },
+    })
+    onCallWaiter?.({ items: itemsWithSource, subtotal })
+    closeCart()
+    setShowIntercept(false)
+  }, [restaurant, cartItems, itemCount, subtotal, onCallWaiter, closeCart])
+
+  const handleInterceptAddAndProceed = (ids: string[]) => {
+    ids.forEach((id) => {
+      const suggestion = aiSuggestions.find((s) => s.id === id)
+      if (suggestion) handleAddFromStrip(suggestion)
+    })
+    setShowIntercept(false)
+    // Small delay so cart updates before proceeding
+    setTimeout(proceedToCallWaiter, 150)
+  }
+
   const menuItemMap = new Map(allItems.map((i) => [i.id, i]))
+  const unaddedSuggestions = aiSuggestions.filter((s) => !addedFromStrip.has(s.id))
 
   return (
-    <div
-      className={[
-        'fixed inset-0 z-[80] transition',
-        isCartOpen ? 'pointer-events-auto' : 'pointer-events-none',
-      ].join(' ')}
-    >
-      {/* Backdrop */}
-      <button
-        type="button"
-        onClick={closeCart}
-        className={[
-          'absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity',
-          isCartOpen ? 'opacity-100' : 'opacity-0',
-        ].join(' ')}
-        aria-label="Close cart"
-      />
+    <>
+      {/* ── Intercept Modal ── */}
+      {showIntercept && unaddedSuggestions.length > 0 && (
+        <CheckoutInterceptModal
+          suggestions={unaddedSuggestions}
+          allItems={allItems}
+          onSkip={proceedToCallWaiter}
+          onAddAndProceed={handleInterceptAddAndProceed}
+          onProceed={proceedToCallWaiter}
+        />
+      )}
 
-      {/* Sheet */}
-      <div
-        className={[
+      {/* ── Cart Sheet ── */}
+      <div className={['fixed inset-0 z-[80] transition', isCartOpen ? 'pointer-events-auto' : 'pointer-events-none'].join(' ')}>
+        {/* Backdrop */}
+        <button
+          type="button"
+          onClick={closeCart}
+          className={['absolute inset-0 bg-slate-950/35 backdrop-blur-sm transition-opacity', isCartOpen ? 'opacity-100' : 'opacity-0'].join(' ')}
+          aria-label="Close cart"
+        />
+
+        {/* Sheet */}
+        <div className={[
           'absolute inset-x-0 bottom-0 mx-auto w-full max-w-2xl',
           'rounded-t-[28px] border border-slate-200 bg-slate-50',
-          'shadow-[0_-20px_80px_rgba(15,23,42,0.16)] transition-transform duration-300',
+          'shadow-[0_-20px_80px_rgba(15,23,42,0.16)] transition-transform duration-300 flex flex-col',
           isCartOpen ? 'translate-y-0' : 'translate-y-full',
-        ].join(' ')}
-      >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-slate-200" />
-        </div>
+        ].join(' ')}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-500">
-              <ShoppingBag size={15} className="text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Your order</p>
-              <p className="text-xs text-slate-400">
-                {itemCount} item{itemCount !== 1 ? 's' : ''} · {formatPrice(subtotal)}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={closeCart}
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:bg-slate-50"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Scrollable body */}
-        <div className="max-h-[68vh] overflow-y-auto overscroll-contain">
-
-          {/* Cart Items */}
-          <div className="px-4 pt-4 pb-3">
-            {cartItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 gap-3">
-                <div className="text-4xl">🛒</div>
-                <p className="text-sm font-medium text-slate-400">Your cart is empty</p>
-                <p className="text-xs text-slate-300">Add dishes from the menu to get started</p>
-              </div>
-            ) : (
-              <>
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Added items
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleClearCart}
-                    className="text-[11px] font-medium text-red-400 hover:text-red-500"
-                  >
-                    Clear all
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {cartItems.map((c) => (
-                    <CartItemRow
-                      key={c.cartKey}
-                      c={c}
-                      onIncrease={() => increaseCartItem(c.cartKey)}
-                      onDecrease={() => decreaseCartItem(c.cartKey)}
-                      onRemove={() => handleRemove(c.cartKey, c.item.name)}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+          {/* Handle */}
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="h-1 w-10 rounded-full bg-slate-200" />
           </div>
 
-          {/* Suggestions */}
-          {cartItems.length > 0 && (aiSuggestions.length > 0 || aiLoading) && (
-            <div className="border-t border-dashed border-slate-200 px-4 pb-5 pt-3">
-              <div className="mb-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-blue-500">
-                    <Sparkles size={10} className="text-white" />
-                  </div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Complete your meal
-                  </p>
-                </div>
-                {aiLoading && (
-                  <div className="flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5">
-                    <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
-                    <span className="text-[10px] font-medium text-violet-500">Personalising…</span>
-                  </div>
-                )}
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-500">
+                <ShoppingBag size={15} className="text-white" />
               </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Your order</p>
+                <p className="text-xs text-slate-400">{itemCount} item{itemCount !== 1 ? 's' : ''} · {formatPrice(subtotal)}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={closeCart}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:bg-slate-50"
+            >
+              <X size={16} />
+            </button>
+          </div>
 
-              <div className="space-y-2">
-                {aiLoading && aiSuggestions.length === 0
-                  ? Array.from({ length: 2 }).map((_, i) => <SuggestionSkeleton key={i} />)
-                  : aiSuggestions.map((suggestion) => (
-                      <AISuggestionCard
-                        key={suggestion.id}
-                        suggestion={suggestion}
-                        menuItem={menuItemMap.get(suggestion.id)}
-                        onAdd={() => handleAddSuggestion(suggestion)}
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto overscroll-contain max-h-[55vh]">
+
+            {/* Cart Items */}
+            <div className="px-4 pt-4 pb-3">
+              {cartItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="text-4xl">🛒</div>
+                  <p className="text-sm font-medium text-slate-400">Your cart is empty</p>
+                  <p className="text-xs text-slate-300">Add dishes from the menu to get started</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Added items</p>
+                    <button type="button" onClick={handleClearCart} className="text-[11px] font-medium text-red-400 hover:text-red-500">
+                      Clear all
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {cartItems.map((c) => (
+                      <CartItemRow
+                        key={c.cartKey}
+                        c={c}
+                        onIncrease={() => increaseCartItem(c.cartKey)}
+                        onDecrease={() => decreaseCartItem(c.cartKey)}
+                        onRemove={() => handleRemove(c.cartKey, c.item.name)}
                       />
                     ))}
-              </div>
+                  </div>
+                </>
+              )}
             </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-slate-200 bg-white px-4 py-3">
-          <div className="mb-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-            <span className="text-sm text-slate-500">Subtotal</span>
-            <span className="text-base font-bold text-slate-900">{formatPrice(subtotal)}</span>
           </div>
 
-          <button
-            type="button"
-            onClick={handleCallWaiter}
-            disabled={cartItems.length === 0 || isWaiterLoading}
-            className="inline-flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 transition hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isWaiterLoading ? (
-              <><Loader2 size={16} className="animate-spin" />Notifying waiter…</>
-            ) : (
-              <><HandMetal size={17} />Call waiter · {formatPrice(subtotal)}</>
+          {/* ── Sticky Bottom Area ── */}
+          <div className="border-t border-slate-200 bg-white">
+
+            {/* Upsell Strip — always visible above CTA when suggestions exist */}
+            {cartItems.length > 0 && (aiSuggestions.length > 0 || aiLoading) && (
+              <div className="px-4 pt-3 pb-2">
+                {/* Strip Header */}
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-400">
+                      <Sparkles size={8} className="text-white" />
+                    </div>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                      People also add
+                    </p>
+                  </div>
+                  {aiLoading && (
+                    <div className="flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5">
+                      <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+                      <span className="text-[9px] font-medium text-violet-500">Finding best pairs…</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cards */}
+                <div className="space-y-2">
+                  {aiLoading && aiSuggestions.length === 0
+                    ? Array.from({ length: 2 }).map((_, i) => <SuggestionSkeleton key={i} />)
+                    : aiSuggestions.map((suggestion) => (
+                        <UpsellStripCard
+                          key={suggestion.id}
+                          suggestion={suggestion}
+                          menuItem={menuItemMap.get(suggestion.id)}
+                          onAdd={() => handleAddFromStrip(suggestion)}
+                          isAdded={addedFromStrip.has(suggestion.id)}
+                        />
+                      ))}
+                </div>
+              </div>
             )}
-          </button>
+
+            {/* Subtotal + CTA */}
+            <div className="px-4 pb-4 pt-2">
+              <div className="mb-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                <span className="text-sm text-slate-500">Subtotal</span>
+                <span className="text-base font-bold text-slate-900">{formatPrice(subtotal)}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCallWaiterClick}
+                disabled={cartItems.length === 0 || isWaiterLoading}
+                className="inline-flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 transition hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isWaiterLoading ? (
+                  <><Loader2 size={16} className="animate-spin" />Notifying waiter…</>
+                ) : (
+                  <><HandMetal size={17} />Call waiter · {formatPrice(subtotal)}</>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }

@@ -260,8 +260,11 @@ export default function AnalyticsPage() {
       const waiterFailedEvents = events.filter((e) => e.event_type === 'waiter_call_failed')
       const cartItemAddedEvents = events.filter((e) => e.event_type === 'cart_item_added')
       const upsellShownEvents = events.filter(
-        (e) => e.event_type === 'upsell_shown' || e.event_type === 'ai_upsell_shown',
-      )
+  (e) =>
+    e.event_type === 'upsell_shown' ||
+    e.event_type === 'ai_upsell_shown' ||
+    e.event_type === 'upsell_intercept_shown'
+)
       const upsellAcceptedEvents = events.filter(
         (e) =>
           e.event_type === 'upsell_accepted' ||
