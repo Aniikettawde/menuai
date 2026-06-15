@@ -1,5 +1,6 @@
 'use client'
 import type { PsychTrigger } from '@/types'
+import { computeItemUnitPrice } from '@/lib/pricing'
 
 import {
   X,
@@ -450,6 +451,9 @@ function CartItemRow({
   onDecrease: () => void
   onRemove: () => void
 }) {
+	
+	  const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])  // ← add this
+
   // Build a compact label for the chosen options (e.g. "Chapati, Extra Cheese")
   const optionSummary =
     c.selectedOptions && c.selectedOptions.length > 0
@@ -473,12 +477,13 @@ function CartItemRow({
         {optionSummary && (
           <p className="mt-0.5 truncate text-[10px] text-slate-400">{optionSummary}</p>
         )}
-        <p className="mt-0.5 text-xs text-slate-400">{formatPrice(c.item.price)} each</p>
+       <p className="mt-0.5 text-xs text-slate-400">{formatPrice(unitPrice)} each</p>
+
       </div>
 
       <span className="shrink-0 text-sm font-bold text-slate-900">
-        {formatPrice(c.item.price * c.quantity)}
-      </span>
+  {formatPrice(unitPrice * c.quantity)}
+</span>
 
       <div className="inline-flex shrink-0 items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50">
         <button type="button" onClick={onDecrease} className="flex h-7 w-7 items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200">
@@ -517,7 +522,10 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
     restaurant,
   } = useAppStore()
 
-  const subtotal = cartItems.reduce((sum, c) => sum + c.item.price * c.quantity, 0)
+  const subtotal = cartItems.reduce((sum, c) => {
+  const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])
+  return sum + unitPrice * c.quantity
+}, 0)
   const itemCount = cartItems.reduce((sum, c) => sum + c.quantity, 0)
 
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([])

@@ -7,6 +7,8 @@ import { track } from '@/lib/analytics'
 import { CartSheet } from './CartSheet'
 import { CustomiseSheet } from './CustomiseSheet'
 import type { SelectedOption } from '@/types'
+import { computeItemUnitPrice } from '@/lib/pricing'
+
 
 type Props = {
   onCallWaiter?: (payload: {
@@ -38,7 +40,10 @@ export function FloatingCartBar({ onCallWaiter, isWaiterLoading = false }: Props
   const [bump, setBump] = useState(false)
 
   const itemCount = cartItems.reduce((sum, c) => sum + c.quantity, 0)
-  const subtotal = cartItems.reduce((sum, c) => sum + c.item.price * c.quantity, 0)
+  const subtotal = cartItems.reduce((sum, c) => {
+  const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])
+  return sum + unitPrice * c.quantity
+}, 0)
 
   useEffect(() => {
     if (itemCount === 0) return
