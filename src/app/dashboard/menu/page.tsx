@@ -41,17 +41,18 @@ type DishOption = {
   min_selections: number
   max_selections: number
   position: number
+  price_mode: 'add' | 'override'
   choices: DishOptionChoice[]
 }
 
-// For local editing (before save)
 type DishOptionDraft = {
-  id?: string           // undefined = new
+  id?: string
   name: string
   is_required: boolean
   min_selections: number
   max_selections: number
   position: number
+  price_mode: 'add' | 'override'
   choices: DishOptionChoiceDraft[]
 }
 type DishOptionChoiceDraft = {
@@ -66,7 +67,7 @@ type DishOptionChoiceDraft = {
 function emptyOptionDraft(position: number): DishOptionDraft {
   return {
     name: '', is_required: false, min_selections: 0, max_selections: 1,
-    position, choices: [emptyChoiceDraft(0)],
+    position, price_mode: 'add', choices: [emptyChoiceDraft(0)],
   }
 }
 function emptyChoiceDraft(position: number): DishOptionChoiceDraft {
@@ -376,7 +377,7 @@ function CustomiseOptionsModal({
       ? existingOptions.map((opt) => ({
           id: opt.id, name: opt.name, is_required: opt.is_required,
           min_selections: opt.min_selections, max_selections: opt.max_selections,
-          position: opt.position,
+          position: opt.position, price_mode: opt.price_mode ?? 'add',
           choices: opt.choices.map((c) => ({
             id: c.id, name: c.name, extra_price: c.extra_price,
             is_default: c.is_default, is_available: c.is_available, position: c.position,
@@ -444,8 +445,8 @@ function CustomiseOptionsModal({
         <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3">
           <p className="text-xs text-purple-300 font-medium">What are customisation options?</p>
           <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
-            Let customers choose variations when ordering — e.g. "Choose base: Chapati / Roti / Bhakri" or "Add-ons: Extra cheese, Salad".
-            You can mark options as required or optional.
+            Two kinds of groups: <span className="text-zinc-300 font-medium">Add-ons</span> let customers add extras on top of the dish price (e.g. "Extra cheese +₹50").
+            <span className="text-zinc-300 font-medium"> Variants</span> let customers pick a version that has its own price, replacing the dish price entirely (e.g. "Half Plate ₹320 / Full Plate ₹640").
           </p>
         </div>
 
@@ -457,7 +458,9 @@ function CustomiseOptionsModal({
           </div>
         )}
 
-        {drafts.map((opt, optIdx) => (
+        {drafts.map((opt, optIdx) => {
+          const isOverride = opt.price_mode === 'override'
+          return (
           <div key={optIdx} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
             {/* Option group header */}
             <div className="p-4 space-y-3 border-b border-zinc-800/60">
@@ -496,6 +499,23 @@ function CustomiseOptionsModal({
                     <CheckSquare size={10} /> Multiple
                   </button>
                 </div>
+                {/* Price mode selector: add-on vs variant */}
+                <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-1">
+                  <button
+                    onClick={() => updateOption(optIdx, { price_mode: 'add' })}
+                    title="Choice prices add on top of the dish price"
+                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.price_mode === 'add' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    Add-on (+₹)
+                  </button>
+                  <button
+                    onClick={() => updateOption(optIdx, { price_mode: 'override' })}
+                    title="Choice prices replace the dish price"
+                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${isOverride ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    Variant (sets price)
+                  </button>
+                </div>
                 {opt.max_selections > 1 && (
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500">
                     <span>Max</span>
@@ -513,7 +533,9 @@ function CustomiseOptionsModal({
 
             {/* Choices list */}
             <div className="p-3 space-y-2">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Choices</p>
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">
+                Choices {isOverride && <span className="text-zinc-600">— enter each variant's full price</span>}
+              </p>
               {opt.choices.map((choice, choiceIdx) => (
                 <div key={choiceIdx} className="flex items-center gap-2">
                   <GripVertical size={14} className="text-zinc-700 shrink-0" />
@@ -529,9 +551,9 @@ function CustomiseOptionsModal({
                     placeholder={`Choice ${choiceIdx + 1}, e.g. Chapati`}
                     className={`${INPUT} flex-1 min-w-0 py-2 text-xs`}
                   />
-                  {/* Extra price */}
+                  {/* Price */}
                   <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-xs text-zinc-600">+₹</span>
+                    <span className="text-xs text-zinc-600">{isOverride ? '₹' : '+₹'}</span>
                     <input
                       type="number" min={0}
                       value={choice.extra_price ? (choice.extra_price / 100).toFixed(0) : ''}
@@ -562,10 +584,12 @@ function CustomiseOptionsModal({
                 {opt.max_selections === 1 ? '◉ Single select — customer picks one.' : `☑ Multi-select — customer picks up to ${opt.max_selections}.`}
                 {' '}{opt.is_required ? 'Selection is required.' : 'Selection is optional.'}
                 {' '}Filled circle = default pre-selected.
+                {' '}{isOverride ? 'Prices shown replace the dish price entirely.' : 'Prices shown are added on top of the dish price.'}
               </p>
             </div>
           </div>
-        ))}
+          )
+        })}
 
         <button
           onClick={addOption}
@@ -735,10 +759,10 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
     }
 
     // 2. Insert fresh option groups
-    const optPayloads = drafts.map((d, i) => ({
+   const optPayloads = drafts.map((d, i) => ({
       menu_item_id: itemId, name: d.name.trim() || 'Options',
       is_required: d.is_required, min_selections: d.min_selections,
-      max_selections: d.max_selections, position: i,
+      max_selections: d.max_selections, price_mode: d.price_mode, position: i,
     }))
     const { data: insertedOpts, error: optErr } = await supabase
       .from('dish_options').insert(optPayloads).select()

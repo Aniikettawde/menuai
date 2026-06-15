@@ -1,13 +1,26 @@
 'use client'
+
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { Restaurant, MenuCategory, MenuItem, ChatMessage, DishOption, SelectedOption } from '@/types'
+import type {
+  Restaurant,
+  MenuCategory,
+  MenuItem,
+  ChatMessage,
+  DishOption,
+  SelectedOption,
+} from '@/types'
+
+export type RatingContext = {
+  orderId: string
+  orderCode: string
+  tableNumber: number
+}
 
 export type CartItem = {
   item: MenuItem
   quantity: number
-  selectedOptions?: SelectedOption[]   // ← NEW: chosen customisations
-  // Computed key so two identical items with different options are separate entries
+  selectedOptions?: SelectedOption[]
   cartKey: string
 }
 
@@ -15,17 +28,14 @@ interface AppStore {
   restaurant: Restaurant | null
   categories: MenuCategory[]
   items: MenuItem[]
-
-  // ── NEW: dish options map (populated by RestaurantShell on load) ──────────
-  dishOptions: Record<string, DishOption[]>   // key = menu_item_id
+  dishOptions: Record<string, DishOption[]>
 
   cartItems: CartItem[]
   isCartOpen: boolean
   cartPulse: number
   tableNumber: number | null
 
-  // ── NEW: customise sheet state ────────────────────────────────────────────
-  customiseItemId: string | null   // if set, show CustomiseSheet for this item
+  customiseItemId: string | null
 
   messages: ChatMessage[]
   isChatLoading: boolean
@@ -34,11 +44,13 @@ interface AppStore {
   activeCategory: string | null
   expandedItem: string | null
   showRating: boolean
+  ratingContext: RatingContext | null
+  showRatingsList: boolean
   isOffline: boolean
   showChat: boolean
 
   setRestaurantData: (data: { restaurant: Restaurant; categories: MenuCategory[]; items: MenuItem[] }) => void
-  setDishOptions: (options: Record<string, DishOption[]>) => void   // NEW
+  setDishOptions: (options: Record<string, DishOption[]>) => void
 
   addMessage: (msg: ChatMessage) => void
   setIsChatLoading: (loading: boolean) => void
@@ -46,28 +58,29 @@ interface AppStore {
   setActiveCategory: (id: string | null) => void
   setExpandedItem: (id: string | null) => void
   setShowRating: (show: boolean) => void
+  openRatingForOrder: (ctx: RatingContext) => void
+  closeRating: () => void
+  openRatingsList: () => void
+  closeRatingsList: () => void
   setIsOffline: (offline: boolean) => void
   setShowChat: (show: boolean) => void
   setTableNumber: (tableNumber: number | null) => void
 
-  // Cart
-  addToCart: (item: MenuItem, selectedOptions?: SelectedOption[], quantity?: number) => void  // UPDATED signature
-  increaseCartItem: (cartKey: string) => void    // now uses cartKey
-  decreaseCartItem: (cartKey: string) => void    // now uses cartKey
-  removeFromCart: (cartKey: string) => void      // now uses cartKey
+  addToCart: (item: MenuItem, selectedOptions?: SelectedOption[], quantity?: number) => void
+  increaseCartItem: (cartKey: string) => void
+  decreaseCartItem: (cartKey: string) => void
+  removeFromCart: (cartKey: string) => void
   clearCart: () => void
   openCart: () => void
   closeCart: () => void
   toggleCart: () => void
 
-  // Customise sheet
-  openCustomiseSheet: (itemId: string) => void   // NEW
-  closeCustomiseSheet: () => void                // NEW
+  openCustomiseSheet: (itemId: string) => void
+  closeCustomiseSheet: () => void
 }
 
 function makeCartKey(itemId: string, selectedOptions?: SelectedOption[]): string {
   if (!selectedOptions || selectedOptions.length === 0) return itemId
-  // Stable key: sort option_ids + choice_ids so ordering doesn't matter
   const parts = selectedOptions
     .map((o) => `${o.option_id}:${o.choices.map((c) => c.choice_id).sort().join('+')}`)
     .sort()
@@ -105,6 +118,8 @@ export const useAppStore = create<AppStore>()(
     activeCategory: null,
     expandedItem: null,
     showRating: false,
+    ratingContext: null,
+    showRatingsList: false,
     isOffline: false,
     showChat: false,
 
@@ -151,6 +166,28 @@ export const useAppStore = create<AppStore>()(
         state.showRating = show
       }),
 
+    openRatingForOrder: (ctx) =>
+      set((state) => {
+        state.ratingContext = ctx
+        state.showRating = true
+      }),
+
+    closeRating: () =>
+      set((state) => {
+        state.showRating = false
+        state.ratingContext = null
+      }),
+
+    openRatingsList: () =>
+      set((state) => {
+        state.showRatingsList = true
+      }),
+
+    closeRatingsList: () =>
+      set((state) => {
+        state.showRatingsList = false
+      }),
+
     setIsOffline: (offline) =>
       set((state) => {
         state.isOffline = offline
@@ -165,8 +202,6 @@ export const useAppStore = create<AppStore>()(
       set((state) => {
         state.tableNumber = tableNumber
       }),
-
-    // ── Cart ─────────────────────────────────────────────────────────────────
 
     addToCart: (item, selectedOptions, quantity = 1) =>
       set((state) => {

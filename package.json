@@ -18,7 +18,7 @@
     "clsx": "^2.1.1",
     "critters": "^0.0.23",
     "firebase-admin": "^13.10.0",
-    "framer-motion": "^11.3.19",
+    "framer-motion": "^11.18.2",
     "idb": "^8.0.0",
     "immer": "^11.1.8",
     "jspdf": "^4.2.1",

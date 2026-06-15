@@ -1,11 +1,12 @@
 'use client'
 
 import { getPersistedOrder, orderStorageKey as storageKey, type PersistedOrder } from '@/lib/order-storage'
-
-import { useEffect, useRef, useState } from 'react'
+import { useAppStore } from '@/store/app-store'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   BellRing,
+  Check,
   CheckCircle2,
   ChefHat,
   PartyPopper,
@@ -41,6 +42,12 @@ interface Props {
   activeIndex?: number        // 0-based
   onNavigate?: (index: number) => void
 }
+
+const STEPS: { key: OrderStatus; label: string; icon: ReactNode }[] = [
+  { key: 'pending', label: 'Placed', icon: <BellRing size={13} /> },
+  { key: 'accepted', label: 'Confirmed', icon: <CheckCircle2 size={13} /> },
+  { key: 'completed', label: 'Ready', icon: <PartyPopper size={13} /> },
+]
 
 export function WaiterCalledToast({
   supabase,
@@ -78,6 +85,31 @@ export function WaiterCalledToast({
   const [minimized, setMinimized] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const openRatingForOrder = useAppStore((s) => s.openRatingForOrder)
+
+  // ── "Just accepted" celebration trigger ───────────────────────────────────────
+  const prevStatusRef = useRef<OrderStatus>(status)
+  const [showAcceptedBurst, setShowAcceptedBurst] = useState(false)
+
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    prevStatusRef.current = status
+    if (prev !== 'accepted' && status === 'accepted') {
+      setShowAcceptedBurst(true)
+      const t = setTimeout(() => setShowAcceptedBurst(false), 1600)
+      return () => clearTimeout(t)
+    }
+  }, [status])
+
+  // ── Start the countdown immediately on acceptance ─────────────────────────────
+  // If the server hasn't synced `accepted_at` yet (realtime delay / polling lag),
+  // start counting from "now" on the client so the timer never sits static.
+  // The real timestamp (if it arrives later) will overwrite this estimate.
+  useEffect(() => {
+    if (status === 'accepted' && !acceptedAt) {
+      setAcceptedAt(new Date().toISOString())
+    }
+  }, [status, acceptedAt])
 
   // Persist state
   useEffect(() => {
@@ -197,25 +229,25 @@ export function WaiterCalledToast({
 
   const totalSecs = avgPrepTime * 60
   const progress = secondsLeft !== null ? 1 - secondsLeft / totalSecs : 0
-  const circumference = 2 * Math.PI * 20
+  const ringCircumference = 2 * Math.PI * 20
   const stepIndex = status === 'pending' ? 0 : status === 'accepted' ? 1 : 2
 
   const stateConfig = {
     pending: {
       icon: <BellRing size={22} />,
-      ringClass: 'bg-green-500/15 text-green-500',
+      ringClass: 'bg-amber-500/15 text-amber-400',
       title: 'Waiter on the way!',
       sub: 'Your order has been sent',
     },
     accepted: {
       icon: <CheckCircle2 size={22} />,
-      ringClass: 'bg-blue-500/15 text-blue-400',
+      ringClass: 'bg-green-500/15 text-green-500',
       title: 'Order confirmed!',
       sub: 'Kitchen is preparing your food',
     },
     completed: {
       icon: <PartyPopper size={22} />,
-      ringClass: 'bg-green-500/15 text-green-400',
+      ringClass: 'bg-emerald-500/15 text-emerald-400',
       title: 'Order ready!',
       sub: 'Enjoy your meal 🍽️',
     },
@@ -232,6 +264,52 @@ export function WaiterCalledToast({
   const toastPosition =
     'fixed bottom-28 left-4 z-[80] w-[calc(100vw-2rem)] sm:bottom-6 sm:w-[320px]'
 
+  // ── Status icon (animated tick draw on acceptance) ────────────────────────────
+  function StatusIcon() {
+    return (
+      <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center">
+        {showAcceptedBurst && (
+          <>
+            <span
+              className="absolute inset-0 rounded-full bg-green-500/30"
+              style={{ animation: 'ripple 0.9s ease-out forwards' }}
+            />
+            <span
+              className="absolute inset-0 rounded-full bg-green-500/20"
+              style={{ animation: 'ripple 0.9s ease-out 0.15s forwards' }}
+            />
+          </>
+        )}
+        <div
+          className={`relative flex h-11 w-11 items-center justify-center rounded-full ${cfg.ringClass}`}
+          style={showAcceptedBurst ? { animation: 'popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' } : undefined}
+        >
+          {status === 'accepted' ? (
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <circle
+                cx="12" cy="12" r="10"
+                stroke="currentColor" strokeWidth="2"
+                strokeDasharray="63"
+                strokeDashoffset={showAcceptedBurst ? 63 : 0}
+                style={showAcceptedBurst ? { animation: 'drawCircle 0.4s ease forwards' } : undefined}
+              />
+              <path
+                d="M7 12.5l3 3 7-7"
+                stroke="currentColor" strokeWidth="2.5"
+                strokeLinecap="round" strokeLinejoin="round"
+                strokeDasharray="20"
+                strokeDashoffset={showAcceptedBurst ? 20 : 0}
+                style={showAcceptedBurst ? { animation: 'drawCheck 0.3s ease-out 0.35s forwards' } : undefined}
+              />
+            </svg>
+          ) : (
+            cfg.icon
+          )}
+        </div>
+      </div>
+    )
+  }
+
   // ── Minimized pill ────────────────────────────────────────────────────────────
   if (minimized) {
     return (
@@ -243,21 +321,21 @@ export function WaiterCalledToast({
           role="button"
           aria-label="View order status"
         >
-          {status === 'accepted' && secondsLeft !== null && secondsLeft > 0 ? (
+          {status === 'accepted' && secondsLeft !== null ? (
             <div className="relative h-10 w-10 flex-shrink-0">
               <svg className="-rotate-90" width="40" height="40" viewBox="0 0 44 44">
                 <circle cx="22" cy="22" r="20" fill="none" stroke="#27272a" strokeWidth="3" />
                 <circle
                   cx="22" cy="22" r="20"
-                  fill="none" stroke="#f97316" strokeWidth="3"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={circumference * (1 - progress)}
+                  fill="none" stroke="#22c55e" strokeWidth="3"
+                  strokeDasharray={ringCircumference}
+                  strokeDashoffset={ringCircumference * (1 - progress)}
                   strokeLinecap="round"
                   style={{ transition: 'stroke-dashoffset 1s linear' }}
                 />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-orange-400">
-                {Math.ceil((secondsLeft ?? 0) / 60)}m
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-green-400">
+                {secondsLeft > 0 ? `${Math.ceil(secondsLeft / 60)}m` : '🔥'}
               </span>
             </div>
           ) : (
@@ -275,14 +353,17 @@ export function WaiterCalledToast({
                   {activeIndex + 1}/{totalOrders}
                 </span>
               )}
-              {' · '}Tap to expand
+              {' · '}
+              {status === 'accepted' && secondsLeft !== null
+                ? secondsLeft > 0 ? `Ready in ${formatTime(secondsLeft)}` : 'Almost ready!'
+                : 'Tap to expand'}
             </p>
           </div>
 
           <ChevronUp size={14} className="ml-auto shrink-0 text-zinc-500" />
         </div>
 
-        <style>{`@keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
+        <style>{KEYFRAMES}</style>
       </>
     )
   }
@@ -291,15 +372,17 @@ export function WaiterCalledToast({
   return (
     <>
       <div
-        className={`${toastPosition} rounded-3xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl shadow-black/35`}
-        style={{ animation: 'toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both' }}
+        className={`${toastPosition} rounded-3xl border ${showAcceptedBurst ? 'border-green-500/40' : 'border-zinc-800'} bg-zinc-900 p-5 shadow-2xl shadow-black/35 transition-colors duration-700`}
+        style={{
+          animation: showAcceptedBurst
+            ? 'toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both, glowPulse 1.2s ease-out 0.1s'
+            : 'toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both',
+        }}
       >
         {/* Header row */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full ${cfg.ringClass}`}>
-              {cfg.icon}
-            </div>
+            <StatusIcon />
             <div className="min-w-0">
               <p className="truncate font-semibold text-white">{cfg.title}</p>
               <p className="mt-0.5 text-xs text-zinc-500">{cfg.sub}</p>
@@ -351,23 +434,43 @@ export function WaiterCalledToast({
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="mt-4 flex gap-1.5">
-          {(['pending', 'accepted', 'completed'] as const).map((s, i) => (
-            <div
-              key={s}
-              className={`h-1 flex-1 rounded-full transition-all duration-500 ${
-                i < stepIndex
-                  ? 'bg-green-500'
-                  : i === stepIndex
-                    ? status === 'completed'
-                      ? 'bg-green-500'
-                      : 'animate-pulse bg-orange-500'
-                    : 'bg-zinc-700'
-              }`}
-            />
-          ))}
-        </div>
+        {/* Step indicator */}
+        {status !== 'cancelled' && (
+          <div className="mt-4 flex items-center">
+            {STEPS.map((step, i) => {
+              const isDone = i < stepIndex || (i === stepIndex && status === 'completed')
+              const isActive = i === stepIndex && status !== 'completed'
+              return (
+                <Fragment key={step.key}>
+                  <div className="flex flex-col items-center gap-1">
+                    <div
+                      className={[
+                        'flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all duration-300',
+                        isDone
+                          ? 'border-green-500 bg-green-500 text-white'
+                          : isActive
+                            ? 'border-orange-500 bg-orange-500/15 text-orange-400 animate-pulse'
+                            : 'border-zinc-700 bg-zinc-800 text-zinc-600',
+                      ].join(' ')}
+                    >
+                      {isDone ? <Check size={14} /> : step.icon}
+                    </div>
+                    <span className={`text-[10px] font-medium ${i <= stepIndex ? 'text-zinc-300' : 'text-zinc-600'}`}>
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < STEPS.length - 1 && (
+                    <div
+                      className={`mx-1.5 mt-3 h-0.5 flex-1 rounded-full transition-all duration-700 ${
+                        i < stepIndex ? 'bg-green-500' : 'bg-zinc-700'
+                      }`}
+                    />
+                  )}
+                </Fragment>
+              )
+            })}
+          </div>
+        )}
 
         {/* Badges */}
         <div className="mt-3 flex flex-wrap gap-2">
@@ -381,13 +484,36 @@ export function WaiterCalledToast({
           </span>
         </div>
 
-        {/* Countdown */}
-        {status === 'accepted' && secondsLeft !== null && (
-          <div className="mt-3 flex items-center gap-2">
-            <ChefHat size={13} className="text-orange-400" />
-            <span className="text-xs text-zinc-400">
-              Ready in <span className="font-semibold text-orange-400">{formatTime(secondsLeft)}</span>
-            </span>
+        {/* Prep time / countdown */}
+        {status === 'accepted' && (
+          <div
+            className="mt-3 rounded-2xl border border-green-500/20 bg-green-500/10 px-4 py-3"
+            style={showAcceptedBurst ? { animation: 'fadeSlide 0.4s ease-out both' } : undefined}
+          >
+            <div className="flex items-center gap-2">
+              <ChefHat size={15} className="text-green-400" />
+              <span className="text-sm font-semibold text-green-300">
+                {secondsLeft !== null
+                  ? secondsLeft > 0 ? `Ready in ${formatTime(secondsLeft)}` : 'Almost ready! 🔥'
+                  : `Ready in ~${avgPrepTime} min`}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              Based on the kitchen&apos;s average prep time of {avgPrepTime} min
+            </p>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all duration-1000 ease-linear"
+                style={{ width: `${Math.min(100, Math.max(4, progress * 100))}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {status === 'completed' && (
+          <div className="mt-3 flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+            <PartyPopper size={15} className="text-emerald-400" />
+            <span className="text-sm font-semibold text-emerald-300">Your order is ready — enjoy!</span>
           </div>
         )}
 
@@ -405,9 +531,46 @@ export function WaiterCalledToast({
           <span>Subtotal</span>
           <span>₹{(subtotal / 100).toLocaleString('en-IN')}</span>
         </div>
+		{status === 'completed' && (
+  <div className="mt-4 rounded-3xl border border-emerald-400/15 bg-emerald-500/10 p-5">
+    <div className="flex items-center gap-3">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+        <CheckCircle2 size={26} />
+      </div>
+      <div>
+        <p className="text-base font-bold text-white">Your order is ready</p>
+        <p className="text-xs text-emerald-100/70">Please collect it or wait for table service.</p>
+      </div>
+    </div>
+
+    <button
+  onClick={() => {
+    setMinimized(true)
+    openRatingForOrder({
+      orderId,
+      orderCode: displayCode,
+      tableNumber,
+    })
+  }}
+  className="mt-4 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition hover:-translate-y-0.5"
+>
+  Rate us
+</button>
+  </div>
+)}
       </div>
 
-      <style>{`@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
+      <style>{KEYFRAMES}</style>
     </>
   )
 }
+
+const KEYFRAMES = `
+@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes ripple{0%{transform:scale(0.6);opacity:0.7}100%{transform:scale(1.9);opacity:0}}
+@keyframes popIn{0%{transform:scale(0.4);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+@keyframes drawCircle{from{stroke-dashoffset:63}to{stroke-dashoffset:0}}
+@keyframes drawCheck{from{stroke-dashoffset:20}to{stroke-dashoffset:0}}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes glowPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,0.35)}70%{box-shadow:0 0 0 14px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+`

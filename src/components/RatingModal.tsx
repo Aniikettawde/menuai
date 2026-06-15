@@ -1,82 +1,118 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Star, X } from 'lucide-react'
-import { useAppStore } from '@/store/app-store'
 import { getSupabaseBrowser } from '@/lib/supabase'
 import { track } from '@/lib/analytics'
+import { useAppStore } from '@/store/app-store'
 
 export function RatingModal() {
-  const { restaurant, setShowRating, sessionId } = useAppStore()
+  const { restaurant, sessionId, ratingContext, closeRating } = useAppStore()
+
   const [selected, setSelected] = useState(0)
   const [hovered, setHovered] = useState(0)
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeRating()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [closeRating])
+
   const handleSubmit = async () => {
-    if (!restaurant || selected === 0) return
+    if (!restaurant || !ratingContext || selected === 0) return
+
     setLoading(true)
+    const supabase = getSupabaseBrowser()
 
     try {
-  const supabase = getSupabaseBrowser()
-  const { error } = await supabase
-    .from('ratings')
-    .insert([{
-      restaurant_id: restaurant.id,
-      session_id: sessionId,
-      score: selected,
-      comment: comment.trim() || null,
-    }] as any)
+      const payload = {
+        restaurant_id: restaurant.id,
+        session_id: sessionId,
+        order_id: ratingContext.orderId,
+        order_code: ratingContext.orderCode,
+        table_number: ratingContext.tableNumber,
+        score: selected,
+        comment: comment.trim() || null,
+        is_public: true,
+      }
 
-  if (error) throw error   // ← was missing entirely
+      const { error } = await (supabase as any)
+  .from('ratings')
+  .insert([payload])
 
-  await track(restaurant.id, 'rating_submitted', {
-    metadata: { score: selected },
-  })
-  
-const { data: updated } = await supabase
-  .from('restaurants')
-  .select('avg_rating, total_ratings')
-  .eq('id', restaurant.id)
-  .single()
+      if (error?.code === '23505') {
+        alert('You have already rated this order.')
+        return
+      }
 
-if (updated) {
-  const store = useAppStore.getState()
+      if (error) throw error
 
-  store.setRestaurantData({
-    restaurant: {
-      ...restaurant,
-      avg_rating: Number((updated as any).avg_rating),
-      total_ratings: Number((updated as any).total_ratings),
-    },
-    categories: store.categories,
-    items: store.items,
-  })
-}
-  setSubmitted(true)
-  setTimeout(() => setShowRating(false), 1600)
-} catch (err) {
-  console.error('Rating submit error:', err)
-  // optionally surface to user: setError('Failed to submit. Please try again.')
-} finally {
-  setLoading(false)
-}
+      await track(restaurant.id, 'rating_submitted', {
+        metadata: {
+          score: selected,
+          order_id: ratingContext.orderId,
+          order_code: ratingContext.orderCode,
+          table_number: ratingContext.tableNumber,
+        },
+      })
+
+      const { data: updated } = await supabase
+        .from('restaurants')
+        .select('avg_rating, total_ratings')
+        .eq('id', restaurant.id)
+        .single()
+
+      if (updated) {
+        const store = useAppStore.getState()
+        store.setRestaurantData({
+          restaurant: {
+            ...restaurant,
+            avg_rating: Number((updated as any).avg_rating),
+            total_ratings: Number((updated as any).total_ratings),
+          },
+          categories: store.categories,
+          items: store.items,
+        })
+      }
+
+      setSubmitted(true)
+      setTimeout(() => closeRating(), 1400)
+    } catch (err) {
+      console.error('Rating submit error:', err)
+      alert('Failed to submit rating. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
+
+  if (!restaurant || !ratingContext) return null
 
   return (
     <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center p-4 lg:items-center"
-      style={{ background: 'rgba(15, 23, 42, 0.42)' }}
+      className="fixed inset-0 z-[10000] flex items-end justify-center p-4 lg:items-center"
+      style={{ background: 'rgba(2, 6, 23, 0.82)' }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) setShowRating(false)
+        if (e.target === e.currentTarget) closeRating()
       }}
     >
-      <div className="w-full max-w-sm animate-[fadeUp_220ms_ease-out] rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.18)] safe-bottom">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+
+      <div className="relative z-[10001] w-full max-w-sm animate-[fadeUp_220ms_ease-out] rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.28)]">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
-          <h2 className="font-semibold text-slate-900">Rate your experience</h2>
+          <div>
+            <h2 className="font-semibold text-slate-900">Rate your experience</h2>
+            <p className="text-xs text-slate-500">
+              Order #{ratingContext.orderCode} · Table {ratingContext.tableNumber}
+            </p>
+          </div>
           <button
-            onClick={() => setShowRating(false)}
+            onClick={closeRating}
             className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             aria-label="Close rating modal"
           >
@@ -117,8 +153,7 @@ if (updated) {
               </div>
 
               <p className="text-center text-sm text-slate-500">
-                {['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'][(hovered || selected)] ||
-                  'Tap to rate'}
+                {['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'][(hovered || selected)] || 'Tap to rate'}
               </p>
 
               <textarea
@@ -128,6 +163,10 @@ if (updated) {
                 rows={3}
                 className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-300 focus:bg-white"
               />
+
+              <p className="text-xs text-slate-500">
+                Your rating and comment can be shown publicly to other diners.
+              </p>
 
               <button
                 onClick={handleSubmit}

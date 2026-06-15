@@ -3,7 +3,7 @@
 // Shared between web and future Android/iOS
 // ============================================================
 export type TeamRole = 'owner' | 'manager' | 'waiter'
-
+export type PriceMode = 'add' | 'override'
 export interface RestaurantStaff {
   id: string
   restaurant_id: string
@@ -65,6 +65,8 @@ export interface DishOption {
   min_selections: number
   max_selections: number
   position: number
+    price_mode: PriceMode   // NEW
+
   choices: DishOptionChoice[]
 }
  
@@ -72,6 +74,8 @@ export interface DishOption {
 export interface SelectedOption {
   option_id: string
   option_name: string
+    price_mode: PriceMode   // NEW
+
   choices: {
     choice_id: string
     choice_name: string
@@ -267,8 +271,12 @@ export interface Rating {
   id: string
   restaurant_id: string
   session_id: string
-  score: number          // 1–5
-  comment?: string
+  order_id: string
+  order_code?: string | null
+  table_number?: number | null
+  score: number
+  comment?: string | null
+  is_public?: boolean
   created_at: string
 }
 

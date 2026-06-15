@@ -28,7 +28,7 @@ function formatRatings(count: number): string {
 }
 
 export function RestaurantHeader({ restaurant }: Props) {
-  const { setShowRating } = useAppStore()
+const openRatingsList = useAppStore((s) => s.openRatingsList)
   const open = isOpenNow(restaurant.opening_hours)
   const hasBanner = Boolean(restaurant.cover_url?.trim())
   const hasLogo = Boolean(restaurant.logo_url?.trim())
@@ -124,15 +124,27 @@ export function RestaurantHeader({ restaurant }: Props) {
       {/* ── Meta pills ── */}
       <div className="flex flex-wrap items-center gap-2 bg-white px-4 py-3 sm:px-5">
         {/* Rating */}
-        <button
-          onClick={() => setShowRating(true)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-sm font-semibold text-amber-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-95"
-          aria-label="Rate this restaurant"
-        >
-          <Star size={13} className="fill-amber-400 text-amber-400" />
-          <span>{restaurant.avg_rating.toFixed(1)}</span>
-          <span className="font-normal text-amber-600">({formatRatings(restaurant.total_ratings)})</span>
-        </button>
+       <button
+  onClick={openRatingsList}
+  className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-sm font-semibold text-amber-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-95"
+>
+  <Star
+    size={14}
+    className="fill-amber-400 text-amber-400"
+  />
+
+  <span>
+    {Number(restaurant.avg_rating ?? 0).toFixed(1)}
+  </span>
+
+  <span className="font-normal text-amber-600">
+    ({restaurant.total_ratings ?? 0})
+  </span>
+
+  <span className="text-xs text-amber-700">
+    Reviews →
+  </span>
+</button>
 
         {/* Open / Closed */}
         <span

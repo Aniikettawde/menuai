@@ -14,6 +14,9 @@ import { RatingModal } from './RatingModal'
 import { OfflineBanner } from './OfflineBanner'
 import { WaiterCalledToast } from './WaiterCalledToast'
 import { getPersistedOrder } from '@/lib/order-storage'
+import { RatingsFeed } from './RatingsFeed'
+import { RatingsListModal } from './RatingsListModal'
+
 
 interface Props {
   initialData: MenuPageData
@@ -66,6 +69,7 @@ export function RestaurantShell({ initialData }: Props) {
   sessionId,
   clearCart,
   showRating,
+  showRatingsList 
 } = useAppStore()
 
   const [waiterToasts, setWaiterToasts] = useState<OrderToastData[]>([])
@@ -212,6 +216,7 @@ useEffect(() => {
             min_selections: opt.min_selections ?? 0,
             max_selections: opt.max_selections ?? 1,
             position: opt.position ?? 0,
+            price_mode: opt.price_mode ?? 'add',
             choices,
           }
 
@@ -511,14 +516,20 @@ useEffect(() => {
       <OfflineBanner />
       <RestaurantHeader restaurant={restaurant} />
 
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
-        <MenuGrid
-          onCallWaiter={handleCallWaiter}
-          isWaiterLoading={waiterLoading}
-        />
-      </main>
+      
+	  
+	  <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
+  <MenuGrid
+    onCallWaiter={handleCallWaiter}
+    isWaiterLoading={waiterLoading}
+  />
+
+  <RatingsFeed restaurantId={restaurant.id} />
+</main>
 
       {showRating && <RatingModal />}
+	  {showRatingsList && <RatingsListModal restaurant={restaurant} />}
+
 
       {activeOrder && (
         <WaiterCalledToast

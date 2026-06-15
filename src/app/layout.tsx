@@ -25,15 +25,12 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://dinezy.in'),
-
   title: {
     default: 'Dinezy - AI Powered QR Menu for Restaurants',
     template: '%s | Dinezy',
   },
-
   description:
     'Dinezy helps restaurants create QR menus with AI recommendations, waiter calling, analytics and digital ordering.',
-
   keywords: [
     'QR menu',
     'digital menu',
@@ -44,7 +41,6 @@ export const metadata: Metadata = {
     'restaurant ordering system',
     'waiter calling system',
   ],
-
   openGraph: {
     title: 'Dinezy - AI Powered QR Menu',
     description:
@@ -53,14 +49,11 @@ export const metadata: Metadata = {
     siteName: 'Dinezy',
     type: 'website',
   },
-
   twitter: {
     card: 'summary_large_image',
     title: 'Dinezy',
-    description:
-      'AI powered digital menu platform for restaurants.',
+    description: 'AI powered digital menu platform for restaurants.',
   },
-
   robots: {
     index: true,
     follow: true,
@@ -72,7 +65,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#f8fafc',
+  themeColor: '#050816',
 }
 
 export default function RootLayout({
@@ -83,9 +76,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} ${playfair.variable} ${jetbrainsMono.variable}`}
+      className={`${dmSans.variable} ${playfair.variable} ${jetbrainsMono.variable} scroll-smooth`}
     >
-      <body>{children}</body>
+      <body className="bg-[#050816] text-white antialiased">{children}</body>
     </html>
   )
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Plus, Minus, ShoppingBag, Loader2 } from 'lucide-react'
 import type { MenuItem, DishOption, SelectedOption } from '@/types'
 import { useAppStore } from '@/store/app-store'
+import { computeItemUnitPrice } from '@/lib/pricing'
 
 interface Props {
   item: MenuItem
@@ -77,34 +78,26 @@ export function CustomiseSheet({ item, options, onConfirm, onClose }: Props) {
   }
   const isValid = validationErrors.length === 0
 
-  const extraPaise = liveOptions.reduce((sum, opt) => {
+  // Build SelectedOption[] for current selections (used for both pricing and confirm)
+  const selectedOptions: SelectedOption[] = liveOptions.map((opt) => {
     const chosen = selections[opt.id] ?? []
-    return sum + opt.choices.filter((c) => chosen.includes(c.id)).reduce((s, c) => s + c.extra_price, 0)
-  }, 0)
+    return {
+      option_id: opt.id,
+      option_name: opt.name,
+      price_mode: opt.price_mode ?? 'add',
+      choices: opt.choices
+        .filter((c) => chosen.includes(c.id))
+        .map((c) => ({ choice_id: c.id, choice_name: c.name, extra_price: c.extra_price })),
+    }
+  })
 
-  const totalPerItem = item.price + extraPaise
-  const grandTotal = totalPerItem * qty
+  const unitPrice = computeItemUnitPrice(item.price, selectedOptions)
+  const grandTotal = unitPrice * qty
 
   function handleConfirm() {
     if (!isValid) return
-    const selectedOptions: SelectedOption[] = liveOptions
-      .map((opt) => {
-        const choiceIds = selections[opt.id] ?? []
-        const chosenChoices = opt.choices.filter((c) => choiceIds.includes(c.id))
-        if (chosenChoices.length === 0) return null
-        return {
-          option_id: opt.id,
-          option_name: opt.name,
-          choices: chosenChoices.map((c) => ({
-            choice_id: c.id,
-            choice_name: c.name,
-            extra_price: c.extra_price,
-          })),
-        }
-      })
-      .filter((x): x is SelectedOption => x !== null)
-
-    onConfirm(selectedOptions, qty)
+    const nonEmpty = selectedOptions.filter((opt) => opt.choices.length > 0)
+    onConfirm(nonEmpty, qty)
   }
 
   // If options still loading, show spinner
@@ -160,6 +153,7 @@ export function CustomiseSheet({ item, options, onConfirm, onClose }: Props) {
             liveOptions.map((opt) => {
               const selected = selections[opt.id] ?? []
               const isMulti = opt.max_selections > 1
+              const isOverride = opt.price_mode === 'override'
 
               return (
                 <div key={opt.id}>
@@ -191,6 +185,7 @@ export function CustomiseSheet({ item, options, onConfirm, onClose }: Props) {
                       .map((choice) => {
                         const isSelected = selected.includes(choice.id)
                         const atMax = !isSelected && isMulti && selected.length >= opt.max_selections
+                        const showPrice = isOverride || choice.extra_price > 0
 
                         return (
                           <button
@@ -219,9 +214,9 @@ export function CustomiseSheet({ item, options, onConfirm, onClose }: Props) {
                               {choice.name}
                             </span>
 
-                            {choice.extra_price > 0 && (
+                            {showPrice && (
                               <span className={['text-xs font-semibold', isSelected ? 'text-orange-600' : 'text-slate-400'].join(' ')}>
-                                +{formatPrice(choice.extra_price)}
+                                {isOverride ? formatPrice(choice.extra_price) : `+${formatPrice(choice.extra_price)}`}
                               </span>
                             )}
                           </button>
