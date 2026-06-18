@@ -43,6 +43,7 @@ export interface Restaurant {
   owner_id?: string | null
     total_tables?: number | null   // ← add this
 instagram_url?: string | null
+  kot_mode: 'manual' | 'dinezy_print'  // ← NEW
 
   
 }

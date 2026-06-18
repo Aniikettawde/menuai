@@ -159,6 +159,7 @@ async function sendAndroidPushWithTokens(
     requestId: string
     items: RequestItem[]
     subtotal: number
+    requestType: 'order' | 'assistance'
   },
 ) {
   try {
@@ -174,6 +175,7 @@ async function sendAndroidPushWithTokens(
         requestId: payload.requestId,
         itemsJson: JSON.stringify(payload.items),
         subtotal: String(payload.subtotal),
+        requestType: payload.requestType,
       },
       android: {
         priority: 'high',
@@ -224,15 +226,18 @@ export async function POST(req: NextRequest) {
     if (!body) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-
-    const { restaurantSlug, tableNumber, tableToken, sessionId, items, subtotal } = body as {
+const { restaurantSlug, tableNumber, tableToken, sessionId, items, subtotal, requestType } = body as {
   restaurantSlug?: string
   tableNumber?: number
   tableToken?: string
   sessionId?: string
   items?: RequestItem[]
   subtotal?: number
+  requestType?: 'order' | 'assistance'
 }
+
+const reqType: 'order' | 'assistance' = requestType === 'assistance' ? 'assistance' : 'order'
+
 if (
   !restaurantSlug ||
   (!tableToken && !Number.isInteger(tableNumber)) ||
@@ -240,10 +245,7 @@ if (
   !Array.isArray(items) ||
   typeof subtotal !== 'number'
 ) {
-  return NextResponse.json(
-    { error: 'Missing or invalid payload' },
-    { status: 400 },
-  )
+  return NextResponse.json({ error: 'Missing or invalid payload' }, { status: 400 })
 }
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -306,6 +308,8 @@ const orderCode = makeOrderCode(resolvedTableNumber)
         subtotal,
         status: 'pending',
         order_code: orderCode,
+		  request_type: reqType,
+
       })
       .select('*')
       .single()
@@ -316,23 +320,29 @@ const orderCode = makeOrderCode(resolvedTableNumber)
     }
 
     const assignedStaff = await getAssignedStaff(
-  admin,
-  restaurant.id,
-  resolvedTableNumber,
-)
+      admin,
+      restaurant.id,
+      resolvedTableNumber,
+    )
     const assignedStaffIds = assignedStaff.map((s) => s.id)
+
+    const isAssistance = reqType === 'assistance'
 
     const itemSummary = (items as RequestItem[])
       .slice(0, 2)
       .map((i) => `${i.name} ×${i.qty}`)
       .join(', ')
     const moreCount = (items as RequestItem[]).length - 2
-    const bodyText =
-      (items as RequestItem[]).length <= 2
-        ? itemSummary
-        : `${itemSummary} +${moreCount} more`
+    const bodyText = isAssistance
+      ? `Table ${resolvedTableNumber} is calling for a waiter`
+      : (items as RequestItem[]).length <= 2
+          ? itemSummary
+          : `${itemSummary} +${moreCount} more`
 
-const title = `🔔 Table ${resolvedTableNumber} — ${restaurant.name}`
+    const title = isAssistance
+      ? `🔔 Table ${resolvedTableNumber} needs assistance — ${restaurant.name}`
+      : `🔔 Table ${resolvedTableNumber} — ${restaurant.name}`
+
     const { data: fcmTokens } = await admin
       .from('device_tokens')
       .select('fcm_token, staff_id')
@@ -347,18 +357,19 @@ const title = `🔔 Table ${resolvedTableNumber} — ${restaurant.name}`
       sendWebPushToStaff(admin, restaurant.id, assignedStaffIds, {
         title,
         body: bodyText,
-tableNumber: resolvedTableNumber,
+        tableNumber: resolvedTableNumber,
         requestId: inserted.id,
-        tag: `waiter-${restaurant.id}-table-${resolvedTableNumber}`,
+        tag: `${isAssistance ? 'assist' : 'waiter'}-${restaurant.id}-table-${resolvedTableNumber}`,
       }),
       tokenList.length > 0
   ? sendAndroidPushWithTokens(admin, tokenList, {
             title,
             body: bodyText,
-tableNumber: resolvedTableNumber,
+            tableNumber: resolvedTableNumber,
             requestId: inserted.id,
             items: items as RequestItem[],
             subtotal,
+            requestType: reqType,
           })
         : Promise.resolve(),
     ])

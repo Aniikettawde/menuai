@@ -59,7 +59,7 @@ const FEATURES = [
   { icon: Shield, text: 'QR code generator & offline menu cache' },
 ]
 
-const PLAN_LIST: BillingPlan[] = [BILLING_PLANS.test, BILLING_PLANS.small, BILLING_PLANS.growth, BILLING_PLANS.large]
+const PLAN_LIST: BillingPlan[] = [BILLING_PLANS.small, BILLING_PLANS.growth, BILLING_PLANS.large]
 
 type BillingStatus = {
   plan: string

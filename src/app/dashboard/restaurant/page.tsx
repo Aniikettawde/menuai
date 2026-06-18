@@ -25,6 +25,8 @@ type RestaurantForm = {
       instagram_url: string   // ← add this
 
   opening_hours: OpeningHours
+    kot_mode: 'manual' | 'dinezy_print'
+
 
 
 }
@@ -82,7 +84,8 @@ export default function RestaurantPage() {
 	    instagram_url: '',
 
     opening_hours: createDefaultHours(),
-	
+	  kot_mode: 'manual',
+
   })
 
   const [logoUrl, setLogoUrl] = useState('')
@@ -114,6 +117,7 @@ export default function RestaurantPage() {
             total_tables: data.total_tables ?? 20,
 			            instagram_url: data.instagram_url ?? '',
 						
+  kot_mode: (data.kot_mode as 'manual' | 'dinezy_print') ?? 'manual',
 
           })
           setLogoUrl(data.logo_url ?? '')
@@ -594,6 +598,85 @@ export default function RestaurantPage() {
         >
           {saving ? 'Saving…' : saved ? '✓ Saved!' : restaurant ? 'Save Changes' : 'Create Restaurant'}
         </button>
+		<Section title="KOT Printing">
+  <div className="space-y-3">
+    <p className="text-xs text-zinc-500 leading-relaxed">
+      Choose how Kitchen Order Tickets are printed when a waiter accepts an order.
+    </p>
+
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Manual (PetPooja) */}
+      <button
+        type="button"
+        onClick={() => setForm(f => ({ ...f, kot_mode: 'manual' }))}
+        className={[
+          'relative flex flex-col gap-2 rounded-2xl border-2 p-4 text-left transition-all',
+          form.kot_mode === 'manual'
+            ? 'border-orange-500/60 bg-orange-500/8'
+            : 'border-zinc-700 bg-zinc-800/30 hover:border-zinc-600',
+        ].join(' ')}
+      >
+        {form.kot_mode === 'manual' && (
+          <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-orange-500">
+            <svg viewBox="0 0 10 8" className="h-3 w-3" fill="none">
+              <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        )}
+        <span className="text-xl">📋</span>
+        <div>
+          <p className="text-sm font-bold text-white">Manual (PetPooja)</p>
+          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+            Waiter accepts in DinezyDash, then enters order manually in PetPooja to print KOT.
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center rounded-full bg-zinc-700 px-2 py-0.5 text-[10px] font-semibold text-zinc-300">
+          Current setup
+        </span>
+      </button>
+
+      {/* Dinezy Print */}
+      <button
+        type="button"
+        onClick={() => setForm(f => ({ ...f, kot_mode: 'dinezy_print' }))}
+        className={[
+          'relative flex flex-col gap-2 rounded-2xl border-2 p-4 text-left transition-all',
+          form.kot_mode === 'dinezy_print'
+            ? 'border-orange-500/60 bg-orange-500/8'
+            : 'border-zinc-700 bg-zinc-800/30 hover:border-zinc-600',
+        ].join(' ')}
+      >
+        {form.kot_mode === 'dinezy_print' && (
+          <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-orange-500">
+            <svg viewBox="0 0 10 8" className="h-3 w-3" fill="none">
+              <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        )}
+        <span className="text-xl">🖨️</span>
+        <div>
+          <p className="text-sm font-bold text-white">Auto-print via DinezyDash</p>
+          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+            KOT prints automatically on Bluetooth printer when waiter accepts in DinezyDash. No PetPooja needed.
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+          Requires Bluetooth printer
+        </span>
+      </button>
+    </div>
+
+    {form.kot_mode === 'dinezy_print' && (
+      <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2.5">
+        <span className="mt-px text-sm">⚠️</span>
+        <p className="text-xs text-amber-300 leading-relaxed">
+          Make sure DinezyDash is connected to a Bluetooth thermal printer before enabling this.
+          Recommended: <strong>Xprinter XP-58</strong> or <strong>Rongta RPP02N</strong> (₹1,500–3,000).
+        </p>
+      </div>
+    )}
+  </div>
+</Section>
       </form>
     </div>
   )

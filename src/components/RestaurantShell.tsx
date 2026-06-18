@@ -16,6 +16,7 @@ import { WaiterCalledToast } from './WaiterCalledToast'
 import { getPersistedOrder } from '@/lib/order-storage'
 import { RatingsFeed } from './RatingsFeed'
 import { RatingsListModal } from './RatingsListModal'
+import { CallWaiterBell } from './CallWaiterBell'
 
 
 interface Props {
@@ -495,6 +496,43 @@ useEffect(() => {
   [restaurant, tableNumber, sessionId, clearCart, slug, searchParams],
 )
 
+const handleRequestAssistance = useCallback(async (): Promise<boolean> => {
+  if (!restaurant) return false
+  const token = searchParams.get('t')
+  if (!tableNumber && !token) {
+    alert('Table number missing. Please scan the table QR again.')
+    return false
+  }
+  try {
+    const res = await fetch('/api/table-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restaurantSlug: restaurant.slug,
+        tableNumber,
+        tableToken: token,
+        sessionId,
+        requestType: 'assistance',
+        items: [],
+        subtotal: 0,
+      }),
+    })
+    const data = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) throw new Error(data.error ?? 'Failed to notify waiter')
+
+    void track(restaurant.id, 'waiter_called', {
+      metadata: { table_number: tableNumber, request_type: 'assistance' },
+    })
+    return true
+  } catch (err) {
+    void track(restaurant.id, 'waiter_call_failed', {
+      metadata: { table_number: tableNumber, error: err instanceof Error ? err.message : 'unknown' },
+    })
+    alert(err instanceof Error ? err.message : 'Something went wrong')
+    return false
+  }
+}, [restaurant, tableNumber, sessionId, searchParams])
+
   const handleCloseToast = useCallback(
     (orderId: string, toastTableNumber: number) => {
       setWaiterToasts((prev) => {
@@ -511,22 +549,28 @@ useEffect(() => {
 
   const activeOrder = waiterToasts[activeToastIndex] ?? null
 
-  return (
+    return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-bg)]">
       <OfflineBanner />
       <RestaurantHeader restaurant={restaurant} />
 
-      
-	 <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
-  <MenuGrid
-    onCallWaiter={handleCallWaiter}
-    isWaiterLoading={waiterLoading}
-  />
-</main>
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
+        <MenuGrid
+          onCallWaiter={handleCallWaiter}
+          isWaiterLoading={waiterLoading}
+        />
+      </main>
 
       {showRating && <RatingModal />}
-	  {showRatingsList && <RatingsListModal restaurant={restaurant} />}
+      {showRatingsList && <RatingsListModal restaurant={restaurant} />}
 
+      {(tableNumber !== null || tableToken) && (
+        <CallWaiterBell
+          slug={slug}
+          tableNumber={tableNumber}
+          onCall={handleRequestAssistance}
+        />
+      )}
 
       {activeOrder && (
         <WaiterCalledToast

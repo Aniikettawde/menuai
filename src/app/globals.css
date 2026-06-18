@@ -794,3 +794,10 @@ body {
   background: linear-gradient(180deg, #fff 0%, #f8fbff 42%, #f3f7ff 100%);
 }
 
+@keyframes floatSoft {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}

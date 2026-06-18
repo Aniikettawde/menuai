@@ -31,7 +31,11 @@ type TableRequestRow = {
   status: 'pending' | 'accepted' | 'completed' | 'cancelled'
   created_at: string
   accepted_at: string | null
+  accepted_by: string | null
   completed_at: string | null
+  kot_printed: boolean
+  kot_printed_at: string | null
+  request_type?: string | null
 }
 
 const HISTORY_PAGE_SIZE = 10
@@ -107,16 +111,19 @@ function StatusPill({ status }: { status: TableRequestRow['status'] }) {
 
 function RequestCard({
   req,
+  kotMode,
   saving,
   onAccept,
   onComplete,
 }: {
   req: TableRequestRow
+  kotMode: 'manual' | 'dinezy_print'
   saving: boolean
   onAccept: () => void
   onComplete: () => void
 }) {
   const orderId = getDisplayOrderId(req)
+  const isAssistance = req.request_type === 'assistance'
 
   return (
     <div className="rounded-3xl border border-white/5 bg-white/[0.03] p-5">
@@ -126,31 +133,58 @@ function RequestCard({
             Table {req.table_number}
           </div>
 
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white">
-            <ClipboardList size={12} />
-            Order ID #{orderId}
-          </div>
+          {isAssistance ? (
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300">
+              🔔 Assistance request
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white">
+              <ClipboardList size={12} />
+              Order ID #{orderId}
+            </div>
+          )}
 
           <p className="text-sm text-zinc-400">{timeAgo(req.created_at)}</p>
         </div>
 
-        <StatusPill status={req.status} />
+        <div className="flex flex-col items-end gap-2">
+          <StatusPill status={req.status} />
+          {kotMode === 'dinezy_print' && req.status === 'accepted' && (
+            <div
+              className={[
+                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold',
+                req.kot_printed
+                  ? 'bg-emerald-500/10 text-emerald-300'
+                  : 'bg-amber-500/10 text-amber-300 animate-pulse',
+              ].join(' ')}
+            >
+              {req.kot_printed ? '🖨️ KOT Printed' : '⏳ Awaiting KOT print'}
+            </div>
+          )}
+          {kotMode === 'manual' && req.status === 'accepted' && (
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-1 text-[10px] font-bold text-blue-300">
+              📋 Enter in PetPooja
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="mt-4 space-y-2">
-        {req.items.map((item) => (
-          <div
-            key={`${req.id}-${item.id}`}
-            className="flex items-center justify-between rounded-2xl border border-white/5 bg-black/20 px-3 py-2"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-white">{item.name}</p>
-              <p className="text-xs text-zinc-500">Qty {item.qty}</p>
+      {!isAssistance && (
+        <div className="mt-4 space-y-2">
+          {req.items.map((item) => (
+            <div
+              key={`${req.id}-${item.id}`}
+              className="flex items-center justify-between rounded-2xl border border-white/5 bg-black/20 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-white">{item.name}</p>
+                <p className="text-xs text-zinc-500">Qty {item.qty}</p>
+              </div>
+              <div className="text-sm font-semibold text-white">{money(item.total)}</div>
             </div>
-            <div className="text-sm font-semibold text-white">{money(item.total)}</div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-4">
         <div>
@@ -170,7 +204,6 @@ function RequestCard({
               Accept
             </button>
           )}
-
           {req.status === 'accepted' && (
             <button
               type="button"
@@ -249,7 +282,6 @@ function HistoryRow({ req }: { req: TableRequestRow }) {
   )
 }
 
-// ── Pagination bar ─────────────────────────────────────────────────────────────
 function PaginationBar({
   page,
   totalPages,
@@ -265,7 +297,6 @@ function PaginationBar({
   onNext: () => void
   onPage: (p: number) => void
 }) {
-  // Show at most 5 page numbers centred on the current page
   const pageNumbers = useMemo(() => {
     const delta = 2
     const start = Math.max(1, page - delta)
@@ -278,13 +309,11 @@ function PaginationBar({
 
   return (
     <div className="flex flex-col items-center gap-3 rounded-3xl border border-white/5 bg-white/[0.03] px-4 py-3 sm:flex-row sm:justify-between">
-      {/* Range label */}
       <p className="text-xs text-zinc-500">
         Showing <span className="font-semibold text-zinc-300">{startItem}–{endItem}</span> of{' '}
         <span className="font-semibold text-zinc-300">{totalItems}</span> orders
       </p>
 
-      {/* Page controls */}
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -296,7 +325,6 @@ function PaginationBar({
           <ChevronLeft size={14} />
         </button>
 
-        {/* Page number buttons */}
         {pageNumbers[0] > 1 && (
           <>
             <button
@@ -356,7 +384,6 @@ function PaginationBar({
   )
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
 export default function OrdersPage() {
   const supabase = getSupabaseDashboardBrowser()
   const { context, loading: contextLoading } = useDashboardContext()
@@ -366,6 +393,7 @@ export default function OrdersPage() {
   const [requests, setRequests] = useState<TableRequestRow[]>([])
   const [error, setError] = useState('')
   const [historyPage, setHistoryPage] = useState(1)
+  const [kotMode, setKotMode] = useState<'manual' | 'dinezy_print'>('manual')
 
   const restaurantId = context?.restaurantId ?? null
   const restaurantName = context?.restaurantName ?? 'Restaurant'
@@ -375,17 +403,28 @@ export default function OrdersPage() {
 
     setError('')
     try {
-      const { data, error } = await supabase
-        .from('table_requests')
-        .select(
-          'id, order_code, restaurant_id, table_number, session_id, items, subtotal, status, created_at, accepted_at, completed_at',
-        )
-        .eq('restaurant_id', restaurantId)
-        .order('created_at', { ascending: false })
-        .limit(100)
+      const [{ data, error }, { data: restaurantData }] = await Promise.all([
+        supabase
+          .from('table_requests')
+          .select(
+            'id, order_code, restaurant_id, table_number, session_id, items, subtotal, status, created_at, accepted_at, accepted_by, completed_at, kot_printed, kot_printed_at, request_type',
+          )
+          .eq('restaurant_id', restaurantId)
+          .order('created_at', { ascending: false })
+          .limit(100),
+        supabase
+          .from('restaurants')
+          .select('kot_mode')
+          .eq('id', restaurantId)
+          .single(),
+      ])
 
       if (error) throw error
+
       setRequests((data ?? []) as TableRequestRow[])
+      if (restaurantData?.kot_mode) {
+        setKotMode(restaurantData.kot_mode as 'manual' | 'dinezy_print')
+      }
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'Failed to load requests')
@@ -436,7 +475,10 @@ export default function OrdersPage() {
     }
   }, [restaurantId, load, supabase])
 
-  const pendingCount = useMemo(() => requests.filter((r) => r.status === 'pending').length, [requests])
+  const pendingCount = useMemo(
+    () => requests.filter((r) => r.status === 'pending').length,
+    [requests],
+  )
 
   const activeRequests = useMemo(
     () => requests.filter((r) => r.status === 'pending' || r.status === 'accepted'),
@@ -450,7 +492,6 @@ export default function OrdersPage() {
 
   const historyTotalPages = Math.max(1, Math.ceil(historyRequests.length / HISTORY_PAGE_SIZE))
 
-  // Clamp page if data changes (e.g. new load brings fewer results)
   useEffect(() => {
     setHistoryPage((prev) => Math.min(prev, historyTotalPages))
   }, [historyTotalPages])
@@ -461,15 +502,36 @@ export default function OrdersPage() {
   }, [historyPage, historyRequests])
 
   const updateStatus = useCallback(
-    async (id: string, status: TableRequestRow['status']) => {
+    async (
+      id: string,
+      nextStatus: TableRequestRow['status'],
+      fromStatus: TableRequestRow['status'],
+    ) => {
       setSavingId(id)
       try {
-        const patch: Record<string, unknown> = { status }
-        if (status === 'accepted') patch.accepted_at = new Date().toISOString()
-        if (status === 'completed') patch.completed_at = new Date().toISOString()
+        const patch: Record<string, unknown> = { status: nextStatus }
+        if (nextStatus === 'accepted') {
+          patch.accepted_at = new Date().toISOString()
+          patch.accepted_by = context?.staffId ?? null
+        }
+        if (nextStatus === 'completed') patch.completed_at = new Date().toISOString()
 
-        const { error } = await supabase.from('table_requests').update(patch).eq('id', id)
+        const { data, error } = await supabase
+          .from('table_requests')
+          .update(patch)
+          .eq('id', id)
+          .eq('status', fromStatus)
+          .select('id')
+          .maybeSingle()
+
         if (error) throw error
+
+        if (!data) {
+          await load()
+          alert('This request was already handled by another staff member.')
+          return
+        }
+
         await load()
       } catch (err) {
         console.error(err)
@@ -478,7 +540,7 @@ export default function OrdersPage() {
         setSavingId(null)
       }
     },
-    [supabase, load],
+    [supabase, load, context?.staffId],
   )
 
   if (contextLoading || loading) {
@@ -506,7 +568,6 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="rounded-3xl border border-white/5 bg-[#111111] p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -517,7 +578,7 @@ export default function OrdersPage() {
             <h1 className="mt-3 text-2xl font-bold text-white">{restaurantName}</h1>
             <p className="mt-1 text-sm text-zinc-500">Pending requests: {pendingCount}</p>
             <div className="mt-3">
-<PushToggle restaurantId={restaurantId} staffId={context.staffId ?? null} />
+              <PushToggle restaurantId={restaurantId} staffId={context.staffId ?? null} />
             </div>
           </div>
 
@@ -531,7 +592,8 @@ export default function OrdersPage() {
           </button>
         </div>
       </div>
- <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
+
+      <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
@@ -547,9 +609,8 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          
           <a
-		  href={process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? '#'}
+            href={process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? '#'}
             download="dinezy-dash.apk"
             target="_blank"
             rel="noopener noreferrer"
@@ -560,14 +621,13 @@ export default function OrdersPage() {
           </a>
         </div>
       </div>
-	  
+
       {error && (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
           {error}
         </div>
       )}
 
-      {/* Active orders */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-sm font-semibold text-white">Active orders</h2>
@@ -580,9 +640,10 @@ export default function OrdersPage() {
               <RequestCard
                 key={req.id}
                 req={req}
+                kotMode={kotMode}
                 saving={savingId === req.id}
-                onAccept={() => void updateStatus(req.id, 'accepted')}
-                onComplete={() => void updateStatus(req.id, 'completed')}
+                onAccept={() => void updateStatus(req.id, 'accepted', 'pending')}
+                onComplete={() => void updateStatus(req.id, 'completed', 'accepted')}
               />
             ))}
           </div>
@@ -594,7 +655,6 @@ export default function OrdersPage() {
         )}
       </div>
 
-      {/* History */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-sm font-semibold text-white">Order history</h2>
