@@ -17,6 +17,7 @@ import { getPersistedOrder } from '@/lib/order-storage'
 import { RatingsFeed } from './RatingsFeed'
 import { RatingsListModal } from './RatingsListModal'
 import { CallWaiterBell } from './CallWaiterBell'
+import { AISuggestionCard } from './AISuggestionCard'
 
 
 interface Props {
@@ -70,7 +71,9 @@ export function RestaurantShell({ initialData }: Props) {
   sessionId,
   clearCart,
   showRating,
-  showRatingsList 
+  showRatingsList,
+    setShowChat,          // ← add this here
+
 } = useAppStore()
 
   const [waiterToasts, setWaiterToasts] = useState<OrderToastData[]>([])
@@ -78,7 +81,7 @@ export function RestaurantShell({ initialData }: Props) {
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
-  
+
   const tableToken = searchParams.get('t')
 const legacyTableParam = searchParams.get('table')
 
@@ -555,10 +558,15 @@ const handleRequestAssistance = useCallback(async (): Promise<boolean> => {
       <RestaurantHeader restaurant={restaurant} />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 sm:px-6">
-        <MenuGrid
-          onCallWaiter={handleCallWaiter}
-          isWaiterLoading={waiterLoading}
-        />
+      <MenuGrid
+  onCallWaiter={handleCallWaiter}
+  isWaiterLoading={waiterLoading}
+  upsellCard={
+    <AISuggestionCard
+      onAsk={(_text) => setShowChat(true)}
+    />
+  }
+/>
       </main>
 
       {showRating && <RatingModal />}
