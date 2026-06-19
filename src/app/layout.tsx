@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Playfair_Display, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
+import Script from 'next/script'
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -78,7 +79,17 @@ export default function RootLayout({
       lang="en"
       className={`${dmSans.variable} ${playfair.variable} ${jetbrainsMono.variable} scroll-smooth`}
     >
-      <body className="bg-[#050816] text-white antialiased">{children}</body>
+      <body className="bg-[#050816] text-white antialiased">
+        {children}
+
+        <Script
+          id="google-adsense"
+          async
+          strategy="afterInteractive"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9875875084938019"
+          crossOrigin="anonymous"
+        />
+      </body>
     </html>
   )
 }
