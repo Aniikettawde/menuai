@@ -21,3 +21,5 @@ export const supabasePublic = createClient(
   supabaseUrl ?? "",
   supabaseAnonKey ?? ""
 );
+
+//fixed
