@@ -40,8 +40,17 @@ export function FloatingCartBar({ onCallWaiter, isWaiterLoading = false }: Props
   const [bump, setBump] = useState(false)
 
   const itemCount = cartItems.reduce((sum, c) => sum + c.quantity, 0)
-  const subtotal = cartItems.reduce((sum, c) => {
-  const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])
+
+const ordersEnabled = useAppStore(
+  (s) => s.restaurant?.orders_enabled ?? true
+)
+
+const subtotal = cartItems.reduce((sum, c) => {
+  const unitPrice = computeItemUnitPrice(
+    c.item.price,
+    c.selectedOptions ?? []
+  )
+
   return sum + unitPrice * c.quantity
 }, 0)
 
@@ -102,11 +111,11 @@ export function FloatingCartBar({ onCallWaiter, isWaiterLoading = false }: Props
 
       <CartSheet onCallWaiter={onCallWaiter} isWaiterLoading={isWaiterLoading} />
 
-      {itemCount > 0 && (
-        <button
-          type="button"
-          onClick={handleOpenCart}
-          className={[
+      {itemCount > 0 && ordersEnabled && (
+  <button
+    type="button"
+    onClick={handleOpenCart}
+    className={[
             'fixed bottom-4 left-1/2 z-[60] w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2',
             'rounded-[26px] border border-slate-200 bg-white/95 px-4 py-3.5',
             'shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop-blur-xl',

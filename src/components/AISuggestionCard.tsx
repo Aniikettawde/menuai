@@ -138,7 +138,7 @@ function ItemCard({ item }: { item: MenuItem }) {
   const imgUrl = imgErr ? null : getImageUrl(item.image_url)
   const price = formatPrice(item.price)
   const role = getRoleLabel(item)
-
+const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
   const onAdd = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (hasOpts) { openCustomiseSheet(item.id); return }
@@ -184,26 +184,28 @@ function ItemCard({ item }: { item: MenuItem }) {
       </div>
 
       {/* add / qty */}
-      <div className="asc-action">
-        {qty === 0 ? (
-          <>
-            <button
-              type="button"
-              onClick={onAdd}
-              className={`asc-add-btn${justAdded ? ' asc-add-btn--done' : ''}`}
-            >
-              {justAdded ? '✓ Added' : <><PlusSVG size={11} /> ADD</>}
-            </button>
-            {hasOpts && <p className="asc-customisable">customisable</p>}
-          </>
-        ) : (
-          <div className="asc-stepper">
-            <button type="button" className="asc-step-btn" onClick={onDec}><MinusSVG /></button>
-            <span className="asc-step-num">{qty}</span>
-            <button type="button" className="asc-step-btn" onClick={onInc}><PlusSVG /></button>
-          </div>
-        )}
+    {ordersEnabled && (
+  <div className="asc-action">
+    {qty === 0 ? (
+      <>
+        <button
+          type="button"
+          onClick={onAdd}
+          className={`asc-add-btn${justAdded ? ' asc-add-btn--done' : ''}`}
+        >
+          {justAdded ? '✓ Added' : <><PlusSVG size={11} /> ADD</>}
+        </button>
+        {hasOpts && <p className="asc-customisable">customisable</p>}
+      </>
+    ) : (
+      <div className="asc-stepper">
+        <button type="button" className="asc-step-btn" onClick={onDec}><MinusSVG /></button>
+        <span className="asc-step-num">{qty}</span>
+        <button type="button" className="asc-step-btn" onClick={onInc}><PlusSVG /></button>
       </div>
+    )}
+  </div>
+)}
     </div>
   )
 }

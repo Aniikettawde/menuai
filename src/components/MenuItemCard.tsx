@@ -174,6 +174,7 @@ export function MenuItemCard({ item }: Props) {
   const hasOptions = (dishOptions[item.id]?.length ?? 0) > 0
   const imageUrl = getImageUrl(item.image_url)
   const cleanDescription = item.description ? trimDescription(item.description) : null
+const ordersEnabled = useAppStore((s) => s.restaurant?.orders_enabled ?? true)
 
   const toggle = () => {
     const next = isExpanded ? null : item.id
@@ -352,16 +353,18 @@ export function MenuItemCard({ item }: Props) {
             </div>
           )}
 
-          <div onClick={(e) => e.stopPropagation()} className="relative z-10">
-            <AddButton
-              qtyInCart={qtyInCart}
-              adding={adding}
-              hasOptions={hasOptions}
-              onAdd={handleAdd}
-              onInc={handleInc}
-              onDec={handleDec}
-            />
-          </div>
+         {ordersEnabled && (
+  <div onClick={(e) => e.stopPropagation()} className="relative z-10">
+    <AddButton
+      qtyInCart={qtyInCart}
+      adding={adding}
+      hasOptions={hasOptions}
+      onAdd={handleAdd}
+      onInc={handleInc}
+      onDec={handleDec}
+    />
+  </div>
+)}
         </div>
       </div>
     </div>

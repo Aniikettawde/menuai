@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 
 /* ─── Types ─────────────────────────────────────────── */
@@ -83,7 +83,6 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" onClick={handleClose}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
       <div className="relative w-full max-w-md rounded-3xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-        {/* gradient border */}
         <div className="absolute inset-0 rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/60 via-fuchsia-500/30 to-cyan-500/40 pointer-events-none" />
         <div className="relative bg-[#080f1e] rounded-3xl p-7">
           {!submitted ? (
@@ -98,7 +97,6 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
                 </div>
                 <button onClick={handleClose} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition text-sm">✕</button>
               </div>
-
               <div className="space-y-3.5">
                 {[
                   { key: 'name', label: 'Your name', placeholder: 'Raj Sharma', type: 'text' },
@@ -120,7 +118,6 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
                   </div>
                 ))}
               </div>
-
               <button
                 onClick={handleSubmit}
                 disabled={loading}
@@ -148,6 +145,7 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
   )
 }
 
+/* ─── Restaurant Website Section ────────────────────── */
 function RestaurantWebsiteSection() {
   const pages = [
     { name: 'Spice Garden', slug: 'spice-garden', city: 'Pune' },
@@ -162,7 +160,6 @@ function RestaurantWebsiteSection() {
     const interval = setInterval(() => {
       setActive(prev => (prev + 1) % pages.length)
     }, 2600)
-
     return () => clearInterval(interval)
   }, [])
 
@@ -170,13 +167,11 @@ function RestaurantWebsiteSection() {
     const text = `dinezy.in/${pages[active].slug}`
     let i = 0
     setTyped('')
-
     const typeTimer = setInterval(() => {
       i += 1
       setTyped(text.slice(0, i))
       if (i >= text.length) clearInterval(typeTimer)
     }, 35)
-
     return () => clearInterval(typeTimer)
   }, [active])
 
@@ -189,50 +184,35 @@ function RestaurantWebsiteSection() {
           <span className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-400/20 rounded-full px-4 py-1.5 text-xs font-bold text-orange-300 uppercase tracking-wide mb-5">
             New: own restaurant website
           </span>
-
           <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-5">
             हर restaurant ko milega
             <span className="block text-transparent bg-gradient-to-r from-orange-300 via-orange-400 to-orange-500 bg-clip-text">
               apna shareable page
             </span>
           </h2>
-
           <p className="text-white/60 text-lg leading-relaxed max-w-xl">
             Har restaurant ka apna link hoga like{' '}
             <span className="text-white font-bold">dinezy.in/restaurant-name</span>.
-            Customers menu dekh sakte hain, order kar sakte hain, aur{' '}
+            Customers menu dekh sakte hain, aur{' '}
             <span className="text-white font-bold">Call Waiter</span> bhi use kar sakte hain —
             phir is link ko WhatsApp, Instagram, Google profile, ya QR code se share kar sakte hain.
           </p>
-
           <div className="grid sm:grid-cols-2 gap-3 mt-8">
-            {[
-              'Own website link',
-              'Menu on the page',
-              'Order from phone',
-              'Call waiter button',
-            ].map(item => (
+            {['Own website link', 'Menu on the page', 'Order from phone', 'Call waiter button'].map(item => (
               <div key={item} className="glass rounded-2xl px-4 py-3 border border-white/10">
                 <p className="text-sm font-semibold text-white/80">✓ {item}</p>
               </div>
             ))}
           </div>
-
           <div className="mt-8 flex flex-wrap gap-2">
             {['Share on WhatsApp', 'Add to bio', 'Print QR code', 'Google Maps link'].map(item => (
-              <span
-                key={item}
-                className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-sm text-white/55 font-medium"
-              >
-                {item}
-              </span>
+              <span key={item} className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-sm text-white/55 font-medium">{item}</span>
             ))}
           </div>
         </div>
 
         <div className="relative">
           <div className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full opacity-40 animate-pulse" />
-
           <div className="glass rounded-[2rem] p-4 border border-white/10 shadow-2xl relative overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-white/5 border border-white/10">
               <div className="flex items-center gap-2">
@@ -242,36 +222,26 @@ function RestaurantWebsiteSection() {
               </div>
               <p className="text-[11px] text-white/35 font-medium">restaurant page preview</p>
             </div>
-
             <div className="mt-4 rounded-[1.5rem] bg-[#050816] border border-white/10 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-white font-black text-lg">{cur.name}</p>
-                  <p className="text-white/40 text-xs">{cur.city} • Dinezy website</p>
+                  <p className="text-white/40 text-xs">{cur.city} · Dinezy website</p>
                 </div>
-                <span className="px-2.5 py-1 rounded-full bg-emerald-400/10 text-emerald-300 text-[11px] font-bold border border-emerald-400/20">
-                  Live
-                </span>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-400/10 text-emerald-300 text-[11px] font-bold border border-emerald-400/20">Live</span>
               </div>
-
               <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-orange-300">🌐</span>
                   <p className="font-mono text-[13px] sm:text-sm text-white/80 truncate">
-                    {typed}
-                    <span className="animate-pulse">|</span>
+                    {typed}<span className="animate-pulse">|</span>
                   </p>
                 </div>
-                <button className="ml-3 text-[11px] px-3 py-1.5 rounded-full bg-orange-500 text-black font-bold">
-                  Share
-                </button>
+                <button className="ml-3 text-[11px] px-3 py-1.5 rounded-full bg-orange-500 text-black font-bold">Share</button>
               </div>
-
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-                  <p className="text-xs font-bold text-orange-300 uppercase tracking-wider mb-3">
-                    Menu
-                  </p>
+                  <p className="text-xs font-bold text-orange-300 uppercase tracking-wider mb-3">Menu</p>
                   <div className="space-y-2">
                     {['Paneer Tikka', 'Butter Naan', 'Dal Makhani'].map(item => (
                       <div key={item} className="flex items-center justify-between text-sm">
@@ -281,38 +251,15 @@ function RestaurantWebsiteSection() {
                     ))}
                   </div>
                 </div>
-
                 <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-                  <p className="text-xs font-bold text-orange-300 uppercase tracking-wider mb-3">
-                    Actions
-                  </p>
+                  <p className="text-xs font-bold text-orange-300 uppercase tracking-wider mb-3">Actions</p>
                   <div className="space-y-2">
-                    <button className="w-full py-2.5 rounded-xl bg-orange-500 text-black font-bold text-sm">
-                      Order Now
-                    </button>
-                    <button className="w-full py-2.5 rounded-xl border border-white/10 text-white font-bold text-sm">
-                      Call Waiter
-                    </button>
+                    <button className="w-full py-2.5 rounded-xl bg-orange-500 text-black font-bold text-sm">Order Now</button>
+                    <button className="w-full py-2.5 rounded-xl border border-white/10 text-white font-bold text-sm">Call Waiter</button>
                   </div>
                 </div>
               </div>
-
-              <div className="mt-4 rounded-2xl bg-orange-500/10 border border-orange-400/20 px-4 py-3">
-                <p className="text-sm text-white/80">
-                  <span className="font-bold text-orange-300">Easily understandable:</span> one
-                  website, one link, one menu, one waiter call flow.
-                </p>
-              </div>
             </div>
-          </div>
-
-          <div className="absolute -left-4 top-10 hidden sm:flex flex-col gap-2">
-            <span className="px-3 py-1.5 rounded-full bg-orange-500 text-black text-xs font-black shadow-lg">
-              Share everywhere
-            </span>
-            <span className="px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold border border-white/10">
-              Works on mobile
-            </span>
           </div>
         </div>
       </div>
@@ -320,13 +267,18 @@ function RestaurantWebsiteSection() {
   )
 }
 
-/* ─── Animated Waiter Call Widget ────────────────────── */
+/* ─── Auto Waiter Call Demo ──────────────────────────── */
+// Fully automatic — loops through the full flow with no user interaction needed.
+// Phases: idle (brief pause) → selecting items one-by-one → confirm → calling → notified → arriving → reset
 function WaiterCallDemo() {
-  const [phase, setPhase] = useState<'idle' | 'selecting' | 'confirming' | 'calling' | 'notified' | 'arriving'>('idle')
+  type Phase = 'idle' | 'selecting' | 'calling' | 'notified' | 'arriving'
+  const [phase, setPhase] = useState<Phase>('idle')
   const [selectedItems, setSelectedItems] = useState<string[]>([])
   const [progress, setProgress] = useState(0)
-  const [etaCount, setEtaCount] = useState(12)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [etaCount, setEtaCount] = useState(8)
+  const [highlightedItem, setHighlightedItem] = useState<string | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const menuItems = [
     { id: 'bc', name: 'Butter Chicken', price: 320, emoji: '🍛', tag: "Chef's pick" },
@@ -335,52 +287,102 @@ function WaiterCallDemo() {
     { id: 'dm', name: 'Dal Makhani', price: 220, emoji: '🫕', tag: 'Veg fav' },
   ]
 
-  const toggle = (id: string) => {
-    if (phase === 'idle') setPhase('selecting')
-    setSelectedItems(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
-  }
-
   const total = menuItems.filter(i => selectedItems.includes(i.id)).reduce((a, c) => a + c.price, 0)
 
-  const callWaiter = () => {
-    if (!selectedItems.length) return
-    setPhase('calling')
-    setProgress(0)
-    let p = 0
-    timerRef.current = setInterval(() => {
-      p += 4
-      setProgress(p)
-      if (p >= 100) {
-        clearInterval(timerRef.current!)
-        setPhase('notified')
-        setEtaCount(12)
-        const countdown = setInterval(() => {
-          setEtaCount(prev => {
-            if (prev <= 1) {
-              clearInterval(countdown)
-              setPhase('arriving')
-              return 0
-            }
-            return prev - 1
-          })
-        }, 1000)
-      }
-    }, 60)
+  function clearAll() {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (intervalRef.current) clearInterval(intervalRef.current)
   }
 
-  const reset = () => {
-    setPhase('idle')
-    setSelectedItems([])
-    setProgress(0)
-    setEtaCount(12)
-    if (timerRef.current) clearInterval(timerRef.current)
-  }
+  // Full auto-loop sequence
+  useEffect(() => {
+    clearAll()
+
+    if (phase === 'idle') {
+      // After a short pause, start selecting items
+      timerRef.current = setTimeout(() => {
+        setPhase('selecting')
+        setSelectedItems([])
+      }, 1200)
+
+    } else if (phase === 'selecting') {
+      // Select items one by one with a highlight animation
+      const order = ['bc', 'pt', 'gn']
+      let step = 0
+
+      function selectNext() {
+        if (step >= order.length) {
+          // All items selected, move to calling
+          setHighlightedItem(null)
+          timerRef.current = setTimeout(() => setPhase('calling'), 900)
+          return
+        }
+        const id = order[step]
+        setHighlightedItem(id)
+        timerRef.current = setTimeout(() => {
+          setSelectedItems(prev => [...prev, id])
+          setHighlightedItem(null)
+          step++
+          timerRef.current = setTimeout(selectNext, 500)
+        }, 420)
+      }
+
+      timerRef.current = setTimeout(selectNext, 600)
+
+    } else if (phase === 'calling') {
+      setProgress(0)
+      let p = 0
+      intervalRef.current = setInterval(() => {
+        p += 3.5
+        setProgress(Math.min(p, 100))
+        if (p >= 100) {
+          clearInterval(intervalRef.current!)
+          timerRef.current = setTimeout(() => {
+            setPhase('notified')
+            setEtaCount(8)
+          }, 200)
+        }
+      }, 55)
+
+    } else if (phase === 'notified') {
+      // Count down eta, then show arriving
+      let count = 8
+      intervalRef.current = setInterval(() => {
+        count -= 1
+        setEtaCount(count)
+        if (count <= 0) {
+          clearInterval(intervalRef.current!)
+          setPhase('arriving')
+        }
+      }, 1000)
+
+    } else if (phase === 'arriving') {
+      // Hold arriving state briefly, then reset the whole loop
+      timerRef.current = setTimeout(() => {
+        setSelectedItems([])
+        setProgress(0)
+        setHighlightedItem(null)
+        setPhase('idle')
+      }, 2800)
+    }
+
+    return clearAll
+  }, [phase])
 
   return (
     <div className="relative">
-      {/* Phone frame */}
-      <div className="relative mx-auto w-full max-w-[340px]">
-        <div className="rounded-[2.5rem] border-[3px] border-white/15 bg-[#07111f] shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden" style={{ animation: 'floatCard 7s ease-in-out infinite' }}>
+      {/* Label above phone */}
+      <div className="flex items-center justify-center gap-2 mb-4">
+        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+        <p className="text-sm font-semibold text-amber-300 tracking-wide">Live demo — watch how it works</p>
+      </div>
+
+      <div className="relative mx-auto w-full max-w-[320px]">
+        {/* Phone frame */}
+        <div
+          className="rounded-[2.5rem] border-[3px] border-white/15 bg-[#07111f] shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden"
+          style={{ animation: 'floatCard 7s ease-in-out infinite' }}
+        >
           {/* Status bar */}
           <div className="flex items-center justify-between px-5 pt-3 pb-1">
             <span className="text-[10px] font-bold text-white/40">9:41</span>
@@ -410,11 +412,17 @@ function WaiterCallDemo() {
           <div className="px-3 space-y-2 pb-3">
             {menuItems.map(item => {
               const sel = selectedItems.includes(item.id)
+              const highlighted = highlightedItem === item.id
               return (
                 <div
                   key={item.id}
-                  onClick={() => phase !== 'calling' && phase !== 'notified' && phase !== 'arriving' && toggle(item.id)}
-                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all duration-200 ${sel ? 'border-violet-400/40 bg-violet-500/12' : 'border-white/8 bg-white/4 hover:border-white/15'}`}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all duration-300 ${
+                    sel
+                      ? 'border-violet-400/40 bg-violet-500/12'
+                      : highlighted
+                      ? 'border-amber-400/50 bg-amber-400/8 scale-[1.02]'
+                      : 'border-white/8 bg-white/4'
+                  }`}
                 >
                   <span className="text-xl">{item.emoji}</span>
                   <div className="flex-1 min-w-0">
@@ -424,16 +432,20 @@ function WaiterCallDemo() {
                     </div>
                     <p className="text-[11px] text-violet-300 font-bold">₹{item.price}</p>
                   </div>
-                  <div className={`w-4 h-4 rounded-full border-[1.5px] flex items-center justify-center transition-all ${sel ? 'border-violet-400 bg-violet-500' : 'border-white/20'}`}>
+                  <div className={`w-4 h-4 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-300 ${
+                    sel ? 'border-violet-400 bg-violet-500' : highlighted ? 'border-amber-400 bg-amber-400/20' : 'border-white/20'
+                  }`}>
                     {sel && <span className="text-white text-[9px]">✓</span>}
+                    {highlighted && !sel && <span className="text-amber-300 text-[9px]">·</span>}
                   </div>
                 </div>
               )
             })}
           </div>
 
-          {/* Order summary / waiter call */}
+          {/* Bottom action area */}
           <div className="mx-3 mb-4">
+            {/* Idle / selecting — show order summary + button */}
             {(phase === 'idle' || phase === 'selecting') && (
               <>
                 {selectedItems.length > 0 && (
@@ -444,19 +456,19 @@ function WaiterCallDemo() {
                     </div>
                   </div>
                 )}
-                <button
-                  onClick={callWaiter}
-                  disabled={!selectedItems.length}
-                  className={`w-full py-3 rounded-xl font-black text-xs transition-all ${selectedItems.length ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-lg shadow-amber-500/30 hover:-translate-y-0.5' : 'bg-white/5 text-white/20 border border-white/8 cursor-not-allowed'}`}
-                >
-                  {selectedItems.length ? '🔔 Call waiter to my table' : 'Select items first'}
-                </button>
+                <div className={`w-full py-3 rounded-xl font-black text-xs text-center transition-all duration-300 ${
+                  selectedItems.length
+                    ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-lg shadow-amber-500/30'
+                    : 'bg-white/5 text-white/25 border border-white/8'
+                }`}>
+                  {selectedItems.length ? '🔔 Call waiter to my table' : 'Selecting items…'}
+                </div>
               </>
             )}
 
             {phase === 'calling' && (
               <div className="bg-amber-400/10 border border-amber-400/20 rounded-xl p-3 text-center">
-                <div className="w-8 h-8 rounded-full border-2 border-amber-400/40 border-t-amber-400 animate-spin mx-auto mb-2" />
+                <div className="w-7 h-7 rounded-full border-2 border-amber-400/40 border-t-amber-400 animate-spin mx-auto mb-2" />
                 <p className="text-xs font-bold text-amber-300 mb-2">Notifying waiter...</p>
                 <div className="h-1 bg-white/10 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full transition-all duration-75" style={{ width: `${progress}%` }} />
@@ -470,7 +482,7 @@ function WaiterCallDemo() {
                 <p className="text-xs font-black text-emerald-300">Waiter notified!</p>
                 <p className="text-[11px] text-white/50 mt-0.5">Arriving in <span className="text-white font-bold">{etaCount}s</span></p>
                 <div className="h-1 bg-white/10 rounded-full overflow-hidden mt-2">
-                  <div className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400 rounded-full transition-all duration-1000" style={{ width: `${((12 - etaCount) / 12) * 100}%` }} />
+                  <div className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400 rounded-full transition-all duration-1000" style={{ width: `${((8 - etaCount) / 8) * 100}%` }} />
                 </div>
               </div>
             )}
@@ -479,13 +491,13 @@ function WaiterCallDemo() {
               <div className="bg-cyan-400/10 border border-cyan-400/25 rounded-xl p-3 text-center">
                 <div className="text-2xl mb-1 animate-bounce">🧑‍🍳</div>
                 <p className="text-xs font-black text-cyan-300">Waiter is here!</p>
-                <button onClick={reset} className="mt-2 text-[10px] text-white/30 hover:text-white/60 transition">Restart demo</button>
+                <p className="text-[10px] text-white/30 mt-1">Restarting demo…</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Floating notification that appears on staff side */}
+        {/* Staff notification bubble — slides in when notified */}
         {(phase === 'notified' || phase === 'arriving') && (
           <div className="absolute -right-4 top-8 w-52 animate-slide-in">
             <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/12 p-3 shadow-2xl">
@@ -503,6 +515,18 @@ function WaiterCallDemo() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Step indicator dots below phone */}
+      <div className="flex items-center justify-center gap-2 mt-5">
+        {(['idle', 'selecting', 'calling', 'notified', 'arriving'] as Phase[]).map(p => (
+          <div
+            key={p}
+            className={`rounded-full transition-all duration-500 ${
+              phase === p ? 'w-5 h-1.5 bg-violet-400' : 'w-1.5 h-1.5 bg-white/15'
+            }`}
+          />
+        ))}
       </div>
     </div>
   )
@@ -555,8 +579,6 @@ function AIUpsellDemo() {
   return (
     <div ref={ref} className="glass rounded-3xl p-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-violet-500/8 to-fuchsia-500/8 pointer-events-none" />
-
-      {/* Header */}
       <div className="relative flex items-center gap-2 mb-5">
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-base">🤖</div>
         <div>
@@ -569,26 +591,19 @@ function AIUpsellDemo() {
         </div>
       </div>
 
-      {/* Conversation */}
       <div className="relative space-y-3 mb-5 min-h-[180px]">
-        {/* Guest message */}
         <div className="flex justify-end">
           <div className="max-w-[80%] px-3.5 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl rounded-br-sm text-sm text-white font-medium shadow-lg shadow-violet-600/20">
             {cur.guest}
           </div>
         </div>
-
-        {/* AI reply */}
         <div className="flex items-start gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-sm flex-shrink-0">
-            {cur.icon}
-          </div>
-          <div className="max-w-[85%] px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-2xl rounded-bl-sm text-sm text-white/80 leading-relaxed"
+          <div className="w-7 h-7 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-sm flex-shrink-0">{cur.icon}</div>
+          <div
+            className="max-w-[85%] px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-2xl rounded-bl-sm text-sm text-white/80 leading-relaxed"
             dangerouslySetInnerHTML={{ __html: cur.suggestion.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>') }}
           />
         </div>
-
-        {/* Upsell accept chip */}
         <div className="flex justify-end">
           <div className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-400/15 border border-emerald-400/25 rounded-xl">
             <span className="text-emerald-300 text-sm font-bold">✓ Add {cur.upsell}</span>
@@ -597,14 +612,12 @@ function AIUpsellDemo() {
         </div>
       </div>
 
-      {/* Step indicators */}
       <div className="relative flex gap-1.5 justify-center mb-5">
         {scenarios.map((_, i) => (
           <button key={i} onClick={() => setStep(i)} className={`rounded-full transition-all duration-300 ${i === step ? 'w-6 h-1.5 bg-violet-400' : 'w-1.5 h-1.5 bg-white/20'}`} />
         ))}
       </div>
 
-      {/* Revenue impact bar */}
       <div className="relative bg-white/5 border border-white/10 rounded-2xl p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-bold text-white/60 uppercase tracking-wider">Revenue impact tonight</p>
@@ -631,7 +644,7 @@ function AIUpsellDemo() {
   )
 }
 
-/* ─── Stats ticker ───────────────────────────────────── */
+/* ─── Stats ──────────────────────────────────────────── */
 function AnimatedStat({ value, label, sub, delay = 0 }: { value: string; label: string; sub: string; delay?: number }) {
   const [visible, setVisible] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -651,13 +664,7 @@ function AnimatedStat({ value, label, sub, delay = 0 }: { value: string; label: 
   )
 }
 
-/* ─── Plans ──────────────────────────────────────────── */
-const plans = [
-  { name: 'Small Dining Room', tables: '10–20 tables', monthly: 1999, yearly: 11994, highlight: 'Best for new restaurants', color: 'from-sky-500 to-blue-600', shadow: 'shadow-blue-500/20' },
-  { name: 'Growing Restaurant', tables: '20–50 tables', monthly: 2999, yearly: 17994, highlight: 'Most popular', popular: true, color: 'from-violet-500 to-purple-600', shadow: 'shadow-violet-500/20' },
-  { name: 'Large Venue', tables: '50+ tables', monthly: 4999, yearly: 29994, highlight: 'For high-volume spots', color: 'from-amber-500 to-orange-500', shadow: 'shadow-orange-500/20' },
-]
-
+/* ─── Data ───────────────────────────────────────────── */
 const features = [
   { icon: '🍽️', title: 'Beautiful QR Menu', desc: 'Guests scan once and see a polished digital menu that adapts to every device. No app download, no friction.', stat: '3s avg load' },
   { icon: '🤖', title: 'AI Menu Assistant', desc: 'Answers ingredient questions, recommends dishes, and suggests upsells naturally — without feeling pushy.', stat: 'Smart upsells' },
@@ -674,13 +681,8 @@ const analytics = [
   { label: 'Waiter response', value: '12s', sub: 'average notify time' },
 ]
 
-function formatPrice(n: number) {
-  return new Intl.NumberFormat('en-IN').format(n)
-}
-
 /* ─── Main Page ──────────────────────────────────────── */
 export default function DinezyLanding() {
-  const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly')
   const [demoOpen, setDemoOpen] = useState(false)
   const [navScrolled, setNavScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -701,15 +703,7 @@ export default function DinezyLanding() {
     { label: 'How it works', id: 'how' },
     { label: 'AI Upsells', id: 'upsell' },
     { label: 'Analytics', id: 'analytics' },
-    { label: 'Pricing', id: 'pricing' },
   ]
-
-  const activePlans = plans.map(p => ({
-    ...p,
-    price: billing === 'monthly' ? p.monthly : p.yearly,
-    suffix: billing === 'monthly' ? '/mo' : '/yr',
-    note: billing === 'yearly' ? `50% off — save ₹${formatPrice(p.monthly * 12 - p.yearly)}` : 'Billed monthly after trial',
-  }))
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#050816] text-white selection:bg-violet-500/30">
@@ -718,7 +712,6 @@ export default function DinezyLanding() {
         @keyframes fade-up { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
         @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
         @keyframes slide-in { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
-        @keyframes glow-pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
         .fade-up { animation: fade-up 0.75s ease forwards; }
         .fade-up-2 { animation: fade-up 0.75s ease 0.15s both; }
         .fade-up-3 { animation: fade-up 0.75s ease 0.3s both; }
@@ -737,16 +730,14 @@ export default function DinezyLanding() {
             radial-gradient(circle at 50% 100%, rgba(14,165,233,0.1), transparent 32%),
             #050816;
         }
-        .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; }
+        .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
         .card-hover:hover { transform: translateY(-5px); box-shadow: 0 20px 50px rgba(0,0,0,0.22); }
-        .glow-ring { animation: glow-pulse 2.5s ease-in-out infinite; }
       `}</style>
 
       {/* ── NAVBAR ── */}
       <header className={`fixed inset-x-0 top-0 z-[100] transition-all duration-300 ${navScrolled ? 'bg-[#050816]/88 backdrop-blur-xl border-b border-white/8 shadow-[0_8px_24px_rgba(0,0,0,0.22)]' : 'bg-transparent'}`}>
         <div className="max-w-7xl mx-auto flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
           <DinezyLogo size={30} dark onClick={() => scrollTo('top')} />
-
           <nav className="hidden lg:flex items-center gap-0.5 glass rounded-2xl px-2 py-1.5">
             {navLinks.map(l => (
               <button key={l.id} onClick={() => scrollTo(l.id)} className="px-3.5 py-2 rounded-xl text-sm font-semibold text-white/65 hover:bg-white/10 hover:text-white transition-all duration-200">
@@ -754,13 +745,11 @@ export default function DinezyLanding() {
               </button>
             ))}
           </nav>
-
           <div className="hidden lg:flex items-center gap-3">
             <button onClick={() => setDemoOpen(true)} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-violet-600/20 hover:-translate-y-0.5 transition-all">
               Book a demo →
             </button>
           </div>
-
           <button onClick={() => setMobileOpen(!mobileOpen)} className="lg:hidden w-10 h-10 border border-white/10 rounded-xl glass flex items-center justify-center">
             <span className="text-lg">{mobileOpen ? '✕' : '☰'}</span>
           </button>
@@ -795,16 +784,13 @@ export default function DinezyLanding() {
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-sm font-semibold text-white/80">India's smartest QR menu platform</span>
             </div>
-
             <h1 className="fade-up text-5xl sm:text-6xl lg:text-7xl font-black leading-[0.92] tracking-tighter mb-6">
               Your menu,
               <span className="block bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text text-transparent mt-1">upgraded.</span>
             </h1>
-
             <p className="fade-up-2 text-white/60 text-lg leading-relaxed max-w-lg mb-8">
               Guests scan a QR, browse beautifully, get AI recommendations, and call the waiter — all without downloading anything. You see it all in your dashboard, live.
             </p>
-
             <div className="fade-up-2 flex flex-wrap gap-3 mb-8">
               <button
                 onClick={() => setDemoOpen(true)}
@@ -817,7 +803,6 @@ export default function DinezyLanding() {
                 See features
               </button>
             </div>
-
             <div className="fade-up-3 flex flex-wrap gap-2">
               {['Live demo, no card needed', 'Setup in under 30 min', '7-day free after demo'].map(b => (
                 <span key={b} className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-sm text-white/55 font-medium">✓ {b}</span>
@@ -825,7 +810,7 @@ export default function DinezyLanding() {
             </div>
           </div>
 
-          {/* Waiter Demo */}
+          {/* Auto Waiter Demo */}
           <div className="flex justify-center lg:justify-end">
             <WaiterCallDemo />
           </div>
@@ -838,10 +823,8 @@ export default function DinezyLanding() {
           ))}
         </div>
       </section>
-	  
-	  
-	  <RestaurantWebsiteSection />
 
+      <RestaurantWebsiteSection />
 
       {/* ── FEATURES ── */}
       <section id="features" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
@@ -896,21 +879,19 @@ export default function DinezyLanding() {
               ))}
             </div>
 
-            {/* Live waiter demo section */}
             <div className="glass rounded-3xl p-6">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-sm font-semibold text-amber-300">Interactive waiter call demo</span>
+                <span className="text-sm font-semibold text-amber-300">Watch the full flow — automatically</span>
               </div>
-              <p className="text-white/50 text-sm mb-5">Select items and tap "Call Waiter" to see the full live flow — including the staff alert.</p>
+              <p className="text-white/50 text-sm mb-5">This is exactly what your guests see on their phones when they scan the QR code at the table.</p>
               <WaiterCallDemo />
-              <p className="text-xs text-white/30 text-center mt-4">This is exactly what your guests see on their phones</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── AI UPSELL SECTION ── */}
+      {/* ── AI UPSELL ── */}
       <section id="upsell" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
@@ -925,7 +906,6 @@ export default function DinezyLanding() {
               <p className="text-white/60 text-lg leading-relaxed mb-8">
                 While your guest browses the menu, Dinezy's AI watches what they pick and quietly suggests the perfect addition — a combo, a drink, a dessert — in a way that feels helpful, not pushy. Restaurants using it see a <span className="text-white font-bold">28% higher average bill</span> within the first week.
               </p>
-
               <div className="space-y-4 mb-8">
                 {[
                   { icon: '🧠', title: 'Learns your bestsellers', desc: 'AI trains on your own order data. It recommends what actually sells — not generic suggestions.' },
@@ -941,12 +921,10 @@ export default function DinezyLanding() {
                   </div>
                 ))}
               </div>
-
               <button onClick={() => setDemoOpen(true)} className="inline-flex items-center gap-2 bg-gradient-to-r from-fuchsia-600 to-violet-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-fuchsia-600/20 hover:-translate-y-0.5 transition-all">
                 See AI upsells live in your demo →
               </button>
             </div>
-
             <AIUpsellDemo />
           </div>
         </div>
@@ -965,7 +943,6 @@ export default function DinezyLanding() {
 
           <div className="glass rounded-3xl p-6 mb-10 shadow-[0_24px_80px_rgba(0,0,0,0.28)] overflow-hidden relative">
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500/8 to-cyan-500/8 pointer-events-none" />
-
             <div className="relative flex items-center gap-2 mb-5">
               <div className="flex gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-red-400" />
@@ -974,7 +951,6 @@ export default function DinezyLanding() {
               </div>
               <div className="flex-1 bg-white/5 rounded-lg px-3 py-1 text-white/30 text-xs text-center border border-white/10">app.dinezy.in/dashboard</div>
             </div>
-
             <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               {[
                 { l: "Today's revenue", v: '₹18,420', c: 'text-emerald-300', g: '↑14%' },
@@ -989,7 +965,6 @@ export default function DinezyLanding() {
                 </div>
               ))}
             </div>
-
             <div className="relative grid lg:grid-cols-3 gap-3">
               <div className="lg:col-span-2 bg-white/5 rounded-2xl p-4 border border-white/10">
                 <p className="text-white font-bold text-sm mb-3">Revenue by hour</p>
@@ -1043,72 +1018,34 @@ export default function DinezyLanding() {
         </div>
       </section>
 
-      {/* ── PRICING ── */}
-      <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mx-auto text-center mb-12">
-            <span className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-violet-300 uppercase tracking-wide mb-4">
-              Pricing
-            </span>
-            <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4">Pick the plan for your venue</h2>
-            <p className="text-white/55 text-lg">Book a demo first. No card needed to start.</p>
-
-            <div className="inline-flex items-center gap-1 glass rounded-2xl p-1.5 mt-6">
-              {(['monthly', 'yearly'] as const).map(b => (
-                <button
-                  key={b}
-                  onClick={() => setBilling(b)}
-                  className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all capitalize ${billing === b ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-600/20' : 'text-white/50 hover:text-white'}`}
-                >
-                  {b} {b === 'yearly' && <span className="ml-1 text-xs font-bold text-emerald-300">50% off</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid lg:grid-cols-3 gap-6">
-            {activePlans.map(plan => (
-              <div key={plan.name} className={`relative glass rounded-3xl p-7 card-hover ${plan.popular ? 'border-violet-400/25 shadow-[0_20px_60px_rgba(124,58,237,0.15)] lg:scale-[1.03]' : ''}`}>
-                {plan.popular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                    <span className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg shadow-violet-600/20">⭐ Most popular</span>
-                  </div>
-                )}
-                <div className="mb-5">
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold mb-3 bg-gradient-to-r ${plan.color} text-white`}>{plan.highlight}</span>
-                  <h3 className="font-black text-2xl text-white">{plan.tables}</h3>
-                  <p className="text-white/50 text-sm mt-0.5">{plan.name}</p>
-                </div>
-                <div className="flex items-baseline gap-1 mb-1">
-                  <span className="text-4xl font-black text-white">₹{formatPrice(plan.price)}</span>
-                  <span className="text-white/40 font-medium">{plan.suffix}</span>
-                </div>
-                <p className="text-sm text-white/50 mb-5">{plan.note}</p>
-                <ul className="space-y-2.5 mb-7">
-                  {['Beautiful QR menu', 'AI assistant & upsells', 'Call waiter button', 'Analytics dashboard', 'Instant menu updates', 'Multi-table management'].map(f => (
-                    <li key={f} className="flex items-center gap-2.5 text-sm text-white/65">
-                      <span className={`w-5 h-5 rounded-full bg-gradient-to-r ${plan.color} flex items-center justify-center flex-shrink-0`}>
-                        <span className="text-white text-xs font-bold">✓</span>
-                      </span>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button onClick={() => setDemoOpen(true)} className={`w-full py-4 rounded-2xl font-bold text-sm transition-all bg-gradient-to-r ${plan.color} text-white shadow-lg ${plan.shadow} hover:-translate-y-0.5`}>
-                  Book a demo →
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-8 glass rounded-3xl p-6 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="font-black text-white text-lg">See it live before you commit</p>
-              <p className="text-white/50 text-sm">A 30-min demo with your actual menu. No card. No pressure.</p>
-            </div>
-            <button onClick={() => setDemoOpen(true)} className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-7 py-3.5 rounded-2xl font-bold shadow-lg shadow-violet-600/20 hover:-translate-y-0.5 transition-all">
-              Book your demo →
+      {/* ── CTA BANNER (replaces pricing) ── */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
+        <div className="max-w-4xl mx-auto text-center">
+          <span className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-violet-300 uppercase tracking-wide mb-6">
+            Get started
+          </span>
+          <h2 className="text-4xl lg:text-6xl font-black leading-tight tracking-tighter mb-6">
+            Ready to upgrade
+            <span className="block text-transparent bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text">your restaurant?</span>
+          </h2>
+          <p className="text-white/55 text-xl leading-relaxed mb-10 max-w-2xl mx-auto">
+            Book a free 30-minute demo. We'll set up your menu live, walk you through the dashboard, and show you exactly how much more revenue you can make. No card needed.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <button
+              onClick={() => setDemoOpen(true)}
+              className="flex items-center gap-2 text-white px-10 py-5 rounded-2xl font-black text-lg shadow-2xl hover:-translate-y-1 transition-all shimmer-btn"
+              style={{ backgroundImage: 'linear-gradient(135deg, #7c3aed, #d946ef, #2563eb, #7c3aed)', backgroundSize: '200% auto', animation: 'shimmer 3.5s linear infinite' }}
+            >
+              Book my free demo →
             </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-6 mt-8">
+            {['No credit card needed', '7-day free trial after demo', 'Setup in under 30 min', 'We respond within 2 hours'].map(b => (
+              <span key={b} className="text-sm text-white/45 flex items-center gap-1.5">
+                <span className="text-emerald-400">✓</span> {b}
+              </span>
+            ))}
           </div>
         </div>
       </section>

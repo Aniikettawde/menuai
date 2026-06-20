@@ -26,6 +26,7 @@ type RestaurantForm = {
 
   opening_hours: OpeningHours
     kot_mode: 'manual' | 'dinezy_print'
+orders_enabled: boolean
 
 
 
@@ -85,6 +86,7 @@ export default function RestaurantPage() {
 
     opening_hours: createDefaultHours(),
 	  kot_mode: 'manual',
+orders_enabled: true,
 
   })
 
@@ -118,6 +120,7 @@ export default function RestaurantPage() {
 			            instagram_url: data.instagram_url ?? '',
 						
   kot_mode: (data.kot_mode as 'manual' | 'dinezy_print') ?? 'manual',
+orders_enabled: data.orders_enabled ?? true,
 
           })
           setLogoUrl(data.logo_url ?? '')
@@ -598,6 +601,43 @@ export default function RestaurantPage() {
         >
           {saving ? 'Saving…' : saved ? '✓ Saved!' : restaurant ? 'Save Changes' : 'Create Restaurant'}
         </button>
+		<Section title="Ordering">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <p className="text-sm font-medium text-white">Accept orders via menu</p>
+      <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+        When off, customers can browse the menu and call a waiter, but cannot add items to cart or place orders.
+      </p>
+    </div>
+    <button
+      type="button"
+      onClick={() => setForm(f => ({ ...f, orders_enabled: !f.orders_enabled }))}
+      className={[
+        'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+        form.orders_enabled ? 'bg-orange-500' : 'bg-zinc-700',
+      ].join(' ')}
+      role="switch"
+      aria-checked={form.orders_enabled}
+    >
+      <span
+        className={[
+          'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition duration-200 ease-in-out',
+          form.orders_enabled ? 'translate-x-5' : 'translate-x-0',
+        ].join(' ')}
+      />
+    </button>
+  </div>
+
+  {!form.orders_enabled && (
+    <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2.5">
+      <span className="mt-px text-sm">⚠️</span>
+      <p className="text-xs text-amber-300 leading-relaxed">
+        Ordering is currently <strong>off</strong>. Customers can browse the menu and call for assistance, but the Add button and cart will be hidden.
+      </p>
+    </div>
+  )}
+</Section>
+
 		<Section title="KOT Printing">
   <div className="space-y-3">
     <p className="text-xs text-zinc-500 leading-relaxed">
