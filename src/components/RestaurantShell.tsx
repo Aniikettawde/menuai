@@ -659,12 +659,7 @@ export function RestaurantShell({ initialData }: Props) {
 
         <main className="pr-main">
           {/* Table context pill */}
-          {tableNumber !== null && (
-            <div className="pr-table-badge">
-              <span style={{ fontSize: 14 }}>🪑</span>
-              Table {tableNumber}
-            </div>
-          )}
+         
 
           <MenuGrid
             onCallWaiter={handleCallWaiter}

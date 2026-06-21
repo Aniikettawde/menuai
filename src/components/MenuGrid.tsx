@@ -342,7 +342,12 @@ export function MenuGrid({
         .mg-root { position: relative; width: 100%; padding-bottom: 11rem; padding-top: 0.25rem; }
 
         /* ── search bar ── */
-        .mg-search-sticky { margin-bottom: 14px; position: sticky; top: 56px; z-index: 30; }
+        .mg-search-sticky {
+  margin-bottom: 14px;
+  position: static;
+  top: auto;
+  z-index: auto;
+}
         .mg-search-sticky-inner { border-radius: 16px; background: color-mix(in srgb, var(--surface-bg) 92%, transparent); backdrop-filter: blur(10px); padding: 6px 0; }
 
         :global(.mg-search-wrap) {
