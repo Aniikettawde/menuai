@@ -290,20 +290,28 @@ export async function POST(req: NextRequest) {
 
     const orderCode = makeOrderCode(resolvedTableNumber)
 
-    const { data: inserted, error: insertError } = await admin
-      .from('table_requests')
-      .insert({
-        restaurant_id: restaurant.id,
-        table_number: resolvedTableNumber,
-        session_id: sessionId,
-        items,
-        subtotal,
-        status: 'pending',
-        order_code: orderCode,
-        request_type: reqType,
-      })
-      .select('*')
-      .single()
+    const isOrderRequest = reqType === 'order'
+
+const requestCode = isOrderRequest
+  ? makeOrderCode(resolvedTableNumber)
+  : `REQ-${resolvedTableNumber}-${randomUUID().slice(0, 8).toUpperCase()}`
+
+const { data: inserted, error: insertError } = await admin
+  .from('table_requests')
+  .insert({
+    restaurant_id: restaurant.id,
+    table_number: resolvedTableNumber,
+    session_id: sessionId,
+    request_type: reqType,
+    status: 'pending',
+    order_code: requestCode,
+
+    // Only real food orders should carry items + subtotal
+    items: isOrderRequest ? items : [],
+    subtotal: isOrderRequest ? subtotal : 0,
+  })
+  .select('*')
+  .single()
 
     if (insertError) {
       console.error('table-request insert error:', insertError)
@@ -315,10 +323,13 @@ export async function POST(req: NextRequest) {
 
     // FIX 2: proper tag per request type; FIX 3: removed dead itemSummary/moreCount
     const title =
-      reqType === 'water'       ? `💧 Table ${resolvedTableNumber} — Water request — ${restaurant.name}`
-      : reqType === 'bill'      ? `🧾 Table ${resolvedTableNumber} — Bill request — ${restaurant.name}`
-      : reqType === 'assistance'? `🔔 Table ${resolvedTableNumber} needs assistance — ${restaurant.name}`
-      : `🍽️ Table ${resolvedTableNumber} — New order — ${restaurant.name}`
+  reqType === 'water'
+    ? `💧 Table ${resolvedTableNumber} — Water request — ${restaurant.name}`
+    : reqType === 'bill'
+      ? `🧾 Table ${resolvedTableNumber} — Bill request — ${restaurant.name}`
+      : reqType === 'assistance'
+        ? `🔔 Table ${resolvedTableNumber} needs assistance — ${restaurant.name}`
+        : `🍽️ Table ${resolvedTableNumber} — New order — ${restaurant.name}`
 
     const bodyText =
       reqType === 'water'       ? `Table ${resolvedTableNumber} is asking for water`

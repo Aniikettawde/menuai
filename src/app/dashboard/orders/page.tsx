@@ -480,15 +480,25 @@ export default function OrdersPage() {
     [requests],
   )
 
-  const activeRequests = useMemo(
-    () => requests.filter((r) => r.status === 'pending' || r.status === 'accepted'),
-    [requests],
-  )
+  const orderRequests = useMemo(
+  () => requests.filter((r) => r.request_type === 'order'),
+  [requests],
+)
 
-  const historyRequests = useMemo(
-    () => requests.filter((r) => r.status === 'completed' || r.status === 'cancelled'),
-    [requests],
-  )
+const serviceRequests = useMemo(
+  () => requests.filter((r) => r.request_type && r.request_type !== 'order'),
+  [requests],
+)
+
+const activeRequests = useMemo(
+  () => orderRequests.filter((r) => r.status === 'pending' || r.status === 'accepted'),
+  [orderRequests],
+)
+
+const historyRequests = useMemo(
+  () => orderRequests.filter((r) => r.status === 'completed' || r.status === 'cancelled'),
+  [orderRequests],
+)
 
   const historyTotalPages = Math.max(1, Math.ceil(historyRequests.length / HISTORY_PAGE_SIZE))
 
@@ -654,6 +664,33 @@ export default function OrdersPage() {
           </div>
         )}
       </div>
+	  
+	  <div className="space-y-3">
+  <div className="flex items-center justify-between px-1">
+    <h2 className="text-sm font-semibold text-white">Service requests</h2>
+    <span className="text-xs text-zinc-500">{serviceRequests.length}</span>
+  </div>
+
+  {serviceRequests.length > 0 ? (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {serviceRequests.map((req) => (
+        <RequestCard
+          key={req.id}
+          req={req}
+          kotMode={kotMode}
+          saving={savingId === req.id}
+          onAccept={() => void updateStatus(req.id, 'accepted', 'pending')}
+          onComplete={() => void updateStatus(req.id, 'completed', 'accepted')}
+        />
+      ))}
+    </div>
+  ) : (
+    <div className="rounded-3xl border border-white/5 bg-white/[0.03] p-8 text-center">
+      <Clock3 size={20} className="mx-auto text-zinc-500" />
+      <p className="mt-3 text-sm text-zinc-400">No service requests right now.</p>
+    </div>
+  )}
+</div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
