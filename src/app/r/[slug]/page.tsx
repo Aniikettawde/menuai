@@ -14,7 +14,6 @@ interface PageProps {
 
 type SubscriptionRow = {
   plan?: string | null
-  status?: string | null
   trial_end?: string | null
   current_period_end?: string | null
 }
@@ -27,7 +26,6 @@ function hasPaidAccess(sub: SubscriptionRow | null | undefined) {
   const periodEnd = sub.current_period_end ? new Date(sub.current_period_end) : null
 
   return (
-    sub.status === 'active' ||
     sub.plan === 'active' ||
     sub.plan === 'paid' ||
     sub.plan === 'subscription' ||
@@ -35,7 +33,6 @@ function hasPaidAccess(sub: SubscriptionRow | null | undefined) {
     (!!periodEnd && periodEnd > now)
   )
 }
-
 // ─── Paid subscription restaurant lookup ──────────────────────────────────────
 
 async function getPaidMenuData(slug: string): Promise<MenuPageData | null> {
@@ -51,10 +48,10 @@ async function getPaidMenuData(slug: string): Promise<MenuPageData | null> {
   if (restError || !restaurant) return null
 
   const { data: sub } = await supabase
-    .from('subscriptions')
-    .select('plan, status, trial_end, current_period_end')
-    .eq('user_id', restaurant.owner_id)
-    .maybeSingle()
+  .from('subscriptions')
+  .select('plan, trial_end, current_period_end')
+  .eq('user_id', restaurant.owner_id)
+  .maybeSingle()
 
   if (!hasPaidAccess(sub as SubscriptionRow | null)) return null
 
