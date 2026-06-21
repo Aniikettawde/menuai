@@ -192,39 +192,62 @@ orders_enabled: data.orders_enabled ?? true,
   }
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setError('')
-    if (slugTaken) { setError('This slug is already taken'); return }
-    setSaving(true)
-    try {
-      const { data: authData } = await supabase.auth.getUser()
-      const user = authData.user
-      if (!user?.email) throw new Error('Not authenticated')
-      const payload = { ...form, slug: slugify(form.slug || form.name), logo_url: logoUrl || null, cover_url: coverUrl || null }
-      if (restaurant) {
-        const { data, error } = await supabase.from('restaurants').update(payload).eq('id', restaurant.id).select('*').single()
-        if (error) throw error
-        if (data) setRestaurant(data as Restaurant)
-      } else {
-        const { data, error } = await supabase.from('restaurants').insert({ ...payload, owner_id: user.id }).select('*').single()
-        if (error) throw error
-        if (!data) throw new Error('Restaurant insert failed')
+  e.preventDefault()
+  setError('')
+  if (slugTaken) { setError('This slug is already taken'); return }
+  setSaving(true)
+  try {
+    const { data: authData } = await supabase.auth.getUser()
+    const user = authData.user
+    if (!user?.email) throw new Error('Not authenticated')
+    const payload = { ...form, slug: slugify(form.slug || form.name), logo_url: logoUrl || null, cover_url: coverUrl || null }
+
+    let savedRestaurantId: string | null = null
+
+    if (restaurant) {
+      const { data, error } = await supabase.from('restaurants').update(payload).eq('id', restaurant.id).select('*').single()
+      if (error) throw error
+      if (data) {
         setRestaurant(data as Restaurant)
-        const { error: staffError } = await supabase.from('restaurant_staff').insert({
-          restaurant_id: data.id, email: user.email, role: 'owner',
-          active: true, created_by: user.id, user_id: user.id,
-        })
-        if (staffError) throw staffError
+        savedRestaurantId = data.id
       }
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    } catch (err) {
-      console.error('Restaurant save error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to save restaurant')
-    } finally {
-      setSaving(false)
+    } else {
+      const { data, error } = await supabase.from('restaurants').insert({ ...payload, owner_id: user.id }).select('*').single()
+      if (error) throw error
+      if (!data) throw new Error('Restaurant insert failed')
+      setRestaurant(data as Restaurant)
+      savedRestaurantId = data.id
+      const { error: staffError } = await supabase.from('restaurant_staff').insert({
+        restaurant_id: data.id, email: user.email, role: 'owner',
+        active: true, created_by: user.id, user_id: user.id,
+      })
+      if (staffError) throw staffError
     }
+
+    // Push the latest restaurant/menu data into discovery.
+    // Fire-and-forget — a sync hiccup shouldn't block the save UX,
+    // but we still log failures so they're not invisible.
+    if (savedRestaurantId) {
+      const { data: { session } } = await supabase.auth.getSession()
+      fetch('/api/discovery/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ restaurantId: savedRestaurantId }),
+      }).catch((err) => console.error('discovery sync failed:', err))
+    }
+
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  } catch (err) {
+    console.error('Restaurant save error:', err)
+    setError(err instanceof Error ? err.message : 'Failed to save restaurant')
+  } finally {
+    setSaving(false)
   }
+}
 
   if (contextLoading) {
     return (

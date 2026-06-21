@@ -1,15 +1,15 @@
 'use client'
-
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { motion } from 'framer-motion'
 import {
   LayoutDashboard, UtensilsCrossed, BadgePercent, Star, BarChart2,
   LogOut, Eye, MousePointerClick, Menu, X, CheckCircle2, Plus, Trash2,
   Pencil, Loader2, Sparkles, Globe, ArrowRight, ChevronRight, Clock,
   ExternalLink, AlertCircle, Image as ImageIcon, Settings,
+  Search, Ticket, Gift,
 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { motion } from 'framer-motion'
 import {
   getDiscoveryBrowser,
   type DiscoveryRestaurant,
@@ -915,172 +915,628 @@ function AIImportModal({ onClose, onImport }: { onClose: () => void; onImport: (
 
 // ─── Offers Tab ────────────────────────────────────────────────────────────────
 
-function OffersTab({ restaurant, supabase }: { restaurant: DiscoveryRestaurant; supabase: ReturnType<typeof getDiscoveryBrowser> }) {
+type OfferType = 'flat' | 'percent' | 'free_item'
+
+type MenuItemLite = {
+  id: string
+  name: string
+  price: number
+  is_available: boolean
+}
+
+type OfferDraft = Partial<DiscoveryOffer> & {
+  coupon_code?: string | null
+  free_menu_item_id?: string | null
+  starts_at?: string | null
+  ends_at?: string | null
+}
+
+const EMPTY_OFFER: OfferDraft = {
+  title: '',
+  description: '',
+  cta_label: 'Claim Offer',
+  discount_type: 'flat',
+  discount_value: 0,
+  is_active: true,
+  coupon_code: '',
+  free_menu_item_id: null,
+  starts_at: '',
+  ends_at: '',
+}
+
+function OffersTab({
+  restaurant,
+  supabase,
+}: {
+  restaurant: DiscoveryRestaurant
+  supabase: ReturnType<typeof getDiscoveryBrowser>
+}) {
   const [offers, setOffers] = useState<DiscoveryOffer[]>([])
+  const [menuItems, setMenuItems] = useState<MenuItemLite[]>([])
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState<Partial<DiscoveryOffer> | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [editing, setEditing] = useState<OfferDraft | null>(null)
+  const [search, setSearch] = useState('')
 
-  const EMPTY_OFFER: Partial<DiscoveryOffer> = {
-    title: '', description: '', cta_label: 'Claim Offer',
-    discount_type: 'flat', discount_value: 0, is_active: true,
-  }
+  const filteredMenuItems = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return menuItems
+    return menuItems.filter((item) => item.name.toLowerCase().includes(q))
+  }, [menuItems, search])
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from('offers').select('*').eq('restaurant_id', restaurant.id).order('position')
-      setOffers((data ?? []) as DiscoveryOffer[])
-      setLoading(false)
+      setLoading(true)
+      try {
+        const [{ data: offerData, error: offerError }, { data: itemData, error: itemError }] =
+          await Promise.all([
+            supabase
+              .from('offers')
+              .select('*')
+              .eq('restaurant_id', restaurant.id)
+              .order('position', { ascending: true }),
+            supabase
+              .from('menu_items')
+              .select('id, name, price, is_available')
+              .eq('restaurant_id', restaurant.id)
+              .order('position', { ascending: true }),
+          ])
+
+        if (offerError) throw offerError
+        if (itemError) throw itemError
+
+        setOffers((offerData ?? []) as DiscoveryOffer[])
+        setMenuItems((itemData ?? []) as MenuItemLite[])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load offers')
+      } finally {
+        setLoading(false)
+      }
     }
+
     void load()
-  }, [supabase, restaurant.id])
+  }, [restaurant.id, supabase])
+
+  function startNew() {
+    setEditing({ ...EMPTY_OFFER })
+    setSearch('')
+  }
+
+  function startEdit(offer: DiscoveryOffer) {
+    setEditing({
+      ...offer,
+      coupon_code: (offer as unknown as { coupon_code?: string | null }).coupon_code ?? '',
+      free_menu_item_id: (offer as unknown as { free_menu_item_id?: string | null }).free_menu_item_id ?? null,
+      starts_at: (offer as unknown as { starts_at?: string | null }).starts_at ?? '',
+      ends_at: (offer as unknown as { ends_at?: string | null }).ends_at ?? '',
+    })
+    setSearch('')
+  }
 
   async function saveOffer() {
-    if (!editing?.title?.trim()) return
-    setSaving(true); setError('')
+    setError('')
+
+    if (!editing?.title?.trim()) {
+      setError('Please enter an offer title.')
+      return
+    }
+
+    if (editing.discount_type === 'percent') {
+      const v = Number(editing.discount_value ?? 0)
+      if (!Number.isFinite(v) || v <= 0 || v > 100) {
+        setError('Percent discount must be between 1 and 100.')
+        return
+      }
+    }
+
+    if (editing.discount_type === 'flat') {
+      const v = Number(editing.discount_value ?? 0)
+      if (!Number.isFinite(v) || v <= 0) {
+        setError('Flat discount must be greater than 0.')
+        return
+      }
+    }
+
+    if (editing.discount_type === 'free_item' && !editing.free_menu_item_id) {
+      setError('Please select a free menu item.')
+      return
+    }
+
+    if (editing.starts_at && editing.ends_at) {
+      const start = new Date(editing.starts_at).getTime()
+      const end = new Date(editing.ends_at).getTime()
+      if (Number.isFinite(start) && Number.isFinite(end) && end <= start) {
+        setError('End time must be after start time.')
+        return
+      }
+    }
+
+    setSaving(true)
     try {
       const payload = {
         restaurant_id: restaurant.id,
-        title: editing.title?.trim() ?? '',
+        title: editing.title.trim(),
         description: editing.description?.trim() ?? '',
         cta_label: editing.cta_label?.trim() || 'Claim Offer',
-        discount_type: editing.discount_type ?? 'flat',
+        discount_type: (editing.discount_type ?? 'flat') as OfferType,
         discount_value: Number(editing.discount_value ?? 0),
         is_active: Boolean(editing.is_active ?? true),
         position: offers.length,
+        coupon_code: editing.coupon_code?.trim()
+          ? editing.coupon_code.trim().toUpperCase()
+          : null,
+        free_menu_item_id:
+          editing.discount_type === 'free_item'
+            ? editing.free_menu_item_id ?? null
+            : null,
+        starts_at: editing.starts_at || null,
+        ends_at: editing.ends_at || null,
       }
+
       if (editing.id) {
-        const { data, error: e } = await supabase.from('offers').update(payload).eq('id', editing.id).select().single()
-        if (e) throw e
-        if (data) setOffers(prev => prev.map(o => o.id === data.id ? (data as DiscoveryOffer) : o))
+        const { data, error: updateError } = await supabase
+          .from('offers')
+          .update(payload)
+          .eq('id', editing.id)
+          .select()
+          .single()
+
+        if (updateError) throw updateError
+        if (data) {
+          setOffers((prev) => prev.map((o) => (o.id === data.id ? (data as DiscoveryOffer) : o)))
+        }
       } else {
-        const { data, error: e } = await supabase.from('offers').insert(payload).select().single()
-        if (e) throw e
-        if (data) setOffers(prev => [...prev, data as DiscoveryOffer])
+        const { data, error: insertError } = await supabase
+          .from('offers')
+          .insert(payload)
+          .select()
+          .single()
+
+        if (insertError) throw insertError
+        if (data) {
+          setOffers((prev) => [...prev, data as DiscoveryOffer])
+        }
       }
+
       setEditing(null)
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to save') }
-    finally { setSaving(false) }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save offer')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function toggleOffer(offer: DiscoveryOffer) {
-    const { data, error: e } = await supabase.from('offers').update({ is_active: !offer.is_active }).eq('id', offer.id).select().single()
-    if (e) { setError(e.message); return }
-    if (data) setOffers(prev => prev.map(o => o.id === data.id ? (data as DiscoveryOffer) : o))
+    setError('')
+    const { data, error: updateError } = await supabase
+      .from('offers')
+      .update({ is_active: !offer.is_active })
+      .eq('id', offer.id)
+      .select()
+      .single()
+
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
+    if (data) {
+      setOffers((prev) => prev.map((o) => (o.id === data.id ? (data as DiscoveryOffer) : o)))
+    }
   }
 
   async function deleteOffer(id: string) {
+    setError('')
     if (!confirm('Delete this offer?')) return
-    const { error: e } = await supabase.from('offers').delete().eq('id', id)
-    if (e) { setError(e.message); return }
-    setOffers(prev => prev.filter(o => o.id !== id))
+
+    const { error: deleteError } = await supabase.from('offers').delete().eq('id', id)
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
+
+    setOffers((prev) => prev.filter((o) => o.id !== id))
   }
 
-  if (loading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin text-orange-400" size={24} /></div>
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="animate-spin text-orange-400" size={24} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4 max-w-2xl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-base font-bold text-white">Offers & Promotions</p>
-          <p className="text-xs text-zinc-500">Live offers appear on your public page</p>
+          <p className="text-base font-bold text-white">Offers & Coupons</p>
+          <p className="text-xs text-zinc-500">
+            Create percent discounts, free menu items, and coupon codes
+          </p>
         </div>
-        <button onClick={() => setEditing(EMPTY_OFFER)} className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-semibold text-white">
+
+        <button
+          onClick={startNew}
+          className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-semibold text-white"
+        >
           <Plus size={12} /> New Offer
         </button>
       </div>
 
-      {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
+      {error && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {error}
+        </div>
+      )}
 
       {offers.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-zinc-700 p-10 text-center">
           <p className="text-3xl mb-3">🏷️</p>
           <p className="text-sm font-semibold text-white">No offers yet</p>
-          <p className="text-xs text-zinc-500 mt-1 mb-4">Create offers to appear on your discovery page</p>
-          <button onClick={() => setEditing(EMPTY_OFFER)} className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white">+ Create First Offer</button>
+          <p className="text-xs text-zinc-500 mt-1 mb-4">
+            Create an offer to show it on the discovery page
+          </p>
+          <button
+            onClick={startNew}
+            className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white"
+          >
+            + Create First Offer
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
-          {offers.map(offer => (
-            <div key={offer.id} className={`rounded-2xl border p-4 transition ${offer.is_active ? 'border-amber-500/20 bg-amber-500/5' : 'border-zinc-800 bg-zinc-900/60 opacity-60'}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-bold text-white truncate">{offer.title}</p>
-                    <span className={`text-[10px] rounded-full px-2 py-0.5 font-bold ${offer.is_active ? 'bg-green-500/20 text-green-400' : 'bg-zinc-700 text-zinc-500'}`}>
-                      {offer.is_active ? 'Active' : 'Paused'}
-                    </span>
+          {offers.map((offer) => {
+            const freeItem = (offer as unknown as { free_menu_item_id?: string | null }).free_menu_item_id
+              ? menuItems.find(
+                  (i) =>
+                    i.id ===
+                    (offer as unknown as { free_menu_item_id?: string | null }).free_menu_item_id,
+                )
+              : null
+
+            return (
+              <div
+                key={offer.id}
+                className={`rounded-2xl border p-4 transition ${
+                  offer.is_active
+                    ? 'border-amber-500/20 bg-amber-500/5'
+                    : 'border-zinc-800 bg-zinc-900/60 opacity-60'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-white truncate">{offer.title}</p>
+                      <span
+                        className={`text-[10px] rounded-full px-2 py-0.5 font-bold ${
+                          offer.is_active
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-zinc-700 text-zinc-500'
+                        }`}
+                      >
+                        {offer.is_active ? 'Active' : 'Paused'}
+                      </span>
+                    </div>
+
+                    {offer.description && (
+                      <p className="text-xs text-zinc-500 mt-1">{offer.description}</p>
+                    )}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                      <span>🎯 {offer.clicks_count ?? 0} clicks</span>
+
+                      {offer.discount_type === 'percent' && (
+                        <span>💰 {Number(offer.discount_value ?? 0)}% off</span>
+                      )}
+
+                      {offer.discount_type === 'flat' && (
+                        <span>💰 ₹{Number(offer.discount_value ?? 0)} off</span>
+                      )}
+
+                      {offer.discount_type === 'free_item' && (
+                        <span>
+                          🎁 Free item{freeItem ? `: ${freeItem.name}` : ''}
+                        </span>
+                      )}
+
+                      {(offer as unknown as { coupon_code?: string | null }).coupon_code && (
+                        <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-zinc-300">
+                          CODE: {(offer as unknown as { coupon_code?: string | null }).coupon_code}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {offer.description && <p className="text-xs text-zinc-500 mt-1">{offer.description}</p>}
-                  <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
-                    <span>🎯 {offer.clicks_count ?? 0} clicks</span>
-                    {offer.discount_value > 0 && <span>💰 {offer.discount_type === 'percent' ? `${offer.discount_value}%` : `₹${offer.discount_value}`} off</span>}
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => void toggleOffer(offer)}
+                      className={`h-5 w-9 rounded-full transition ${
+                        offer.is_active ? 'bg-green-500' : 'bg-zinc-700'
+                      }`}
+                      aria-label="Toggle offer active state"
+                    >
+                      <span
+                        className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                          offer.is_active ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+
+                    <button
+                      onClick={() => startEdit(offer)}
+                      className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-300"
+                      aria-label="Edit offer"
+                    >
+                      <Pencil size={13} />
+                    </button>
+
+                    <button
+                      onClick={() => void deleteOffer(offer.id)}
+                      className="rounded-lg p-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
+                      aria-label="Delete offer"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button onClick={() => void toggleOffer(offer)} className={`h-5 w-9 rounded-full transition ${offer.is_active ? 'bg-green-500' : 'bg-zinc-700'}`}>
-                    <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${offer.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                  </button>
-                  <button onClick={() => setEditing(offer)} className="rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-300"><Pencil size={13} /></button>
-                  <button onClick={() => void deleteOffer(offer.id)} className="rounded-lg p-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400"><Trash2 size={13} /></button>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
-      {/* Edit modal */}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center bg-black/70 p-0 sm:p-4">
-          <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl border border-zinc-800 bg-[#111] flex flex-col">
+          <div className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl border border-zinc-800 bg-[#111] max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
-              <p className="text-sm font-bold text-white">{editing.id ? 'Edit Offer' : 'New Offer'}</p>
-              <button onClick={() => setEditing(null)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-200">{error}</div>}
-              <div>
-                <label className="text-xs font-semibold text-zinc-400 mb-1 block">Offer Title *</label>
-                <input value={editing.title ?? ''} onChange={e => setEditing(prev => prev ? { ...prev, title: e.target.value } : prev)} placeholder="e.g. 20% off on weekends" className={INPUT} />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-zinc-400 mb-1 block">Description</label>
-                <textarea value={editing.description ?? ''} onChange={e => setEditing(prev => prev ? { ...prev, description: e.target.value } : prev)} rows={2} placeholder="More details about the offer…" className={`${INPUT} resize-none`} />
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="text-xs font-semibold text-zinc-400 mb-1 block">Discount type</label>
-                  <select value={editing.discount_type ?? 'flat'} onChange={e => setEditing(prev => prev ? { ...prev, discount_type: e.target.value } : prev)} className={INPUT}>
-                    <option value="flat">Flat ₹</option>
-                    <option value="percent">Percent %</option>
-                    <option value="free_item">Free Item</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs font-semibold text-zinc-400 mb-1 block">Value</label>
-                  <input type="number" min={0} value={editing.discount_value ?? 0} onChange={e => setEditing(prev => prev ? { ...prev, discount_value: Number(e.target.value) } : prev)} placeholder="0" className={INPUT} />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-zinc-400 mb-1 block">CTA Button Label</label>
-                <input value={editing.cta_label ?? ''} onChange={e => setEditing(prev => prev ? { ...prev, cta_label: e.target.value } : prev)} placeholder="Claim Offer" className={INPUT} />
-              </div>
+              <p className="text-sm font-bold text-white">
+                {editing.id ? 'Edit Offer' : 'New Offer'}
+              </p>
               <button
-                onClick={() => setEditing(prev => prev ? { ...prev, is_active: !prev.is_active } : prev)}
-                className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition ${editing.is_active ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-zinc-700 bg-zinc-800/40 text-zinc-500'}`}
+                onClick={() => setEditing(null)}
+                className="text-zinc-500 hover:text-white"
               >
-                <span>Active on discovery page</span>
-                <div className={`h-5 w-9 rounded-full transition ${editing.is_active ? 'bg-green-500' : 'bg-zinc-700'}`}>
-                  <span className={`block h-4 w-4 rounded-full bg-white shadow mt-0.5 transition-transform ${editing.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                </div>
+                <X size={16} />
               </button>
             </div>
-            <div className="px-5 pb-5 flex gap-2.5">
-              <button onClick={() => setEditing(null)} className="flex-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-300">Cancel</button>
-              <button onClick={() => void saveOffer()} disabled={saving || !editing.title?.trim()} className="flex-[2] rounded-2xl bg-orange-500 py-3 text-sm font-bold text-white disabled:opacity-50">
-                {saving ? <span className="flex items-center justify-center gap-2"><Loader2 size={14} className="animate-spin" /> Saving…</span> : editing.id ? 'Save Changes' : 'Create Offer'}
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                  Offer Title *
+                </label>
+                <input
+                  value={editing.title ?? ''}
+                  onChange={(e) =>
+                    setEditing((prev) => (prev ? { ...prev, title: e.target.value } : prev))
+                  }
+                  placeholder="e.g. 20% off on weekends"
+                  className={INPUT}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                  Description
+                </label>
+                <textarea
+                  value={editing.description ?? ''}
+                  onChange={(e) =>
+                    setEditing((prev) => (prev ? { ...prev, description: e.target.value } : prev))
+                  }
+                  rows={2}
+                  placeholder="More details about the offer…"
+                  className={`${INPUT} resize-none`}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                    Discount type
+                  </label>
+                  <select
+                    value={editing.discount_type ?? 'flat'}
+                    onChange={(e) =>
+                      setEditing((prev) =>
+                        prev ? { ...prev, discount_type: e.target.value as OfferType } : prev,
+                      )
+                    }
+                    className={INPUT}
+                  >
+                    <option value="flat">Flat ₹ off</option>
+                    <option value="percent">Percent % off</option>
+                    <option value="free_item">Free item</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                    Value
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editing.discount_value ?? 0}
+                    onChange={(e) =>
+                      setEditing((prev) =>
+                        prev ? { ...prev, discount_value: Number(e.target.value) } : prev,
+                      )
+                    }
+                    placeholder="0"
+                    className={INPUT}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                  CTA Button Label
+                </label>
+                <input
+                  value={editing.cta_label ?? ''}
+                  onChange={(e) =>
+                    setEditing((prev) => (prev ? { ...prev, cta_label: e.target.value } : prev))
+                  }
+                  placeholder="Claim Offer"
+                  className={INPUT}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                    Coupon code
+                  </label>
+                  <input
+                    value={editing.coupon_code ?? ''}
+                    onChange={(e) =>
+                      setEditing((prev) =>
+                        prev ? { ...prev, coupon_code: e.target.value.toUpperCase() } : prev,
+                      )
+                    }
+                    placeholder="LUNCH10"
+                    className={INPUT}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                    Active state
+                  </label>
+                  <button
+                    onClick={() =>
+                      setEditing((prev) => (prev ? { ...prev, is_active: !prev.is_active } : prev))
+                    }
+                    className={`w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition ${
+                      editing.is_active
+                        ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                        : 'border-zinc-700 bg-zinc-800/40 text-zinc-500'
+                    }`}
+                  >
+                    <span>{editing.is_active ? 'Active on discovery page' : 'Paused'}</span>
+                    <div
+                      className={`h-5 w-9 rounded-full transition ${
+                        editing.is_active ? 'bg-green-500' : 'bg-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className={`block h-4 w-4 rounded-full bg-white shadow mt-0.5 transition-transform ${
+                          editing.is_active ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                    Starts at
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editing.starts_at ?? ''}
+                    onChange={(e) =>
+                      setEditing((prev) =>
+                        prev ? { ...prev, starts_at: e.target.value } : prev,
+                      )
+                    }
+                    className={INPUT}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-zinc-400 mb-1 block">
+                    Ends at
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editing.ends_at ?? ''}
+                    onChange={(e) =>
+                      setEditing((prev) =>
+                        prev ? { ...prev, ends_at: e.target.value } : prev,
+                      )
+                    }
+                    className={INPUT}
+                  />
+                </div>
+              </div>
+
+              {editing.discount_type === 'free_item' && (
+                <div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <Search size={14} className="text-zinc-500" />
+                    <input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search menu item"
+                      className="w-full rounded-2xl border border-zinc-700/60 bg-zinc-800/50 px-4 py-3 text-sm text-white placeholder-zinc-500 focus:border-orange-500/60 focus:outline-none focus:ring-1 focus:ring-orange-500/20 transition"
+                    />
+                  </div>
+
+                  <div className="max-h-56 space-y-2 overflow-auto rounded-2xl border border-zinc-700/50 bg-zinc-900/60 p-2">
+                    {filteredMenuItems.length === 0 ? (
+                      <div className="p-4 text-sm text-zinc-500">
+                        No matching menu items found.
+                      </div>
+                    ) : (
+                      filteredMenuItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() =>
+                            setEditing((prev) =>
+                              prev ? { ...prev, free_menu_item_id: item.id } : prev,
+                            )
+                          }
+                          className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition ${
+                            editing.free_menu_item_id === item.id
+                              ? 'bg-orange-500/15 text-white'
+                              : 'bg-white/[0.02] text-zinc-300 hover:bg-white/[0.04]'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{item.name}</p>
+                            <p className="text-xs text-zinc-500">
+                              {item.is_available ? 'Available' : 'Unavailable'}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-sm text-zinc-400">
+                            ₹{Math.round(item.price / 100)}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 border-t border-white/[0.06] px-5 pb-5 pt-4 flex gap-2.5">
+              <button
+                onClick={() => setEditing(null)}
+                className="flex-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void saveOffer()}
+                disabled={saving || !editing.title?.trim()}
+                className="flex-[2] rounded-2xl bg-orange-500 py-3 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {saving ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 size={14} className="animate-spin" /> Saving…
+                  </span>
+                ) : editing.id ? (
+                  'Save Changes'
+                ) : (
+                  'Create Offer'
+                )}
               </button>
             </div>
           </div>

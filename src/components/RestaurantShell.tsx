@@ -18,9 +18,17 @@ import { RatingsFeed } from './RatingsFeed'
 import { RatingsListModal } from './RatingsListModal'
 import { CallWaiterBell } from './CallWaiterBell'
 import { AISuggestionCard } from './AISuggestionCard'
+import { CustomerAuthProvider } from './CustomerAuthProvider'
 
+
+
+
+ 
 interface Props {
-  initialData: MenuPageData
+  restaurantId?: string | null
+  tableNumber?:  number | null
+    initialData: MenuPageData
+
 }
 
 interface OrderToastData {
@@ -55,6 +63,7 @@ function writePersistedOrderIds(slug: string, tableNumber: number | null, ids: s
     else localStorage.setItem(key, JSON.stringify(ids))
   } catch {}
 }
+
 
 export function RestaurantShell({ initialData }: Props) {
   const searchParams = useSearchParams()
@@ -640,6 +649,12 @@ export function RestaurantShell({ initialData }: Props) {
 
       <div className="pr-shell">
         <OfflineBanner />
+		
+		<CustomerAuthProvider
+    restaurantId={restaurant?.id ?? null}
+    tableNumber={tableNumber}
+  />
+  
         <RestaurantHeader restaurant={restaurant} />
 
         <main className="pr-main">

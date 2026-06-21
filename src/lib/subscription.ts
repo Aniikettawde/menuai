@@ -12,6 +12,12 @@ type ActivateSubscriptionOptions = {
   amountPaise?: number
 }
 
+type SubscriptionLike = {
+  plan?: string | null
+  trial_end?: string | null
+  current_period_end?: string | null
+}
+
 function getServiceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,6 +28,7 @@ function getServiceClient() {
 
 export async function getUserSubscriptionStatus(userId: string): Promise<SubscriptionStatus | null> {
   const sb = getServiceClient()
+
   const { data, error } = await sb
     .from('subscription_status')
     .select('*')
@@ -30,6 +37,33 @@ export async function getUserSubscriptionStatus(userId: string): Promise<Subscri
 
   if (error || !data) return null
   return data as SubscriptionStatus
+}
+
+/**
+ * Central helper for premium access checks.
+ * Discovery visibility should NOT use this; discovery should rely on restaurants.is_published.
+ */
+export function isSubscriptionActive(status: SubscriptionLike | SubscriptionStatus | null | undefined): boolean {
+  if (!status) return false
+
+  const now = Date.now()
+  const plan = String(status.plan ?? '').toLowerCase()
+  const trialEnd = status.trial_end ? new Date(status.trial_end).getTime() : null
+  const currentPeriodEnd = status.current_period_end ? new Date(status.current_period_end).getTime() : null
+
+  if (['expired', 'cancelled', 'canceled', 'inactive', 'suspended'].includes(plan)) {
+    return false
+  }
+
+  if (['active', 'paid', 'subscription'].includes(plan)) {
+    return true
+  }
+
+  if (plan === 'trial') {
+    return !!trialEnd && trialEnd > now
+  }
+
+  return !!currentPeriodEnd && currentPeriodEnd > now
 }
 
 export async function activateSubscription(
@@ -47,14 +81,12 @@ export async function activateSubscription(
   const planId: PlanId = opts.planId ?? 'growth'
   const amountPaise = opts.amountPaise ?? getPlanAmountPaise(planId, billingCycle)
 
-  // Dynamic expiry based on billing cycle
   if (billingCycle === 'yearly') {
     end.setFullYear(end.getFullYear() + 1)
   } else {
     end.setMonth(end.getMonth() + 1)
   }
 
-  // Save plan_id, billing_cycle, amount_paise alongside subscription state
   const { error: upsertError } = await sb
     .from('subscriptions')
     .upsert(
@@ -81,7 +113,7 @@ export async function activateSubscription(
 
   if (subFetchError) throw subFetchError
 
-  await sb.from('payment_history').insert({
+  const { error: paymentError } = await sb.from('payment_history').insert({
     user_id: userId,
     subscription_id: sub?.id ?? null,
     razorpay_order_id: orderId,
@@ -91,15 +123,42 @@ export async function activateSubscription(
     currency: 'INR',
     status: 'paid',
   })
+
+  if (paymentError) throw paymentError
+
+  // Important:
+  // Paid/trial restaurants should appear on discovery.
+  // This does NOT affect QR paid-access logic.
+  const { error: publishError } = await sb
+    .from('restaurants')
+    .update({
+      is_published: true,
+      published_at: now.toISOString(),
+    })
+    .eq('owner_id', userId)
+
+  if (publishError) throw publishError
 }
 
+/**
+ * Only expires the subscription.
+ * IMPORTANT: Do NOT touch restaurants.is_published here.
+ * Discovery listing must remain visible after trial ends.
+ */
 export async function expireTrials() {
   const sb = getServiceClient()
-  await sb
+  const nowIso = new Date().toISOString()
+
+  const { error } = await sb
     .from('subscriptions')
-    .update({ plan: 'expired' })
+    .update({
+      plan: 'expired',
+      current_period_end: nowIso,
+    })
     .eq('plan', 'trial')
-    .lt('trial_end', new Date().toISOString())
+    .lte('trial_end', nowIso)
+
+  if (error) throw error
 }
 
 export async function getTrialsExpiringSoon(): Promise<string[]> {
@@ -109,7 +168,7 @@ export async function getTrialsExpiringSoon(): Promise<string[]> {
   const dayAfter = new Date(tomorrow)
   dayAfter.setDate(dayAfter.getDate() + 1)
 
-  const { data } = await sb
+  const { data, error } = await sb
     .from('subscriptions')
     .select('user_id')
     .eq('plan', 'trial')
@@ -117,13 +176,18 @@ export async function getTrialsExpiringSoon(): Promise<string[]> {
     .gte('trial_end', tomorrow.toISOString())
     .lt('trial_end', dayAfter.toISOString())
 
+  if (error) throw error
+
   return data?.map((r) => r.user_id) ?? []
 }
 
 export async function markReminderSent(userId: string) {
   const sb = getServiceClient()
-  await sb
+
+  const { error } = await sb
     .from('subscriptions')
     .update({ trial_reminder_sent: true })
     .eq('user_id', userId)
+
+  if (error) throw error
 }

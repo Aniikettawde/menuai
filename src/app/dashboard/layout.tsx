@@ -1,4 +1,5 @@
 'use client'
+
 import type { ComponentType } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
@@ -16,6 +17,7 @@ import {
   ClipboardList,
   Users,
   Home,
+  Tag,
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import { TrialBanner } from '@/components/billing/TrialBanner'
@@ -35,6 +37,7 @@ const ALL_NAV: NavItem[] = [
   { href: '/dashboard/orders', label: 'Orders', shortLabel: 'Orders', icon: ClipboardList },
   { href: '/dashboard/restaurant', label: 'Restaurant', shortLabel: 'Resto', icon: Store },
   { href: '/dashboard/menu', label: 'Menu', shortLabel: 'Menu', icon: UtensilsCrossed },
+  { href: '/dashboard/offers', label: 'Offers', shortLabel: 'Offers', icon: Tag },
   { href: '/dashboard/analytics', label: 'Analytics', shortLabel: 'Stats', icon: BarChart3 },
   { href: '/dashboard/qr', label: 'QR Code', shortLabel: 'QR', icon: QrCode },
   { href: '/dashboard/staff', label: 'Staff', shortLabel: 'Staff', icon: Users },
@@ -43,9 +46,9 @@ const ALL_NAV: NavItem[] = [
 
 function getNavForRole(role: TeamRole): NavItem[] {
   if (role === 'waiter') {
-    return [ALL_NAV[0]] // Orders only
+    return [ALL_NAV[0]]
   }
-  return ALL_NAV // owner and manager both see everything
+  return ALL_NAV
 }
 
 const BARE_PAGES = ['/dashboard/login', '/dashboard/onboarding']
@@ -60,22 +63,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [checked, setChecked] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [showMobileAccountMenu, setShowMobileAccountMenu] = useState(false)
+  const [hasSub, setHasSub] = useState<boolean | null>(null)
+  const [contextReady, setContextReady] = useState(false)
 
   const isBarePage = BARE_PAGES.includes(pathname)
   const role = context?.role ?? null
-    const [hasSub, setHasSub] = useState<boolean | null>(null)
+  const navItems = role ? getNavForRole(role) : (hasSub ? ALL_NAV : [])
 
-const navItems = role ? getNavForRole(role) : (hasSub ? ALL_NAV : [])
-  
-// add this near navItems
-const mobileNavItems: NavItem[] = [
-  { href: '/dashboard', label: 'Home', shortLabel: 'Home', icon: Home },
-  { href: '/dashboard/orders', label: 'Orders', shortLabel: 'Orders', icon: ClipboardList },
-  { href: '/dashboard/restaurant', label: 'Restaurant', shortLabel: 'Resto', icon: Store },
-  { href: '/dashboard/menu', label: 'Menu', shortLabel: 'Menu', icon: UtensilsCrossed },
-  { href: '/dashboard/staff', label: 'Staff', shortLabel: 'Staff', icon: Users },
-  { href: '/dashboard/billing', label: 'Billing', shortLabel: 'Billing', icon: CreditCard },
-]
+  const mobileNavItems: NavItem[] = [
+    { href: '/dashboard', label: 'Home', shortLabel: 'Home', icon: Home },
+    { href: '/dashboard/orders', label: 'Orders', shortLabel: 'Orders', icon: ClipboardList },
+    { href: '/dashboard/menu', label: 'Menu', shortLabel: 'Menu', icon: UtensilsCrossed },
+    { href: '/dashboard/offers', label: 'Offers', shortLabel: 'Offers', icon: Tag },
+    { href: '/dashboard/staff', label: 'Staff', shortLabel: 'Staff', icon: Users },
+    { href: '/dashboard/billing', label: 'Billing', shortLabel: 'Billing', icon: CreditCard },
+  ]
 
   const activePage = useMemo(
     () => navItems.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`)),
@@ -92,29 +94,24 @@ const mobileNavItems: NavItem[] = [
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
-  
-  const [contextReady, setContextReady] = useState(false)
-  
+
   useEffect(() => {
-  if (!context && !loading) {
-    // No restaurant — check if they have a trial/sub
-    fetch('/api/billing/status', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => {
-        setHasSub(data?.status?.has_access ?? false)
-      })
-      .catch(() => setHasSub(false))
-  }
-}, [context, loading])
+    if (!context && !loading) {
+      fetch('/api/billing/status', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((data) => {
+          setHasSub(data?.status?.has_access ?? false)
+        })
+        .catch(() => setHasSub(false))
+    }
+  }, [context, loading])
 
-
-// add this effect alongside your other useEffects:
-useEffect(() => {
-  if (!loading) {
-    const t = setTimeout(() => setContextReady(true), 200)
-    return () => clearTimeout(t)
-  }
-}, [loading])
+  useEffect(() => {
+    if (!loading) {
+      const t = setTimeout(() => setContextReady(true), 200)
+      return () => clearTimeout(t)
+    }
+  }, [loading])
 
   useEffect(() => {
     setShowMobileAccountMenu(false)
@@ -216,43 +213,41 @@ useEffect(() => {
     )
   }
 
- if (!context) {
-  if (hasSub === null) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#080808]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative h-14 w-14">
-            <div className="absolute inset-0 rounded-2xl border border-orange-500/20" />
-            <div
-              className="absolute inset-0 animate-spin rounded-2xl border-2 border-transparent border-t-orange-500"
-              style={{ animationDuration: '0.8s' }}
-            />
-            <div className="absolute inset-1.5 flex items-center justify-center rounded-xl bg-gradient-to-br from-orange-500/20 to-amber-500/10">
-              <UtensilsCrossed size={16} className="text-orange-400" />
+  if (!context) {
+    if (hasSub === null) {
+      return (
+        <div className="flex min-h-dvh items-center justify-center bg-[#080808]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative h-14 w-14">
+              <div className="absolute inset-0 rounded-2xl border border-orange-500/20" />
+              <div
+                className="absolute inset-0 animate-spin rounded-2xl border-2 border-transparent border-t-orange-500"
+                style={{ animationDuration: '0.8s' }}
+              />
+              <div className="absolute inset-1.5 flex items-center justify-center rounded-xl bg-gradient-to-br from-orange-500/20 to-amber-500/10">
+                <UtensilsCrossed size={16} className="text-orange-400" />
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-sm font-semibold text-white">Loading dashboard</p>
+              <p className="text-xs text-zinc-600">Just a moment…</p>
             </div>
           </div>
-          <div className="flex flex-col items-center gap-1">
-            <p className="text-sm font-semibold text-white">Loading dashboard</p>
-            <p className="text-xs text-zinc-600">Just a moment…</p>
+        </div>
+      )
+    }
+
+    if (!hasSub) {
+      return (
+        <div className="flex min-h-dvh items-center justify-center bg-[#080808] px-4">
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
+            <h2 className="text-lg font-semibold text-red-300">No restaurant access</h2>
+            <p className="mt-2 text-zinc-400">Your account is not assigned to a restaurant.</p>
           </div>
         </div>
-      </div>
-    )
+      )
+    }
   }
-
-  if (hasSub) {
-    // fall through — render the full layout below
-  } else {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#080808] px-4">
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
-          <h2 className="text-lg font-semibold text-red-300">No restaurant access</h2>
-          <p className="mt-2 text-zinc-400">Your account is not assigned to a restaurant.</p>
-        </div>
-      </div>
-    )
-  }
-}
 
   const userInitial = user?.email?.[0]?.toUpperCase() ?? '?'
   const userEmail = user?.email ?? ''
@@ -379,68 +374,16 @@ useEffect(() => {
           <button
             type="button"
             onClick={goToDashboard}
-            className="flex items-center gap-2.5 shrink-0 text-left"
-            aria-label="Go to dashboard home"
+            className="flex items-center gap-2.5 text-left"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-md shadow-orange-500/20">
-              <UtensilsCrossed size={13} className="text-white" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-md shadow-orange-500/20">
+              <UtensilsCrossed size={15} className="text-white" />
             </div>
-            <p className="text-sm font-bold tracking-tight text-white">Dinezy</p>
+            <div>
+              <p className="text-sm font-bold tracking-tight text-white">{activePage?.label ?? 'Dashboard'}</p>
+              <p className="text-[10px] text-zinc-600">Dinezy</p>
+            </div>
           </button>
-
-          <nav className="flex flex-1 items-center justify-center gap-1">
-            {navItems.map(({ href, label, icon: Icon }) => {
-              const active = isActive(href)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
-                    active
-                      ? 'bg-orange-500/12 text-white border border-orange-500/15'
-                      : 'border border-transparent text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200'
-                  }`}
-                >
-                  <Icon size={13} className={active ? 'text-orange-400' : ''} />
-                  <span>{label}</span>
-                </Link>
-              )
-            })}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
-                  pathname.startsWith('/admin')
-                    ? 'bg-purple-500/12 text-white border border-purple-500/15'
-                    : 'border border-transparent text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200'
-                }`}
-              >
-                <Shield size={13} className={pathname.startsWith('/admin') ? 'text-purple-400' : ''} />
-                <span>Admin</span>
-              </Link>
-            )}
-          </nav>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/15 bg-emerald-500/6 px-2.5 py-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] font-medium text-emerald-400">Live</span>
-            </div>
-            <button
-              onClick={handleSignOut}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-zinc-500 transition hover:bg-white/[0.07] hover:text-zinc-300"
-              title="Sign out"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-            </button>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 text-[11px] font-bold text-white">
-              {userInitial}
-            </div>
-          </div>
         </div>
       </header>
 
@@ -502,19 +445,6 @@ useEffect(() => {
                 <p className="mt-0.5 text-[10px] text-zinc-600">{role ?? 'Account'}</p>
               </div>
 
-              {isAdmin && (
-                <Link
-                  href="/admin"
-                  onClick={() => setShowMobileAccountMenu(false)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
-                >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
-                    <Shield size={14} />
-                  </span>
-                  <span className="flex-1">Admin Panel</span>
-                </Link>
-              )}
-
               <button
                 type="button"
                 onClick={() => {
@@ -565,42 +495,34 @@ useEffect(() => {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden">
-  <div className="border-t border-white/[0.07] bg-[#0c0c0c]/98 backdrop-blur-2xl">
-    <div className="grid grid-cols-6 gap-0 px-1 pt-1 pb-safe">
-      {mobileNavItems.map(({ href, shortLabel, icon: Icon }) => {
-        const active = isActive(href)
-        return (
-          <Link
-            key={href}
-            href={href}
-            className="flex flex-col items-center justify-center gap-1 py-2 px-1"
-          >
-            <div
-              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
-                active ? 'bg-orange-500/15 scale-105' : 'bg-transparent hover:bg-white/[0.04] active:scale-95'
-              }`}
-            >
-              <Icon size={18} className={`transition-colors ${active ? 'text-orange-400' : 'text-zinc-600'}`} />
-            </div>
-            <span
-              className={`text-[9px] font-medium leading-none tracking-wide transition-colors ${
-                active ? 'text-orange-400' : 'text-zinc-700'
-              }`}
-            >
-              {shortLabel}
-            </span>
-          </Link>
-        )
-      })}
-    </div>
-  </div>
-</nav>
-
-      <style jsx>{`
-        .pb-safe {
-          padding-bottom: max(8px, env(safe-area-inset-bottom));
-        }
-      `}</style>
+        <div className="border-t border-white/[0.07] bg-[#0c0c0c]/98 backdrop-blur-2xl">
+          <div className="grid grid-cols-6 gap-0 px-1 pt-1 pb-safe">
+            {mobileNavItems.map(({ href, shortLabel, icon: Icon }) => {
+              const active = isActive(href)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className="flex flex-col items-center justify-center gap-1 py-2 px-1"
+                >
+                  <div
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
+                      active
+                        ? 'bg-orange-500/15 text-orange-400'
+                        : 'text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200'
+                    }`}
+                  >
+                    <Icon size={14} />
+                  </div>
+                  <span className={`text-[10px] font-medium ${active ? 'text-orange-400' : 'text-zinc-500'}`}>
+                    {shortLabel}
+                  </span>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </nav>
     </div>
   )
 }
