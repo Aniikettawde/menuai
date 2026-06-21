@@ -4,6 +4,8 @@ import { useDashboardContext } from '@/hooks/useDashboardContext'
 import { useEffect, useMemo, useState } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import * as QRCode from 'qrcode'
+import { toPng } from 'html-to-image'
+import { useRef } from 'react'
 import {
   Download,
   Share2,
@@ -17,8 +19,7 @@ import {
   Table,
   AlertTriangle,
   ScanLine,
-  Smartphone,
-  ScanFace,
+  Zap,
 } from 'lucide-react'
 
 type RestaurantRecord = {
@@ -106,7 +107,6 @@ async function generateQRWithLogoHole(url: string, size: number, holeFraction = 
   canvas.height = size
   const ctx = canvas.getContext('2d')!
 
-  // Draw standard QR first to an offscreen canvas
   const qrDataUrl = await QRCode.toDataURL(url, {
     errorCorrectionLevel: 'H',
     margin: 2,
@@ -120,7 +120,6 @@ async function generateQRWithLogoHole(url: string, size: number, holeFraction = 
     img.src = qrDataUrl
   })
 
-  // Punch a white square hole in center
   const holeSize = size * holeFraction
   const holeX = (size - holeSize) / 2
   const holeY = (size - holeSize) / 2
@@ -174,115 +173,89 @@ async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
   }
 }
 
-// ─── Preview Card (web) ───────────────────────────────────────────────────────
+// ─── Preview Card (web) ─── matches the neon Dinezy reference card ──────────
 function FixedQrCard({
   tableNo,
   restaurantName,
   qrDataUrl,
   logoDataUrl,
   isLoading,
+  cardRef,
 }: {
   tableNo: number
   restaurantName: string
   qrDataUrl?: string
   logoDataUrl?: string | null
   isLoading?: boolean
+  cardRef?: (el: HTMLDivElement | null) => void
 }) {
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[#3a2d0e] bg-[#0a0a0a] shadow-[0_18px_50px_rgba(0,0,0,0.55)]">
-      {/* Top gold line */}
-      <div className="h-[3px] w-full bg-gradient-to-r from-transparent via-[#b8872b] to-transparent" />
+    <div
+      ref={cardRef}
+      className="relative w-[360px] overflow-hidden rounded-[30px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[2px] shadow-[0_0_35px_rgba(139,92,246,0.30)]"
+    >
+      <div className="relative overflow-hidden rounded-[28px] bg-[#0b0612] px-5 py-6 text-center">
+        <div className="pointer-events-none absolute -top-20 left-1/2 h-40 w-40 -translate-x-1/2 rounded-full bg-purple-600/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 right-0 h-32 w-32 rounded-full bg-orange-500/10 blur-3xl" />
 
-      <div className="px-5 pt-6 pb-6 text-center">
-        {/* Restaurant name */}
-        <p className="text-[13px] font-black uppercase tracking-[0.3em] text-[#c7a15a]">
+        <div className="absolute right-4 top-4 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[9px] font-bold tracking-wider text-white/45">
+          T{String(tableNo).padStart(2, '0')}
+        </div>
+
+        <p className="relative z-10 text-[15px] font-black uppercase tracking-[0.18em] text-white">
           {restaurantName}
         </p>
-        <p className="mt-1 text-[9px] font-medium uppercase tracking-[0.45em] text-[#666]">
-          DINE · DISCOVER · DELIGHT
-        </p>
 
-        {/* Divider */}
-        <div className="mx-auto mt-4 h-px w-3/4 bg-gradient-to-r from-transparent via-[#7f5c1f] to-transparent" />
-
-        {/* SCAN TO VIEW / OUR MENU */}
-        <p className="mt-4 text-[18px] font-black uppercase tracking-[0.08em] text-white">
+        <p className="relative z-10 mt-5 text-[20px] font-black uppercase leading-tight tracking-wide text-white">
           SCAN TO VIEW
         </p>
-        <p className="text-[17px] font-black uppercase tracking-[0.08em] text-[#d4a64a]">
+        <p className="relative z-10 text-[20px] font-black uppercase leading-tight tracking-wide text-white">
           OUR MENU
         </p>
 
-        {/* QR + logo overlay */}
-        <div className="mx-auto mt-5 flex items-center justify-center">
-          <div className="relative rounded-[18px] border-2 border-[#8d6521] bg-white p-2.5 shadow-[0_0_0_1px_rgba(184,135,43,0.2),0_8px_32px_rgba(0,0,0,0.4)]">
-            {isLoading || !qrDataUrl ? (
-              <div className="flex h-[190px] w-[190px] items-center justify-center">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-transparent" />
-              </div>
-            ) : (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qrDataUrl} alt={`Table ${tableNo} QR`} className="h-[190px] w-[190px] object-cover" />
-                {/* Logo centred over the hole */}
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-sm">
-                    {logoDataUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={logoDataUrl} alt="Logo" className="h-9 w-9 object-contain" />
-                    ) : (
-                      <span className="text-[20px] font-black leading-none text-[#d4a64a]">D</span>
-                    )}
-                  </div>
+        <div className="relative z-10 mx-auto mt-6 flex w-fit items-center justify-center rounded-[22px] bg-white p-3 shadow-[0_10px_34px_rgba(0,0,0,0.45)]">
+          {isLoading || !qrDataUrl ? (
+            <div className="flex h-[220px] w-[220px] items-center justify-center">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-purple-500" />
+            </div>
+          ) : (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qrDataUrl}
+                alt={`Table ${tableNo} QR`}
+                className="h-[220px] w-[220px]"
+              />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white">
+                  {logoDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoDataUrl} alt="Logo" className="h-10 w-10 object-contain" />
+                  ) : (
+                    <span className="text-[#f97316]">D</span>
+                  )}
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Divider */}
-        <div className="mx-auto mt-5 h-px w-3/4 bg-gradient-to-r from-transparent via-[#7f5c1f] to-transparent" />
-
-        {/* Instructions */}
-        <div className="mt-4 flex items-center justify-center gap-4 text-[#8f8f8f]">
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[#444] bg-[#141414]">
-              <Smartphone size={14} />
-            </div>
-            <span className="text-[9px] uppercase tracking-wide">Camera</span>
-          </div>
-          <div className="h-px w-6 bg-[#6e5320]" />
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[#444] bg-[#141414]">
-              <ScanFace size={14} />
-            </div>
-            <span className="text-[9px] uppercase tracking-wide">Scan QR</span>
-          </div>
-          <div className="h-px w-6 bg-[#6e5320]" />
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[#444] bg-[#141414]">
-              <QrCode size={14} />
-            </div>
-            <span className="text-[9px] uppercase tracking-wide">View Menu</span>
-          </div>
+        <div className="relative z-10 mt-7 flex items-center justify-center gap-2">
+          {logoDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoDataUrl} alt="Dinezy" className="h-5 w-5 object-contain" />
+          ) : (
+            <span className="text-[#f97316]">D</span>
+          )}
+          <span className="text-[15px] font-extrabold tracking-tight text-white">Dinezy</span>
         </div>
 
-        {/* Table badge */}
-        <div className="mx-auto mt-5 w-fit rounded-[16px] border border-[#7f5c1f] bg-[#111] px-7 py-3 shadow-[0_0_0_1px_rgba(184,135,43,0.12)]">
-          <div className="flex items-baseline gap-2 justify-center">
-            <span className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#d9d9d9]">TABLE</span>
-            <span className="text-[32px] font-black leading-none text-[#d4a64a]">
-              {String(tableNo).padStart(2, '0')}
-            </span>
-          </div>
-        </div>
-
-        {/* Thank you */}
-        <p className="mt-4 font-[cursive] text-[22px] text-[#c79a47]">Thank You!</p>
+        <p className="relative z-10 mt-1 text-[12px] font-bold">
+          <span className="bg-gradient-to-r from-[#c084fc] to-[#fb923c] bg-clip-text text-transparent">
+            Smart Menu. Happy Guests.
+          </span>
+        </p>
       </div>
-
-      {/* Bottom gold line */}
-      <div className="h-[3px] w-full bg-gradient-to-r from-transparent via-[#b8872b] to-transparent" />
     </div>
   )
 }
@@ -304,7 +277,7 @@ export default function QRPage() {
   const [tokensLoading, setTokensLoading] = useState(false)
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
-
+const cardRefs = useRef<Record<number, HTMLDivElement | null>>({})
   useEffect(() => { setBaseUrl(window.location.origin) }, [])
 
   useEffect(() => {
@@ -462,248 +435,68 @@ export default function QRPage() {
     }
   }
 
+  // ─── PDF generation — mirrors the FixedQrCard preview exactly ─────────────
   async function downloadTableSheet() {
-    if (!restaurant || !menuUrl) return
-    if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted.'); return }
-    if (tableNumbers.length === 0) { alert('Please choose at least one table.'); return }
+  if (!restaurant) return
+  if (remainingQrLimit <= 0) {
+    alert('Your QR limit is exhausted.')
+    return
+  }
+  if (tableNumbers.length === 0) {
+    alert('Please choose at least one table.')
+    return
+  }
 
-    setBusy(true)
-    try {
-      const latestTokenMap = await ensureTokens(tableNumbers)
-      const JsPDF = await loadJsPDF()
+  setBusy(true)
+  try {
+    const JsPDF = await loadJsPDF()
+    const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
 
-      // ── Page / card geometry ──────────────────────────────────────────────
-      const pageW = 595.28
-      const pageH = 841.89
-      const margin = 22
-      const gap = 12
-      const cols = 2
-      const rows = 2
-      const cardsPerPage = cols * rows
-      const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols
-      const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows
+    const pageW = doc.internal.pageSize.getWidth()
+    const pageH = doc.internal.pageSize.getHeight()
+    const margin = 22
+    const gap = 12
+    const cols = 2
+    const rows = 2
+    const cardsPerPage = cols * rows
+    const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols
+    const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows
 
-      // Fixed vertical budget (points):
-      // topLine 3 | pt 10 | restName 14 | subtitle 8 | divider 8 | scanToView 16 | ourMenu 16
-      // divider 6 | qr+padding | divider 6 | instrRow 36 | tableBadge 46 | thankYou 18 | gap 6 | bottomLine 3
-      const TOPLINE = 3
-      const PT = 10          // padding top inside card
-      const NAME_H = 14
-      const SUB_H = 8
-      const DIV1 = 10
-      const S2V_H = 16       // SCAN TO VIEW
-      const MENU_H = 14      // OUR MENU
-      const DIV2 = 10
-      const QR_BORDER = 6
-      const INSTR_H = 38
-      const TABLE_BADGE_H = 44
-      const THANKYOU_H = 20
-      const GAP_BOTTOM = 8
-      const BOTTOMLINE = 3
+    for (let i = 0; i < tableNumbers.length; i++) {
+      const tableNo = tableNumbers[i]
+      const node = cardRefs.current[tableNo]
 
-      const fixedAboveQR = TOPLINE + PT + NAME_H + SUB_H + DIV1 + S2V_H + MENU_H + DIV2 + QR_BORDER
-      const fixedBelowQR = QR_BORDER + INSTR_H + TABLE_BADGE_H + THANKYOU_H + GAP_BOTTOM + BOTTOMLINE
-
-      const qrSize = Math.floor(cardH - fixedAboveQR - fixedBelowQR)
-
-      const gold = hexToRgb('#b8872b')
-      const goldSoft = hexToRgb('#7f5c1f')
-      const goldBright = hexToRgb('#d4a64a')
-      const bg = hexToRgb('#0a0a0a')
-      const white = hexToRgb('#ffffff')
-      const gray = hexToRgb('#999999')
-      const darkCard = hexToRgb('#111111')
-
-      const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
-
-      for (let i = 0; i < tableNumbers.length; i++) {
-        const tableNo = tableNumbers[i]
-        const token = latestTokenMap.get(tableNo)
-        if (!token) throw new Error(`Missing token for Table ${tableNo}`)
-        const tableUrl = `${menuUrl}?t=${token}`
-
-        if (i > 0 && i % cardsPerPage === 0) doc.addPage()
-
-        const posInPage = i % cardsPerPage
-        const col = posInPage % cols
-        const row = Math.floor(posInPage / cols)
-        const x = margin + col * (cardW + gap)
-        const y = margin + row * (cardH + gap)
-
-        // ── Card background ──
-        doc.setFillColor(...bg)
-        doc.setDrawColor(...goldSoft)
-        doc.setLineWidth(1.2)
-        doc.roundedRect(x, y, cardW, cardH, 10, 10, 'FD')
-
-        // ── Top gold line ──
-        doc.setFillColor(...gold)
-        doc.roundedRect(x + 14, y, cardW - 28, TOPLINE, 1.5, 1.5, 'F')
-
-        // cursor tracks vertical position
-        let cy = y + TOPLINE + PT
-
-        // ── Restaurant name ──
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(13)
-        doc.setTextColor(...goldBright)
-        cy += NAME_H
-        doc.text(restaurant.name.toUpperCase(), x + cardW / 2, cy, { align: 'center', maxWidth: cardW - 20 })
-
-        // ── Sub ──
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(6.5)
-        doc.setTextColor(...gray)
-        cy += SUB_H
-        doc.text('DINE  ·  DISCOVER  ·  DELIGHT', x + cardW / 2, cy, { align: 'center' })
-
-        // ── Divider ──
-        cy += DIV1
-        doc.setFillColor(...goldSoft)
-        doc.rect(x + cardW * 0.15, cy - 1, cardW * 0.7, 1, 'F')
-
-        // ── SCAN TO VIEW ──
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(14)
-        doc.setTextColor(...white)
-        cy += S2V_H
-        doc.text('SCAN TO VIEW', x + cardW / 2, cy, { align: 'center' })
-
-        // ── OUR MENU ──
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(13)
-        doc.setTextColor(...goldBright)
-        cy += MENU_H
-        doc.text('OUR MENU', x + cardW / 2, cy, { align: 'center' })
-
-        // ── Divider ──
-        cy += DIV2
-        doc.setFillColor(...goldSoft)
-        doc.rect(x + cardW * 0.15, cy - 1, cardW * 0.7, 1, 'F')
-
-        // ── QR Code (with logo hole punched) ──
-        cy += QR_BORDER
-        const qrTopY = cy
-
-        // Generate QR with center hole
-        const qrImg = await generateQRWithLogoHole(tableUrl, 700, 0.22)
-
-        const qrX = x + (cardW - qrSize) / 2
-
-        // White rounded box for QR
-        doc.setFillColor(...white)
-        doc.setDrawColor(...goldSoft)
-        doc.setLineWidth(1.8)
-        doc.roundedRect(qrX - QR_BORDER, qrTopY - QR_BORDER, qrSize + QR_BORDER * 2, qrSize + QR_BORDER * 2, 7, 7, 'FD')
-        doc.addImage(qrImg, 'PNG', qrX, qrTopY, qrSize, qrSize)
-
-        // ── Logo in center hole ──
-        const logoSize = Math.floor(qrSize * 0.20)
-        const logoX = qrX + (qrSize - logoSize) / 2
-        const logoY = qrTopY + (qrSize - logoSize) / 2
-
-        if (logoDataUrl) {
-          // White background behind logo so QR dots don't show through
-          doc.setFillColor(...white)
-          doc.roundedRect(logoX - 2, logoY - 2, logoSize + 4, logoSize + 4, 4, 4, 'F')
-          doc.addImage(logoDataUrl, 'PNG', logoX, logoY, logoSize, logoSize)
-        } else {
-          // Fallback: gold "D" on dark bg
-          doc.setFillColor(...bg)
-          doc.roundedRect(logoX - 2, logoY - 2, logoSize + 4, logoSize + 4, 4, 4, 'F')
-          doc.setFont('helvetica', 'bold')
-          doc.setFontSize(Math.floor(logoSize * 0.7))
-          doc.setTextColor(...goldBright)
-          doc.text('D', logoX + logoSize / 2, logoY + logoSize * 0.74, { align: 'center' })
-        }
-
-        cy = qrTopY + qrSize + QR_BORDER
-
-        // ── Divider ──
-        doc.setFillColor(...goldSoft)
-        doc.rect(x + cardW * 0.15, cy, cardW * 0.7, 1, 'F')
-        cy += 2
-
-        // ── Instructions row ──
-        const instrTopY = cy + 8
-        const labels = ['Open Camera', 'Scan QR Code', 'View Menu']
-        const iconCenters = [x + cardW * 0.22, x + cardW * 0.5, x + cardW * 0.78]
-        const circleR = 9
-
-        iconCenters.forEach((cx2, idx) => {
-          // Circle
-          doc.setFillColor(20, 20, 20)
-          doc.setDrawColor(...gray)
-          doc.setLineWidth(0.6)
-          doc.circle(cx2, instrTopY + circleR, circleR, 'FD')
-
-          // Icon number (fallback since jsPDF can't render emoji reliably)
-          doc.setFont('helvetica', 'bold')
-          doc.setFontSize(8)
-          doc.setTextColor(...gold)
-          doc.text(String(idx + 1), cx2, instrTopY + circleR + 2.5, { align: 'center' })
-
-          // Label
-          doc.setFont('helvetica', 'normal')
-          doc.setFontSize(6.5)
-          doc.setTextColor(...gray)
-          doc.text(labels[idx], cx2, instrTopY + circleR * 2 + 9, { align: 'center' })
-        })
-
-        // Connector lines
-        doc.setDrawColor(...goldSoft)
-        doc.setLineWidth(0.6)
-        doc.line(iconCenters[0] + circleR, instrTopY + circleR, iconCenters[1] - circleR, instrTopY + circleR)
-        doc.line(iconCenters[1] + circleR, instrTopY + circleR, iconCenters[2] - circleR, instrTopY + circleR)
-
-        cy += INSTR_H
-
-        // ── Table badge ──
-        const badgeH = 32
-        const badgeW = cardW * 0.60
-        const badgeX = x + (cardW - badgeW) / 2
-        const badgeY2 = cy + 4
-
-        doc.setFillColor(...darkCard)
-        doc.setDrawColor(...goldSoft)
-        doc.setLineWidth(1)
-        doc.roundedRect(badgeX, badgeY2, badgeW, badgeH, 8, 8, 'FD')
-
-        // "TABLE" text
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(8)
-        doc.setTextColor(...white)
-        doc.text('TABLE', badgeX + badgeW * 0.34, badgeY2 + badgeH * 0.62, { align: 'center' })
-
-        // Number — big gold
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(22)
-        doc.setTextColor(...goldBright)
-        doc.text(String(tableNo).padStart(2, '0'), badgeX + badgeW * 0.65, badgeY2 + badgeH * 0.72, { align: 'center' })
-
-        cy += TABLE_BADGE_H
-
-        // ── Thank You ──
-        doc.setFont('times', 'italic')
-        doc.setFontSize(14)
-        doc.setTextColor(199, 154, 71)
-        doc.text('Thank You!', x + cardW / 2, cy + 12, { align: 'center' })
-
-        cy += THANKYOU_H
-
-        // ── Bottom gold line ──
-        doc.setFillColor(...gold)
-        doc.roundedRect(x + 14, y + cardH - BOTTOMLINE - 1, cardW - 28, BOTTOMLINE, 1.5, 1.5, 'F')
+      if (!node) {
+        throw new Error(`Card not ready for Table ${tableNo}`)
       }
 
-      doc.save(`${restaurant.slug}-table-qr-sheet.pdf`)
-    } catch (err) {
-      console.error('Download error:', err)
-      alert('Could not generate PDF. Please try again.')
-    } finally {
-      setBusy(false)
+      if (i > 0 && i % cardsPerPage === 0) {
+        doc.addPage()
+      }
+
+      const posInPage = i % cardsPerPage
+      const col = posInPage % cols
+      const row = Math.floor(posInPage / cols)
+      const x = margin + col * (cardW + gap)
+      const y = margin + row * (cardH + gap)
+
+      const png = await toPng(node, {
+        cacheBust: true,
+        pixelRatio: 3,
+        backgroundColor: '#ffffff',
+      })
+
+      doc.addImage(png, 'PNG', x, y, cardW, cardH)
     }
+
+    doc.save(`${restaurant.slug}-table-qr-sheet.pdf`)
+  } catch (err) {
+    console.error('Download error:', err)
+    alert('Could not generate PDF. Please try again.')
+  } finally {
+    setBusy(false)
   }
+}
 
   // ─── Loading / error states ────────────────────────────────────────────────
   if (contextLoading) {
@@ -764,7 +557,7 @@ export default function QRPage() {
       <div className="mb-7">
         <h1 className="text-2xl font-bold text-white">Table QR Codes</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Matte-black premium card with gold accents, centre logo, table number, and scan instructions.
+          Neon-glow premium card — your restaurant name up top, Dinezy branding at the base, centre logo and live table QR.
         </p>
       </div>
 
@@ -776,7 +569,7 @@ export default function QRPage() {
               <div>
                 <p className="text-sm font-semibold text-white">Print preview</p>
                 <p className="mt-1 text-xs text-zinc-500">
-                  Matte-black card with gold details. QR has a clear logo space in the centre.
+                  Matte-black card, purple-to-orange glow border. QR has a clear logo space in the centre.
                 </p>
               </div>
               <span className="rounded-full bg-zinc-800 px-3 py-1 text-[11px] font-semibold text-zinc-400 ring-1 ring-zinc-700">
@@ -785,25 +578,28 @@ export default function QRPage() {
             </div>
           </div>
 
-          <div className="bg-[#f1ece2] p-4 sm:p-6">
-            <div className="grid max-h-[860px] grid-cols-1 gap-5 overflow-auto pr-1 sm:grid-cols-2">
+          <div className="bg-[#13101a] p-4 sm:p-6">
+            <div className="grid max-h-[860px] grid-cols-1 gap-6 overflow-auto pr-1 sm:grid-cols-2">
               {tableNumbers.length === 0 ? (
-                <div className="col-span-full rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center">
-                  <Table size={20} className="mx-auto text-zinc-400" />
-                  <p className="mt-3 text-sm font-semibold text-zinc-700">No QR cards to generate</p>
+                <div className="col-span-full rounded-2xl border border-dashed border-zinc-700 bg-zinc-900 p-8 text-center">
+                  <Table size={20} className="mx-auto text-zinc-500" />
+                  <p className="mt-3 text-sm font-semibold text-zinc-300">No QR cards to generate</p>
                   <p className="mt-1 text-xs text-zinc-500">Increase the table count or upgrade your plan.</p>
                 </div>
               ) : (
                 tableNumbers.map((tableNo) => (
-                  <FixedQrCard
-                    key={tableNo}
-                    tableNo={tableNo}
-                    restaurantName={restaurant.name}
-                    qrDataUrl={tablePreviewMap[tableNo]}
-                    logoDataUrl={logoDataUrl}
-                    isLoading={tokensLoading || !tokenMap.has(tableNo)}
-                  />
-                ))
+  <FixedQrCard
+    key={tableNo}
+    cardRef={(el) => {
+      cardRefs.current[tableNo] = el
+    }}
+    tableNo={tableNo}
+    restaurantName={restaurant.name}
+    qrDataUrl={tablePreviewMap[tableNo]}
+    logoDataUrl={logoDataUrl}
+    isLoading={tokensLoading || !tokenMap.has(tableNo)}
+  />
+))
               )}
             </div>
           </div>
@@ -813,7 +609,7 @@ export default function QRPage() {
               onClick={downloadTableSheet}
               disabled={busy || isQuotaExhausted || tableNumbers.length === 0}
               className="flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #1B4D4A, #163D3A)' }}
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #f97316)' }}
             >
               {busy ? (
                 <>
@@ -851,7 +647,7 @@ export default function QRPage() {
               value={tableCount}
               onChange={(e) => setTableCount(Number(e.target.value || 1))}
               disabled={isQuotaExhausted}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-teal-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500/50 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <p className="mt-2 text-xs text-zinc-600">
               {isQuotaExhausted
@@ -961,19 +757,19 @@ export default function QRPage() {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Current plan</p>
           <p className="mt-2 text-sm font-semibold text-white">{quotaLabel}</p>
           <p className="mt-1 text-xs text-zinc-500">
-            Max QR: <span className="text-teal-400">{Number.isFinite(allowedQrLimit) ? allowedQrLimit : 'Unlimited'}</span>
+            Max QR: <span className="text-purple-400">{Number.isFinite(allowedQrLimit) ? allowedQrLimit : 'Unlimited'}</span>
           </p>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Used QR</p>
           <p className="mt-2 text-sm font-semibold text-white">{usedQrCount}</p>
           <p className="mt-1 text-xs text-zinc-500">
-            Remaining: <span className="text-teal-400">{Number.isFinite(remainingQrLimit) ? remainingQrLimit : '∞'}</span>
+            Remaining: <span className="text-purple-400">{Number.isFinite(remainingQrLimit) ? remainingQrLimit : '∞'}</span>
           </p>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Menu link</p>
-          <p className="mt-2 break-all font-mono text-xs text-teal-400">{menuUrl}</p>
+          <p className="mt-2 break-all font-mono text-xs text-purple-400">{menuUrl}</p>
         </div>
       </div>
     </div>

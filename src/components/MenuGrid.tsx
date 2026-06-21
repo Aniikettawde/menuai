@@ -1,12 +1,12 @@
 'use client'
 
 // src/components/MenuGrid.tsx
-// Drop-in replacement — removes category tabs dependency, adds:
+// Premium dark theme — matches .pr-shell tokens (--pr-black, --pr-gold, --pr-orange)
 //   1. Accordion-style categories (collapsed by default, click to expand)
 //   2. Floating search bar that filters items across all categories
 //   3. BestSellers section stays at top (always expanded)
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ChevronRight,
   ChefHat,
@@ -47,13 +47,6 @@ function getBadge(item: MenuItem, catItems: MenuItem[]): Badge {
   return { kind: 'none', label: '' }
 }
 
-const BADGE_STYLES: Record<PsychKind, string> = {
-  social_proof: 'bg-amber-50 text-amber-700 border-amber-200',
-  anchoring: 'bg-stone-100 text-stone-600 border-stone-200',
-  scarcity: 'bg-red-50 text-red-600 border-red-200',
-  none: '',
-}
-
 const BADGE_ICONS: Record<PsychKind, ReactNode> = {
   social_proof: <TrendingUp size={9} />,
   anchoring: <Star size={9} />,
@@ -63,15 +56,7 @@ const BADGE_ICONS: Record<PsychKind, ReactNode> = {
 
 function PsychBadge({ badge }: { badge: Badge }) {
   if (badge.kind === 'none') return null
-  return (
-    <span className={[
-      'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide',
-      BADGE_STYLES[badge.kind],
-    ].join(' ')}>
-      {BADGE_ICONS[badge.kind]}
-      {badge.label}
-    </span>
-  )
+  return <span className={`mg-badge mg-badge--${badge.kind}`}>{BADGE_ICONS[badge.kind]}{badge.label}</span>
 }
 
 function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) => void }) {
@@ -82,39 +67,26 @@ function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) =>
     <button
       type="button"
       onClick={() => onAsk?.(`Tell me more about ${item.name} — why is it the chef's pick?`)}
-      className="group w-full rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-4 text-left transition-all duration-200 hover:bg-amber-100/70 hover:shadow-sm"
+      className="mg-chefspick"
     >
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-200 text-amber-900">
-          <ChefHat size={16} />
+      <div className="mg-chefspick-icon"><ChefHat size={16} /></div>
+      <div className="mg-chefspick-body">
+        <span className="mg-chefspick-eyebrow">Chef&apos;s pick</span>
+        <p className="mg-chefspick-name">{item.name}</p>
+        {cleanDesc && <p className="mg-chefspick-desc">{cleanDesc}</p>}
+        <div className="mg-chefspick-meta">
+          {price && <span className="mg-chefspick-price">{price}</span>}
+          <span className="mg-chefspick-hint"><Sparkles size={9} /> Tap to learn more</span>
         </div>
-        <div className="min-w-0 flex-1">
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Chef&apos;s pick</span>
-          <p className="mt-1 text-sm font-semibold text-zinc-900">{item.name}</p>
-          {cleanDesc && (
-            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-600">{cleanDesc}</p>
-          )}
-          <div className="mt-2 flex items-center gap-3">
-            {price && <span className="text-sm font-bold text-zinc-900">{price}</span>}
-            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
-              <Sparkles size={9} className="text-amber-500" />
-              Tap to learn more
-            </span>
-          </div>
-        </div>
-        <ChevronRight size={14} className="mt-0.5 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-zinc-700" />
       </div>
+      <ChevronRight size={14} className="mg-chefspick-chevron" />
     </button>
   )
 }
 
 function CategoryHeaderPlaceholder({ name }: { name: string }) {
   const letter = name.trim()[0]?.toUpperCase() ?? '?'
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-stone-100">
-      <span className="text-lg font-semibold text-stone-400">{letter}</span>
-    </div>
-  )
+  return <div className="mg-cat-thumb-placeholder">{letter}</div>
 }
 
 // ── BestSellers (always visible, never in accordion) ──────────────────────────
@@ -122,31 +94,20 @@ function CategoryHeaderPlaceholder({ name }: { name: string }) {
 function BestSellersSection({ items }: { items: MenuItem[] }) {
   if (items.length === 0) return null
   return (
-    <section className="overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-b from-amber-50 via-white to-white shadow-sm">
-      <div className="flex items-start justify-between gap-3 border-b border-amber-100 px-4 py-4 sm:px-5">
+    <section className="mg-section mg-bestsellers">
+      <div className="mg-bestsellers-head">
         <div>
-          <div className="flex items-center gap-2">
-            <Flame size={16} className="text-amber-600" />
-            <h2 className="text-base font-semibold text-stone-900">Best sellers</h2>
+          <div className="mg-bestsellers-title-row">
+            <Flame size={16} className="mg-flame" />
+            <h2 className="mg-section-title">Best sellers</h2>
           </div>
-          <p className="mt-0.5 text-xs text-stone-500">Most ordered dishes</p>
+          <p className="mg-section-sub">Most ordered dishes</p>
         </div>
-        <span className="inline-flex animate-pulse items-center gap-1 rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-700">
-          <Sparkles size={9} />
-          Popular now
-        </span>
+        <span className="mg-popular-pill"><Sparkles size={9} /> Popular now</span>
       </div>
-      <div className="divide-y divide-amber-100">
-        {items.slice(0, 4).map((item, index) => (
-          <div key={item.id} className="relative" style={{ animationDelay: `${index * 60}ms` }}>
-            <div className="absolute left-3 top-3 z-10">
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 ring-1 ring-amber-200">
-                <TrendingUp size={8} />
-                Most ordered
-              </span>
-            </div>
-            <MenuItemCard item={item} />
-          </div>
+      <div className="mg-bestsellers-list">
+        {items.slice(0, 4).map((item) => (
+          <MenuItemCard key={item.id} item={item} showMostOrdered />
         ))}
       </div>
     </section>
@@ -158,23 +119,19 @@ function BestSellersSection({ items }: { items: MenuItem[] }) {
 function SearchResults({ results }: { results: MenuItem[] }) {
   if (results.length === 0) {
     return (
-      <div className="rounded-3xl border border-slate-200 bg-white px-4 py-10 text-center shadow-sm">
-        <p className="text-sm font-medium text-stone-400">No dishes found</p>
-        <p className="mt-1 text-xs text-stone-300">Try a different keyword</p>
+      <div className="mg-empty-state">
+        <p className="mg-empty-title">No dishes found</p>
+        <p className="mg-empty-sub">Try a different keyword</p>
       </div>
     )
   }
   return (
-    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
-        <p className="text-xs font-medium text-stone-500">
-          {results.length} result{results.length !== 1 ? 's' : ''}
-        </p>
+    <section className="mg-section">
+      <div className="mg-search-results-head">
+        <p>{results.length} result{results.length !== 1 ? 's' : ''}</p>
       </div>
-      <div className="divide-y divide-slate-100">
-        {results.map((item) => (
-          <MenuItemCard key={item.id} item={item} />
-        ))}
+      <div className="mg-divided-list">
+        {results.map((item) => <MenuItemCard key={item.id} item={item} />)}
       </div>
     </section>
   )
@@ -207,75 +164,51 @@ function CategorySection({
     : null
 
   return (
-    <section
-      id={`cat-${category.id}`}
-      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
-    >
-      {/* ── Accordion header (always visible, tap to expand/collapse) ── */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-stone-50 sm:px-5"
-        aria-expanded={isOpen}
-      >
-        {/* Category thumbnail */}
-        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
+    <section id={`cat-${category.id}`} className="mg-section mg-cat-section">
+      <button type="button" onClick={onToggle} className="mg-cat-header" aria-expanded={isOpen}>
+        <div className="mg-cat-thumb">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt={category.name} className="h-full w-full object-cover" loading="lazy" />
+            <img src={imageUrl} alt={category.name} loading="lazy" />
           ) : (
             <CategoryHeaderPlaceholder name={category.name} />
           )}
         </div>
 
-        {/* Name + count */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="truncate text-base font-semibold text-slate-900">{category.name}</h2>
-            {chefsPick && isOpen && (
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                Featured
-              </span>
-            )}
+        <div className="mg-cat-info">
+          <div className="mg-cat-name-row">
+            <h2 className="mg-cat-name">{category.name}</h2>
+            {chefsPick && isOpen && <span className="mg-featured-pill">Featured</span>}
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mg-cat-desc">
             {category.description
-              ? <span className="line-clamp-1">{category.description}</span>
+              ? <span className="mg-line-clamp-1">{category.description}</span>
               : `${items.length} ${items.length === 1 ? 'item' : 'items'}`}
           </p>
         </div>
 
-        {/* Item count pill + chevron */}
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-500">
-            {items.length} {items.length === 1 ? 'item' : 'items'}
-          </span>
-          <ChevronRight
-            size={16}
-            className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
-          />
+        <div className="mg-cat-right">
+          <span className="mg-count-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+          <ChevronRight size={16} className={`mg-chevron${isOpen ? ' mg-chevron--open' : ''}`} />
         </div>
       </button>
 
-      {/* ── Accordion body ── */}
       {isOpen && (
-        <div className="border-t border-slate-100">
-          <div className="divide-y divide-slate-100">
+        <div className="mg-cat-body">
+          <div className="mg-divided-list">
             {chefsPick && (
-              <div className="px-4 py-3 sm:px-5">
+              <div className="mg-chefspick-wrap">
                 <ChefsPickCard item={chefsPick} onAsk={onAsk} />
               </div>
             )}
             {otherItems.map((item) => {
               const badge = getBadge(item, items)
               return (
-                <div key={item.id} className="relative">
+                <div key={item.id} className="mg-item-row">
                   {badge.kind !== 'none' && (
-                    <div className="absolute -top-2 left-3 z-10">
-                      <PsychBadge badge={badge} />
-                    </div>
+                    <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
                   )}
-                  <div className={badge.kind !== 'none' ? 'pt-2' : ''}>
+                  <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
                     <MenuItemCard item={item} />
                   </div>
                 </div>
@@ -302,11 +235,8 @@ function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null)
 
   return (
-    <div className="relative">
-      <Search
-        size={15}
-        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400"
-      />
+    <div className="mg-search-wrap">
+      <Search size={15} className="mg-search-icon" />
       <input
         ref={inputRef}
         type="search"
@@ -314,13 +244,13 @@ function SearchBar({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search dishes…"
-        className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-9 pr-9 text-sm text-stone-900 shadow-sm placeholder:text-stone-400 focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400/30"
+        className="mg-search-input"
       />
       {value && (
         <button
           type="button"
           onClick={() => { onClear(); inputRef.current?.focus() }}
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-stone-400 hover:text-stone-700"
+          className="mg-search-clear"
           aria-label="Clear search"
         >
           <X size={14} />
@@ -354,27 +284,20 @@ export function MenuGrid({
 
   const [query, setQuery] = useState('')
   const [openCategoryIds, setOpenCategoryIds] = useState<Set<string>>(new Set())
-  
+
   const sortedCategories = useMemo(() => {
-  return [...categories].sort(
-    (a, b) => (Number(a.position) || 0) - (Number(b.position) || 0),
+    return [...categories].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+  }, [categories])
+
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+  }, [items])
+
+  const categoriesWithItems = useMemo(
+    () => sortedCategories.filter((cat) => sortedItems.some((i) => i.category_id === cat.id && i.is_available)),
+    [sortedCategories, sortedItems],
   )
-}, [categories])
 
-const sortedItems = useMemo(() => {
-  return [...items].sort(
-    (a, b) => (Number(a.position) || 0) - (Number(b.position) || 0),
-  )
-}, [items])
-
-const categoriesWithItems = useMemo(
-  () => sortedCategories.filter((cat) => sortedItems.some((i) => i.category_id === cat.id && i.is_available)),
-  [sortedCategories, sortedItems],
-)
-
-  
-
-  // Best sellers (top 4, always shown outside accordion)
   const bestSellerItems = useMemo(
     () =>
       items
@@ -385,7 +308,6 @@ const categoriesWithItems = useMemo(
     [items],
   )
 
-  // Search results across all categories
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
@@ -409,39 +331,207 @@ const categoriesWithItems = useMemo(
     })
   }, [])
 
-  // When search is cleared, close everything so user sees clean accordion
   const handleClearSearch = useCallback(() => {
-  setQuery('')
-  setOpenCategoryIds(new Set())
-}, [])
+    setQuery('')
+    setOpenCategoryIds(new Set())
+  }, [])
 
   return (
-    <div className="relative w-full pb-44 pt-3">
+    <div className="mg-root">
+      <style jsx>{`
+        .mg-root { position: relative; width: 100%; padding-bottom: 11rem; padding-top: 0.25rem; }
+
+        /* ── search bar ── */
+        .mg-search-sticky { margin-bottom: 14px; position: sticky; top: 56px; z-index: 30; }
+        .mg-search-sticky-inner { border-radius: 16px; background: color-mix(in srgb, var(--surface-bg) 92%, transparent); backdrop-filter: blur(10px); padding: 6px 0; }
+
+        :global(.mg-search-wrap) {
+          display: flex; align-items: center; gap: 10px;
+          padding: 12px 14px;
+          background: var(--pr-card);
+          border: 1px solid var(--pr-border);
+          border-radius: 14px;
+          transition: border-color 0.2s, background 0.2s;
+        }
+        :global(.mg-search-wrap:focus-within) {
+          border-color: rgba(232,197,71,0.35);
+          background: var(--pr-card-hover);
+        }
+        :global(.mg-search-icon) { color: var(--pr-text-faint); flex-shrink: 0; }
+        :global(.mg-search-input) {
+          flex: 1; background: transparent; border: none; outline: none;
+          font-size: 14px; font-family: var(--font-body); color: var(--pr-text);
+        }
+        :global(.mg-search-input::placeholder) { color: var(--pr-text-faint); }
+        :global(.mg-search-clear) {
+          background: none; border: none; cursor: pointer; padding: 2px;
+          color: var(--pr-text-faint); display: flex; transition: color 0.15s;
+        }
+        :global(.mg-search-clear:hover) { color: var(--pr-text); }
+
+        /* ── layout ── */
+        .mg-stack { display: flex; flex-direction: column; gap: 14px; }
+        .mg-upsell-wrap { border-radius: 18px; overflow: hidden; }
+
+        :global(.mg-section) {
+          border-radius: 26px;
+          background: var(--pr-card);
+          border: 1px solid var(--pr-border);
+          overflow: hidden;
+        }
+		:global(.mg-bestsellers::before) {
+  content: '';
+  display: block; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(212,168,75,0.45), transparent);
+}
+
+        /* ── bestsellers ── */
+       :global(.mg-bestsellers) {
+  border-color: rgba(212,168,75,0.16);
+  background: linear-gradient(180deg, rgba(212,168,75,0.04) 0%, var(--pr-card) 60%);
+}
+        :global(.mg-bestsellers-head) {
+          display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+          padding: 16px 16px 14px; border-bottom: 1px solid rgba(232,197,71,0.12);
+        }
+        :global(.mg-bestsellers-title-row) { display: flex; align-items: center; gap: 8px; }
+        :global(.mg-flame) { color: var(--pr-gold); }
+        :global(.mg-section-title) {
+          font-family: var(--font-display); font-size: 17px; font-weight: 600;
+          color: var(--pr-text); margin: 0; letter-spacing: -0.01em;
+        }
+        :global(.mg-section-sub) { margin: 3px 0 0; font-size: 11.5px; color: var(--pr-text-muted); }
+        :global(.mg-popular-pill) {
+          display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+          border-radius: 999px; border: 1px solid rgba(232,197,71,0.25);
+          background: var(--pr-gold-dim); color: var(--pr-gold);
+          padding: 6px 11px; font-size: 9.5px; font-weight: 700;
+          letter-spacing: 0.1em; text-transform: uppercase;
+        }
+        :global(.mg-bestsellers-list) { display: flex; flex-direction: column; }
+        :global(.mg-bestseller-row:first-child) { border-top: none; }
+        
+
+        /* ── category accordion ── */
+        :global(.mg-cat-header) {
+          display: flex; align-items: center; gap: 12px; width: 100%;
+          padding: 14px 16px; background: none; border: none; cursor: pointer;
+          text-align: left; transition: background 0.15s;
+        }
+        :global(.mg-cat-header:hover) { background: rgba(255,255,255,0.03); }
+        :global(.mg-cat-thumb) {
+          width: 50px; height: 50px; flex-shrink: 0; border-radius: 14px;
+          overflow: hidden; background: rgba(255,255,255,0.04);
+          border: 1px solid var(--pr-border);
+        }
+        :global(.mg-cat-thumb img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+        :global(.mg-cat-thumb-placeholder) {
+          width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+          font-size: 18px; font-weight: 600; color: var(--pr-text-faint);
+        }
+        :global(.mg-cat-info) { flex: 1; min-width: 0; }
+        :global(.mg-cat-name-row) { display: flex; align-items: center; gap: 8px; }
+        :global(.mg-cat-name) {
+          font-family: var(--font-display); font-size: 16px; font-weight: 600;
+          color: var(--pr-text); margin: 0; overflow: hidden; text-overflow: ellipsis;
+          white-space: nowrap; letter-spacing: -0.005em;
+        }
+        :global(.mg-featured-pill) {
+          flex-shrink: 0; border-radius: 999px; border: 1px solid rgba(232,197,71,0.25);
+          background: var(--pr-gold-dim); color: var(--pr-gold);
+          padding: 2px 9px; font-size: 9.5px; font-weight: 700;
+        }
+        :global(.mg-cat-desc) { margin: 3px 0 0; font-size: 12px; color: var(--pr-text-muted); }
+        :global(.mg-line-clamp-1) {
+          display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        :global(.mg-cat-right) { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        :global(.mg-count-pill) {
+          border-radius: 999px; border: 1px solid var(--pr-border);
+          background: rgba(255,255,255,0.04); color: var(--pr-text-faint);
+          padding: 5px 10px; font-size: 10px; font-weight: 500; white-space: nowrap;
+        }
+        :global(.mg-chevron) { color: var(--pr-text-faint); transition: transform 0.2s; }
+        :global(.mg-chevron--open) { transform: rotate(90deg); color: var(--pr-gold); }
+
+        :global(.mg-cat-body) { border-top: 1px solid var(--pr-border); }
+        :global(.mg-divided-list) { display: flex; flex-direction: column; }
+        :global(.mg-item-row) { position: relative; border-top: 1px solid var(--pr-border); }
+        :global(.mg-item-row:first-child) { border-top: none; }
+        :global(.mg-item-pad) { padding-top: 10px; }
+        :global(.mg-badge-overlay) { position: absolute; top: -1px; left: 14px; z-index: 5; transform: translateY(8px); }
+
+        /* ── psych badges ── */
+        :global(.mg-badge) {
+          display: inline-flex; align-items: center; gap: 4px;
+          border-radius: 999px; padding: 3px 9px;
+          font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+          border: 1px solid;
+        }
+        :global(.mg-badge--social_proof) { background: var(--pr-gold-dim); border-color: rgba(232,197,71,0.25); color: var(--pr-gold); }
+        :global(.mg-badge--anchoring) { background: rgba(255,255,255,0.06); border-color: var(--pr-border); color: var(--pr-text-muted); }
+        :global(.mg-badge--scarcity) { background: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.22); color: #fb7185; }
+
+        /* ── chef's pick ── */
+        :global(.mg-chefspick-wrap) { padding: 12px 14px; }
+        :global(.mg-chefspick) {
+          display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+          border-radius: 16px; border: 1px solid rgba(232,197,71,0.2);
+          background: var(--pr-gold-dim); padding: 14px; cursor: pointer;
+          transition: background 0.2s, box-shadow 0.2s;
+        }
+        :global(.mg-chefspick:hover) { background: rgba(232,197,71,0.18); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+        :global(.mg-chefspick-icon) {
+          width: 38px; height: 38px; flex-shrink: 0; border-radius: 12px;
+          background: rgba(232,197,71,0.22); color: var(--pr-gold);
+          display: flex; align-items: center; justify-content: center;
+        }
+        :global(.mg-chefspick-body) { flex: 1; min-width: 0; }
+        :global(.mg-chefspick-eyebrow) {
+          font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.16em; color: var(--pr-gold);
+        }
+        :global(.mg-chefspick-name) { margin: 5px 0 0; font-size: 14px; font-weight: 600; color: var(--pr-text); }
+        :global(.mg-chefspick-desc) {
+          margin: 4px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--pr-text-muted);
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        :global(.mg-chefspick-meta) { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+        :global(.mg-chefspick-price) { font-size: 14px; font-weight: 700; color: var(--pr-text); }
+        :global(.mg-chefspick-hint) { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--pr-text-faint); }
+        :global(.mg-chefspick-chevron) { color: var(--pr-text-faint); margin-top: 2px; flex-shrink: 0; }
+
+        /* ── search results ── */
+        :global(.mg-search-results-head) {
+          padding: 12px 16px; border-bottom: 1px solid var(--pr-border);
+        }
+        :global(.mg-search-results-head p) { margin: 0; font-size: 12px; font-weight: 500; color: var(--pr-text-muted); }
+
+        /* ── empty state ── */
+        .mg-empty-state {
+          border-radius: 18px; border: 1px solid var(--pr-border); background: var(--pr-card);
+          padding: 44px 16px; text-align: center;
+        }
+        .mg-empty-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--pr-text-muted); }
+        .mg-empty-sub { margin: 4px 0 0; font-size: 12px; color: var(--pr-text-faint); }
+      `}</style>
+
       {/* Search bar */}
-      <div className="mb-3 sticky top-[56px] z-30">
-        {/* Slight backdrop blur so it floats nicely over content below */}
-        <div className="rounded-2xl bg-[var(--surface-bg)]/90 backdrop-blur-sm py-1.5">
+      <div className="mg-search-sticky">
+        <div className="mg-search-sticky-inner">
           <SearchBar value={query} onChange={setQuery} onClear={handleClearSearch} />
         </div>
       </div>
 
-      <div className="space-y-3">
-        {/* Upsell card */}
-        {upsellCard && !isSearching && (
-          <div className="rounded-2xl border border-stone-200 bg-white p-1 shadow-sm">
-            {upsellCard}
-          </div>
-        )}
+      <div className="mg-stack">
+        {upsellCard && !isSearching && <div className="mg-upsell-wrap">{upsellCard}</div>}
 
-        {/* Search results mode */}
         {isSearching ? (
           <SearchResults results={searchResults} />
         ) : (
           <>
-            {/* Best sellers — always open, not part of accordion */}
             <BestSellersSection items={bestSellerItems} />
 
-            {/* Accordion categories */}
             {categoriesWithItems.map((cat, catIndex) => {
               const catItems = sortedItems.filter((i) => i.category_id === cat.id && i.is_available)
               if (catItems.length === 0) return null

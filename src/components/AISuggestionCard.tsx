@@ -87,7 +87,7 @@ const MinusSVG = ({ size = 12 }: { size?: number }) => (
 /* ─── VegDot ───────────────────────────────────────────────────────────── */
 
 function VegDot({ isVeg }: { isVeg: boolean }) {
-  const c = isVeg ? '#16a34a' : '#dc2626'
+  const c = isVeg ? '#22c55e' : '#ef4444'
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -138,7 +138,8 @@ function ItemCard({ item }: { item: MenuItem }) {
   const imgUrl = imgErr ? null : getImageUrl(item.image_url)
   const price = formatPrice(item.price)
   const role = getRoleLabel(item)
-const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
+  const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
+
   const onAdd = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (hasOpts) { openCustomiseSheet(item.id); return }
@@ -158,10 +159,8 @@ const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
 
   return (
     <div className="asc-card" style={{ flexShrink: 0, width: 148, scrollSnapAlign: 'start' }}>
-      {/* course role strip */}
       <div className="asc-role">{role}</div>
 
-      {/* image */}
       <div className="asc-img-box">
         {imgUrl
           ? <img src={imgUrl} alt={item.name} className="asc-img" loading="lazy" onError={() => setImgErr(true)} />
@@ -170,7 +169,6 @@ const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
         {item.is_bestseller && <div className="asc-best-badge">⭐ Bestseller</div>}
       </div>
 
-      {/* info */}
       <div className="asc-info">
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
           <VegDot isVeg={item.is_veg} />
@@ -183,29 +181,28 @@ const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
         {price && <p className="asc-price">{price}</p>}
       </div>
 
-      {/* add / qty */}
-    {ordersEnabled && (
-  <div className="asc-action">
-    {qty === 0 ? (
-      <>
-        <button
-          type="button"
-          onClick={onAdd}
-          className={`asc-add-btn${justAdded ? ' asc-add-btn--done' : ''}`}
-        >
-          {justAdded ? '✓ Added' : <><PlusSVG size={11} /> ADD</>}
-        </button>
-        {hasOpts && <p className="asc-customisable">customisable</p>}
-      </>
-    ) : (
-      <div className="asc-stepper">
-        <button type="button" className="asc-step-btn" onClick={onDec}><MinusSVG /></button>
-        <span className="asc-step-num">{qty}</span>
-        <button type="button" className="asc-step-btn" onClick={onInc}><PlusSVG /></button>
-      </div>
-    )}
-  </div>
-)}
+      {ordersEnabled && (
+        <div className="asc-action">
+          {qty === 0 ? (
+            <>
+              <button
+                type="button"
+                onClick={onAdd}
+                className={`asc-add-btn${justAdded ? ' asc-add-btn--done' : ''}`}
+              >
+                {justAdded ? '✓ Added' : <><PlusSVG size={11} /> ADD</>}
+              </button>
+              {hasOpts && <p className="asc-customisable">customisable</p>}
+            </>
+          ) : (
+            <div className="asc-stepper">
+              <button type="button" className="asc-step-btn" onClick={onDec}><MinusSVG /></button>
+              <span className="asc-step-num">{qty}</span>
+              <button type="button" className="asc-step-btn" onClick={onInc}><PlusSVG /></button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -233,7 +230,7 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
   const [result, setResult] = useState<AIResult | null>(null)
   const abort = useRef<AbortController | null>(null)
 
-  const fetchSuggestion = useCallback(async (msg = 'Suggest a complete meal for me') => {
+ const fetchSuggestion = useCallback(async (msg = 'Suggest the best compatible revenue-smart meal bundle') => {
     if (!restaurant) return
     abort.current?.abort()
     const ctrl = new AbortController()
@@ -276,7 +273,6 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
     }
   }, [restaurant, items, sessionId])
 
-  /* resolve named items → MenuItem objects, preserving mention order */
   const sliderItems: MenuItem[] = (() => {
     if (!result) return []
     const names = [...result.mentioned_items, ...result.upsell_items]
@@ -286,74 +282,67 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
       const m = items.find(i => i.is_available && i.name.toLowerCase() === name.toLowerCase())
       if (m && !seen.has(m.id)) { found.push(m); seen.add(m.id) }
     }
-    return found.slice(0, 6)
+    const maxItems = result.mentioned_items.length + result.upsell_items.length
+return found.slice(0, Math.min(maxItems, 6))
   })()
 
   return (
     <>
-      {/* ── all scoped CSS, single <style> tag ── */}
+      {/* ── all scoped CSS, dark premium theme matching .pr-shell ── */}
       <style>{`
-        /* card */
         .asc-wrap {
           position: relative;
           overflow: hidden;
-          border-radius: 20px;
-          border: 1.5px solid #f5c57a;
-          background: #fffbf2;
+          border-radius: 18px;
+          border: 1px solid rgba(232,197,71,0.22);
+          background: linear-gradient(180deg, rgba(232,197,71,0.07) 0%, var(--pr-card, #242424) 65%);
           -webkit-tap-highlight-color: transparent;
         }
-        .asc-wrap--idle { cursor: pointer; transition: box-shadow 200ms, transform 200ms; }
-        .asc-wrap--idle:hover { box-shadow: 0 6px 24px rgba(186,117,23,.16); transform: translateY(-1px); }
+        .asc-wrap--idle { cursor: pointer; transition: box-shadow 200ms, transform 200ms, border-color 200ms; }
+        .asc-wrap--idle:hover { box-shadow: 0 10px 32px rgba(0,0,0,0.35); transform: translateY(-1px); border-color: rgba(232,197,71,0.4); }
         .asc-wrap--idle:active { transform: scale(0.99); }
 
-        /* ambient sweep */
         .asc-wrap::before {
           content: '';
           position: absolute; inset: 0; border-radius: inherit;
-          background: conic-gradient(from 220deg at 110% -10%,#fde68a18 0deg,#fed7aa20 90deg,#fbbf2418 180deg,transparent 270deg);
+          background: conic-gradient(from 220deg at 110% -10%, rgba(232,197,71,0.10) 0deg, rgba(255,92,53,0.08) 90deg, rgba(232,197,71,0.08) 180deg, transparent 270deg);
           animation: asc-sweep 10s linear infinite;
           pointer-events: none; z-index: 0;
         }
         @keyframes asc-sweep { to { transform: rotate(360deg) scale(1.8); } }
 
-        /* header */
         .asc-header {
           position: relative; z-index: 1;
           display: flex; align-items: center; gap: 12px;
-          padding: 14px 16px 10px;
+          padding: 15px 16px 11px;
         }
         .asc-eyebrow {
           font-size: 9px; font-weight: 700; letter-spacing: .16em;
-          text-transform: uppercase; color: #b45309; margin: 0 0 2px;
+          text-transform: uppercase; color: #E8C547; margin: 0 0 2px;
         }
-        .asc-title { font-size: 14px; font-weight: 600; color: #1c1917; margin: 0; line-height: 1.3; }
-        .asc-sub {
-          margin-top: 2px; font-size: 10px; color: #92400e; opacity: .72;
-        }
+        .asc-title { font-size: 14px; font-weight: 600; color: #FAFAF7; margin: 0; line-height: 1.3; font-family: var(--font-body, 'Inter', sans-serif); }
+        .asc-sub { margin-top: 2px; font-size: 10.5px; color: rgba(250,250,247,0.5); }
 
-        /* suggest pill */
         .asc-suggest-btn {
           display: inline-flex; align-items: center; gap: 6px;
-          padding: 7px 14px; border-radius: 999px;
-          border: 1.5px solid #f59e0b; background: white;
-          color: #92400e; font-size: 12px; font-weight: 600;
+          padding: 8px 15px; border-radius: 999px;
+          border: 1.5px solid #E8C547; background: rgba(232,197,71,0.1);
+          color: #E8C547; font-size: 12px; font-weight: 700;
           cursor: pointer; flex-shrink: 0;
           transition: background 140ms, transform 100ms;
           -webkit-tap-highlight-color: transparent;
         }
-        .asc-suggest-btn:hover { background: #fef3c7; }
+        .asc-suggest-btn:hover { background: rgba(232,197,71,0.2); }
         .asc-suggest-btn:active { transform: scale(.94); }
 
-        /* refresh */
         .asc-refresh-btn {
           display: inline-flex; align-items: center; gap: 4px;
-          font-size: 11px; font-weight: 500; color: #a16207;
-          background: none; border: none; cursor: pointer; opacity: .65;
+          font-size: 11px; font-weight: 600; color: #E8C547;
+          background: none; border: none; cursor: pointer; opacity: .8;
           padding: 0; -webkit-tap-highlight-color: transparent; flex-shrink: 0;
         }
         .asc-refresh-btn:hover { opacity: 1; }
 
-        /* body */
         .asc-body {
           position: relative; z-index: 1;
           padding: 0 16px 12px;
@@ -361,24 +350,20 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
         }
         @keyframes asc-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-        .asc-reply {
-          font-size: 13px; line-height: 1.55; color: #44403c; margin: 0;
-        }
+        .asc-reply { font-size: 13px; line-height: 1.6; color: rgba(250,250,247,0.75); margin: 0; }
 
-        /* divider */
         .asc-divider {
           position: relative; z-index: 1;
           height: 1px;
-          background: linear-gradient(to right, transparent, #fcd34d55, transparent);
+          background: linear-gradient(to right, transparent, rgba(232,197,71,0.25), transparent);
           margin: 0 16px 10px;
         }
 
-        /* slider section */
         .asc-slider-hd {
           position: relative; z-index: 1;
           font-size: 9.5px; font-weight: 700; letter-spacing: .1em;
-          text-transform: uppercase; color: #a16207;
-          padding: 0 16px 7px;
+          text-transform: uppercase; color: #E8C547;
+          padding: 0 16px 8px;
         }
         .asc-slider {
           position: relative; z-index: 1;
@@ -390,81 +375,79 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
         }
         .asc-slider::-webkit-scrollbar { display: none; }
 
-        /* item card */
         .asc-card {
           border-radius: 14px;
-          border: 1px solid #fde68a;
-          background: white;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: #1A1A1A;
           overflow: hidden;
           display: flex; flex-direction: column;
-          transition: box-shadow 160ms;
+          transition: box-shadow 160ms, border-color 160ms;
         }
-        .asc-card:hover { box-shadow: 0 4px 14px rgba(186,117,23,.13); }
+        .asc-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.35); border-color: rgba(232,197,71,0.25); }
 
         .asc-role {
           font-size: 9px; font-weight: 700; letter-spacing: .1em;
-          text-transform: uppercase; color: #b45309;
-          background: #fef3c7; padding: 4px 8px;
-          border-bottom: 1px solid #fde68a;
+          text-transform: uppercase; color: #E8C547;
+          background: rgba(232,197,71,0.1); padding: 4px 8px;
+          border-bottom: 1px solid rgba(232,197,71,0.15);
         }
 
         .asc-img-box {
           position: relative; width: 100%; height: 92px;
-          background: #f5f5f4; overflow: hidden; flex-shrink: 0;
+          background: rgba(255,255,255,0.04); overflow: hidden; flex-shrink: 0;
         }
         .asc-img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .asc-img-placeholder {
           width: 100%; height: 100%;
           display: flex; align-items: center; justify-content: center;
-          background: #fef3c7; font-size: 30px; font-weight: 700; color: #d97706;
+          background: rgba(232,197,71,0.08); font-size: 28px; font-weight: 700; color: #E8C547;
         }
         .asc-best-badge {
           position: absolute; bottom: 0; left: 0; right: 0;
-          background: rgba(0,0,0,.54); color: white;
+          background: rgba(0,0,0,.6); color: #E8C547;
           font-size: 8px; font-weight: 700; text-align: center;
           padding: 3px 0; letter-spacing: .04em;
         }
 
-        .asc-info { padding: 8px 8px 4px; flex: 1; }
+        .asc-info { padding: 8px 9px 4px; flex: 1; }
         .asc-special-tag {
           font-size: 8px; font-weight: 700; text-transform: uppercase;
-          letter-spacing: .07em; color: #be123c; background: #fff1f2;
+          letter-spacing: .07em; color: #fb7185; background: rgba(244,63,94,0.12);
           border-radius: 3px; padding: 1px 5px;
         }
         .asc-name {
-          font-size: 12px; font-weight: 600; color: #1c1917;
+          font-size: 12px; font-weight: 600; color: #FAFAF7;
           margin: 0 0 3px; line-height: 1.3;
           display: -webkit-box; -webkit-line-clamp: 2;
           -webkit-box-orient: vertical; overflow: hidden;
         }
         .asc-desc {
-          font-size: 10px; color: #78716c; margin: 0 0 4px; line-height: 1.4;
+          font-size: 10px; color: rgba(250,250,247,0.4); margin: 0 0 4px; line-height: 1.4;
           display: -webkit-box; -webkit-line-clamp: 2;
           -webkit-box-orient: vertical; overflow: hidden;
         }
-        .asc-price { font-size: 12.5px; font-weight: 700; color: #1c1917; margin: 0; }
+        .asc-price { font-size: 12.5px; font-weight: 700; color: #FAFAF7; margin: 0; }
 
-        /* add / stepper */
         .asc-action {
-          padding: 6px 8px 9px;
+          padding: 6px 9px 10px;
           display: flex; flex-direction: column; align-items: center; gap: 3px;
         }
         .asc-add-btn {
           display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-          width: 100%; padding: 7px 0; border-radius: 8px;
-          border: 1.5px solid #f97316; background: white;
-          color: #ea580c; font-size: 11px; font-weight: 700; letter-spacing: .05em;
+          width: 100%; padding: 7px 0; border-radius: 9px;
+          border: 1.5px solid rgba(255,92,53,0.5); background: rgba(255,92,53,0.12);
+          color: #FF5C35; font-size: 11px; font-weight: 700; letter-spacing: .05em;
           cursor: pointer;
           transition: background 140ms, color 140ms, transform 90ms;
           -webkit-tap-highlight-color: transparent;
         }
-        .asc-add-btn:hover { background: #fff7ed; }
+        .asc-add-btn:hover { background: rgba(255,92,53,0.2); }
         .asc-add-btn:active { transform: scale(.94); }
-        .asc-add-btn--done { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
+        .asc-add-btn--done { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.5); color: #4ade80; }
 
         .asc-stepper {
           display: flex; align-items: center; justify-content: space-between;
-          width: 100%; height: 30px; background: #f97316; border-radius: 8px; overflow: hidden;
+          width: 100%; height: 30px; background: #FF5C35; border-radius: 9px; overflow: hidden;
         }
         .asc-step-btn {
           display: flex; align-items: center; justify-content: center;
@@ -475,43 +458,40 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
         }
         .asc-step-btn:active { background: rgba(0,0,0,.18); }
         .asc-step-num { font-size: 12px; font-weight: 700; color: white; }
-        .asc-customisable { font-size: 8.5px; color: #a8a29e; margin: 0; }
+        .asc-customisable { font-size: 8.5px; color: rgba(250,250,247,0.3); margin: 0; }
 
-        /* chips */
         .asc-chips {
           position: relative; z-index: 1;
           display: flex; flex-wrap: wrap; gap: 6px;
           padding: 0 16px 14px;
         }
         .asc-chip {
-          font-size: 11.5px; font-weight: 500; padding: 5px 12px;
-          border-radius: 999px; border: 1.5px solid #fcd34d;
-          background: white; color: #92400e; cursor: pointer;
+          font-size: 11.5px; font-weight: 600; padding: 6px 13px;
+          border-radius: 999px; border: 1.5px solid rgba(232,197,71,0.3);
+          background: rgba(232,197,71,0.06); color: #E8C547; cursor: pointer;
           transition: background 130ms, transform 90ms;
           -webkit-tap-highlight-color: transparent;
         }
-        .asc-chip:hover { background: #fef3c7; }
+        .asc-chip:hover { background: rgba(232,197,71,0.16); }
         .asc-chip:active { transform: scale(.94); }
 
-        /* error */
         .asc-error {
           position: relative; z-index: 1;
-          font-size: 12.5px; color: #b45309;
+          font-size: 12.5px; color: #fb923c;
           padding: 0 16px 14px;
           display: flex; align-items: center; gap: 8px;
         }
 
-        /* orb */
         .asc-orb {
           position: relative; width: 34px; height: 34px;
           display: flex; align-items: center; justify-content: center;
         }
         .asc-orb-inner {
           width: 30px; height: 30px; border-radius: 50%;
-          background: linear-gradient(135deg,#f59e0b,#f97316);
+          background: linear-gradient(135deg,#E8C547,#FF5C35);
           display: flex; align-items: center; justify-content: center;
-          color: white; position: relative; z-index: 1;
-          box-shadow: 0 2px 8px rgba(249,115,22,.28);
+          color: #1A1A1A; position: relative; z-index: 1;
+          box-shadow: 0 4px 14px rgba(232,197,71,0.3);
           animation: asc-sparkle 2.6s ease-in-out infinite;
         }
         @keyframes asc-sparkle {
@@ -520,7 +500,7 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
         }
         .asc-ring {
           position: absolute; border-radius: 50%;
-          border: 1.5px solid #f59e0b; opacity: 0;
+          border: 1.5px solid #E8C547; opacity: 0;
         }
         .asc-ring1 { width: 42px; height: 42px; animation: asc-ripple 2.2s ease-out infinite; }
         .asc-ring2 { width: 52px; height: 52px; animation: asc-ripple 2.2s ease-out .6s infinite; }
@@ -528,15 +508,14 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
           0%   { transform: scale(.6); opacity: .45; }
           100% { transform: scale(1);  opacity: 0; }
         }
-        .asc-orb-thinking .asc-ring1 { animation: asc-ripple .85s ease-out infinite; border-color: #f97316; }
-        .asc-orb-thinking .asc-ring2 { animation: asc-ripple .85s ease-out .22s infinite; border-color: #f97316; }
+        .asc-orb-thinking .asc-ring1 { animation: asc-ripple .85s ease-out infinite; border-color: #FF5C35; }
+        .asc-orb-thinking .asc-ring2 { animation: asc-ripple .85s ease-out .22s infinite; border-color: #FF5C35; }
         .asc-orb-thinking .asc-orb-inner { animation: asc-pulse .85s ease-in-out infinite; }
         @keyframes asc-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.11); } }
 
-        /* shimmer */
         .asc-shimmer {
           height: 11px; border-radius: 999px;
-          background: linear-gradient(90deg,#fde68a 0%,#fef9e7 45%,#fde68a 90%);
+          background: linear-gradient(90deg, rgba(232,197,71,0.12) 0%, rgba(232,197,71,0.28) 45%, rgba(232,197,71,0.12) 90%);
           background-size: 200% 100%;
           animation: asc-shimmer 1.4s ease-in-out infinite;
         }
@@ -554,7 +533,6 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
         onKeyDown={e => e.key === 'Enter' && state === 'idle' && fetchSuggestion()}
         aria-label={state === 'idle' ? 'Get AI meal suggestion' : undefined}
       >
-        {/* header */}
         <div className="asc-header">
           <AIOrb thinking={state === 'loading'} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -586,20 +564,14 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
           )}
         </div>
 
-        {/* loading */}
-        {state === 'loading' && (
-          <div className="asc-body"><Shimmer /></div>
-        )}
+        {state === 'loading' && <div className="asc-body"><Shimmer /></div>}
 
-        {/* result */}
         {state === 'done' && result && (
           <>
-            {/* reply */}
             <div className="asc-body" onClick={e => e.stopPropagation()}>
               <p className="asc-reply">{result.reply}</p>
             </div>
 
-            {/* item slider */}
             {sliderItems.length > 0 && (
               <>
                 <div className="asc-divider" />
@@ -610,7 +582,6 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
               </>
             )}
 
-            {/* quick-reply chips */}
             {result.suggestions.length > 0 && (
               <div className="asc-chips" onClick={e => e.stopPropagation()}>
                 {result.suggestions.map(chip => (
@@ -626,7 +597,6 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
           </>
         )}
 
-        {/* error */}
         {state === 'error' && (
           <div className="asc-error" onClick={e => e.stopPropagation()}>
             <span>Couldn't load a suggestion.</span>

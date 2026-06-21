@@ -22,6 +22,9 @@ if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey)
 }
 
+// FIX 1: expanded type union to cover all request types
+type ReqType = 'order' | 'assistance' | 'water' | 'bill'
+
 function makeOrderCode(tableNumber: number) {
   return `SM-${tableNumber}-${randomUUID().slice(0, 8).toUpperCase()}`
 }
@@ -67,7 +70,6 @@ type AssignedStaff = {
 
 function matchesTable(staff: AssignedStaff, tableNumber: number) {
   if (!staff.active) return false
-  // No range set = "All tables" — match every table
   if (staff.table_start == null || staff.table_end == null) return true
   return tableNumber >= staff.table_start && tableNumber <= staff.table_end
 }
@@ -110,7 +112,7 @@ async function sendWebPushToStaff(
     .eq('restaurant_id', restaurantId)
     .in('staff_id', staffIds)
 
-    if (error || !subs?.length) return 
+  if (error || !subs?.length) return
 
   const notification = JSON.stringify({
     title: payload.title,
@@ -148,9 +150,9 @@ async function sendWebPushToStaff(
   }
 }
 
+// FIX 1: requestType now accepts the full ReqType union
 async function sendAndroidPushWithTokens(
   admin: SupabaseClient,
-
   tokenList: string[],
   payload: {
     title: string
@@ -159,7 +161,7 @@ async function sendAndroidPushWithTokens(
     requestId: string
     items: RequestItem[]
     subtotal: number
-    requestType: 'order' | 'assistance'
+    requestType: ReqType  // was: 'order' | 'assistance'
   },
 ) {
   try {
@@ -182,28 +184,24 @@ async function sendAndroidPushWithTokens(
         ttl: 10000,
       },
     })
-	
-	const deadTokens: string[] = []
-result.responses.forEach((r, i) => {
-  if (!r.success) {
-    const code = r.error?.code
-    if (
-      code === 'messaging/registration-token-not-registered' ||
-      code === 'messaging/invalid-registration-token'
-    ) {
-      deadTokens.push(tokenList[i])
-    }
-  }
-})
 
-if (deadTokens.length > 0) {
-  // Need admin client here — pass it in or import at module level
-  await admin
-    .from('device_tokens')
-    .delete()
-    .in('fcm_token', deadTokens)
-  console.log('[FCM] Cleaned up dead tokens:', deadTokens.length)
-}
+    const deadTokens: string[] = []
+    result.responses.forEach((r, i) => {
+      if (!r.success) {
+        const code = r.error?.code
+        if (
+          code === 'messaging/registration-token-not-registered' ||
+          code === 'messaging/invalid-registration-token'
+        ) {
+          deadTokens.push(tokenList[i])
+        }
+      }
+    })
+
+    if (deadTokens.length > 0) {
+      await admin.from('device_tokens').delete().in('fcm_token', deadTokens)
+      console.log('[FCM] Cleaned up dead tokens:', deadTokens.length)
+    }
 
     console.log('[FCM] Success:', result.successCount, 'Failed:', result.failureCount)
     result.responses.forEach((r, i) => {
@@ -226,27 +224,30 @@ export async function POST(req: NextRequest) {
     if (!body) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-const { restaurantSlug, tableNumber, tableToken, sessionId, items, subtotal, requestType } = body as {
-  restaurantSlug?: string
-  tableNumber?: number
-  tableToken?: string
-  sessionId?: string
-  items?: RequestItem[]
-  subtotal?: number
-  requestType?: 'order' | 'assistance'
-}
 
-const reqType: 'order' | 'assistance' = requestType === 'assistance' ? 'assistance' : 'order'
+    const { restaurantSlug, tableNumber, tableToken, sessionId, items, subtotal, requestType } = body as {
+      restaurantSlug?: string
+      tableNumber?: number
+      tableToken?: string
+      sessionId?: string
+      items?: RequestItem[]
+      subtotal?: number
+      requestType?: ReqType
+    }
 
-if (
-  !restaurantSlug ||
-  (!tableToken && !Number.isInteger(tableNumber)) ||
-  !sessionId ||
-  !Array.isArray(items) ||
-  typeof subtotal !== 'number'
-) {
-  return NextResponse.json({ error: 'Missing or invalid payload' }, { status: 400 })
-}
+    const reqType: ReqType = (['assistance', 'water', 'bill'] as ReqType[]).includes(requestType as ReqType)
+      ? (requestType as ReqType)
+      : 'order'
+
+    if (
+      !restaurantSlug ||
+      (!tableToken && !Number.isInteger(tableNumber)) ||
+      !sessionId ||
+      !Array.isArray(items) ||
+      typeof subtotal !== 'number'
+    ) {
+      return NextResponse.json({ error: 'Missing or invalid payload' }, { status: 400 })
+    }
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -262,41 +263,32 @@ if (
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
 
-// Resolve actual table number from secure QR token
-let resolvedTableNumber = Number.isInteger(tableNumber)
-  ? Number(tableNumber)
-  : null
+    let resolvedTableNumber = Number.isInteger(tableNumber) ? Number(tableNumber) : null
 
-if (tableToken) {
-  const { data: qrTokenRow, error: qrError } = await admin
-    .from('qr_tokens')
-    .select('table_number')
-    .eq('restaurant_id', restaurant.id)
-    .eq('token', tableToken)
-    .maybeSingle()
+    if (tableToken) {
+      const { data: qrTokenRow, error: qrError } = await admin
+        .from('qr_tokens')
+        .select('table_number')
+        .eq('restaurant_id', restaurant.id)
+        .eq('token', tableToken)
+        .maybeSingle()
 
-  if (qrError) {
-    return NextResponse.json({ error: qrError.message }, { status: 500 })
-  }
+      if (qrError) {
+        return NextResponse.json({ error: qrError.message }, { status: 500 })
+      }
 
-  if (!qrTokenRow) {
-    return NextResponse.json(
-      { error: 'Invalid table token' },
-      { status: 403 },
-    )
-  }
+      if (!qrTokenRow) {
+        return NextResponse.json({ error: 'Invalid table token' }, { status: 403 })
+      }
 
-  resolvedTableNumber = qrTokenRow.table_number
-}
+      resolvedTableNumber = qrTokenRow.table_number
+    }
 
-if (!resolvedTableNumber || resolvedTableNumber < 1) {
-  return NextResponse.json(
-    { error: 'Missing or invalid table number' },
-    { status: 400 },
-  )
-}
+    if (!resolvedTableNumber || resolvedTableNumber < 1) {
+      return NextResponse.json({ error: 'Missing or invalid table number' }, { status: 400 })
+    }
 
-const orderCode = makeOrderCode(resolvedTableNumber)
+    const orderCode = makeOrderCode(resolvedTableNumber)
 
     const { data: inserted, error: insertError } = await admin
       .from('table_requests')
@@ -308,8 +300,7 @@ const orderCode = makeOrderCode(resolvedTableNumber)
         subtotal,
         status: 'pending',
         order_code: orderCode,
-		  request_type: reqType,
-
+        request_type: reqType,
       })
       .select('*')
       .single()
@@ -319,29 +310,25 @@ const orderCode = makeOrderCode(resolvedTableNumber)
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
-    const assignedStaff = await getAssignedStaff(
-      admin,
-      restaurant.id,
-      resolvedTableNumber,
-    )
+    const assignedStaff = await getAssignedStaff(admin, restaurant.id, resolvedTableNumber)
     const assignedStaffIds = assignedStaff.map((s) => s.id)
 
-    const isAssistance = reqType === 'assistance'
+    // FIX 2: proper tag per request type; FIX 3: removed dead itemSummary/moreCount
+    const title =
+      reqType === 'water'       ? `💧 Table ${resolvedTableNumber} — Water request — ${restaurant.name}`
+      : reqType === 'bill'      ? `🧾 Table ${resolvedTableNumber} — Bill request — ${restaurant.name}`
+      : reqType === 'assistance'? `🔔 Table ${resolvedTableNumber} needs assistance — ${restaurant.name}`
+      : `🍽️ Table ${resolvedTableNumber} — New order — ${restaurant.name}`
 
-    const itemSummary = (items as RequestItem[])
-      .slice(0, 2)
-      .map((i) => `${i.name} ×${i.qty}`)
-      .join(', ')
-    const moreCount = (items as RequestItem[]).length - 2
-    const bodyText = isAssistance
-      ? `Table ${resolvedTableNumber} is calling for a waiter`
-      : (items as RequestItem[]).length <= 2
-          ? itemSummary
-          : `${itemSummary} +${moreCount} more`
+    const bodyText =
+      reqType === 'water'       ? `Table ${resolvedTableNumber} is asking for water`
+      : reqType === 'bill'      ? `Table ${resolvedTableNumber} wants the bill`
+      : reqType === 'assistance'? `Table ${resolvedTableNumber} is calling for a waiter`
+      : (items as RequestItem[]).slice(0, 2).map((i) => `${i.name} ×${i.qty}`).join(', ') +
+        ((items as RequestItem[]).length > 2 ? ` +${(items as RequestItem[]).length - 2} more` : '')
 
-    const title = isAssistance
-      ? `🔔 Table ${resolvedTableNumber} needs assistance — ${restaurant.name}`
-      : `🔔 Table ${resolvedTableNumber} — ${restaurant.name}`
+    // FIX 2: meaningful tag for each type so dashboard can group/dedupe correctly
+    const pushTag = `${reqType}-${restaurant.id}-table-${resolvedTableNumber}`
 
     const { data: fcmTokens } = await admin
       .from('device_tokens')
@@ -349,9 +336,7 @@ const orderCode = makeOrderCode(resolvedTableNumber)
       .eq('restaurant_slug', restaurantSlug)
       .in('staff_id', assignedStaffIds)
 
-    const tokenList = (fcmTokens ?? [])
-      .map((t) => t.fcm_token)
-      .filter(Boolean)
+    const tokenList = (fcmTokens ?? []).map((t) => t.fcm_token).filter(Boolean)
 
     const [webPushResult, androidPushResult] = await Promise.allSettled([
       sendWebPushToStaff(admin, restaurant.id, assignedStaffIds, {
@@ -359,17 +344,17 @@ const orderCode = makeOrderCode(resolvedTableNumber)
         body: bodyText,
         tableNumber: resolvedTableNumber,
         requestId: inserted.id,
-        tag: `${isAssistance ? 'assist' : 'waiter'}-${restaurant.id}-table-${resolvedTableNumber}`,
+        tag: pushTag,
       }),
       tokenList.length > 0
-  ? sendAndroidPushWithTokens(admin, tokenList, {
+        ? sendAndroidPushWithTokens(admin, tokenList, {
             title,
             body: bodyText,
             tableNumber: resolvedTableNumber,
             requestId: inserted.id,
             items: items as RequestItem[],
             subtotal,
-            requestType: reqType,
+            requestType: reqType, // FIX 1: now type-safe
           })
         : Promise.resolve(),
     ])
