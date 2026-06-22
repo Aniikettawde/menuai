@@ -27,37 +27,23 @@ function detectRestaurantType(rawType: string | null | undefined, items: { is_ve
   const raw = normalizeText(String(rawType ?? ''))
 
   if (
-    raw.includes('veg/non veg') ||
-    raw.includes('veg/non-veg') ||
-    raw.includes('veg and non veg') ||
-    raw.includes('mixed') ||
-    raw.includes('both') ||
-    raw.includes('non veg') ||
-    raw.includes('non-veg')
-  ) {
-    return 'mixed'
-  }
+    raw.includes('veg/non veg') || raw.includes('veg/non-veg') ||
+    raw.includes('veg and non veg') || raw.includes('mixed') ||
+    raw.includes('both') || raw.includes('non veg') || raw.includes('non-veg')
+  ) return 'mixed'
 
   if (
-    raw.includes('pure veg') ||
-    raw.includes('vegetarian') ||
+    raw.includes('pure veg') || raw.includes('vegetarian') ||
     (raw.includes('veg') && !raw.includes('non veg') && !raw.includes('non-veg'))
-  ) {
-    return 'veg'
-  }
+  ) return 'veg'
 
   if (
-    raw.includes('pure non veg') ||
-    raw.includes('pure non-veg') ||
-    raw.includes('non veg') ||
-    raw.includes('non-veg')
-  ) {
-    return 'non_veg'
-  }
+    raw.includes('pure non veg') || raw.includes('pure non-veg') ||
+    raw.includes('non veg') || raw.includes('non-veg')
+  ) return 'non_veg'
 
-  const hasVeg = items.some((i) => i.is_veg)
-  const hasNonVeg = items.some((i) => !i.is_veg)
-
+  const hasVeg = items.some(i => i.is_veg)
+  const hasNonVeg = items.some(i => !i.is_veg)
   if (hasVeg && hasNonVeg) return 'mixed'
   if (hasNonVeg) return 'non_veg'
   return 'veg'
@@ -65,69 +51,58 @@ function detectRestaurantType(rawType: string | null | undefined, items: { is_ve
 
 function inferPreference(text: string): DiningPreference | null {
   const t = normalizeText(text)
-
   if (/(^| )(veg|vegetarian|only veg|pure veg)( |$)/.test(t)) return 'veg'
   if (/(^| )(non veg|non-veg|nonveg|chicken|mutton|fish|egg)( |$)/.test(t)) return 'non_veg'
-
   return null
 }
 
-function buildStarters(args: {
-  restaurantType: RestaurantType
-  preference: DiningPreference | null
-}): QuickReply[] {
+function buildStarters(args: { restaurantType: RestaurantType; preference: DiningPreference | null }): QuickReply[] {
   const { restaurantType, preference } = args
 
   if (restaurantType === 'mixed' && !preference) {
     return [
-      { label: 'Veg', action: 'I want veg food' },
-      { label: 'Non-veg', action: 'I want non-veg food' },
-      { label: 'Help me choose', action: 'Suggest a complete meal for me' },
-      { label: 'Best sellers', action: 'Show me your best selling dishes' },
+      { label: '🥗 Veg', action: 'I want veg food' },
+      { label: '🍖 Non-veg', action: 'I want non-veg food' },
+      { label: '🔥 Help me choose', action: 'Suggest a complete meal for me' },
+      { label: '⭐ Best sellers', action: 'Show me your best selling dishes' },
     ]
   }
 
   if (restaurantType === 'veg' || preference === 'veg') {
     return [
-      { label: 'Best veg dishes', action: 'Show me your best veg dishes' },
-      { label: 'Veg complete meal', action: 'Suggest a complete veg meal for me' },
-      { label: 'Chef special', action: "What is today's special?" },
-      { label: 'Budget under ₹300', action: 'Suggest veg food under ₹300' },
+      { label: '⭐ Best veg dishes', action: 'Show me your best veg dishes' },
+      { label: '🍽️ Full veg meal', action: 'Suggest a complete veg meal for me' },
+      { label: '👨‍🍳 Chef special', action: "What is today's special?" },
+      { label: '💸 Under ₹300', action: 'Suggest veg food under ₹300' },
     ]
   }
 
   if (restaurantType === 'non_veg' || preference === 'non_veg') {
     return [
-      { label: 'Best non-veg dishes', action: 'Show me your best non-veg dishes' },
-      { label: 'Complete meal', action: 'Suggest a complete meal for me' },
-      { label: 'Chef special', action: "What is today's special?" },
-      { label: 'Budget under ₹300', action: 'Suggest non-veg food under ₹300' },
+      { label: '⭐ Best dishes', action: 'Show me your best non-veg dishes' },
+      { label: '🍽️ Full meal', action: 'Suggest a complete meal for me' },
+      { label: '👨‍🍳 Chef special', action: "What is today's special?" },
+      { label: '💸 Under ₹300', action: 'Suggest non-veg food under ₹300' },
     ]
   }
 
   return [
-    { label: 'Best sellers', action: 'Show me your best selling dishes' },
-    { label: 'Chef special', action: "What is today's special?" },
-    { label: 'Help me choose', action: 'Suggest a complete meal for me' },
-    { label: 'Budget under ₹300', action: 'Suggest food under ₹300' },
+    { label: '⭐ Best sellers', action: 'Show me your best selling dishes' },
+    { label: '👨‍🍳 Chef special', action: "What is today's special?" },
+    { label: '🔥 Help me choose', action: 'Suggest a complete meal for me' },
+    { label: '💸 Under ₹300', action: 'Suggest food under ₹300' },
   ]
 }
 
 function TypingIndicator() {
   return (
-    <div className="flex items-center gap-2 px-3 py-2">
-      <div className="flex gap-1">
-        <span className="h-2 w-2 animate-bounce rounded-full bg-blue-500" />
-        <span
-          className="h-2 w-2 animate-bounce rounded-full bg-blue-500"
-          style={{ animationDelay: '0.15s' }}
-        />
-        <span
-          className="h-2 w-2 animate-bounce rounded-full bg-blue-500"
-          style={{ animationDelay: '0.3s' }}
-        />
+    <div className="cp-typing-indicator">
+      <div className="cp-typing-dots">
+        <span className="cp-dot" style={{ animationDelay: '0ms' }} />
+        <span className="cp-dot" style={{ animationDelay: '150ms' }} />
+        <span className="cp-dot" style={{ animationDelay: '300ms' }} />
       </div>
-      <span className="text-xs text-slate-500">AI is thinking...</span>
+      <span className="cp-typing-text">on it...</span>
     </div>
   )
 }
@@ -146,20 +121,20 @@ function ChatInput({
   inputRef: RefObject<HTMLInputElement>
 }) {
   return (
-    <form onSubmit={onSubmit} className="flex items-center gap-2 border-t border-slate-100 px-4 py-3">
+    <form onSubmit={onSubmit} className="cp-input-row">
       <input
         ref={inputRef}
         type="text"
         value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Ask about the menu..."
+        onChange={e => setInput(e.target.value)}
+        placeholder="Ask me anything about the menu..."
         disabled={disabled}
-        className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
+        className="cp-input"
       />
       <button
         type="submit"
         disabled={disabled || !input.trim()}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-sm transition-transform active:scale-95 disabled:opacity-40"
+        className="cp-send-btn"
         aria-label="Send"
       >
         <Send size={15} />
@@ -175,68 +150,50 @@ function PreferencePrompt({
   restaurantType: RestaurantType
   onPick: (pref: DiningPreference) => void
 }) {
-  const title =
-    restaurantType === 'mixed'
-      ? 'Before I recommend anything, are you looking for veg or non-veg?'
-      : 'I can help you pick faster. Ask for best sellers, chef special, or a complete meal.'
-
-  const subtitle =
-    restaurantType === 'mixed'
-      ? 'Choosing once makes the suggestions much smarter.'
-      : 'I will keep the suggestions aligned to this menu.'
+  if (restaurantType !== 'mixed') return null
 
   return (
-    <div className="space-y-3 rounded-[24px] border border-blue-100 bg-gradient-to-br from-blue-50 to-violet-50 p-4 shadow-sm">
-      <div>
-        <p className="text-sm font-semibold text-slate-900">{title}</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">{subtitle}</p>
+    <div className="cp-pref-card">
+      <p className="cp-pref-title">Veg or non-veg today?</p>
+      <p className="cp-pref-sub">I'll keep every suggestion on point once I know 🙏</p>
+      <div className="cp-pref-btns">
+        <button type="button" onClick={() => onPick('veg')} className="cp-pref-btn cp-pref-veg">
+          🥗 Veg
+        </button>
+        <button type="button" onClick={() => onPick('non_veg')} className="cp-pref-btn cp-pref-nonveg">
+          🍖 Non-veg
+        </button>
       </div>
-
-      {restaurantType === 'mixed' ? (
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => onPick('veg')}
-            className="rounded-2xl border border-green-200 bg-white px-3 py-3 text-sm font-semibold text-green-700 shadow-sm transition hover:-translate-y-0.5 hover:border-green-300"
-          >
-            Veg
-          </button>
-          <button
-            type="button"
-            onClick={() => onPick('non_veg')}
-            className="rounded-2xl border border-rose-200 bg-white px-3 py-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:-translate-y-0.5 hover:border-rose-300"
-          >
-            Non-veg
-          </button>
-        </div>
-      ) : null}
     </div>
   )
 }
 
-function StarterChips({
-  starters,
-  onSend,
-  heading,
-}: {
-  starters: QuickReply[]
-  onSend: (text: string) => void
-  heading: string
-}) {
+function StarterChips({ starters, onSend }: { starters: QuickReply[]; onSend: (text: string) => void }) {
   return (
-    <div className="space-y-3 pt-2">
-      <p className="text-xs text-slate-500">{heading}</p>
-      <div className="flex flex-wrap gap-2">
-        {starters.map((s) => (
-          <button
-            key={s.action}
-            onClick={() => onSend(s.action)}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition hover:border-blue-200 hover:text-blue-700"
-          >
+    <div className="cp-starters">
+      <p className="cp-starters-label">Try asking:</p>
+      <div className="cp-chips-wrap">
+        {starters.map(s => (
+          <button key={s.action} onClick={() => onSend(s.action)} className="cp-chip">
             {s.label}
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+function WaiterGreeting({ restaurantName }: { restaurantName: string }) {
+  return (
+    <div className="cp-greeting">
+      <div className="cp-greeting-orb">
+        <Sparkles size={18} />
+      </div>
+      <p className="cp-greeting-name">Hey, I'm your waiter at {restaurantName} 👋</p>
+      <p className="cp-greeting-sub">
+        Been here long enough to know every dish by heart. Ask me anything — what's good today, what to pair,
+        hidden gems, all of it. No AI vibes, just real recs.
+      </p>
     </div>
   )
 }
@@ -256,14 +213,10 @@ export function ChatPanel() {
   } = useAppStore()
 
   const [input, setInput] = useState('')
-  const [isExpanded, setIsExpanded] = useState(false)
   const [preference, setPreference] = useState<DiningPreference | null>(null)
-  const [showTooltip, setShowTooltip] = useState(true)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const desktopMessagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const desktopInputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const restaurantType = useMemo<RestaurantType>(() => {
@@ -273,69 +226,73 @@ export function ChatPanel() {
 
   const isMixedRestaurant = restaurantType === 'mixed'
   const showPreferenceGate = isMixedRestaurant && !preference
-  const starters = useMemo(
-    () => buildStarters({ restaurantType, preference }),
-    [restaurantType, preference],
-  )
+  const starters = useMemo(() => buildStarters({ restaurantType, preference }), [restaurantType, preference])
 
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    desktopMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isChatLoading])
 
+  // Focus input when chat opens
   useEffect(() => {
-    const t = setTimeout(() => setShowTooltip(false), 5000)
-    return () => clearTimeout(t)
-  }, [])
+    if (showChat) {
+      setTimeout(() => inputRef.current?.focus(), 200)
+    }
+  }, [showChat])
 
+  // Restore preference from session
   useEffect(() => {
     if (!restaurant) return
-
     const key = `dinezy_pref_${restaurant.id}_${sessionId}`
     try {
       const saved = sessionStorage.getItem(key)
-      if (saved === 'veg' || saved === 'non_veg') {
-        setPreference(saved)
-      }
-    } catch {
-      // ignore
-    }
+      if (saved === 'veg' || saved === 'non_veg') setPreference(saved)
+    } catch {}
   }, [restaurant, sessionId])
 
+  // Persist preference
   useEffect(() => {
-    if (!restaurant) return
-    if (!isMixedRestaurant) return
-
+    if (!restaurant || !isMixedRestaurant) return
     const key = `dinezy_pref_${restaurant.id}_${sessionId}`
     try {
       if (preference) sessionStorage.setItem(key, preference)
       else sessionStorage.removeItem(key)
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [preference, restaurant, sessionId, isMixedRestaurant])
 
-  const buildAssistantPreferencePrompt = useCallback(() => {
-    return {
-      id: nanoid(),
-      role: 'assistant' as const,
-      content:
-        restaurantType === 'mixed'
-          ? 'Before I suggest dishes, are you looking for veg or non-veg?'
-          : 'Tell me what you are in the mood for, and I will help you pick the best dishes.',
-      timestamp: Date.now(),
-      suggestions:
-        restaurantType === 'mixed'
-          ? [
-              { label: 'Veg', action: 'I want veg food' },
-              { label: 'Non-veg', action: 'I want non-veg food' },
-            ]
-          : [
-              { label: 'Best sellers', action: 'Show me your best selling dishes' },
-              { label: 'Chef special', action: "What is today's special?" },
-            ],
-    } as ChatMessage
-  }, [restaurantType])
+  // Listen for open event from AISuggestionCard
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { autoAsk } = (e as CustomEvent<{ autoAsk?: boolean }>).detail ?? {}
+      if (autoAsk && messages.length === 0 && !isChatLoading) {
+        // Don't auto-send; just open and let greeting show
+      }
+    }
+    window.addEventListener('menuai:open', handler)
+    return () => window.removeEventListener('menuai:open', handler)
+  }, [messages.length, isChatLoading])
+
+  // Listen for external ask events (from other components)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { text } = (e as CustomEvent<{ text: string }>).detail
+      void sendMessage(text)
+    }
+    window.addEventListener('menuai:ask', handler)
+    return () => window.removeEventListener('menuai:ask', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const buildAssistantPreferencePrompt = useCallback((): ChatMessage => ({
+    id: nanoid(),
+    role: 'assistant',
+    content: 'Real quick — veg or non-veg today? Once I know that, my recs will actually be worth something 😄',
+    timestamp: Date.now(),
+    suggestions: [
+      { label: '🥗 Veg', action: 'I want veg food' },
+      { label: '🍖 Non-veg', action: 'I want non-veg food' },
+    ],
+  }), [])
 
   const sendMessage = useCallback(
     async (text: string, forcedPreference: DiningPreference | null = null) => {
@@ -347,15 +304,10 @@ export function ChatPanel() {
 
       if (isMixedRestaurant && !activePreference) {
         addMessage(buildAssistantPreferencePrompt())
-        setShowChat(true)
-        setIsExpanded(true)
-        setShowTooltip(false)
         return
       }
 
-      if (inferredPreference && !preference) {
-        setPreference(inferredPreference)
-      }
+      if (inferredPreference && !preference) setPreference(inferredPreference)
 
       setInput('')
 
@@ -366,20 +318,15 @@ export function ChatPanel() {
         timestamp: Date.now(),
       }
 
-      const historyPayload = [...messages.slice(-8), userMsg].map((m) => ({
+      const historyPayload = [...messages.slice(-8), userMsg].map(m => ({
         role: m.role,
         content: m.content,
       }))
 
       addMessage(userMsg)
       setIsChatLoading(true)
-      setIsExpanded(true)
-      setShowTooltip(false)
 
-      const bestsellers = items.filter((i) => i.is_bestseller).map((i) => i.name)
-      const available = items.map((i) => i.name)
-      const categoryNames = categories.map((c) => c.name)
-      const menuItems = items.map((item) => ({
+      const menuItems = items.map(item => ({
         id: item.id,
         name: item.name,
         description: item.description,
@@ -399,7 +346,7 @@ export function ChatPanel() {
         course_type: (item as any).course_type,
       }))
 
-      const menuItemMap = new Map(items.map((item) => [normalizeText(item.name), item]))
+      const menuItemMap = new Map(items.map(item => [normalizeText(item.name), item]))
 
       try {
         abortRef.current?.abort()
@@ -420,9 +367,9 @@ export function ChatPanel() {
               restaurant_name: restaurant.name,
               restaurant_type: restaurantType,
               customer_preference: activePreference,
-              categories: categoryNames,
-              bestsellers,
-              available_items: available,
+              categories: categories.map(c => c.name),
+              bestsellers: items.filter(i => i.is_bestseller).map(i => i.name),
+              available_items: items.map(i => i.name),
               menu_items: menuItems,
               recommendation_mode:
                 isMixedRestaurant && !activePreference
@@ -436,7 +383,7 @@ export function ChatPanel() {
         const data = await res.json()
 
         const mentioned = new Set<string>((data.mentioned_items ?? []).map((x: string) => normalizeText(x)))
-        const matchedMenuItems = items.filter((i) => mentioned.has(normalizeText(i.name)))
+        const matchedMenuItems = items.filter(i => mentioned.has(normalizeText(i.name)))
 
         const upsellMenuItems = Array.isArray(data.upsell_items)
           ? data.upsell_items
@@ -473,7 +420,7 @@ export function ChatPanel() {
         addMessage({
           id: nanoid(),
           role: 'assistant',
-          content: "Sorry, I'm having trouble connecting. Please try again.",
+          content: "Ugh, something went sideways on my end. Give it another shot?",
           timestamp: Date.now(),
         })
       } finally {
@@ -481,19 +428,9 @@ export function ChatPanel() {
       }
     },
     [
-      addMessage,
-      buildAssistantPreferencePrompt,
-      categories,
-      isChatLoading,
-      isMixedRestaurant,
-      items,
-      messages,
-      preference,
-      restaurant,
-      restaurantType,
-      sessionId,
-      setIsChatLoading,
-      setShowChat,
+      addMessage, buildAssistantPreferencePrompt, categories, isChatLoading,
+      isMixedRestaurant, items, messages, preference, restaurant,
+      restaurantType, sessionId, setIsChatLoading,
     ],
   )
 
@@ -509,11 +446,7 @@ export function ChatPanel() {
     (itemName: string, psychTrigger: PsychTrigger, stage?: string) => {
       if (restaurant) {
         track(restaurant.id, 'ai_upsell_accepted', {
-          metadata: {
-            item_name: itemName,
-            psych_trigger: psychTrigger,
-            stage: stage ?? 'early',
-          },
+          metadata: { item_name: itemName, psych_trigger: psychTrigger, stage: stage ?? 'early' },
         })
       }
       void sendMessage(`Tell me more about ${itemName}`)
@@ -521,213 +454,292 @@ export function ChatPanel() {
     [restaurant, sendMessage],
   )
 
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { text } = (e as CustomEvent<{ text: string }>).detail
-      void sendMessage(text)
-    }
-    window.addEventListener('menuai:ask', handler)
-    return () => window.removeEventListener('menuai:ask', handler)
-  }, [sendMessage])
-
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     void sendMessage(input)
   }
 
-  const openChat = useCallback(() => {
-    setShowChat(true)
-    setIsExpanded(true)
-    setShowTooltip(false)
-  }, [setShowChat])
-
-  const closeChat = useCallback(() => {
-    setShowChat(false)
-    setIsExpanded(false)
-  }, [setShowChat])
+  const closeChat = useCallback(() => setShowChat(false), [setShowChat])
 
   const isEmpty = messages.length === 0
 
+  if (!showChat || !restaurant) return null
+
   return (
     <>
-      {/* MOBILE */}
-      <div className="lg:hidden">
-        {!showChat && (
-          <div className="fixed bottom-6 right-4 z-[70]">
-            {showTooltip && (
-              <div className="absolute bottom-16 right-0 w-[220px] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600 shadow-lg">
-                Tap the AI button for help choosing food
-                <div className="absolute -bottom-1.5 right-6 h-3 w-3 rotate-45 border-b border-r border-slate-200 bg-white" />
-              </div>
-            )}
+      <style>{`
+        /* ── ChatPanel overlay (mobile bottom sheet + desktop sidebar) ── */
 
-            <button
-              onClick={openChat}
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/25 transition-transform active:scale-95"
-              aria-label="Open AI chat"
-            >
-              <Sparkles size={22} />
-            </button>
+        .cp-backdrop {
+          position: fixed; inset: 0; z-index: 80;
+          background: rgba(0,0,0,0.55);
+          backdrop-filter: blur(2px);
+          animation: cp-fade-in 200ms ease both;
+        }
+        @keyframes cp-fade-in { from { opacity:0; } to { opacity:1; } }
+
+        .cp-sheet {
+          position: fixed; inset-x: 0; bottom: 0; z-index: 81;
+          display: flex; flex-direction: column;
+          height: 88dvh;
+          background: #1A1A1A;
+          border-top-left-radius: 24px;
+          border-top-right-radius: 24px;
+          border: 1px solid rgba(232,197,71,0.15);
+          border-bottom: none;
+          overflow: hidden;
+          animation: cp-slide-up 280ms cubic-bezier(0.32,0.72,0,1) both;
+        }
+        @keyframes cp-slide-up {
+          from { transform: translateY(100%); }
+          to   { transform: translateY(0); }
+        }
+
+        /* Desktop: right panel */
+        @media (min-width: 1024px) {
+          .cp-backdrop { display: none; }
+          .cp-sheet {
+            position: fixed; right: 1.5rem; top: 1rem; bottom: 1rem;
+            inset-x: unset; height: auto;
+            width: 360px; border-radius: 20px;
+            border: 1px solid rgba(232,197,71,0.2);
+            animation: cp-slide-in-right 260ms cubic-bezier(0.32,0.72,0,1) both;
+            box-shadow: -12px 0 60px rgba(0,0,0,0.5);
+          }
+          @keyframes cp-slide-in-right {
+            from { transform: translateX(120%); opacity: 0; }
+            to   { transform: translateX(0); opacity: 1; }
+          }
+        }
+
+        /* Header */
+        .cp-header {
+          display: flex; align-items: center; gap: 10px;
+          padding: 14px 16px 12px;
+          border-bottom: 1px solid rgba(255,255,255,0.07);
+          flex-shrink: 0;
+          background: linear-gradient(180deg, rgba(232,197,71,0.06) 0%, transparent 100%);
+        }
+        .cp-header-orb {
+          width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+          background: linear-gradient(135deg, #E8C547, #FF5C35);
+          display: flex; align-items: center; justify-content: center;
+          color: #111;
+          box-shadow: 0 4px 12px rgba(232,197,71,0.25);
+        }
+        .cp-header-text { flex: 1; min-width: 0; }
+        .cp-header-title {
+          font-size: 13px; font-weight: 700; color: #FAFAF7;
+          margin: 0; font-family: var(--font-body, 'Inter', sans-serif);
+        }
+        .cp-header-sub {
+          font-size: 10px; color: rgba(250,250,247,0.45); margin: 0;
+        }
+        .cp-close-btn {
+          display: flex; align-items: center; justify-content: center;
+          width: 32px; height: 32px; border-radius: 50%;
+          background: rgba(255,255,255,0.07);
+          border: 1px solid rgba(255,255,255,0.1);
+          color: rgba(250,250,247,0.6);
+          cursor: pointer; flex-shrink: 0;
+          transition: background 140ms, color 140ms;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .cp-close-btn:hover { background: rgba(255,255,255,0.12); color: #FAFAF7; }
+
+        /* Messages area */
+        .cp-messages {
+          flex: 1; overflow-y: auto;
+          padding: 16px 14px 8px;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(232,197,71,0.2) transparent;
+        }
+        .cp-messages::-webkit-scrollbar { width: 3px; }
+        .cp-messages::-webkit-scrollbar-thumb {
+          background: rgba(232,197,71,0.2); border-radius: 10px;
+        }
+
+        /* Greeting */
+        .cp-greeting {
+          display: flex; flex-direction: column; align-items: center;
+          text-align: center; padding: 8px 4px 20px; gap: 10px;
+        }
+        .cp-greeting-orb {
+          width: 52px; height: 52px; border-radius: 50%;
+          background: linear-gradient(135deg, #E8C547, #FF5C35);
+          display: flex; align-items: center; justify-content: center;
+          color: #111;
+          box-shadow: 0 8px 24px rgba(232,197,71,0.3);
+          animation: cp-orb-pulse 2.4s ease-in-out infinite;
+        }
+        @keyframes cp-orb-pulse {
+          0%,100% { transform: scale(1); }
+          50%      { transform: scale(1.07); }
+        }
+        .cp-greeting-name {
+          font-size: 15px; font-weight: 700; color: #FAFAF7;
+          margin: 0; font-family: var(--font-body, 'Inter', sans-serif);
+        }
+        .cp-greeting-sub {
+          font-size: 12.5px; color: rgba(250,250,247,0.55);
+          line-height: 1.6; margin: 0; max-width: 280px;
+        }
+
+        /* Preference card */
+        .cp-pref-card {
+          background: rgba(232,197,71,0.07);
+          border: 1px solid rgba(232,197,71,0.2);
+          border-radius: 16px; padding: 14px 14px 14px;
+          margin-bottom: 12px;
+        }
+        .cp-pref-title {
+          font-size: 13px; font-weight: 700; color: #FAFAF7; margin: 0 0 4px;
+        }
+        .cp-pref-sub {
+          font-size: 11px; color: rgba(250,250,247,0.5); margin: 0 0 12px;
+        }
+        .cp-pref-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .cp-pref-btn {
+          padding: 10px 0; border-radius: 12px;
+          font-size: 13px; font-weight: 700; cursor: pointer;
+          border: 1.5px solid; transition: transform 100ms, background 140ms;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .cp-pref-btn:active { transform: scale(0.95); }
+        .cp-pref-veg {
+          border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.08); color: #4ade80;
+        }
+        .cp-pref-veg:hover { background: rgba(34,197,94,0.16); }
+        .cp-pref-nonveg {
+          border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); color: #f87171;
+        }
+        .cp-pref-nonveg:hover { background: rgba(239,68,68,0.16); }
+
+        /* Starter chips */
+        .cp-starters { padding: 4px 0 8px; }
+        .cp-starters-label {
+          font-size: 10px; font-weight: 700; letter-spacing: .1em;
+          text-transform: uppercase; color: rgba(250,250,247,0.35);
+          margin: 0 0 10px;
+        }
+        .cp-chips-wrap { display: flex; flex-wrap: wrap; gap: 7px; }
+        .cp-chip {
+          font-size: 12px; font-weight: 600; padding: 7px 14px;
+          border-radius: 999px; border: 1.5px solid rgba(232,197,71,0.25);
+          background: rgba(232,197,71,0.05); color: rgba(250,250,247,0.75);
+          cursor: pointer; transition: background 130ms, color 130ms, transform 90ms;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .cp-chip:hover { background: rgba(232,197,71,0.14); color: #E8C547; }
+        .cp-chip:active { transform: scale(0.93); }
+
+        /* Typing indicator */
+        .cp-typing-indicator {
+          display: flex; align-items: center; gap: 8px;
+          padding: 10px 14px;
+          animation: cp-fade-in 200ms ease both;
+        }
+        .cp-typing-dots { display: flex; gap: 4px; }
+        .cp-dot {
+          width: 7px; height: 7px; border-radius: 50%;
+          background: #E8C547;
+          animation: cp-bounce 1s ease-in-out infinite;
+        }
+        @keyframes cp-bounce {
+          0%,100% { transform: translateY(0); opacity: .5; }
+          50%      { transform: translateY(-5px); opacity: 1; }
+        }
+        .cp-typing-text { font-size: 11px; color: rgba(250,250,247,0.4); font-style: italic; }
+
+        /* Input row */
+        .cp-input-row {
+          display: flex; align-items: center; gap: 10px;
+          padding: 12px 14px 14px;
+          border-top: 1px solid rgba(255,255,255,0.07);
+          flex-shrink: 0;
+          padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
+        }
+        .cp-input {
+          flex: 1; padding: 10px 16px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.1);
+          color: #FAFAF7; font-size: 13px;
+          font-family: var(--font-body, 'Inter', sans-serif);
+          outline: none; transition: border-color 180ms, background 180ms;
+        }
+        .cp-input::placeholder { color: rgba(250,250,247,0.3); }
+        .cp-input:focus {
+          border-color: rgba(232,197,71,0.4);
+          background: rgba(255,255,255,0.09);
+        }
+        .cp-input:disabled { opacity: 0.5; }
+        .cp-send-btn {
+          width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+          background: linear-gradient(135deg, #E8C547, #FF5C35);
+          border: none; color: #111; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: transform 100ms, opacity 140ms;
+          box-shadow: 0 4px 14px rgba(232,197,71,0.25);
+        }
+        .cp-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .cp-send-btn:not(:disabled):active { transform: scale(0.92); }
+      `}</style>
+
+      {/* Backdrop (mobile only) */}
+      <div className="cp-backdrop" onClick={closeChat} />
+
+      {/* Panel */}
+      <div className="cp-sheet">
+        {/* Header */}
+        <div className="cp-header">
+          <div className="cp-header-orb">
+            <Sparkles size={15} />
           </div>
-        )}
-
-        {showChat && (
-          <div
-            className={`fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-[28px] border-t border-slate-200 bg-white/95 shadow-[0_-20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-all duration-300 ${
-              isExpanded ? 'h-[82dvh]' : 'h-[58px]'
-            }`}
-          >
-            <div
-              className="relative flex cursor-pointer select-none items-center justify-between px-4 py-3"
-              onClick={() => setIsExpanded((e) => !e)}
-            >
-              <div className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-slate-200" />
-              <div className="mt-1 flex items-center gap-2">
-                <Sparkles size={15} className="text-blue-600" />
-                <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
-                <span className="text-[10px] text-slate-500">
-                  · {showPreferenceGate ? 'Choose veg / non-veg first' : 'Ask about the menu'}
-                </span>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  closeChat()
-                }}
-                className="mt-1 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                aria-label="Close chat"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            {isExpanded && (
-              <>
-                <div className="flex-1 overflow-y-auto px-4 pb-2">
-                  {isEmpty ? (
-                    showPreferenceGate ? (
-                      <PreferencePrompt restaurantType={restaurantType} onPick={handlePreferencePick} />
-                    ) : (
-                      <StarterChips
-                        starters={starters}
-                        onSend={(text) => void sendMessage(text)}
-                        heading={
-                          restaurantType === 'veg'
-                            ? 'Start with veg recommendations:'
-                            : restaurantType === 'non_veg'
-                              ? 'Start with non-veg recommendations:'
-                              : 'Start with the best dishes:'
-                        }
-                      />
-                    )
-                  ) : (
-                    <>
-                      {messages.map((msg) => (
-                        <ChatMessageComp
-                          key={msg.id}
-                          message={msg as any}
-                          onSuggestionTap={(text) => void sendMessage(text)}
-                          onUpsellTap={handleUpsellTap}
-                        />
-                      ))}
-                      {isChatLoading && <TypingIndicator />}
-                      <div ref={messagesEndRef} />
-                    </>
-                  )}
-                </div>
-
-                <ChatInput
-                  input={input}
-                  setInput={setInput}
-                  onSubmit={handleSubmit}
-                  disabled={isChatLoading}
-                  inputRef={inputRef}
-                />
-              </>
-            )}
+          <div className="cp-header-text">
+            <p className="cp-header-title">Your Waiter</p>
+            <p className="cp-header-sub">@ {restaurant.name}</p>
           </div>
-        )}
-      </div>
-
-      {/* DESKTOP */}
-      <div className="hidden h-[calc(100vh-2rem)] w-[340px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm lg:sticky lg:top-4 lg:flex lg:flex-col xl:w-[380px]">
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
-          <Sparkles size={15} className="text-blue-600" />
-          <span className="text-sm font-semibold text-slate-900">AI Waiter</span>
-          <span className="ml-1 text-[11px] text-slate-500">Powered by Gemini</span>
+          <button type="button" className="cp-close-btn" onClick={closeChat} aria-label="Close">
+            <X size={16} />
+          </button>
         </div>
 
-        {!showChat ? (
-          <div className="flex flex-1 flex-col items-center justify-center px-5 py-6 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-xl shadow-blue-500/20">
-              <Sparkles size={22} />
-            </div>
-
-            <h3 className="mt-4 text-lg font-semibold text-slate-900">Ask the AI waiter</h3>
-            <p className="mt-2 max-w-[280px] text-sm leading-6 text-slate-500">
-              Get dish suggestions, complete meal ideas, and smart pairing help.
-            </p>
-
-            {showTooltip && (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-sm">
-                Tip: tap the AI button to start chatting
-              </div>
-            )}
-
-            <button
-              onClick={openChat}
-              className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              <Sparkles size={15} />
-              Open AI chat
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex-1 overflow-y-auto px-4 py-3">
-              {isEmpty ? (
-                <div className="space-y-3">
-                  {showPreferenceGate ? (
-                    <PreferencePrompt restaurantType={restaurantType} onPick={handlePreferencePick} />
-                  ) : (
-                    <StarterChips
-                      starters={starters}
-                      onSend={(text) => void sendMessage(text)}
-                      heading={
-                        restaurantType === 'veg'
-                          ? 'Start with veg recommendations:'
-                          : restaurantType === 'non_veg'
-                            ? 'Start with non-veg recommendations:'
-                            : 'Start with the best dishes:'
-                      }
-                    />
-                  )}
-                </div>
+        {/* Messages */}
+        <div className="cp-messages">
+          {isEmpty ? (
+            <div>
+              <WaiterGreeting restaurantName={restaurant.name} />
+              {showPreferenceGate ? (
+                <PreferencePrompt restaurantType={restaurantType} onPick={handlePreferencePick} />
               ) : (
-                <>
-                  {messages.map((msg) => (
-                    <ChatMessageComp
-                      key={msg.id}
-                      message={msg as any}
-                      onSuggestionTap={(text) => void sendMessage(text)}
-                      onUpsellTap={handleUpsellTap}
-                    />
-                  ))}
-                  {isChatLoading && <TypingIndicator />}
-                  <div ref={desktopMessagesEndRef} />
-                </>
+                <StarterChips starters={starters} onSend={text => void sendMessage(text)} />
               )}
             </div>
+          ) : (
+            <>
+              {messages.map(msg => (
+                <ChatMessageComp
+                  key={msg.id}
+                  message={msg as any}
+                  onSuggestionTap={text => void sendMessage(text)}
+                  onUpsellTap={handleUpsellTap}
+                />
+              ))}
+              {isChatLoading && <TypingIndicator />}
+              <div ref={messagesEndRef} />
+            </>
+          )}
+        </div>
 
-            <ChatInput
-              input={input}
-              setInput={setInput}
-              onSubmit={handleSubmit}
-              disabled={isChatLoading}
-              inputRef={desktopInputRef}
-            />
-          </>
-        )}
+        {/* Input */}
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          onSubmit={handleSubmit}
+          disabled={isChatLoading}
+          inputRef={inputRef}
+        />
       </div>
     </>
   )

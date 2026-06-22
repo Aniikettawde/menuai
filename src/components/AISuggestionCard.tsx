@@ -138,6 +138,7 @@ function ItemCard({ item }: { item: MenuItem }) {
   const imgUrl = imgErr ? null : getImageUrl(item.image_url)
   const price = formatPrice(item.price)
   const role = getRoleLabel(item)
+  // respect per-restaurant orders toggle
   const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
 
   const onAdd = (e: React.MouseEvent) => {
@@ -181,6 +182,7 @@ function ItemCard({ item }: { item: MenuItem }) {
         {price && <p className="asc-price">{price}</p>}
       </div>
 
+      {/* Only render add/stepper when orders are enabled */}
       {ordersEnabled && (
         <div className="asc-action">
           {qty === 0 ? (
@@ -225,12 +227,12 @@ interface AIResult {
 /* ─── Main export ──────────────────────────────────────────────────────── */
 
 export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
-  const { restaurant, items, sessionId } = useAppStore()
+  const { restaurant, items, sessionId, setShowChat } = useAppStore()
   const [state, setState] = useState<State>('idle')
   const [result, setResult] = useState<AIResult | null>(null)
   const abort = useRef<AbortController | null>(null)
 
- const fetchSuggestion = useCallback(async (msg = 'Suggest the best compatible revenue-smart meal bundle') => {
+  const fetchSuggestion = useCallback(async (msg = 'Suggest the best compatible revenue-smart meal bundle') => {
     if (!restaurant) return
     abort.current?.abort()
     const ctrl = new AbortController()
@@ -283,12 +285,19 @@ export function AISuggestionCard({ onAsk }: AISuggestionCardProps) {
       if (m && !seen.has(m.id)) { found.push(m); seen.add(m.id) }
     }
     const maxItems = result.mentioned_items.length + result.upsell_items.length
-return found.slice(0, Math.min(maxItems, 6))
+    return found.slice(0, Math.min(maxItems, 6))
   })()
+
+  // clicking the card opens ChatPanel instead of fetching inline
+  const handleCardClick = () => {
+    if (state === 'idle') {
+      setShowChat(true)
+      onAsk?.('')
+    }
+  }
 
   return (
     <>
-      {/* ── all scoped CSS, dark premium theme matching .pr-shell ── */}
       <style>{`
         .asc-wrap {
           position: relative;
@@ -527,11 +536,11 @@ return found.slice(0, Math.min(maxItems, 6))
 
       <div
         className={`asc-wrap${state === 'idle' ? ' asc-wrap--idle' : ''}`}
-        onClick={() => state === 'idle' && fetchSuggestion()}
+        onClick={handleCardClick}
         role={state === 'idle' ? 'button' : undefined}
         tabIndex={state === 'idle' ? 0 : undefined}
-        onKeyDown={e => e.key === 'Enter' && state === 'idle' && fetchSuggestion()}
-        aria-label={state === 'idle' ? 'Get AI meal suggestion' : undefined}
+        onKeyDown={e => e.key === 'Enter' && state === 'idle' && handleCardClick()}
+        aria-label={state === 'idle' ? 'Chat with AI Waiter' : undefined}
       >
         <div className="asc-header">
           <AIOrb thinking={state === 'loading'} />
@@ -540,16 +549,16 @@ return found.slice(0, Math.min(maxItems, 6))
             <p className="asc-title">
               {state === 'loading' ? 'Building your perfect meal…' : 'Confused what to order?'}
             </p>
-            {state === 'idle' && <p className="asc-sub">Let AI pick for you →</p>}
+            {state === 'idle' && <p className="asc-sub">Chat with me, I got you →</p>}
           </div>
 
           {state === 'idle' && (
             <button
               type="button" className="asc-suggest-btn"
-              onClick={e => { e.stopPropagation(); fetchSuggestion() }}
+              onClick={e => { e.stopPropagation(); handleCardClick() }}
               tabIndex={-1}
             >
-              <SparkSVG size={12} /> Suggest
+              <SparkSVG size={12} /> Ask me
             </button>
           )}
 

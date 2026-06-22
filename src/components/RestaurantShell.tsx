@@ -14,12 +14,12 @@ import { RatingModal } from './RatingModal'
 import { OfflineBanner } from './OfflineBanner'
 import { WaiterCalledToast } from './WaiterCalledToast'
 import { getPersistedOrder } from '@/lib/order-storage'
+import { ChatPanel } from './ChatPanel'
 import { RatingsFeed } from './RatingsFeed'
 import { RatingsListModal } from './RatingsListModal'
 import { CallWaiterBell } from './CallWaiterBell'
 import { AISuggestionCard } from './AISuggestionCard'
 import { CustomerAuthProvider } from './CustomerAuthProvider'
-
 
 
 
@@ -78,7 +78,6 @@ export function RestaurantShell({ initialData }: Props) {
     clearCart,
     showRating,
     showRatingsList,
-    setShowChat,
   } = useAppStore()
 
   const [waiterToasts, setWaiterToasts] = useState<OrderToastData[]>([])
@@ -661,14 +660,14 @@ export function RestaurantShell({ initialData }: Props) {
           {/* Table context pill */}
          
 
-          <MenuGrid
+             <MenuGrid
             onCallWaiter={handleCallWaiter}
             isWaiterLoading={waiterLoading}
-            upsellCard={
-              <AISuggestionCard onAsk={(_text) => setShowChat(true)} />
-            }
+            upsellCard={<AISuggestionCard />}
           />
         </main>
+		
+		<ChatPanel />
 
         {showRating && <RatingModal />}
         {showRatingsList && <RatingsListModal restaurant={restaurant} />}

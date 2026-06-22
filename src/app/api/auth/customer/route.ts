@@ -7,22 +7,118 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export interface CustomerUpsertPayload {
-  firebase_uid:  string
-  phone:         string
-  display_name?: string | null
-  restaurant_id?: string | null   // for join tracking
+  firebase_uid:   string
+  phone:          string
+  display_name?:  string | null
+  restaurant_id?: string | null
   table_number?:  number | null
 }
 
 export interface CustomerProfile {
-  id:            string
-  firebase_uid:  string
-  phone:         string
-  display_name:  string | null
+  id:             string
+  firebase_uid:   string
+  phone:          string
+  display_name:   string | null
   loyalty_points: number
-  created_at:    string
+  created_at:     string
 }
+
+// ─── GET: fetch account data (visits + offers) ────────────────────────────────
+
+export async function GET(req: NextRequest) {
+  try {
+    const customerId = req.nextUrl.searchParams.get('id')
+    if (!customerId) {
+      return NextResponse.json({ error: 'Missing customer id' }, { status: 400 })
+    }
+
+    // Fetch visit history — joined with restaurants so we get the name
+    const { data: visitRows, error: visitErr } = await supabase
+      .from('customer_visits')
+      .select(`
+        restaurant_id,
+        visited_at,
+        restaurants ( name, slug )
+      `)
+      .eq('customer_id', customerId)
+      .order('visited_at', { ascending: false })
+
+    if (visitErr) {
+      console.error('[customer visits]', visitErr)
+      return NextResponse.json({ error: visitErr.message }, { status: 500 })
+    }
+
+    // Aggregate: count visits per restaurant and keep the most recent date
+    const visitMap = new Map<string, {
+      restaurant_id:   string
+      restaurant_name: string
+      restaurant_slug: string
+      visit_count:     number
+      last_visited_at: string
+    }>()
+
+    for (const row of visitRows ?? []) {
+      const rid  = row.restaurant_id as string
+      const rest = row.restaurants as unknown as { name: string; slug: string } | null
+      const name = rest?.name ?? 'Unknown Restaurant'
+      const slug = rest?.slug ?? ''
+
+      if (visitMap.has(rid)) {
+        const existing = visitMap.get(rid)!
+        existing.visit_count += 1
+        // keep the most recent visited_at
+        if (row.visited_at > existing.last_visited_at) {
+          existing.last_visited_at = row.visited_at as string
+        }
+      } else {
+        visitMap.set(rid, {
+          restaurant_id:   rid,
+          restaurant_name: name,
+          restaurant_slug: slug,
+          visit_count:     1,
+          last_visited_at: row.visited_at as string,
+        })
+      }
+    }
+
+    // Sort: most recently visited first
+    const visits = [...visitMap.values()].sort(
+      (a, b) => new Date(b.last_visited_at).getTime() - new Date(a.last_visited_at).getTime(),
+    )
+
+    // Fetch offers for this customer
+    // Table: customer_offers (id, customer_id, title, description, expires_at, is_used, created_at)
+    // If you don't have this table yet, the query safely returns []
+    const { data: offerRows, error: offerErr } = await supabase
+      .from('customer_offers')
+      .select('id, title, description, expires_at, is_used')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false })
+
+    if (offerErr && offerErr.code !== 'PGRST116') {
+      // PGRST116 = table not found — silently return empty offers
+      console.error('[customer offers]', offerErr)
+    }
+
+    const offers = (offerRows ?? []).map((o) => ({
+      id:          o.id as string,
+      title:       o.title as string,
+      description: o.description as string ?? '',
+      expires_at:  o.expires_at as string | null,
+      is_used:     o.is_used as boolean ?? false,
+    }))
+
+    return NextResponse.json({ visits, offers })
+  } catch (err) {
+    console.error('[customer GET]', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// ─── POST: upsert customer profile + log visit ────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -52,7 +148,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Optionally log the restaurant visit
+    // Log the restaurant visit
     if (body.restaurant_id && customer?.id) {
       await supabase.from('customer_visits').insert({
         customer_id:   customer.id,

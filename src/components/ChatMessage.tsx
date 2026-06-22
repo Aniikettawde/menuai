@@ -1,17 +1,7 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import {
-  Sparkles,
-  TrendingUp,
-  ChefHat,
-  Clock3,
-  Flame,
-  ShieldCheck,
-  ArrowRight,
-  Plus,
-  Check,
-} from 'lucide-react'
+import { Plus } from 'lucide-react'
 import type { ChatMessage as ChatMessageType, PsychTrigger, QuickReply, MenuItem } from '@/types'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
@@ -30,10 +20,8 @@ interface Props {
 function getImageUrl(imageUrl: string | null | undefined): string | null {
   if (!imageUrl) return null
   if (imageUrl.startsWith('http')) return imageUrl
-
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
-
   return `${base}/storage/v1/object/public/restaurant-assets/${imageUrl}`
 }
 
@@ -41,177 +29,262 @@ function formatPrice(paise: number) {
   return `₹${Math.round(paise / 100)}`
 }
 
-const PSYCH_BADGE: Record<
-  string,
-  {
-    label: string
-    icon: ReactNode
-    color: string
-    borderColor: string
-  }
-> = {
-  social_proof: {
-    icon: <TrendingUp size={10} />,
-    label: 'Most paired',
-    color: 'text-emerald-700 bg-emerald-50',
-    borderColor: 'border-emerald-200',
-  },
-  scarcity: {
-    icon: <Clock3 size={10} />,
-    label: 'Limited today',
-    color: 'text-rose-700 bg-rose-50',
-    borderColor: 'border-rose-200',
-  },
-  completion: {
-    icon: <Sparkles size={10} />,
-    label: 'Completes the meal',
-    color: 'text-sky-700 bg-sky-50',
-    borderColor: 'border-sky-200',
-  },
-  anchoring: {
-    icon: <Flame size={10} />,
-    label: 'Smart add-on',
-    color: 'text-violet-700 bg-violet-50',
-    borderColor: 'border-violet-200',
-  },
-  reciprocity: {
-    icon: <ChefHat size={10} />,
-    label: "Chef's pick",
-    color: 'text-amber-700 bg-amber-50',
-    borderColor: 'border-amber-200',
-  },
-  fomo: {
-    icon: <ShieldCheck size={10} />,
-    label: 'Trending now',
-    color: 'text-orange-700 bg-orange-50',
-    borderColor: 'border-orange-200',
-  },
-  none: {
-    icon: <Sparkles size={10} />,
-    label: 'Pairs well with this',
-    color: 'text-blue-700 bg-blue-50',
-    borderColor: 'border-blue-200',
-  },
+const PlusSVG = ({ size = 11 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={2.5} strokeLinecap="round">
+    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+)
+const MinusSVG = ({ size = 11 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={2.5} strokeLinecap="round">
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+)
+
+function VegDot({ isVeg }: { isVeg: boolean }) {
+  const c = isVeg ? '#22c55e' : '#ef4444'
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 11, height: 11, borderRadius: 2, border: `1.5px solid ${c}`, flexShrink: 0,
+    }}>
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: c, display: 'block' }} />
+    </span>
+  )
 }
 
-function SmartDishCard({
+/* ── Dark dish card — matches the dark panel theme ── */
+function DarkDishCard({
   item,
-  tag,
+  label,
+  labelColor,
   onAdd,
   onWhy,
 }: {
   item: MenuItem
-  tag: string
+  label: string
+  labelColor: 'gold' | 'orange'
   onAdd: () => void
   onWhy?: () => void
 }) {
-  const imageUrl = getImageUrl(item.image_url)
+  const { cartItems, increaseCartItem, decreaseCartItem, dishOptions, openCustomiseSheet } = useAppStore()
+  const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
+  const [justAdded, setJustAdded] = useState(false)
+  const [imgErr, setImgErr] = useState(false)
+
+  const entries = cartItems.filter(c => c.item.id === item.id)
+  const qty = entries.reduce((s, c) => s + c.quantity, 0)
+  const primaryEntry = entries[0] ?? null
+  const hasOpts = (dishOptions[item.id]?.length ?? 0) > 0
+  const imageUrl = imgErr ? null : getImageUrl(item.image_url)
+  const price = item.price > 0 ? formatPrice(item.price) : ''
+
+  const accentColor = labelColor === 'gold' ? '#E8C547' : '#FF5C35'
+  const accentBg = labelColor === 'gold' ? 'rgba(232,197,71,0.1)' : 'rgba(255,92,53,0.1)'
+  const accentBorder = labelColor === 'gold' ? 'rgba(232,197,71,0.2)' : 'rgba(255,92,53,0.2)'
+
+  const handleAdd = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (hasOpts) { openCustomiseSheet(item.id); return }
+    onAdd()
+    setJustAdded(true)
+    setTimeout(() => setJustAdded(false), 900)
+  }
+  const onInc = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (hasOpts) { openCustomiseSheet(item.id); return }
+    if (primaryEntry) increaseCartItem(primaryEntry.cartKey)
+  }
+  const onDec = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (primaryEntry) decreaseCartItem(primaryEntry.cartKey)
+  }
 
   return (
-    <div className="group flex w-full items-center gap-3 rounded-3xl border border-slate-200 bg-white/95 p-3 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
-      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-200 text-lg">
-            {item.is_veg ? '🥗' : '🍖'}
-          </div>
-        )}
+    <>
+      <style>{`
+        .cm-card {
+          display: flex; align-items: center; gap: 10px;
+          background: #1A1A1A;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 14px; padding: 10px;
+          transition: border-color 160ms;
+        }
+        .cm-card:hover { border-color: rgba(232,197,71,0.2); }
+        .cm-img-wrap {
+          position: relative; width: 52px; height: 52px; flex-shrink: 0;
+          border-radius: 10px; overflow: hidden;
+          background: rgba(255,255,255,0.04);
+        }
+        .cm-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .cm-img-placeholder {
+          width: 100%; height: 100%;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 20px; font-weight: 700; color: #E8C547;
+          background: rgba(232,197,71,0.08);
+        }
+        .cm-label-pill {
+          position: absolute; bottom: 0; left: 0; right: 0;
+          font-size: 7px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: .06em; text-align: center;
+          padding: 2px 0; color: white;
+          background: rgba(0,0,0,0.6);
+        }
+        .cm-info { flex: 1; min-width: 0; }
+        .cm-meta { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+        .cm-tag {
+          font-size: 8px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: .08em; padding: 2px 6px; border-radius: 4px;
+        }
+        .cm-bestseller {
+          font-size: 8px; font-weight: 600; color: #E8C547;
+          background: rgba(232,197,71,0.1); border-radius: 4px; padding: 1px 5px;
+        }
+        .cm-name {
+          font-size: 12.5px; font-weight: 600; color: #FAFAF7;
+          margin: 0 0 2px; line-height: 1.3;
+          overflow: hidden; display: -webkit-box;
+          -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+        }
+        .cm-desc {
+          font-size: 10px; color: rgba(250,250,247,0.4);
+          margin: 0 0 5px; line-height: 1.35;
+          overflow: hidden; display: -webkit-box;
+          -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+        }
+        .cm-bottom { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+        .cm-price { font-size: 13px; font-weight: 700; color: #FAFAF7; }
 
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-1.5 pb-1 pt-3">
-          <p className="truncate text-center text-[8px] font-bold uppercase tracking-wider text-white">
-            {tag}
-          </p>
+        .cm-add-btn {
+          display: inline-flex; align-items: center; gap: 3px;
+          padding: 5px 10px; border-radius: 8px;
+          font-size: 10px; font-weight: 700; letter-spacing: .05em;
+          cursor: pointer; border: 1.5px solid; flex-shrink: 0;
+          transition: background 130ms, transform 90ms;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .cm-add-btn:active { transform: scale(.93); }
+        .cm-add-btn--done { background: rgba(34,197,94,0.12) !important; border-color: rgba(34,197,94,0.5) !important; color: #4ade80 !important; }
+
+        .cm-stepper {
+          display: flex; align-items: center;
+          background: #FF5C35; border-radius: 8px; overflow: hidden;
+          height: 28px; flex-shrink: 0;
+        }
+        .cm-step-btn {
+          display: flex; align-items: center; justify-content: center;
+          width: 26px; height: 100%; background: none; border: none;
+          color: white; cursor: pointer;
+          transition: background 90ms;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .cm-step-btn:active { background: rgba(0,0,0,.18); }
+        .cm-step-num { font-size: 11px; font-weight: 700; color: white; padding: 0 4px; }
+
+        .cm-why-btn {
+          font-size: 10px; font-weight: 600; padding: 4px 8px;
+          border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);
+          background: none; color: rgba(250,250,247,0.4); cursor: pointer;
+          transition: color 130ms, border-color 130ms;
+          -webkit-tap-highlight-color: transparent; flex-shrink: 0;
+        }
+        .cm-why-btn:hover { color: #E8C547; border-color: rgba(232,197,71,0.3); }
+      `}</style>
+
+      <div className="cm-card">
+        <div className="cm-img-wrap">
+          {imageUrl
+            ? <img src={imageUrl} alt={item.name} className="cm-img" loading="lazy" onError={() => setImgErr(true)} />
+            : <div className="cm-img-placeholder">{item.name[0]?.toUpperCase()}</div>
+          }
+          <div className="cm-label-pill">{label}</div>
         </div>
-      </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
-          {item.is_bestseller && (
-            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
-              Bestseller
+        <div className="cm-info">
+          <div className="cm-meta">
+            <VegDot isVeg={item.is_veg} />
+            <span className="cm-tag" style={{ color: accentColor, background: accentBg, border: `1px solid ${accentBorder}` }}>
+              {label}
             </span>
-          )}
-        </div>
-
-        {item.description && (
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-            {item.description}
-          </p>
-        )}
-
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-blue-700">{formatPrice(item.price)}</span>
-
-          <div className="flex items-center gap-2">
-            {onWhy && (
-              <button
-                type="button"
-                onClick={onWhy}
-                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition hover:border-blue-200 hover:text-blue-700"
-              >
-                Why?
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onAdd}
-              className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-blue-700 active:scale-95"
-            >
-              <Plus size={12} />
-              ADD
-            </button>
+            {item.is_bestseller && <span className="cm-bestseller">⭐ Best</span>}
+          </div>
+          <p className="cm-name">{item.name}</p>
+          {item.description && <p className="cm-desc">{item.description.replace(/[,;:\s]+$/, '')}</p>}
+          <div className="cm-bottom">
+            {price && <span className="cm-price">{price}</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+              {onWhy && (
+                <button type="button" className="cm-why-btn" onClick={e => { e.stopPropagation(); onWhy() }}>
+                  Why?
+                </button>
+              )}
+              {/* Only show add/stepper when orders are enabled */}
+              {ordersEnabled && (
+                qty === 0 ? (
+                  <button
+                    type="button"
+                    className={`cm-add-btn${justAdded ? ' cm-add-btn--done' : ''}`}
+                    style={justAdded ? {} : {
+                      color: '#FF5C35',
+                      borderColor: 'rgba(255,92,53,0.5)',
+                      background: 'rgba(255,92,53,0.1)',
+                    }}
+                    onClick={handleAdd}
+                  >
+                    {justAdded ? '✓' : <><PlusSVG size={9} /> ADD</>}
+                  </button>
+                ) : (
+                  <div className="cm-stepper">
+                    <button type="button" className="cm-step-btn" onClick={onDec}><MinusSVG size={9} /></button>
+                    <span className="cm-step-num">{qty}</span>
+                    <button type="button" className="cm-step-btn" onClick={onInc}><PlusSVG size={9} /></button>
+                  </div>
+                )
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
-function UpsellTextCard({
-  itemName,
-  psychTrigger,
-  onLearnMore,
-}: {
-  itemName: string
-  psychTrigger: PsychTrigger
-  onLearnMore: () => void
-}) {
-  const badge = PSYCH_BADGE[psychTrigger] ?? PSYCH_BADGE.none
-
-  return (
-    <button
-      type="button"
-      onClick={onLearnMore}
-      className="group w-full rounded-3xl border border-slate-200 bg-white/95 p-3 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
-    >
-      <div
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${badge.color} ${badge.borderColor}`}
-      >
-        {badge.icon}
-        {badge.label}
-      </div>
-
-      <p className="mt-2 text-sm font-semibold text-slate-900">{itemName}</p>
-      <p className="mt-1 text-xs text-slate-500 transition group-hover:text-slate-700">
-        Tap to learn more
-      </p>
-    </button>
-  )
-}
-
+/* ── Quick reply chip ── */
 function QuickReplyChip({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '6px 13px', borderRadius: 999,
+        border: '1.5px solid rgba(232,197,71,0.25)',
+        background: 'rgba(232,197,71,0.05)',
+        color: '#E8C547', fontSize: 11.5, fontWeight: 600,
+        cursor: 'pointer',
+        transition: 'background 130ms, transform 90ms',
+        WebkitTapHighlightColor: 'transparent',
+      }}
     >
       {label}
-      <ArrowRight size={11} />
     </button>
+  )
+}
+
+/* ── Waiter orb (AI avatar) ── */
+function WaiterOrb() {
+  return (
+    <div style={{
+      width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+      background: 'linear-gradient(135deg, #E8C547, #FF5C35)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: '#111', fontSize: 12, fontWeight: 700,
+      boxShadow: '0 4px 12px rgba(232,197,71,0.25)',
+      marginTop: 2,
+    }}>
+      ★
+    </div>
   )
 }
 
@@ -231,59 +304,70 @@ export function ChatMessage({ message, onSuggestionTap, onUpsellTap }: Props) {
   const handleAdd = (item: MenuItem, source: 'ai_suggestion' | 'ai_upsell' = 'ai_suggestion') => {
     setAddingId(item.id)
     addToCart(item)
-
     if (restaurant) {
       void track(restaurant.id, 'cart_item_added', {
         item_id: item.id,
         item_name: item.name,
-        metadata: {
-          source,
-          price: item.price,
-          is_bestseller: item.is_bestseller,
-          is_special: item.is_special,
-        },
+        metadata: { source, price: item.price, is_bestseller: item.is_bestseller },
       })
     }
-
     setTimeout(() => setAddingId(null), 800)
   }
 
   return (
-    <div className={`mb-4 flex gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-      {isAI && (
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-sm shadow-blue-500/20">
-          <Sparkles size={12} />
-        </div>
-      )}
+    <div style={{
+      marginBottom: 16,
+      display: 'flex',
+      gap: 8,
+      flexDirection: isUser ? 'row-reverse' : 'row',
+      alignItems: 'flex-start',
+    }}>
+      {isAI && <WaiterOrb />}
 
-      <div className={`flex max-w-[88%] flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
-        <div
-          className={[
-            'rounded-[22px] px-4 py-3 text-sm leading-relaxed shadow-sm transition-all duration-300',
-            isUser
-              ? 'rounded-tr-sm bg-gradient-to-br from-blue-600 to-violet-600 text-white'
-              : 'rounded-tl-sm border border-slate-200 bg-white/95 text-slate-800',
-          ].join(' ')}
-        >
-          <div className="whitespace-pre-wrap">{content}</div>
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 8,
+        maxWidth: '88%',
+        alignItems: isUser ? 'flex-end' : 'flex-start',
+      }}>
+        {/* Message bubble */}
+        <div style={{
+          padding: '10px 14px',
+          borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+          fontSize: 13, lineHeight: 1.55,
+          ...(isUser ? {
+            background: 'linear-gradient(135deg, #E8C547, #FF5C35)',
+            color: '#111',
+            fontWeight: 500,
+          } : {
+            background: '#242424',
+            border: '1px solid rgba(255,255,255,0.08)',
+            color: 'rgba(250,250,247,0.85)',
+          }),
+        }}>
+          {content}
         </div>
 
+        {/* Quick reply chips */}
         {isAI && suggestions.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((s) => (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {suggestions.map(s => (
               <QuickReplyChip key={s.action} label={s.label} onClick={() => onSuggestionTap(s.action)} />
             ))}
           </div>
         )}
 
+        {/* Suggested main dish cards */}
         {isAI && menuItems.length > 0 && (
-          <div className="grid w-full grid-cols-1 gap-2">
-            <p className="px-0.5 text-[11px] font-medium text-slate-400">Suggested dishes</p>
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#E8C547', margin: 0 }}>
+              Suggested for you
+            </p>
             {menuItems.slice(0, 3).map((item: MenuItem, idx: number) => (
-              <SmartDishCard
+              <DarkDishCard
                 key={item.id ?? `${item.name}-${idx}`}
                 item={item}
-                tag="Suggested for you"
+                label="Suggested"
+                labelColor="gold"
                 onAdd={() => handleAdd(item, 'ai_suggestion')}
                 onWhy={() => onUpsellTap?.(item.name, psychTrigger, message.convo_stage)}
               />
@@ -291,14 +375,18 @@ export function ChatMessage({ message, onSuggestionTap, onUpsellTap }: Props) {
           </div>
         )}
 
+        {/* Upsell cards (with full MenuItem data) */}
         {isAI && upsellMenuItems.length > 0 && (
-          <div className="grid w-full grid-cols-1 gap-2">
-            <p className="px-0.5 text-[11px] font-medium text-slate-400">Perfect pairing</p>
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#FF5C35', margin: 0 }}>
+              Pairs perfectly
+            </p>
             {upsellMenuItems.slice(0, 2).map((item: MenuItem, idx: number) => (
-              <SmartDishCard
+              <DarkDishCard
                 key={item.id ?? `${item.name}-${idx}`}
                 item={item}
-                tag="Pairs well with this"
+                label="Pairs well"
+                labelColor="orange"
                 onAdd={() => handleAdd(item, 'ai_upsell')}
                 onWhy={() => onUpsellTap?.(item.name, psychTrigger, message.convo_stage)}
               />
@@ -306,23 +394,32 @@ export function ChatMessage({ message, onSuggestionTap, onUpsellTap }: Props) {
           </div>
         )}
 
+        {/* Upsell text-only fallback (no MenuItem data) */}
         {isAI && upsellItems.length > 0 && upsellMenuItems.length === 0 && (
-          <div className="grid w-full grid-cols-1 gap-2">
-            <p className="px-0.5 text-[11px] font-medium text-slate-400">Perfect pairing</p>
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#FF5C35', margin: 0 }}>
+              Also consider
+            </p>
             {upsellItems.slice(0, 2).map((itemName: string, idx: number) => (
-              <UpsellTextCard
+              <button
                 key={`${itemName}-${idx}`}
-                itemName={itemName}
-                psychTrigger={psychTrigger}
-                onLearnMore={() => onUpsellTap?.(itemName, psychTrigger, message.convo_stage)}
-              />
+                type="button"
+                onClick={() => onUpsellTap?.(itemName, psychTrigger, message.convo_stage)}
+                style={{
+                  textAlign: 'left', padding: '10px 12px',
+                  background: '#1A1A1A',
+                  border: '1px solid rgba(255,92,53,0.2)',
+                  borderRadius: 12, cursor: 'pointer',
+                  transition: 'border-color 140ms',
+                  color: 'rgba(250,250,247,0.8)', fontSize: 12.5, fontWeight: 600,
+                }}
+              >
+                {itemName}
+                <span style={{ display: 'block', fontSize: 10, color: 'rgba(250,250,247,0.35)', marginTop: 2, fontWeight: 400 }}>
+                  Tap to learn more →
+                </span>
+              </button>
             ))}
-          </div>
-        )}
-
-        {isAI && addingId && (
-          <div className="px-0.5 text-[11px] font-medium text-emerald-600">
-            Added to cart ✓
           </div>
         )}
       </div>
