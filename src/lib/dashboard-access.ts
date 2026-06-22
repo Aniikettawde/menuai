@@ -156,10 +156,9 @@ export function getLandingPath(role: TeamRole): string {
 export function canAccessPath(role: TeamRole, pathname: string): boolean {
   if (role === 'manager') return true
 
-  if (role === 'owner') {
-    if (pathname.startsWith('/dashboard/billing')) return false
-    return pathname.startsWith('/dashboard')
-  }
+ if (role === 'owner') {
+  return pathname.startsWith('/dashboard')  // owners can access everything including billing
+}
 
   // waiter
   if (pathname === '/dashboard/change-password') return true

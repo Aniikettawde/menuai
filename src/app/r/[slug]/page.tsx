@@ -10,6 +10,7 @@ import { DiscoveryRestaurantView, type DiscoveryPageData } from './discovery-vie
 
 interface PageProps {
   params: { slug: string }
+  searchParams: { table?: string; t?: string }
 }
 
 type SubscriptionRow = {
@@ -18,13 +19,11 @@ type SubscriptionRow = {
   current_period_end?: string | null
 }
 
-function hasPaidAccess(sub: SubscriptionRow | null | undefined) {
+function hasPaidAccess(sub: SubscriptionRow | null | undefined): boolean {
   if (!sub) return false
-
   const now = new Date()
   const trialEnd = sub.trial_end ? new Date(sub.trial_end) : null
   const periodEnd = sub.current_period_end ? new Date(sub.current_period_end) : null
-
   return (
     sub.plan === 'active' ||
     sub.plan === 'paid' ||
@@ -33,55 +32,76 @@ function hasPaidAccess(sub: SubscriptionRow | null | undefined) {
     (!!periodEnd && periodEnd > now)
   )
 }
-// ─── Paid subscription restaurant lookup ──────────────────────────────────────
 
-async function getPaidMenuData(slug: string): Promise<MenuPageData | null> {
+// Validates that the ?t= token exists, belongs to this restaurant,
+// and matches the ?table= number. Returns null if anything is wrong.
+async function validateTableToken(
+  restaurantId: string,
+  tableNumber: string | undefined,
+  token: string | undefined,
+): Promise<{ valid: boolean; tokenExists: boolean }> {
+  // No token and no table = browse mode (discovery-style, no ordering)
+  if (!token && !tableNumber) return { valid: false, tokenExists: false }
+
+  // Token provided — validate it
+  if (token) {
+    const supabase = getSupabaseServer()
+    const { data } = await supabase
+      .from('qr_tokens')
+      .select('id, table_number, is_active')
+      .eq('restaurant_id', restaurantId)
+      .eq('token', token)
+      .maybeSingle()
+
+    if (!data) return { valid: false, tokenExists: false }
+
+    // Token exists but was deactivated (trial expired)
+    if (!data.is_active) return { valid: false, tokenExists: true }
+
+    // If table number was also passed, it must match
+    if (tableNumber && data.table_number !== parseInt(tableNumber, 10)) {
+      return { valid: false, tokenExists: false }
+    }
+
+    return { valid: true, tokenExists: true }
+  }
+
+  // Table number without token — old-style QR, treat as invalid
+  return { valid: false, tokenExists: false }
+}
+
+async function getRestaurantWithSub(slug: string) {
   const supabase = getSupabaseServer()
 
-  const { data: restaurant, error: restError } = await supabase
+  const { data: restaurant, error } = await supabase
     .from('restaurants')
     .select('*')
     .eq('slug', slug)
     .eq('is_active', true)
     .single()
 
-  if (restError || !restaurant) return null
+  if (error || !restaurant) return null
 
   const { data: sub } = await supabase
-  .from('subscriptions')
-  .select('plan, trial_end, current_period_end')
-  .eq('user_id', restaurant.owner_id)
-  .maybeSingle()
+    .from('subscriptions')
+    .select('plan, trial_end, current_period_end')
+    .eq('user_id', restaurant.owner_id)
+    .maybeSingle()
 
-  if (!hasPaidAccess(sub as SubscriptionRow | null)) return null
-
-  const [{ data: categories }, { data: items }] = await Promise.all([
-    supabase
-      .from('menu_categories')
-      .select('*')
-      .eq('restaurant_id', restaurant.id)
-      .eq('is_active', true)
-      .order('position'),
-    supabase
-      .from('menu_items')
-      .select('*')
-      .eq('restaurant_id', restaurant.id)
-      .eq('is_available', true)
-      .order('position'),
-  ])
-
-  return {
-    restaurant,
-    categories: categories ?? [],
-    items: items ?? [],
-  }
+  return { restaurant, sub: sub as SubscriptionRow | null }
 }
 
-// ─── Free discovery restaurant lookup ────────────────────────────────────────
+async function getMenuItems(restaurantId: string): Promise<Pick<MenuPageData, 'categories' | 'items'>> {
+  const supabase = getSupabaseServer()
+  const [{ data: categories }, { data: items }] = await Promise.all([
+    supabase.from('menu_categories').select('*').eq('restaurant_id', restaurantId).eq('is_active', true).order('position'),
+    supabase.from('menu_items').select('*').eq('restaurant_id', restaurantId).eq('is_available', true).order('position'),
+  ])
+  return { categories: categories ?? [], items: items ?? [] }
+}
 
 async function getDiscoveryData(slug: string): Promise<DiscoveryPageData | null> {
   const sb = getDiscoveryServer()
-
   const { data: restaurant, error } = await sb
     .from('restaurants')
     .select('*')
@@ -93,31 +113,10 @@ async function getDiscoveryData(slug: string): Promise<DiscoveryPageData | null>
 
   const [{ data: categories }, { data: items }, { data: offers }, { data: reviews }] =
     await Promise.all([
-      sb
-        .from('menu_categories')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .eq('is_active', true)
-        .order('position'),
-      sb
-        .from('menu_items')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .eq('is_available', true)
-        .order('position'),
-      sb
-        .from('offers')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .eq('is_active', true)
-        .order('position'),
-      sb
-        .from('reviews')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .eq('is_public', true)
-        .order('created_at', { ascending: false })
-        .limit(20),
+      sb.from('menu_categories').select('*').eq('restaurant_id', restaurant.id).eq('is_active', true).order('position'),
+      sb.from('menu_items').select('*').eq('restaurant_id', restaurant.id).eq('is_available', true).order('position'),
+      sb.from('offers').select('*').eq('restaurant_id', restaurant.id).eq('is_active', true).order('position'),
+      sb.from('reviews').select('*').eq('restaurant_id', restaurant.id).eq('is_public', true).order('created_at', { ascending: false }).limit(20),
     ])
 
   return {
@@ -132,74 +131,36 @@ async function getDiscoveryData(slug: string): Promise<DiscoveryPageData | null>
 // ─── Metadata ────────────────────────────────────────────────────────────────
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const paidData = await getPaidMenuData(params.slug)
+  const result = await getRestaurantWithSub(params.slug)
 
-  if (paidData) {
-    const title = `${paidData.restaurant.name} Menu | Digital Menu & Ordering | Dinezy`
-    const description =
-      paidData.restaurant.description ||
-      `Browse ${paidData.restaurant.name}'s menu, prices and specials on Dinezy.`
+  if (result && hasPaidAccess(result.sub)) {
+    const { restaurant } = result
+    const title = `${restaurant.name} Menu | Digital Menu & Ordering | Dinezy`
+    const description = restaurant.description || `Browse ${restaurant.name}'s menu on Dinezy.`
     const url = `https://dinezy.in/r/${params.slug}`
-
     return {
       title,
       description,
-      keywords: [
-        paidData.restaurant.name,
-        `${paidData.restaurant.name} menu`,
-        `${paidData.restaurant.name} restaurant`,
-        'restaurant menu',
-        'digital menu',
-        'QR menu',
-      ],
       alternates: { canonical: url },
       robots: { index: true, follow: true },
       openGraph: {
-        title,
-        description,
-        url,
-        siteName: 'Dinezy',
-        type: 'website',
-        images: paidData.restaurant.cover_url
-          ? [{ url: paidData.restaurant.cover_url, width: 1200, height: 630 }]
-          : [],
-      },
-      twitter: {
-        card: 'summary_large_image',
-        title,
-        description,
-        images: paidData.restaurant.cover_url ? [paidData.restaurant.cover_url] : [],
+        title, description, url, siteName: 'Dinezy', type: 'website',
+        images: restaurant.cover_url ? [{ url: restaurant.cover_url, width: 1200, height: 630 }] : [],
       },
     }
   }
 
   const discoveryData = await getDiscoveryData(params.slug)
-
   if (discoveryData) {
     const r = discoveryData.restaurant
-    const title = `${r.name} | ${r.area || r.city} | Dinezy Discovery`
-    const description = r.description || `Discover ${r.name} on Dinezy — menu, offers and reviews.`
+    const title = `${r.name} | ${r.area || r.city} | Dinezy`
+    const description = r.description || `Discover ${r.name} on Dinezy.`
     const url = `https://dinezy.in/r/${params.slug}`
-
     return {
-      title,
-      description,
+      title, description,
       alternates: { canonical: url },
       robots: { index: true, follow: true },
-      openGraph: {
-        title,
-        description,
-        url,
-        siteName: 'Dinezy Discovery',
-        type: 'website',
-        images: r.cover_image_url ? [{ url: r.cover_image_url, width: 1200, height: 630 }] : [],
-      },
-      twitter: {
-        card: 'summary_large_image',
-        title,
-        description,
-        images: r.cover_image_url ? [r.cover_image_url] : [],
-      },
+      openGraph: { title, description, url, siteName: 'Dinezy', type: 'website' },
     }
   }
 
@@ -208,21 +169,59 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-export default async function RestaurantPage({ params }: PageProps) {
-  const paidData = await getPaidMenuData(params.slug)
+export default async function RestaurantPage({ params, searchParams }: PageProps) {
+  const tableParam = searchParams.table
+  const tokenParam = searchParams.t
+  const hasTableIntent = !!(tableParam || tokenParam)
 
-  if (paidData) {
-    return (
-      <Suspense fallback={null}>
-        <TableGuard restaurant={paidData.restaurant}>
-          <RestaurantShell initialData={paidData} />
-        </TableGuard>
-      </Suspense>
-    )
+  const result = await getRestaurantWithSub(params.slug)
+
+  if (result) {
+    const { restaurant, sub } = result
+    const subscriptionActive = hasPaidAccess(sub)
+
+    if (hasTableIntent) {
+      // Someone scanned a QR code (has ?table= or ?t= param)
+
+      if (!subscriptionActive) {
+        // Trial/subscription expired — QR codes are dead → 404
+        notFound()
+      }
+
+      // Sub is active — validate the token
+      const { valid } = await validateTableToken(restaurant.id, tableParam, tokenParam)
+
+      if (!valid) {
+        // Bad or deactivated token → 404
+        notFound()
+      }
+
+      // Valid token + active sub → full QR UI
+      const menuData = await getMenuItems(restaurant.id)
+      return (
+        <Suspense fallback={null}>
+          <TableGuard restaurant={restaurant}>
+            <RestaurantShell initialData={{ restaurant, ...menuData }} />
+          </TableGuard>
+        </Suspense>
+      )
+    }
+
+    // No table intent — if sub is active, still show full QR UI in browse mode
+    if (subscriptionActive) {
+      const menuData = await getMenuItems(restaurant.id)
+      return (
+        <Suspense fallback={null}>
+          <TableGuard restaurant={restaurant}>
+            <RestaurantShell initialData={{ restaurant, ...menuData }} />
+          </TableGuard>
+        </Suspense>
+      )
+    }
   }
 
+  // Sub expired or restaurant not in public schema → fall to discovery
   const discoveryData = await getDiscoveryData(params.slug)
-
   if (discoveryData) {
     return <DiscoveryRestaurantView data={discoveryData} />
   }

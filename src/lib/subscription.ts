@@ -174,6 +174,19 @@ const { error: discoveryError } = await sb
   .eq('owner_id', userId)
 
 if (discoveryError) throw discoveryError
+
+const { data: restaurantForTokens } = await sb
+  .from('restaurants')
+  .select('id')
+  .eq('owner_id', userId)
+  .single()
+
+if (restaurantForTokens) {
+  await sb
+    .from('qr_tokens')
+    .update({ is_active: true })
+    .eq('restaurant_id', restaurantForTokens.id)
+}
 }
 
 /**
@@ -185,16 +198,41 @@ export async function expireTrials() {
   const sb = getServiceClient()
   const nowIso = new Date().toISOString()
 
+  // 1. Find trials that are expiring
+  const { data: expiring, error: fetchError } = await sb
+    .from('subscriptions')
+    .select('user_id')
+    .eq('plan', 'trial')
+    .lte('trial_end', nowIso)
+
+  if (fetchError) throw fetchError
+
+  // 2. Expire the subscriptions
   const { error } = await sb
     .from('subscriptions')
-    .update({
-      plan: 'expired',
-      current_period_end: nowIso,
-    })
+    .update({ plan: 'expired', current_period_end: nowIso })
     .eq('plan', 'trial')
     .lte('trial_end', nowIso)
 
   if (error) throw error
+
+  // 3. Deactivate all QR tokens for these restaurants
+  if (expiring && expiring.length > 0) {
+    const ownerIds = expiring.map((r) => r.user_id)
+
+    const { data: restaurants } = await sb
+      .from('restaurants')
+      .select('id')
+      .in('owner_id', ownerIds)
+
+    if (restaurants && restaurants.length > 0) {
+      const restaurantIds = restaurants.map((r) => r.id)
+      await sb
+        .from('qr_tokens')
+        .update({ is_active: false })
+        .in('restaurant_id', restaurantIds)
+    }
+  }
 }
 
 export async function getTrialsExpiringSoon(): Promise<string[]> {
