@@ -18,6 +18,28 @@ type SubscriptionLike = {
   current_period_end?: string | null
 }
 
+type ServiceClient = ReturnType<typeof getServiceClient>
+
+async function markRestaurantAsPartner(
+  sb: ServiceClient,
+  ownerId: string,
+  nowIso: string,
+) {
+  const payload = {
+    is_published: true,
+    is_partner: true,
+    published_at: nowIso,
+  }
+
+  const [publicRes, discoveryRes] = await Promise.all([
+    sb.from('restaurants').update(payload).eq('owner_id', ownerId),
+    sb.schema('discovery').from('restaurants').update(payload).eq('owner_id', ownerId),
+  ])
+
+  if (publicRes.error) throw publicRes.error
+  if (discoveryRes.error) throw discoveryRes.error
+}
+
 function getServiceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -130,14 +152,28 @@ export async function activateSubscription(
   // Paid/trial restaurants should appear on discovery.
   // This does NOT affect QR paid-access logic.
   const { error: publishError } = await sb
-    .from('restaurants')
-    .update({
-      is_published: true,
-      published_at: now.toISOString(),
-    })
-    .eq('owner_id', userId)
+  .from('restaurants')
+  .update({
+    is_published: true,
+    is_partner: true,
+    published_at: now.toISOString(),
+  })
+  .eq('owner_id', userId)
 
-  if (publishError) throw publishError
+if (publishError) throw publishError
+
+// Keep discovery copy in sync
+const { error: discoveryError } = await sb
+  .schema('discovery')
+  .from('restaurants')
+  .update({
+    is_partner: true,
+    is_published: true,
+    published_at: now.toISOString(),
+  })
+  .eq('owner_id', userId)
+
+if (discoveryError) throw discoveryError
 }
 
 /**

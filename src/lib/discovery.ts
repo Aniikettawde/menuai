@@ -39,6 +39,7 @@ export type DiscoveryRestaurant = {
   logo_url: string | null
   cuisine_tags: string[]
   is_published: boolean
+  is_partner?: boolean
   is_claimed: boolean
   is_verified: boolean
   rating_avg: number

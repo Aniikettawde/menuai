@@ -90,6 +90,34 @@ export async function POST(req: NextRequest) {
       console.error('start-trial insert error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+	
+	// Mark restaurant as verified partner
+const { data: restaurant } = await sb
+  .from('restaurants')
+  .select('id')
+  .eq('owner_id', userId)
+  .single()
+
+if (restaurant) {
+  await sb
+    .from('restaurants')
+    .update({
+      is_partner: true,
+      is_published: true,
+      published_at: new Date().toISOString(),
+    })
+    .eq('id', restaurant.id)
+
+  await sb
+    .schema('discovery')
+    .from('restaurants')
+    .update({
+      is_partner: true,
+      is_published: true,
+      published_at: new Date().toISOString(),
+    })
+    .eq('id', restaurant.id)
+}
 
     return NextResponse.json({ success: true, trialEnd: trialEnd.toISOString() })
   } catch (err) {

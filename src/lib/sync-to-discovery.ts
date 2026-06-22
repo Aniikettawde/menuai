@@ -22,6 +22,8 @@ type MainRestaurant = {
   email: string | null
   cover_image_url: string | null
   logo_url: string | null
+    is_partner: boolean | null
+
   cuisine_tags: string[] | null
   is_published: boolean | null
   is_claimed: boolean | null
@@ -104,6 +106,8 @@ function normalizeRestaurant(r: MainRestaurant) {
     logo_url: r.logo_url ?? null,
     cuisine_tags: r.cuisine_tags ?? [],
     is_published: true,
+	is_partner: r.is_partner ?? false,
+
     is_claimed: r.is_claimed ?? true,
     is_verified: r.is_verified ?? false,
     rating_avg: ratingAvg,
