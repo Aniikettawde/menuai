@@ -8,19 +8,19 @@ import {
   ArrowLeft, Camera, ChevronRight, Clock, ImagePlus, Loader2,
   MoreVertical, Pencil, Plus, Sparkles, Trash2, UtensilsCrossed,
   X, ToggleLeft, ToggleRight, Flame, Leaf, Zap, Settings2, GripVertical,
-  CheckSquare, Circle,
+  CheckSquare, Circle, Link2,
 } from 'lucide-react'
 
 const BOTTOM_NAV_H = 72
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MenuItemForm = Partial<MenuItem> & { _open?: boolean }
+type MenuItemForm = Partial<MenuItem> & { _open?: boolean; best_with?: string[] }
 const EMPTY_ITEM: MenuItemForm = {
   category_id: '', name: '', description: '', price: 0, currency: 'INR',
   image_url: '', is_available: true, is_bestseller: false, is_veg: true,
   is_special: false, tags: [], allergens: [], prep_time_minutes: undefined,
-  calories: undefined, position: 0,
+  calories: undefined, position: 0, best_with: [],
 }
 
 type DishOptionChoice = {
@@ -75,8 +75,8 @@ function emptyChoiceDraft(position: number): DishOptionChoiceDraft {
 }
 
 type MenuCategoryRow = MenuCategory
-type MenuItemRow = MenuItem
-type ParsedItem = { name: string; description?: string; price?: number; is_veg?: boolean; tags?: string[] }
+type MenuItemRow = MenuItem & { best_with?: string[] }
+type ParsedItem = { name: string; description?: string; price?: number; is_veg?: boolean; tags?: string[]; best_with?: string[] }
 type ParsedCategory = { name: string; items: ParsedItem[] }
 type GeminiMenuResult = { categories: ParsedCategory[] }
 
@@ -219,7 +219,7 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
             <div className="flex items-center gap-2 text-sm font-semibold text-orange-400">
               <Sparkles size={16} /> AI Menu Import
             </div>
-            <p className="mt-1 text-xs text-zinc-500">Powered by Gemini</p>
+            <p className="mt-1 text-xs text-zinc-500">Powered by Gemini · auto-fills pairings too</p>
           </div>
           <button onClick={onClose} className="rounded-xl p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
         </div>
@@ -230,7 +230,7 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
 
         {step === 'choose' && (
           <div className="space-y-3">
-            <p className="text-sm text-zinc-400">Upload a photo or file of your menu — AI will extract all dishes automatically.</p>
+            <p className="text-sm text-zinc-400">Upload a photo or file of your menu — AI will extract all dishes and auto-suggest pairings.</p>
             <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-4 rounded-2xl border border-zinc-700/60 bg-zinc-800/40 p-4 text-left transition hover:border-orange-500/50 hover:bg-zinc-800/80">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400"><Camera size={20} /></div>
               <div><p className="text-sm font-semibold text-white">Scan Photo</p><p className="text-xs text-zinc-500">Take a photo of your menu</p></div>
@@ -256,7 +256,7 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
           <div className="space-y-4">
             <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-4">
               <p className="text-sm font-semibold text-green-300">Scan complete!</p>
-              <p className="mt-1 text-xs text-zinc-400">Found {result.categories.length} categories and {totalItems} dishes</p>
+              <p className="mt-1 text-xs text-zinc-400">Found {result.categories.length} categories and {totalItems} dishes. Pairings auto-filled where possible.</p>
             </div>
             <div className="space-y-3">
               {result.categories.map((cat) => (
@@ -267,19 +267,26 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
                   </div>
                   <div className="space-y-2">
                     {cat.items.map((item) => (
-                      <div key={`${cat.name}-${item.name}`} className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm text-zinc-200">{item.is_veg ? '🟢' : '🔴'} {item.name}</p>
-                          {item.description && <p className="truncate text-xs text-zinc-500">{item.description}</p>}
+                      <div key={`${cat.name}-${item.name}`} className="rounded-xl bg-black/20 px-3 py-2">
+                        <div className="flex items-center justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm text-zinc-200">{item.is_veg ? '🟢' : '🔴'} {item.name}</p>
+                            {item.description && <p className="truncate text-xs text-zinc-500">{item.description}</p>}
+                          </div>
+                          {typeof item.price === 'number' && <span className="shrink-0 text-sm text-orange-400 ml-2">₹{item.price}</span>}
                         </div>
-                        {typeof item.price === 'number' && <span className="shrink-0 text-sm text-orange-400">₹{item.price}</span>}
+                        {item.best_with && item.best_with.length > 0 && (
+                          <p className="mt-1 text-[10px] text-amber-400/80">
+                            🔗 Pairs with: {item.best_with.join(', ')}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-zinc-500">You can edit or refine any dish after importing.</p>
+            <p className="text-xs text-zinc-500">You can edit pairings or any dish details after importing.</p>
           </div>
         )}
 
@@ -388,39 +395,28 @@ function CustomiseOptionsModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  function addOption() {
-    setDrafts((prev) => [...prev, emptyOptionDraft(prev.length)])
-  }
-
-  function removeOption(idx: number) {
-    setDrafts((prev) => prev.filter((_, i) => i !== idx))
-  }
-
+  function addOption() { setDrafts((prev) => [...prev, emptyOptionDraft(prev.length)]) }
+  function removeOption(idx: number) { setDrafts((prev) => prev.filter((_, i) => i !== idx)) }
   function updateOption(idx: number, patch: Partial<DishOptionDraft>) {
     setDrafts((prev) => prev.map((d, i) => i === idx ? { ...d, ...patch } : d))
   }
-
   function addChoice(optIdx: number) {
     setDrafts((prev) => prev.map((d, i) =>
       i === optIdx ? { ...d, choices: [...d.choices, emptyChoiceDraft(d.choices.length)] } : d
     ))
   }
-
   function removeChoice(optIdx: number, choiceIdx: number) {
     setDrafts((prev) => prev.map((d, i) =>
       i === optIdx ? { ...d, choices: d.choices.filter((_, ci) => ci !== choiceIdx) } : d
     ))
   }
-
   function updateChoice(optIdx: number, choiceIdx: number, patch: Partial<DishOptionChoiceDraft>) {
     setDrafts((prev) => prev.map((d, i) =>
       i === optIdx ? {
-        ...d,
-        choices: d.choices.map((c, ci) => ci === choiceIdx ? { ...c, ...patch } : c),
+        ...d, choices: d.choices.map((c, ci) => ci === choiceIdx ? { ...c, ...patch } : c),
       } : d
     ))
   }
-
   async function handleSave() {
     setSaving(true); setError('')
     try { await onSave(drafts); onClose() }
@@ -441,7 +437,6 @@ function CustomiseOptionsModal({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Explainer */}
         <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3">
           <p className="text-xs text-purple-300 font-medium">What are customisation options?</p>
           <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
@@ -461,133 +456,123 @@ function CustomiseOptionsModal({
         {drafts.map((opt, optIdx) => {
           const isOverride = opt.price_mode === 'override'
           return (
-          <div key={optIdx} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-            {/* Option group header */}
-            <div className="p-4 space-y-3 border-b border-zinc-800/60">
-              <div className="flex items-center gap-2">
-                <GripVertical size={16} className="text-zinc-600 shrink-0" />
-                <input
-                  value={opt.name}
-                  onChange={(e) => updateOption(optIdx, { name: e.target.value })}
-                  placeholder='Group name, e.g. "Choose base"'
-                  className={`${INPUT} flex-1`}
-                />
-                <button onClick={() => removeOption(optIdx)} className="shrink-0 rounded-xl p-2 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 transition">
-                  <Trash2 size={15} />
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Required toggle */}
-                <button
-                  onClick={() => updateOption(optIdx, { is_required: !opt.is_required })}
-                  className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${opt.is_required ? 'border-orange-500/40 bg-orange-500/15 text-orange-400' : 'border-zinc-700 bg-zinc-800/50 text-zinc-500'}`}
-                >
-                  {opt.is_required ? '★ Required' : '☆ Optional'}
-                </button>
-                {/* Type selector: single vs multi */}
-                <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-1">
-                  <button
-                    onClick={() => updateOption(optIdx, { max_selections: 1, min_selections: 0 })}
-                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.max_selections === 1 ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                  >
-                    <Circle size={10} /> Single
-                  </button>
-                  <button
-                    onClick={() => updateOption(optIdx, { max_selections: Math.max(2, opt.choices.length) })}
-                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.max_selections > 1 ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                  >
-                    <CheckSquare size={10} /> Multiple
-                  </button>
-                </div>
-                {/* Price mode selector: add-on vs variant */}
-                <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-1">
-                  <button
-                    onClick={() => updateOption(optIdx, { price_mode: 'add' })}
-                    title="Choice prices add on top of the dish price"
-                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.price_mode === 'add' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                  >
-                    Add-on (+₹)
-                  </button>
-                  <button
-                    onClick={() => updateOption(optIdx, { price_mode: 'override' })}
-                    title="Choice prices replace the dish price"
-                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${isOverride ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                  >
-                    Variant (sets price)
-                  </button>
-                </div>
-                {opt.max_selections > 1 && (
-                  <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                    <span>Max</span>
-                    <input
-                      type="number" min={1} max={20}
-                      value={opt.max_selections}
-                      onChange={(e) => updateOption(optIdx, { max_selections: Math.max(1, parseInt(e.target.value) || 1) })}
-                      className="w-14 rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-1 text-center text-xs text-white focus:outline-none focus:border-purple-500/60"
-                    />
-                    <span>choices</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Choices list */}
-            <div className="p-3 space-y-2">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">
-                Choices {isOverride && <span className="text-zinc-600">— enter each variant's full price</span>}
-              </p>
-              {opt.choices.map((choice, choiceIdx) => (
-                <div key={choiceIdx} className="flex items-center gap-2">
-                  <GripVertical size={14} className="text-zinc-700 shrink-0" />
-                  {/* Veg/Non-veg dot as default indicator */}
-                  <button
-                    onClick={() => updateChoice(optIdx, choiceIdx, { is_default: !choice.is_default })}
-                    title={choice.is_default ? 'Default choice (click to unset)' : 'Set as default'}
-                    className={`h-5 w-5 shrink-0 rounded-full border-2 transition ${choice.is_default ? 'border-orange-500 bg-orange-500' : 'border-zinc-600 bg-transparent hover:border-orange-400'}`}
-                  />
+            <div key={optIdx} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
+              <div className="p-4 space-y-3 border-b border-zinc-800/60">
+                <div className="flex items-center gap-2">
+                  <GripVertical size={16} className="text-zinc-600 shrink-0" />
                   <input
-                    value={choice.name}
-                    onChange={(e) => updateChoice(optIdx, choiceIdx, { name: e.target.value })}
-                    placeholder={`Choice ${choiceIdx + 1}, e.g. Chapati`}
-                    className={`${INPUT} flex-1 min-w-0 py-2 text-xs`}
+                    value={opt.name}
+                    onChange={(e) => updateOption(optIdx, { name: e.target.value })}
+                    placeholder='Group name, e.g. "Choose base"'
+                    className={`${INPUT} flex-1`}
                   />
-                  {/* Price */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-xs text-zinc-600">{isOverride ? '₹' : '+₹'}</span>
-                    <input
-                      type="number" min={0}
-                      value={choice.extra_price ? (choice.extra_price / 100).toFixed(0) : ''}
-                      onChange={(e) => updateChoice(optIdx, choiceIdx, { extra_price: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 })}
-                      placeholder="0"
-                      className="w-14 rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-2 text-center text-xs text-white focus:outline-none focus:border-purple-500/60"
-                    />
-                  </div>
-                  <button
-                    onClick={() => removeChoice(optIdx, choiceIdx)}
-                    disabled={opt.choices.length <= 1}
-                    className="shrink-0 rounded-lg p-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-30 transition"
-                  >
-                    <X size={13} />
+                  <button onClick={() => removeOption(optIdx)} className="shrink-0 rounded-xl p-2 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 transition">
+                    <Trash2 size={15} />
                   </button>
                 </div>
-              ))}
-              <button
-                onClick={() => addChoice(optIdx)}
-                className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 py-2.5 text-xs font-medium text-zinc-500 hover:border-purple-500/40 hover:text-purple-400 transition"
-              >
-                <Plus size={12} /> Add choice
-              </button>
-            </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => updateOption(optIdx, { is_required: !opt.is_required })}
+                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${opt.is_required ? 'border-orange-500/40 bg-orange-500/15 text-orange-400' : 'border-zinc-700 bg-zinc-800/50 text-zinc-500'}`}
+                  >
+                    {opt.is_required ? '★ Required' : '☆ Optional'}
+                  </button>
+                  <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-1">
+                    <button
+                      onClick={() => updateOption(optIdx, { max_selections: 1, min_selections: 0 })}
+                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.max_selections === 1 ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      <Circle size={10} /> Single
+                    </button>
+                    <button
+                      onClick={() => updateOption(optIdx, { max_selections: Math.max(2, opt.choices.length) })}
+                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.max_selections > 1 ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      <CheckSquare size={10} /> Multiple
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-1">
+                    <button
+                      onClick={() => updateOption(optIdx, { price_mode: 'add' })}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.price_mode === 'add' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      Add-on (+₹)
+                    </button>
+                    <button
+                      onClick={() => updateOption(optIdx, { price_mode: 'override' })}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${isOverride ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      Variant (sets price)
+                    </button>
+                  </div>
+                  {opt.max_selections > 1 && (
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                      <span>Max</span>
+                      <input
+                        type="number" min={1} max={20}
+                        value={opt.max_selections}
+                        onChange={(e) => updateOption(optIdx, { max_selections: Math.max(1, parseInt(e.target.value) || 1) })}
+                        className="w-14 rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-1 text-center text-xs text-white focus:outline-none focus:border-purple-500/60"
+                      />
+                      <span>choices</span>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-            <div className="px-3 pb-3">
-              <p className="text-[10px] text-zinc-600">
-                {opt.max_selections === 1 ? '◉ Single select — customer picks one.' : `☑ Multi-select — customer picks up to ${opt.max_selections}.`}
-                {' '}{opt.is_required ? 'Selection is required.' : 'Selection is optional.'}
-                {' '}Filled circle = default pre-selected.
-                {' '}{isOverride ? 'Prices shown replace the dish price entirely.' : 'Prices shown are added on top of the dish price.'}
-              </p>
+              <div className="p-3 space-y-2">
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">
+                  Choices {isOverride && <span className="text-zinc-600">— enter each variant's full price</span>}
+                </p>
+                {opt.choices.map((choice, choiceIdx) => (
+                  <div key={choiceIdx} className="flex items-center gap-2">
+                    <GripVertical size={14} className="text-zinc-700 shrink-0" />
+                    <button
+                      onClick={() => updateChoice(optIdx, choiceIdx, { is_default: !choice.is_default })}
+                      className={`h-5 w-5 shrink-0 rounded-full border-2 transition ${choice.is_default ? 'border-orange-500 bg-orange-500' : 'border-zinc-600 bg-transparent hover:border-orange-400'}`}
+                    />
+                    <input
+                      value={choice.name}
+                      onChange={(e) => updateChoice(optIdx, choiceIdx, { name: e.target.value })}
+                      placeholder={`Choice ${choiceIdx + 1}, e.g. Chapati`}
+                      className={`${INPUT} flex-1 min-w-0 py-2 text-xs`}
+                    />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-xs text-zinc-600">{isOverride ? '₹' : '+₹'}</span>
+                      <input
+                        type="number" min={0}
+                        value={choice.extra_price ? (choice.extra_price / 100).toFixed(0) : ''}
+                        onChange={(e) => updateChoice(optIdx, choiceIdx, { extra_price: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 })}
+                        placeholder="0"
+                        className="w-14 rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-2 text-center text-xs text-white focus:outline-none focus:border-purple-500/60"
+                      />
+                    </div>
+                    <button
+                      onClick={() => removeChoice(optIdx, choiceIdx)}
+                      disabled={opt.choices.length <= 1}
+                      className="shrink-0 rounded-lg p-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-30 transition"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => addChoice(optIdx)}
+                  className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 py-2.5 text-xs font-medium text-zinc-500 hover:border-purple-500/40 hover:text-purple-400 transition"
+                >
+                  <Plus size={12} /> Add choice
+                </button>
+              </div>
+
+              <div className="px-3 pb-3">
+                <p className="text-[10px] text-zinc-600">
+                  {opt.max_selections === 1 ? '◉ Single select — customer picks one.' : `☑ Multi-select — customer picks up to ${opt.max_selections}.`}
+                  {' '}{opt.is_required ? 'Selection is required.' : 'Selection is optional.'}
+                  {' '}Filled circle = default pre-selected.
+                  {' '}{isOverride ? 'Prices shown replace the dish price entirely.' : 'Prices shown are added on top of the dish price.'}
+                </p>
+              </div>
             </div>
-          </div>
           )
         })}
 
@@ -632,71 +617,47 @@ export default function MenuPage() {
   const [showImport, setShowImport] = useState(false)
   const [catImageUploading, setCatImageUploading] = useState<string | null>(null)
   const [descriptionGenerating, setDescriptionGenerating] = useState(false)
-  // Options
   const [customiseItem, setCustomiseItem] = useState<MenuItemRow | null>(null)
   const [optionsByItem, setOptionsByItem] = useState<Record<string, DishOption[]>>({})
   const { context, loading: contextLoading } = useDashboardContext()
-  
+
   const [draggedCatId, setDraggedCatId] = useState<string | null>(null)
-const orderedCategories = useMemo(() => {
-  return [...categories].sort(
-    (a, b) => (Number(a.position) || 0) - (Number(b.position) || 0),
-  )
-}, [categories])
+  const orderedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+  }, [categories])
 
-function normalizeCategoryPositions(next: MenuCategoryRow[]) {
-  return next.map((cat, index) => ({
-    ...cat,
-    position: index,
-  }))
-}
-
-function moveCategoryLocal(fromId: string, toId: string) {
-  setCategories((prev) => {
-    const current = [...prev].sort(
-      (a, b) => (Number(a.position) || 0) - (Number(b.position) || 0),
-    )
-
-    const fromIndex = current.findIndex((c) => c.id === fromId)
-    const toIndex = current.findIndex((c) => c.id === toId)
-
-    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return prev
-
-    const next = [...current]
-    const [moved] = next.splice(fromIndex, 1)
-    next.splice(toIndex, 0, moved)
-
-    return normalizeCategoryPositions(next) as MenuCategoryRow[]
-  })
-}
-
-async function saveCategoryOrder() {
-  try {
-    const currentOrder = [...categories].sort(
-      (a, b) => (Number(a.position) || 0) - (Number(b.position) || 0),
-    )
-
-    const updates = currentOrder.map((cat, index) =>
-      supabase
-        .from('menu_categories')
-        .update({ position: index })
-        .eq('id', cat.id),
-    )
-
-    const results = await Promise.all(updates)
-
-    const failed = results.find((r) => r.error)?.error
-    if (failed) throw failed
-  } catch (err) {
-    setError(
-      err instanceof Error
-        ? err.message
-        : 'Failed to save category order',
-    )
-  } finally {
-    setDraggedCatId(null)
+  function normalizeCategoryPositions(next: MenuCategoryRow[]) {
+    return next.map((cat, index) => ({ ...cat, position: index }))
   }
-}
+
+  function moveCategoryLocal(fromId: string, toId: string) {
+    setCategories((prev) => {
+      const current = [...prev].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+      const fromIndex = current.findIndex((c) => c.id === fromId)
+      const toIndex = current.findIndex((c) => c.id === toId)
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return prev
+      const next = [...current]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return normalizeCategoryPositions(next) as MenuCategoryRow[]
+    })
+  }
+
+  async function saveCategoryOrder() {
+    try {
+      const currentOrder = [...categories].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+      const updates = currentOrder.map((cat, index) =>
+        supabase.from('menu_categories').update({ position: index }).eq('id', cat.id)
+      )
+      const results = await Promise.all(updates)
+      const failed = results.find((r) => r.error)?.error
+      if (failed) throw failed
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save category order')
+    } finally {
+      setDraggedCatId(null)
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -708,21 +669,17 @@ async function saveCategoryOrder() {
         if (!r) { if (mounted) setLoading(false); return }
         const { data: cats } = await supabase.from('menu_categories').select('*').eq('restaurant_id', r.id).order('position')
         const { data: its } = await supabase.from('menu_items').select('*').eq('restaurant_id', r.id).order('position')
-
         if (!mounted) return
         const safeCats = (cats ?? []) as MenuCategoryRow[]
         const safeItems = (its ?? []) as MenuItemRow[]
         setRestaurant(r as Restaurant); setCategories(safeCats); setItems(safeItems)
         setActiveCat(safeCats[0]?.id ?? null)
-
-        // Load all options + choices for this restaurant's items
         if (safeItems.length > 0) {
           const itemIds = safeItems.map((i) => i.id)
           const { data: opts } = await supabase.from('dish_options').select('*').in('menu_item_id', itemIds).order('position')
           if (opts && opts.length > 0) {
             const optIds = opts.map((o) => o.id)
             const { data: choices } = await supabase.from('dish_option_choices').select('*').in('dish_option_id', optIds).order('position')
-            // Group
             const choicesByOpt: Record<string, DishOptionChoice[]> = {}
             for (const c of choices ?? []) {
               if (!choicesByOpt[c.dish_option_id]) choicesByOpt[c.dish_option_id] = []
@@ -746,29 +703,20 @@ async function saveCategoryOrder() {
   }, [supabase, context?.restaurantId, contextLoading])
 
   const catItems = useMemo(() => items.filter((x) => x.category_id === activeCat), [items, activeCat])
-const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
+  const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
+
   // ── Save dish options ──────────────────────────────────────────────────────
 
   async function saveDishOptions(itemId: string, drafts: DishOptionDraft[]) {
-    // 1. Delete all existing options for this item (cascade deletes choices)
     await supabase.from('dish_options').delete().eq('menu_item_id', itemId)
-
-    if (drafts.length === 0) {
-      setOptionsByItem((prev) => ({ ...prev, [itemId]: [] }))
-      return
-    }
-
-    // 2. Insert fresh option groups
-   const optPayloads = drafts.map((d, i) => ({
+    if (drafts.length === 0) { setOptionsByItem((prev) => ({ ...prev, [itemId]: [] })); return }
+    const optPayloads = drafts.map((d, i) => ({
       menu_item_id: itemId, name: d.name.trim() || 'Options',
       is_required: d.is_required, min_selections: d.min_selections,
       max_selections: d.max_selections, price_mode: d.price_mode, position: i,
     }))
-    const { data: insertedOpts, error: optErr } = await supabase
-      .from('dish_options').insert(optPayloads).select()
+    const { data: insertedOpts, error: optErr } = await supabase.from('dish_options').insert(optPayloads).select()
     if (optErr) throw optErr
-
-    // 3. Insert choices for each group
     const allChoicePayloads = (insertedOpts ?? []).flatMap((opt, i) =>
       (drafts[i]?.choices ?? []).map((c, ci) => ({
         dish_option_id: opt.id, name: c.name.trim() || `Choice ${ci + 1}`,
@@ -778,21 +726,16 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
     )
     let allChoices: DishOptionChoice[] = []
     if (allChoicePayloads.length > 0) {
-      const { data: insertedChoices, error: choiceErr } = await supabase
-        .from('dish_option_choices').insert(allChoicePayloads).select()
+      const { data: insertedChoices, error: choiceErr } = await supabase.from('dish_option_choices').insert(allChoicePayloads).select()
       if (choiceErr) throw choiceErr
       allChoices = (insertedChoices ?? []) as DishOptionChoice[]
     }
-
-    // 4. Update local state
     const choicesByOpt: Record<string, DishOptionChoice[]> = {}
     for (const c of allChoices) {
       if (!choicesByOpt[c.dish_option_id]) choicesByOpt[c.dish_option_id] = []
       choicesByOpt[c.dish_option_id].push(c)
     }
-    const newOpts: DishOption[] = (insertedOpts ?? []).map((opt) => ({
-      ...opt, choices: choicesByOpt[opt.id] ?? [],
-    } as DishOption))
+    const newOpts: DishOption[] = (insertedOpts ?? []).map((opt) => ({ ...opt, choices: choicesByOpt[opt.id] ?? [] } as DishOption))
     setOptionsByItem((prev) => ({ ...prev, [itemId]: newOpts }))
   }
 
@@ -839,6 +782,8 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
         is_available: Boolean(editingItem.is_available ?? true), is_bestseller: Boolean(editingItem.is_bestseller ?? false),
         is_veg: Boolean(editingItem.is_veg ?? true), is_special: Boolean(editingItem.is_special ?? false),
         tags: cleanStringArray(editingItem.tags), allergens: cleanStringArray(editingItem.allergens),
+        // ✅ NEW: save best_with array
+        best_with: cleanStringArray(editingItem.best_with),
         prep_time_minutes: toIntOrNull(editingItem.prep_time_minutes), calories: toIntOrNull(editingItem.calories),
         position: Number.isFinite(Number(editingItem.position)) ? Number(editingItem.position) : items.filter((x) => x.category_id === activeCat).length,
       }
@@ -940,6 +885,8 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
         is_bestseller: (item.tags ?? []).some((t) => t.toLowerCase().includes('best')),
         is_veg: item.is_veg ?? true, is_special: false, tags: item.tags ?? [],
         allergens: [], prep_time_minutes: null, calories: null, position: idx,
+        // ✅ NEW: save best_with from Gemini import
+        best_with: item.best_with ?? [],
       }))
       const { data: insertedItems, error: itemsError } = await supabase.from('menu_items').insert(itemPayloads).select()
       if (itemsError) throw itemsError
@@ -1001,70 +948,58 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
 
         {mobileView === 'categories' && (
           <div className="space-y-2">
-         {categories.length === 0 ? (
-  <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center">
-    <p className="text-2xl">🗂️</p>
-    <p className="mt-2 text-sm font-semibold text-white">No categories yet</p>
-    <p className="mt-1 text-xs text-zinc-500">Import your menu with AI or add manually</p>
-    <button onClick={() => setShowImport(true)} className="mt-4 rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-2.5 text-sm font-semibold text-orange-400">Import with AI</button>
-  </div>
-) : (
-  <>
-    {orderedCategories.map((cat) => {
-      const count = items.filter((x) => x.category_id === cat.id).length
-      const avail = items.filter((x) => x.category_id === cat.id && x.is_available).length
-      const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
-
-      return (
-        <div
-          key={cat.id}
-          draggable
-          onDragStart={() => setDraggedCatId(cat.id)}
-          onDragOver={(e) => {
-            e.preventDefault()
-            if (!draggedCatId || draggedCatId === cat.id) return
-            moveCategoryLocal(draggedCatId, cat.id)
-          }}
-          onDrop={(e) => { e.preventDefault(); void saveCategoryOrder() }}
-          onDragEnd={() => { if (draggedCatId) void saveCategoryOrder() }}
-          className="group"
-        >
-          <button
-            onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
-            className={[
-              'group flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left active:scale-[0.99] transition',
-              draggedCatId === cat.id ? 'ring-2 ring-orange-500/40 opacity-80' : '',
-            ].join(' ')}
-          >
-            <div className="flex items-center gap-2 shrink-0 text-zinc-600">
-              <GripVertical size={15} />
-            </div>
-            <div className="relative shrink-0">
-              {catWithImage.image_url
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
-                : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">🍱</div>
-              }
-              <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
-                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
-                  {catImageUploading === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Camera size={9} />}
-                </div>
-                <input type="file" accept="image/*" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
-              </label>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-zinc-100">{cat.name}</p>
-              <p className="text-xs text-zinc-500">{count} dishes · {avail} available</p>
-            </div>
-            <ChevronRight size={16} className="text-zinc-600 shrink-0" />
-          </button>
-        </div>
-      )
-    })}
-  </>
-)}
-            
+            {categories.length === 0 ? (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center">
+                <p className="text-2xl">🗂️</p>
+                <p className="mt-2 text-sm font-semibold text-white">No categories yet</p>
+                <p className="mt-1 text-xs text-zinc-500">Import your menu with AI or add manually</p>
+                <button onClick={() => setShowImport(true)} className="mt-4 rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-2.5 text-sm font-semibold text-orange-400">Import with AI</button>
+              </div>
+            ) : (
+              <>
+                {orderedCategories.map((cat) => {
+                  const count = items.filter((x) => x.category_id === cat.id).length
+                  const avail = items.filter((x) => x.category_id === cat.id && x.is_available).length
+                  const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
+                  return (
+                    <div
+                      key={cat.id}
+                      draggable
+                      onDragStart={() => setDraggedCatId(cat.id)}
+                      onDragOver={(e) => { e.preventDefault(); if (!draggedCatId || draggedCatId === cat.id) return; moveCategoryLocal(draggedCatId, cat.id) }}
+                      onDrop={(e) => { e.preventDefault(); void saveCategoryOrder() }}
+                      onDragEnd={() => { if (draggedCatId) void saveCategoryOrder() }}
+                      className="group"
+                    >
+                      <button
+                        onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
+                        className={['group flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left active:scale-[0.99] transition', draggedCatId === cat.id ? 'ring-2 ring-orange-500/40 opacity-80' : ''].join(' ')}
+                      >
+                        <div className="flex items-center gap-2 shrink-0 text-zinc-600"><GripVertical size={15} /></div>
+                        <div className="relative shrink-0">
+                          {catWithImage.image_url
+                            // eslint-disable-next-line @next/next/no-img-element
+                            ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
+                            : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">🍱</div>
+                          }
+                          <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
+                              {catImageUploading === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Camera size={9} />}
+                            </div>
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
+                          </label>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-zinc-100">{cat.name}</p>
+                          <p className="text-xs text-zinc-500">{count} dishes · {avail} available</p>
+                        </div>
+                        <ChevronRight size={16} className="text-zinc-600 shrink-0" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </>
+            )}
 
             <div className="rounded-2xl border border-white/[0.07] bg-[#111111] p-4 space-y-2.5 mt-2">
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">New Category</p>
@@ -1152,80 +1087,55 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
               <p className="text-xs text-zinc-500">{categories.length}</p>
             </div>
             <div className="space-y-1">
-             {orderedCategories.map((cat) => {
-  const active = activeCat === cat.id
-  const count = items.filter((x) => x.category_id === cat.id).length
-  const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
-
-  return (
-    <div
-      key={cat.id}
-      className="group relative"
-      draggable
-      onDragStart={() => setDraggedCatId(cat.id)}
-      onDragOver={(e) => {
-        e.preventDefault()
-        if (!draggedCatId || draggedCatId === cat.id) return
-        moveCategoryLocal(draggedCatId, cat.id)
-      }}
-      onDrop={(e) => {
-        e.preventDefault()
-        void saveCategoryOrder()
-      }}
-      onDragEnd={() => {
-        if (draggedCatId) void saveCategoryOrder()
-      }}
-    >
-      <div
-        onClick={() => setActiveCat(cat.id)}
-        className={[
-          `flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-3 transition ${
-            active ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-          }`,
-          draggedCatId === cat.id ? 'ring-2 ring-orange-500/40 opacity-80' : '',
-        ].join(' ')}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="flex items-center justify-center text-zinc-600 shrink-0">
-            <GripVertical size={14} />
-          </span>
-
-          {catWithImage.image_url
-            // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-8 w-8 rounded-xl object-cover shrink-0" />
-            : <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-sm shrink-0">🍱</div>
-          }
-          <span className="truncate text-sm">{cat.name}</span>
-        </div>
-
-        <span className="flex items-center gap-2 text-xs shrink-0">
-          <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
-          <button
-            onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
-            className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
-          >
-            <Trash2 size={14} />
-          </button>
-        </span>
-      </div>
-
-      <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
-        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900/80 text-zinc-400 hover:bg-orange-500 hover:text-white transition">
-          {catImageUploading === cat.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
-        </div>
-        <input
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) void uploadCategoryImage(cat.id, f)
-          }}
-        />
-      </label>
-    </div>
-  )
-})}
+              {orderedCategories.map((cat) => {
+                const active = activeCat === cat.id
+                const count = items.filter((x) => x.category_id === cat.id).length
+                const catWithImage = cat as MenuCategoryRow & { image_url?: string | null }
+                return (
+                  <div
+                    key={cat.id}
+                    className="group relative"
+                    draggable
+                    onDragStart={() => setDraggedCatId(cat.id)}
+                    onDragOver={(e) => { e.preventDefault(); if (!draggedCatId || draggedCatId === cat.id) return; moveCategoryLocal(draggedCatId, cat.id) }}
+                    onDrop={(e) => { e.preventDefault(); void saveCategoryOrder() }}
+                    onDragEnd={() => { if (draggedCatId) void saveCategoryOrder() }}
+                  >
+                    <div
+                      onClick={() => setActiveCat(cat.id)}
+                      className={[
+                        `flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-3 transition ${active ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'}`,
+                        draggedCatId === cat.id ? 'ring-2 ring-orange-500/40 opacity-80' : '',
+                      ].join(' ')}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="flex items-center justify-center text-zinc-600 shrink-0"><GripVertical size={14} /></span>
+                        {catWithImage.image_url
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-8 w-8 rounded-xl object-cover shrink-0" />
+                          : <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-sm shrink-0">🍱</div>
+                        }
+                        <span className="truncate text-sm">{cat.name}</span>
+                      </div>
+                      <span className="flex items-center gap-2 text-xs shrink-0">
+                        <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
+                          className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </span>
+                    </div>
+                    <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900/80 text-zinc-400 hover:bg-orange-500 hover:text-white transition">
+                        {catImageUploading === cat.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
+                      </div>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
+                    </label>
+                  </div>
+                )
+              })}
             </div>
             <div className="mt-4 space-y-2">
               <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder="New category name…" className={INPUT} />
@@ -1261,7 +1171,7 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
                       <DesktopItemCard
                         key={item.id} item={item}
                         optionCount={(optionsByItem[item.id] ?? []).length}
-                        onEdit={() => setEditingItem(item)}
+                        onEdit={() => setEditingItem({ ...item, best_with: item.best_with ?? [] })}
                         onDelete={() => void deleteItem(item.id)}
                         onToggle={() => void toggleAvailable(item)}
                         onCustomize={() => setCustomiseItem(item)}
@@ -1350,7 +1260,6 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
                 <ToggleRow label="Available" description="Show to customers" checked={Boolean(editingItem.is_available)} onChange={(checked) => setEditingItem((f) => (f ? { ...f, is_available: checked } : f))} />
               </div>
 
-              {/* Quick link to customise if editing existing item */}
               {editingItem.id && (
                 <button
                   type="button"
@@ -1381,6 +1290,47 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
                   <input type="number" min={0} value={editingItem.calories ?? ''} onChange={(e) => setEditingItem((f) => f ? { ...f, calories: e.target.value ? parseInt(e.target.value) : undefined } : f)} placeholder="450" className={INPUT} />
                 </Field>
               </div>
+
+              {/* ✅ NEW: Best Paired With field */}
+              <Field label="Best Paired With 🔗">
+                <input
+                  value={(editingItem.best_with ?? []).join(', ')}
+                  onChange={(e) => setEditingItem((f) => f ? {
+                    ...f,
+                    best_with: e.target.value.split(',').map((t) => t.trim()).filter(Boolean)
+                  } : f)}
+                  placeholder="e.g. Cold Coffee, French Fries, Brownie"
+                  className={INPUT}
+                />
+                <p className="mt-1.5 text-xs text-zinc-500">
+                  Items this dish pairs well with — AI uses this for smart upsell suggestions. Separate with commas.
+                </p>
+                {/* Show existing pairings as quick-remove chips */}
+                {(editingItem.best_with ?? []).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(editingItem.best_with ?? []).map((pair) => (
+                      <span
+                        key={pair}
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400"
+                      >
+                        <Link2 size={9} />
+                        {pair}
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem((f) => f ? {
+                            ...f,
+                            best_with: (f.best_with ?? []).filter((p) => p !== pair)
+                          } : f)}
+                          className="ml-0.5 text-amber-600 hover:text-amber-300"
+                        >
+                          <X size={9} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </Field>
+
               <Field label="Tags">
                 <input value={(editingItem.tags ?? []).join(', ')} onChange={(e) => setEditingItem((f) => f ? { ...f, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) } : f)} placeholder="spicy, new, chef-special" className={INPUT} />
                 <p className="mt-1.5 text-xs text-zinc-600">Separate with commas</p>
@@ -1407,7 +1357,7 @@ const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
         <ItemActionSheet
           item={actionSheetItem}
           onClose={() => setActionSheetItem(null)}
-          onEdit={() => { setEditingItem(actionSheetItem); setActionSheetItem(null) }}
+          onEdit={() => { setEditingItem({ ...actionSheetItem, best_with: actionSheetItem.best_with ?? [] }); setActionSheetItem(null) }}
           onDelete={() => { void deleteItem(actionSheetItem.id); setActionSheetItem(null) }}
           onToggle={() => { void toggleAvailable(actionSheetItem); setActionSheetItem(null) }}
           onCustomize={() => setCustomiseItem(actionSheetItem)}
@@ -1499,6 +1449,12 @@ function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize }: {
               <Settings2 size={8} /> {optionCount} opt
             </span>
           )}
+          {/* ✅ NEW: show pairing count badge */}
+          {(item.best_with ?? []).length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400 ring-1 ring-amber-500/20">
+              <Link2 size={8} /> {(item.best_with ?? []).length} pairs
+            </span>
+          )}
         </div>
       </button>
       <div className="flex shrink-0 flex-col items-center gap-2">
@@ -1528,6 +1484,12 @@ function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCust
         <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${item.is_veg ? 'bg-green-500/20 text-green-400 ring-green-500/30' : 'bg-red-500/20 text-red-400 ring-red-500/30'}`}>{item.is_veg ? '🌿 Veg' : '🍖 Non-veg'}</span>
         {item.is_bestseller && <span className="rounded-full bg-orange-500/20 px-2.5 py-1 text-[10px] font-bold text-orange-400 ring-1 ring-orange-500/30">🔥 Best</span>}
         {optionCount > 0 && <span className="rounded-full bg-purple-500/20 px-2.5 py-1 text-[10px] font-bold text-purple-400 ring-1 ring-purple-500/30">⚙ {optionCount} opts</span>}
+        {/* ✅ NEW: pairing badge on desktop card */}
+        {(item.best_with ?? []).length > 0 && (
+          <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold text-amber-400 ring-1 ring-amber-500/30">
+            🔗 {(item.best_with ?? []).length} pairs
+          </span>
+        )}
       </div>
       <button onClick={onToggle} className={`absolute right-3 top-3 h-6 w-11 rounded-full ${item.is_available ? 'bg-green-500' : 'bg-zinc-600'}`}>
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${item.is_available ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -1538,6 +1500,12 @@ function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCust
           <p className="shrink-0 text-sm font-bold text-orange-400">₹{((Number(item.price) || 0) / 100).toFixed(0)}</p>
         </div>
         {item.description && <p className="mb-2 line-clamp-2 text-xs text-zinc-500">{item.description}</p>}
+        {/* ✅ NEW: show pairings inline on desktop card */}
+        {(item.best_with ?? []).length > 0 && (
+          <p className="mb-2 text-[10px] text-amber-400/70">
+            🔗 {(item.best_with ?? []).slice(0, 2).join(', ')}{(item.best_with ?? []).length > 2 ? ` +${(item.best_with ?? []).length - 2}` : ''}
+          </p>
+        )}
         <div className="mb-3 flex items-center gap-3 text-[11px] text-zinc-600">
           {typeof item.prep_time_minutes === 'number' && <span className="flex items-center gap-1"><Clock size={10} />{item.prep_time_minutes}m</span>}
           {typeof item.calories === 'number' && <span className="flex items-center gap-1"><Zap size={10} />{item.calories} cal</span>}

@@ -121,6 +121,7 @@ export interface MenuItem {
   calories?: number
   customizations?: MenuItemCustomization[]
   position: number
+  best_with: string[]
 }
 
 export interface MenuItemCustomization {
