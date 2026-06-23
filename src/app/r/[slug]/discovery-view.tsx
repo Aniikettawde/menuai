@@ -44,7 +44,8 @@ function toText(value: unknown): string {
   return ''
 }
 
-function getSessionId() {
+function getSessionId(): string {
+  if (typeof window === 'undefined') return ''   // SSR guard
   const KEY = 'dinezy_discovery_session'
   try {
     let id = window.sessionStorage.getItem(KEY)
@@ -86,7 +87,7 @@ function AmenityIcon({ label }: { label: string }) {
 export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
   const supabase = useMemo(() => getDiscoveryBrowser(), [])
   const r = data.restaurant as ExtendedRestaurant
-  const [sessionId] = useState(() => getSessionId())
+   const [sessionId, setSessionId] = useState('')
   const [trackedMenuView, setTrackedMenuView] = useState(false)
   const [offerFeedback, setOfferFeedback] = useState<string | null>(null)
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)

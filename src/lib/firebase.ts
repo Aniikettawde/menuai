@@ -18,18 +18,30 @@ const firebaseConfig = {
 
 // Singleton — avoid duplicate app init in hot-reload / Strict Mode
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
-
 export const auth: Auth = getAuth(app)
 
 // ─── reCAPTCHA ────────────────────────────────────────────────────────────────
 
 let recaptchaVerifier: RecaptchaVerifier | null = null
 
-export function getRecaptchaVerifier(containerId: string): RecaptchaVerifier {
+export function clearRecaptcha(containerId: string): void {
+  // 1. Call Firebase's own clear() method
   if (recaptchaVerifier) {
     try { recaptchaVerifier.clear() } catch {}
     recaptchaVerifier = null
   }
+
+  // 2. Wipe the DOM element so Firebase doesn't see an already-rendered widget
+  if (typeof window !== 'undefined') {
+    const el = document.getElementById(containerId)
+    if (el) el.innerHTML = ''
+  }
+}
+
+export function getRecaptchaVerifier(containerId: string): RecaptchaVerifier {
+  // Always clear first — handles the "edit phone" re-trigger case
+  clearRecaptcha(containerId)
+
   recaptchaVerifier = new RecaptchaVerifier(auth, containerId, { size: 'invisible' })
   return recaptchaVerifier
 }
@@ -39,9 +51,11 @@ export async function sendOTP(
   containerId: string,
 ): Promise<ConfirmationResult> {
   const verifier = getRecaptchaVerifier(containerId)
+
   // Normalise: ensure +91 prefix for Indian numbers
   const normalised =
     phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`
+
   return signInWithPhoneNumber(auth, normalised, verifier)
 }
 

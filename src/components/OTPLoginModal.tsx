@@ -5,6 +5,7 @@ import { type ConfirmationResult } from 'firebase/auth'
 import { sendOTP, verifyOTP } from '@/lib/firebase'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 import { X, Phone, Shield, Gift, ChevronRight, Loader2 } from 'lucide-react'
+import { clearRecaptcha } from '@/lib/firebase'
 
 interface Props {
   isOpen:           boolean
@@ -424,14 +425,19 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                 }}>
                   Sent to +91 {phone.replace(/(\d{5})(\d{5})/, '$1 $2')}
                   <button
-                    type="button"
-                    onClick={() => { setScreen('phone'); setOtp(''); setError('') }}
-                    style={{
-                      marginLeft: 8, background: 'none', border: 'none',
-                      color: '#E8C547', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                      fontFamily: 'var(--font-body)',
-                    }}
-                  >Edit</button>
+  type="button"
+  onClick={() => {
+    clearRecaptcha('recaptcha-container') // ← clear before going back
+    setScreen('phone')
+    setOtp('')
+    setError('')
+  }}
+  style={{
+    marginLeft: 8, background: 'none', border: 'none',
+    color: '#E8C547', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+    fontFamily: 'var(--font-body)',
+  }}
+>Edit</button>
                 </p>
 
                 <OTPInput value={otp} onChange={setOtp} disabled={loading} />

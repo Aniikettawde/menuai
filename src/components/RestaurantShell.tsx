@@ -34,8 +34,7 @@ type OfferRow = {
 interface Props {
   restaurantId?: string | null
   tableNumber?:  number | null
-    initialData: MenuPageData
-
+  initialData: MenuPageData
 }
 
 interface OrderToastData {
@@ -80,6 +79,7 @@ export function RestaurantShell({ initialData }: Props) {
     setDishOptions,
     setIsOffline,
     setTableNumber,
+    setHasTableToken,   // ✅ destructured here
     tableNumber,
     sessionId,
     clearCart,
@@ -91,32 +91,35 @@ export function RestaurantShell({ initialData }: Props) {
   const [activeToastIndex, setActiveToastIndex] = useState(0)
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-const [activeOffers, setActiveOffers] = useState<OfferRow[]>([])
+  const [activeOffers, setActiveOffers] = useState<OfferRow[]>([])
 
   const tableToken = searchParams.get('t')
   const legacyTableParam = searchParams.get('table')
   const [loginOpen, setLoginOpen] = useState(false)
 
-  
-useEffect(() => {
-  setRestaurantData(initialData)
-  setCachedMenu(initialData.restaurant.slug, initialData)
+  useEffect(() => {
+    setRestaurantData(initialData)
+    setCachedMenu(initialData.restaurant.slug, initialData)
 
-  void supabase
-    .from('offers')
-    .select('id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at')
-    .eq('restaurant_id', initialData.restaurant.id)
-    .eq('is_active', true)
-    .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString())
-    .then(({ data }) => { if (data) setActiveOffers(data as OfferRow[]) })
-}, [initialData, setRestaurantData])
+    void supabase
+      .from('offers')
+      .select('id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at')
+      .eq('restaurant_id', initialData.restaurant.id)
+      .eq('is_active', true)
+      .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString())
+      .then(({ data }) => { if (data) setActiveOffers(data as OfferRow[]) })
+  }, [initialData, setRestaurantData])
 
-  // ── Table resolution ───────────────────────────────────────────────────────
+  // ── Table resolution + token gate ─────────────────────────────────────────
+  // Single source of truth for both tableNumber AND hasTableToken.
+  // The page_view tracking effect below is intentionally kept separate
+  // and does NOT call setHasTableToken — it only fires analytics.
   useEffect(() => {
     let mounted = true
 
     async function resolveTable() {
       if (!initialData.restaurant.id) return
+
       if (tableToken) {
         const { data, error } = await supabase
           .from('qr_tokens')
@@ -125,18 +128,26 @@ useEffect(() => {
           .eq('token', tableToken)
           .maybeSingle()
         if (!mounted) return
-        if (error) { setTableNumber(null); return }
+        if (error) {
+          setTableNumber(null)
+          setHasTableToken(false)  // ✅ token present but invalid/error
+          return
+        }
         setTableNumber(data?.table_number ?? null)
+        setHasTableToken(true)     // ✅ valid token = ordering allowed
         return
       }
+
+      // No ?t= token — legacy ?table= param or bare browse URL
       const n = legacyTableParam ? Number(legacyTableParam) : null
       const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
       setTableNumber(resolved)
+      setHasTableToken(false)      // ✅ no token = ordering NOT allowed
     }
 
     void resolveTable()
     return () => { mounted = false }
-  }, [tableToken, legacyTableParam, initialData.restaurant.id, setTableNumber])
+  }, [tableToken, legacyTableParam, initialData.restaurant.id, setTableNumber, setHasTableToken])
 
   const slug = initialData.restaurant.slug
   usePWA()
@@ -234,9 +245,6 @@ useEffect(() => {
     } catch (err) { console.error('Failed to refresh menu:', err) }
   }, [initialData.restaurant.id, slug, setRestaurantData, fetchDishOptions])
 
- 
- 
-
   // ── Connectivity ──────────────────────────────────────────────────────────
   useEffect(() => {
     const cleanup = setupConnectivityListeners()
@@ -248,21 +256,19 @@ useEffect(() => {
     return () => { cleanup(); window.removeEventListener('offline', off); window.removeEventListener('online', on) }
   }, [setIsOffline])
 
-  // ── Page view + table tracking ────────────────────────────────────────────
+  // ── Page view analytics only (does NOT touch hasTableToken) ───────────────
   useEffect(() => {
     const token = searchParams.get('t')
     const rawTable = searchParams.get('table')
     let mounted = true
 
-    async function resolveTableNumber() {
+    async function trackPageView() {
       if (token) {
         const { data, error } = await supabase
           .from('qr_tokens').select('table_number')
           .eq('restaurant_id', initialData.restaurant.id).eq('token', token).maybeSingle()
         if (!mounted) return
-        if (error) { setTableNumber(null); return }
-        setTableNumber(data?.table_number ?? null)
-        if (!initialData.restaurant.id) return
+        if (error || !initialData.restaurant.id) return
         void track(initialData.restaurant.id, 'page_view', {
           metadata: { table_number: data?.table_number ?? null, table_token: token },
         })
@@ -270,14 +276,13 @@ useEffect(() => {
       }
       const n = rawTable ? Number(rawTable) : null
       const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
-      setTableNumber(resolved)
       if (!initialData.restaurant.id) return
       void track(initialData.restaurant.id, 'page_view', { metadata: { table_number: resolved } })
     }
 
-    void resolveTableNumber()
+    void trackPageView()
     return () => { mounted = false }
-  }, [searchParams, setTableNumber, initialData.restaurant.id])
+  }, [searchParams, initialData.restaurant.id])
 
   // ── Realtime subscriptions ────────────────────────────────────────────────
   useEffect(() => {
@@ -351,60 +356,60 @@ useEffect(() => {
     [restaurant, tableNumber, sessionId, clearCart, slug, searchParams],
   )
 
- const handleRequestAssistance = useCallback(
-  async (
-    requestType: 'assistance' | 'water' | 'bill' = 'assistance',
-  ): Promise<{ ok: boolean; requestId?: string }> => {
-    if (!restaurant) return { ok: false }
+  const handleRequestAssistance = useCallback(
+    async (
+      requestType: 'assistance' | 'water' | 'bill' = 'assistance',
+    ): Promise<{ ok: boolean; requestId?: string }> => {
+      if (!restaurant) return { ok: false }
 
-    const token = searchParams.get('t')
-    if (!tableNumber && !token) {
-      alert('Table number missing. Please scan the table QR again.')
-      return { ok: false }
-    }
-
-    try {
-      const res = await fetch('/api/table-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          restaurantSlug: restaurant.slug,
-          tableNumber,
-          tableToken: token,
-          sessionId,
-          requestType,
-          items: [],
-          subtotal: 0,
-        }),
-      })
-
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string
-        orderId?: string
-        request?: { id?: string }
+      const token = searchParams.get('t')
+      if (!tableNumber && !token) {
+        alert('Table number missing. Please scan the table QR again.')
+        return { ok: false }
       }
 
-      if (!res.ok) throw new Error(data.error ?? 'Failed to notify waiter')
+      try {
+        const res = await fetch('/api/table-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            restaurantSlug: restaurant.slug,
+            tableNumber,
+            tableToken: token,
+            sessionId,
+            requestType,
+            items: [],
+            subtotal: 0,
+          }),
+        })
 
-      void track(restaurant.id, 'waiter_called', {
-        metadata: { table_number: tableNumber, request_type: requestType },
-      })
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          orderId?: string
+          request?: { id?: string }
+        }
 
-      const requestId = data.orderId ?? data.request?.id ?? undefined
-      return { ok: true, requestId }
-    } catch (err) {
-      void track(restaurant.id, 'waiter_call_failed', {
-        metadata: {
-          table_number: tableNumber,
-          error: err instanceof Error ? err.message : 'unknown',
-        },
-      })
-      alert(err instanceof Error ? err.message : 'Something went wrong')
-      return { ok: false }
-    }
-  },
-  [restaurant, tableNumber, sessionId, searchParams],
-)
+        if (!res.ok) throw new Error(data.error ?? 'Failed to notify waiter')
+
+        void track(restaurant.id, 'waiter_called', {
+          metadata: { table_number: tableNumber, request_type: requestType },
+        })
+
+        const requestId = data.orderId ?? data.request?.id ?? undefined
+        return { ok: true, requestId }
+      } catch (err) {
+        void track(restaurant.id, 'waiter_call_failed', {
+          metadata: {
+            table_number: tableNumber,
+            error: err instanceof Error ? err.message : 'unknown',
+          },
+        })
+        alert(err instanceof Error ? err.message : 'Something went wrong')
+        return { ok: false }
+      }
+    },
+    [restaurant, tableNumber, sessionId, searchParams],
+  )
 
   const handleCloseToast = useCallback((orderId: string, toastTableNumber: number) => {
     setWaiterToasts((prev) => {
@@ -421,7 +426,6 @@ useEffect(() => {
 
   return (
     <>
-      {/* ── Premium CSS injection ── */}
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -451,7 +455,6 @@ useEffect(() => {
           -webkit-font-smoothing: antialiased;
         }
 
-        /* ── Premium main content wrapper ── */
         .pr-shell {
           min-height: 100dvh;
           display: flex;
@@ -468,7 +471,6 @@ useEffect(() => {
         }
         @media (min-width: 640px) { .pr-main { padding: 1.75rem 1.5rem 6rem; } }
 
-        /* ── Category tabs ── */
         .pr-cat-rail {
           display: flex;
           gap: 6px;
@@ -499,7 +501,6 @@ useEffect(() => {
           color: #111; border-color: var(--pr-gold); font-weight: 600;
         }
 
-        /* ── Section labels ── */
         .pr-section-label {
           font-family: var(--font-display);
           font-size: 1.4rem; font-weight: 600;
@@ -512,7 +513,6 @@ useEffect(() => {
           height: 1px; background: var(--pr-border);
         }
 
-        /* ── Search box ── */
         .pr-search-wrap {
           display: flex; align-items: center; gap: 10px;
           padding: 11px 14px;
@@ -539,7 +539,6 @@ useEffect(() => {
         }
         .pr-search-clear:hover { color: var(--pr-text); }
 
-        /* ── Bestseller rail ── */
         .pr-bestseller-eyebrow {
           display: flex; align-items: center; gap: 5px;
           font-size: 10px; font-weight: 700;
@@ -582,11 +581,9 @@ useEffect(() => {
           font-family: var(--font-body);
         }
 
-        /* ── Items grid ── */
         .pr-items-grid { display: grid; gap: 8px; }
         @media (min-width: 580px) { .pr-items-grid { grid-template-columns: 1fr 1fr; } }
 
-        /* ── Veg toggle ── */
         .pr-veg-toggle {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 7px 14px; border-radius: 100px;
@@ -604,13 +601,11 @@ useEffect(() => {
         }
         .pr-veg-toggle:active { transform: scale(0.96); }
 
-        /* ── Empty state ── */
         .pr-empty {
           font-size: 14px; color: var(--pr-text-faint);
           font-family: var(--font-body); padding: 1rem 0;
         }
 
-        /* ── Table badge (contextual) ── */
         .pr-table-badge {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 6px 14px; border-radius: 100px;
@@ -622,14 +617,12 @@ useEffect(() => {
           margin-bottom: 1rem;
         }
 
-        /* ── Offline banner ── */
         .offline-banner-override {
           background: rgba(239,68,68,0.12) !important;
           border-color: rgba(239,68,68,0.2) !important;
           color: #fca5a5 !important;
         }
 
-        /* Fade-up animation for items */
         @keyframes pr-fadeUp {
           from { opacity: 0; transform: translateY(12px); }
           to   { opacity: 1; transform: translateY(0); }
@@ -643,14 +636,12 @@ useEffect(() => {
         .pr-items-grid > *:nth-child(4)  { animation-delay: 120ms; }
         .pr-items-grid > *:nth-child(n+5) { animation-delay: 160ms; }
 
-        /* Custom scrollbar */
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb {
           background: rgba(255,255,255,0.1); border-radius: 10px;
         }
 
-        /* RatingModal dark override */
         .rating-modal-dark {
           background: #242424 !important;
           border: 1px solid rgba(255,255,255,0.08) !important;
@@ -667,40 +658,37 @@ useEffect(() => {
 
       <div className="pr-shell">
         <OfflineBanner />
-		
-		<CustomerAuthProvider
-  restaurantId={restaurant?.id ?? null}
-  tableNumber={tableNumber}
-  loginOpen={loginOpen}
-  onLoginOpenChange={setLoginOpen}
-/>
-  
+
+        <CustomerAuthProvider
+          restaurantId={restaurant?.id ?? null}
+          tableNumber={tableNumber}
+          loginOpen={loginOpen}
+          onLoginOpenChange={setLoginOpen}
+        />
+
         <RestaurantHeader restaurant={restaurant} />
 
         <main className="pr-main">
-          {/* Table context pill */}
-         
-
-           <MenuGrid
-  onCallWaiter={handleCallWaiter}
-  isWaiterLoading={waiterLoading}
- upsellCard={
-  <>
-   {activeOffers.length > 0 && (
-  <OffersCarousel
-    offers={activeOffers}
-    restaurantId={initialData.restaurant.id}
-    restaurantName={initialData.restaurant.name}
-    onLoginClick={() => setLoginOpen(true)}
-  />
-)}
-    <AISuggestionCard />
-  </>
-}
-/>
+          <MenuGrid
+            onCallWaiter={handleCallWaiter}
+            isWaiterLoading={waiterLoading}
+            upsellCard={
+              <>
+                {activeOffers.length > 0 && (
+                  <OffersCarousel
+                    offers={activeOffers}
+                    restaurantId={initialData.restaurant.id}
+                    restaurantName={initialData.restaurant.name}
+                    onLoginClick={() => setLoginOpen(true)}
+                  />
+                )}
+                <AISuggestionCard />
+              </>
+            }
+          />
         </main>
-		
-		<ChatPanel />
+
+        <ChatPanel />
 
         {showRating && <RatingModal />}
         {showRatingsList && <RatingsListModal restaurant={restaurant} />}

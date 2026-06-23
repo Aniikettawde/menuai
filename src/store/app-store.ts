@@ -29,11 +29,12 @@ interface AppStore {
   categories: MenuCategory[]
   items: MenuItem[]
   dishOptions: Record<string, DishOption[]>
-
+setHasTableToken: (has: boolean) => void
   cartItems: CartItem[]
   isCartOpen: boolean
   cartPulse: number
   tableNumber: number | null
+hasTableToken: boolean
 
   customiseItemId: string | null
 
@@ -108,6 +109,7 @@ export const useAppStore = create<AppStore>()(
     isCartOpen: false,
     cartPulse: 0,
     tableNumber: null,
+hasTableToken: false,
 
     customiseItemId: null,
 
@@ -122,7 +124,11 @@ export const useAppStore = create<AppStore>()(
     showRatingsList: false,
     isOffline: false,
     showChat: false,
-
+setHasTableToken: (has) =>
+  set((state) => {
+    state.hasTableToken = has
+  }),
+ 
     setRestaurantData: ({ restaurant, categories, items }) =>
       set((state) => {
         state.restaurant = restaurant

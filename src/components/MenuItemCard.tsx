@@ -185,7 +185,8 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
   const hasOptions = (dishOptions[item.id]?.length ?? 0) > 0
   const imageUrl = getImageUrl(item.image_url)
   const cleanDescription = item.description ? trimDescription(item.description) : null
-  const ordersEnabled = useAppStore((s) => s.restaurant?.orders_enabled ?? true)
+  const ordersEnabled = useAppStore((s) => (s.restaurant?.orders_enabled ?? true) && s.hasTableToken)
+
 
   const toggle = () => {
     const next = isExpanded ? null : item.id
