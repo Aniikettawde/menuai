@@ -341,7 +341,7 @@ export function ChatPanel() {
         calories: item.calories,
         spice_level: (item as any).spice_level,
         taste_profile: (item as any).taste_profile,
-        best_with: (item as any).best_with,
+        best_with: item.best_with,
         chef_note: (item as any).chef_note,
         course_type: (item as any).course_type,
       }))

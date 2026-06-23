@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   X, Gift, MapPin, Clock, Star, LogOut, ChevronRight,
-  Award, TrendingUp, Utensils, Calendar,
+  Award, TrendingUp, Utensils, Calendar, Tag,
 } from 'lucide-react'
 import { useCustomerAuth, type CustomerProfile } from '@/store/customer-auth-store'
 
@@ -25,9 +25,27 @@ interface CustomerOffer {
   is_used:     boolean
 }
 
+interface ClaimedOffer {
+  claim_id:        string
+  claimed_at:      string
+  restaurant_id:   string
+  restaurant_name: string
+  offer_id:        string
+  title:           string
+  offer_kind:      string
+  discount_percent: number | null
+  discount_amount_paise: number | null
+  coupon_code:     string | null
+  ends_at:         string | null
+  is_active:       boolean
+}
+
+
 interface AccountData {
   visits:  RestaurantVisit[]
   offers:  CustomerOffer[]
+    claimedOffers:  ClaimedOffer[]   // ← add this
+
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -351,6 +369,131 @@ function SectionLabel({ icon, title }: { icon: React.ReactNode; title: string })
   )
 }
 
+function formatOfferKind(kind: string, discountPercent: number | null, discountAmountPaise: number | null): string {
+  if (kind === 'percent') return `${discountPercent ?? 0}% off`
+  if (kind === 'fixed')   return `₹${Math.round((discountAmountPaise ?? 0) / 100)} off`
+  if (kind === 'free_item') return 'Free item'
+  if (kind === 'combo')     return 'Combo deal'
+  if (kind === 'happy_hour') return 'Happy hour'
+  if (kind === 'today_special') return "Chef's special"
+  if (kind === 'buy_x_get_y') return 'Buy X Get Y'
+  if (kind === 'cart_value_free_item') return 'Free item on order'
+  return 'Offer'
+}
+
+function ClaimedOffersSection({ claimedOffers }: { claimedOffers: ClaimedOffer[] }) {
+  if (claimedOffers.length === 0) {
+    return (
+      <div style={{
+        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 14, padding: '20px 16px', textAlign: 'center', marginBottom: 20,
+      }}>
+        <Gift size={22} style={{ color: 'rgba(232,197,71,0.3)', marginBottom: 8 }} />
+        <p style={{ margin: 0, fontSize: 13, color: 'rgba(250,250,247,0.35)', fontFamily: 'var(--font-body)' }}>
+          No claimed offers yet
+        </p>
+        <p style={{ margin: '4px 0 0', fontSize: 11, color: 'rgba(250,250,247,0.2)', fontFamily: 'var(--font-body)' }}>
+          Claim offers from the menu to save them here
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+      {claimedOffers.map((claim) => {
+        const expiry = formatExpiry(claim.ends_at)
+        const isExpired = claim.ends_at ? new Date(claim.ends_at) < new Date() : false
+        const isExpiringSoon = expiry?.startsWith('Ends in') &&
+          parseInt(expiry.replace(/\D/g, ''), 10) <= 3
+
+        return (
+          <div key={claim.claim_id} style={{
+            background: isExpired ? 'rgba(255,255,255,0.02)' : 'rgba(232,197,71,0.05)',
+            border: `1px solid ${isExpired ? 'rgba(255,255,255,0.06)' : 'rgba(232,197,71,0.16)'}`,
+            borderRadius: 14, padding: '13px 14px',
+            opacity: isExpired ? 0.5 : 1,
+            position: 'relative', overflow: 'hidden',
+          }}>
+            {/* Left accent */}
+            {!isExpired && (
+              <div style={{
+                position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+                background: 'linear-gradient(180deg, #E8C547, #FF5C35)',
+                borderRadius: '14px 0 0 14px',
+              }} />
+            )}
+            <div style={{ paddingLeft: isExpired ? 0 : 8 }}>
+              {/* Discount tag + restaurant name row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  background: 'rgba(232,197,71,0.1)', border: '1px solid rgba(232,197,71,0.2)',
+                  borderRadius: 999, padding: '2px 9px',
+                  fontSize: 10, fontWeight: 800, color: '#E8C547', fontFamily: 'var(--font-body)',
+                }}>
+                  <Tag size={8} color="#E8C547" />
+                  {formatOfferKind(claim.offer_kind, claim.discount_percent, claim.discount_amount_paise)}
+                </div>
+                {isExpired && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+                    color: 'rgba(250,250,247,0.3)', background: 'rgba(255,255,255,0.05)',
+                    borderRadius: 4, padding: '2px 7px', fontFamily: 'var(--font-body)',
+                  }}>Expired</span>
+                )}
+              </div>
+
+              {/* Offer title */}
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#FAFAF7', fontFamily: 'var(--font-body)', lineHeight: 1.3 }}>
+                {claim.title}
+              </p>
+
+              {/* Restaurant name */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <MapPin size={9} color="rgba(250,250,247,0.35)" />
+                <p style={{ margin: 0, fontSize: 11, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+                  {claim.restaurant_name}
+                </p>
+              </div>
+
+              {/* Coupon code */}
+              {claim.coupon_code && (
+                <div style={{ marginTop: 8 }}>
+                  <span style={{
+                    background: 'rgba(255,255,255,0.06)', border: '1px dashed rgba(255,255,255,0.15)',
+                    borderRadius: 6, padding: '3px 9px', fontSize: 10, fontWeight: 700,
+                    color: 'rgba(250,250,247,0.7)', fontFamily: 'var(--font-mono, monospace)',
+                    letterSpacing: '0.08em',
+                  }}>
+                    {claim.coupon_code}
+                  </span>
+                </div>
+              )}
+
+              {/* Expiry */}
+              {expiry && !isExpired && (
+                <p style={{
+                  margin: '6px 0 0', fontSize: 10.5, fontWeight: 600,
+                  color: isExpiringSoon ? '#f87171' : 'rgba(250,250,247,0.35)',
+                  fontFamily: 'var(--font-body)',
+                }}>
+                  {expiry}
+                </p>
+              )}
+
+              {/* Claimed date */}
+              <p style={{ margin: '5px 0 0', fontSize: 10, color: 'rgba(250,250,247,0.2)', fontFamily: 'var(--font-body)' }}>
+                Claimed {formatDate(claim.claimed_at)}
+              </p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main drawer ──────────────────────────────────────────────────────────────
 
 export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) {
@@ -524,6 +667,15 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
               ) : (
                 <OffersSection offers={data?.offers ?? []} />
               )}
+			  {/* Claimed offers */}
+<SectionLabel icon={<Tag size={13} />} title="Claimed Offers" />
+{loading ? (
+  <div style={{ padding: '16px 0', textAlign: 'center' }}>
+    <p style={{ margin: 0, fontSize: 12, color: 'rgba(250,250,247,0.3)', fontFamily: 'var(--font-body)' }}>Loading…</p>
+  </div>
+) : (
+  <ClaimedOffersSection claimedOffers={data?.claimedOffers ?? []} />
+)}
 
               {/* Restaurant history */}
               <SectionLabel icon={<MapPin size={13} />} title="Restaurant History" />

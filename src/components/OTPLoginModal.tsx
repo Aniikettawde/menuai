@@ -151,20 +151,43 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
 
   // ── verify OTP ──
   const handleVerifyOTP = useCallback(async () => {
-    if (otp.replace(/\s/g, '').length < 6) { setError('Enter the 6-digit OTP'); return }
-    if (!confirmRef.current) { setError('Session expired. Resend OTP.'); return }
-    setError(''); setLoading(true)
-    try {
-      const { uid, phone: fbPhone } = await verifyOTP(confirmRef.current, otp.replace(/\s/g, ''))
-      // Ask for name
+  if (otp.replace(/\s/g, '').length < 6) { setError('Enter the 6-digit OTP'); return }
+  if (!confirmRef.current) { setError('Session expired. Resend OTP.'); return }
+  setError(''); setLoading(true)
+  try {
+    const { uid, phone: fbPhone } = await verifyOTP(confirmRef.current, otp.replace(/\s/g, ''))
+    // Store for next step
+    confirmRef.current = { uid, phone: fbPhone ?? `+91${phone}` } as any
+
+    // ✅ Check if they already have a profile with a name
+    const res = await fetch('/api/auth/customer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firebase_uid:  uid,
+        phone:         fbPhone ?? `+91${phone}`,
+        display_name:  null,   // don't overwrite existing name
+        restaurant_id: restaurantId ?? null,
+        table_number:  tableNumber ?? null,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error)
+
+    if (data.customer.display_name) {
+      // Returning user — skip name screen entirely
+      setCustomer(data.customer)
+      setScreen('done')
+      setTimeout(onClose, 1800)
+    } else {
+      // New user — ask for name
       setScreen('name')
-      // Store uid/phone temporarily via closure ref for next step
-      confirmRef.current = { uid, phone: fbPhone ?? `+91${phone}` } as any
-    } catch (err: any) {
-      setError('Incorrect OTP. Please try again.')
-      setOtp('')
-    } finally { setLoading(false) }
-  }, [otp, phone])
+    }
+  } catch (err: any) {
+    setError('Incorrect OTP. Please try again.')
+    setOtp('')
+  } finally { setLoading(false) }
+}, [otp, phone, restaurantId, tableNumber, setCustomer, onClose])
 
   // ── save profile ──
   const handleSaveProfile = useCallback(async () => {

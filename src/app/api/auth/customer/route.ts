@@ -110,6 +110,51 @@ export async function GET(req: NextRequest) {
       expires_at:  o.expires_at as string | null,
       is_used:     o.is_used as boolean ?? false,
     }))
+	
+	const { data: claimedRows, error: claimedErr } = await supabase
+  .from('claimed_offers')
+  .select(`
+    id,
+    claimed_at,
+    restaurant_id,
+    restaurant_name,
+    offers (
+      id,
+      title,
+      offer_kind,
+      offer_type,
+      discount_percent,
+      discount_amount_paise,
+      coupon_code,
+      ends_at,
+      is_active
+    )
+  `)
+  .eq('customer_id', customerId)
+  .order('claimed_at', { ascending: false })
+
+if (claimedErr) console.error('[claimed offers]', claimedErr)
+
+const claimedOffers = (claimedRows ?? []).map((row) => {
+  const o = (Array.isArray(row.offers) ? row.offers[0] : row.offers) as Record<string, unknown> | null
+  return {
+    claim_id:        row.id as string,
+    claimed_at:      row.claimed_at as string,
+    restaurant_id:   row.restaurant_id as string,
+    restaurant_name: row.restaurant_name as string,
+    offer_id:        (o?.id as string) ?? '',
+    title:           (o?.title as string) ?? '',
+    offer_kind:      (o?.offer_kind ?? o?.offer_type) as string,
+    discount_percent: (o?.discount_percent as number | null) ?? null,
+    discount_amount_paise: (o?.discount_amount_paise as number | null) ?? null,
+    coupon_code:     (o?.coupon_code as string | null) ?? null,
+    ends_at:         (o?.ends_at as string | null) ?? null,
+    is_active:       (o?.is_active as boolean) ?? false,
+  }
+})
+
+// Then update the final return to include claimedOffers:
+return NextResponse.json({ visits, offers, claimedOffers })
 
     return NextResponse.json({ visits, offers })
   } catch (err) {
@@ -129,19 +174,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Upsert customer — create or return existing
-    const { data: customer, error } = await supabase
-      .from('customers')
-      .upsert(
-        {
-          firebase_uid:  body.firebase_uid,
-          phone:         body.phone,
-          display_name:  body.display_name ?? null,
-          updated_at:    new Date().toISOString(),
-        },
-        { onConflict: 'firebase_uid', ignoreDuplicates: false },
-      )
-      .select('id, firebase_uid, phone, display_name, loyalty_points, created_at')
-      .single()
+   const { data: customer, error } = await supabase
+  .from('customers')
+  .upsert(
+    {
+      firebase_uid: body.firebase_uid,
+      phone:        body.phone,
+      // ✅ Only set display_name if one was actually provided
+      ...(body.display_name != null && { display_name: body.display_name }),
+      updated_at:   new Date().toISOString(),
+    },
+    { onConflict: 'firebase_uid', ignoreDuplicates: false },
+  )
+  .select('id, firebase_uid, phone, display_name, loyalty_points, created_at')
+  .single()
 
     if (error) {
       console.error('[customer upsert]', error)

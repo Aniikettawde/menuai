@@ -529,7 +529,7 @@ export function MenuGrid({
       </div>
 
       <div className="mg-stack">
-        {upsellCard && !isSearching && <div className="mg-upsell-wrap">{upsellCard}</div>}
+        {upsellCard && !isSearching && <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{upsellCard}</div>}
 
         {isSearching ? (
           <SearchResults results={searchResults} />

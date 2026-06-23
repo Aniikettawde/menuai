@@ -20,9 +20,16 @@ import { RatingsListModal } from './RatingsListModal'
 import { CallWaiterBell } from './CallWaiterBell'
 import { AISuggestionCard } from './AISuggestionCard'
 import { CustomerAuthProvider } from './CustomerAuthProvider'
+import { OffersCarousel } from './OffersCarousel'
 
 
-
+type OfferRow = {
+  id: string; title: string
+  offer_type: 'percent' | 'fixed' | 'free_item'
+  discount_percent: number | null; discount_amount_paise: number | null
+  coupon_code: string | null; min_order_amount_paise: number | null
+  ends_at: string | null
+}
  
 interface Props {
   restaurantId?: string | null
@@ -84,9 +91,25 @@ export function RestaurantShell({ initialData }: Props) {
   const [activeToastIndex, setActiveToastIndex] = useState(0)
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+const [activeOffers, setActiveOffers] = useState<OfferRow[]>([])
 
   const tableToken = searchParams.get('t')
   const legacyTableParam = searchParams.get('table')
+  const [loginOpen, setLoginOpen] = useState(false)
+
+  
+useEffect(() => {
+  setRestaurantData(initialData)
+  setCachedMenu(initialData.restaurant.slug, initialData)
+
+  void supabase
+    .from('offers')
+    .select('id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at')
+    .eq('restaurant_id', initialData.restaurant.id)
+    .eq('is_active', true)
+    .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString())
+    .then(({ data }) => { if (data) setActiveOffers(data as OfferRow[]) })
+}, [initialData, setRestaurantData])
 
   // ── Table resolution ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -211,12 +234,8 @@ export function RestaurantShell({ initialData }: Props) {
     } catch (err) { console.error('Failed to refresh menu:', err) }
   }, [initialData.restaurant.id, slug, setRestaurantData, fetchDishOptions])
 
-  // ── Initial hydration ────────────────────────────────────────────────────
-  useEffect(() => {
-    setRestaurantData(initialData)
-    setCachedMenu(slug, initialData)
-    if (initialData.items.length > 0) void fetchDishOptions(initialData.items.map((i) => i.id))
-  }, [initialData, setRestaurantData, slug, fetchDishOptions])
+ 
+ 
 
   // ── Connectivity ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -650,9 +669,11 @@ export function RestaurantShell({ initialData }: Props) {
         <OfflineBanner />
 		
 		<CustomerAuthProvider
-    restaurantId={restaurant?.id ?? null}
-    tableNumber={tableNumber}
-  />
+  restaurantId={restaurant?.id ?? null}
+  tableNumber={tableNumber}
+  loginOpen={loginOpen}
+  onLoginOpenChange={setLoginOpen}
+/>
   
         <RestaurantHeader restaurant={restaurant} />
 
@@ -660,11 +681,23 @@ export function RestaurantShell({ initialData }: Props) {
           {/* Table context pill */}
          
 
-             <MenuGrid
-            onCallWaiter={handleCallWaiter}
-            isWaiterLoading={waiterLoading}
-            upsellCard={<AISuggestionCard />}
-          />
+           <MenuGrid
+  onCallWaiter={handleCallWaiter}
+  isWaiterLoading={waiterLoading}
+ upsellCard={
+  <>
+   {activeOffers.length > 0 && (
+  <OffersCarousel
+    offers={activeOffers}
+    restaurantId={initialData.restaurant.id}
+    restaurantName={initialData.restaurant.name}
+    onLoginClick={() => setLoginOpen(true)}
+  />
+)}
+    <AISuggestionCard />
+  </>
+}
+/>
         </main>
 		
 		<ChatPanel />

@@ -17,11 +17,15 @@ import { CustomerAccountDrawer }  from './CustomerAccountDrawer'
 interface Props {
   restaurantId?: string | null
   tableNumber?:  number | null
+  loginOpen?: boolean
+  onLoginOpenChange?: (open: boolean) => void
 }
 
-export function CustomerAuthProvider({ restaurantId, tableNumber }: Props) {
-  const [loginOpen,   setLoginOpen]   = useState(false)
-  const [accountOpen, setAccountOpen] = useState(false)
+export function CustomerAuthProvider({ restaurantId, tableNumber, loginOpen: loginOpenProp, onLoginOpenChange }: Props) {
+  const [loginOpenInternal, setLoginOpenInternal] = useState(false)
+  const loginOpen = loginOpenProp ?? loginOpenInternal
+  const setLoginOpen = onLoginOpenChange ?? setLoginOpenInternal
+  const [accountOpen, setAccountOpen] = useState(false)  // ← add this back
 
   return (
     <>

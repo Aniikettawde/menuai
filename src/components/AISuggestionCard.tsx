@@ -18,6 +18,8 @@ function toAIContext(item: MenuItem): MenuItemAIContext {
     allergens: item.allergens,
     prep_time_minutes: item.prep_time_minutes,
     calories: item.calories,
+	    best_with: item.best_with,  // ← add this
+
   }
 }
 
