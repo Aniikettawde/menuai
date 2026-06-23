@@ -16,7 +16,6 @@ const firebaseConfig = {
   appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 }
 
-// Singleton — avoid duplicate app init in hot-reload / Strict Mode
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
 export const auth: Auth = getAuth(app)
 
@@ -25,24 +24,22 @@ export const auth: Auth = getAuth(app)
 let recaptchaVerifier: RecaptchaVerifier | null = null
 
 export function clearRecaptcha(containerId: string): void {
-  // 1. Call Firebase's own clear() method
   if (recaptchaVerifier) {
     try { recaptchaVerifier.clear() } catch {}
     recaptchaVerifier = null
   }
-
-  // 2. Wipe the DOM element so Firebase doesn't see an already-rendered widget
   if (typeof window !== 'undefined') {
     const el = document.getElementById(containerId)
     if (el) el.innerHTML = ''
   }
 }
 
+// FIXED: only clear & recreate if we don't already have a live verifier.
+// Recreating on every sendOTP call was the main cause of the delay.
 export function getRecaptchaVerifier(containerId: string): RecaptchaVerifier {
-  // Always clear first — handles the "edit phone" re-trigger case
-  clearRecaptcha(containerId)
-
-  recaptchaVerifier = new RecaptchaVerifier(auth, containerId, { size: 'invisible' })
+  if (!recaptchaVerifier) {
+    recaptchaVerifier = new RecaptchaVerifier(auth, containerId, { size: 'invisible' })
+  }
   return recaptchaVerifier
 }
 
@@ -50,13 +47,16 @@ export async function sendOTP(
   phone: string,
   containerId: string,
 ): Promise<ConfirmationResult> {
-  const verifier = getRecaptchaVerifier(containerId)
-
-  // Normalise: ensure +91 prefix for Indian numbers
-  const normalised =
-    phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`
-
-  return signInWithPhoneNumber(auth, normalised, verifier)
+  const verifier   = getRecaptchaVerifier(containerId)
+  const normalised = phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`
+  try {
+    return await signInWithPhoneNumber(auth, normalised, verifier)
+  } catch (err) {
+    // If Firebase rejects the existing verifier (e.g. expired token),
+    // clear it so the next attempt creates a fresh one.
+    clearRecaptcha(containerId)
+    throw err
+  }
 }
 
 export async function verifyOTP(

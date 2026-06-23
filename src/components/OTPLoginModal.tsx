@@ -16,7 +16,9 @@ interface Props {
 
 type Screen = 'phone' | 'otp' | 'name' | 'done'
 
-// ─── OTP digit input ─────────────────────────────────────────────────────────
+// ─── OTP digit input ──────────────────────────────────────────────────────────
+// FIXED: refs must not be created inside a loop (Rules of Hooks).
+// We use a single ref to the container and query children instead.
 
 function OTPInput({
   value,
@@ -27,26 +29,45 @@ function OTPInput({
   onChange: (v: string) => void
   disabled: boolean
 }) {
-  const digits = value.split('')
-  const refs = Array.from({ length: 6 }, () => useRef<HTMLInputElement>(null))
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const focusAt = (i: number) => refs[i]?.current?.focus()
+  const getInputs = (): HTMLInputElement[] =>
+    containerRef.current
+      ? Array.from(containerRef.current.querySelectorAll('input'))
+      : []
+
+  const focusAt = (i: number) => {
+    const inputs = getInputs()
+    inputs[i]?.focus()
+  }
+
+  // Auto-focus first slot on mount
+  useEffect(() => {
+    const digits = value.split('')
+    const firstEmpty = digits.findIndex((d) => !d)
+    setTimeout(() => focusAt(firstEmpty === -1 ? 5 : firstEmpty), 50)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const digits = value.split('')
 
   const handleKey = (i: number) => (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace') {
+      e.preventDefault()
       if (digits[i]) {
         const next = [...digits]
         next[i] = ''
         onChange(next.join(''))
       } else if (i > 0) {
-        focusAt(i - 1)
         const next = [...digits]
         next[i - 1] = ''
         onChange(next.join(''))
+        focusAt(i - 1)
       }
       return
     }
     if (/^\d$/.test(e.key)) {
+      e.preventDefault()
       const next = [...digits]
       next[i] = e.key
       onChange(next.join(''))
@@ -54,34 +75,30 @@ function OTPInput({
     }
   }
 
-  // auto-focus first empty slot on mount
-  useEffect(() => {
-    const firstEmpty = digits.findIndex((d) => !d)
-    focusAt(firstEmpty === -1 ? 5 : firstEmpty)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (!pasted) return
+    const padded = pasted.padEnd(6, '').slice(0, 6)
+    onChange(padded)
+    focusAt(Math.min(pasted.length, 5))
+  }
 
   return (
-    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+    <div ref={containerRef} style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
       {Array.from({ length: 6 }).map((_, i) => (
         <input
           key={i}
-          ref={refs[i]}
           type="text"
           inputMode="numeric"
           pattern="\d*"
           maxLength={1}
           value={digits[i] ?? ''}
           disabled={disabled}
-          onChange={() => {}}       // controlled via onKeyDown
+          onChange={() => {}}        // controlled via onKeyDown
           onKeyDown={handleKey(i)}
           onFocus={(e) => e.target.select()}
-          onPaste={(e) => {
-            e.preventDefault()
-            const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
-            onChange(pasted.padEnd(6, ' ').slice(0, 6).trimEnd())
-            focusAt(Math.min(pasted.length, 5))
-          }}
+          onPaste={handlePaste}
           style={{
             width: 44, height: 52,
             textAlign: 'center',
@@ -94,7 +111,11 @@ function OTPInput({
             outline: 'none',
             transition: 'all 0.15s',
             opacity: disabled ? 0.5 : 1,
-          }}
+            // Critical for mobile — don't let the browser resize or zoom the field
+            WebkitAppearance: 'none',
+            MozAppearance: 'textfield',
+            touchAction: 'manipulation',
+          } as React.CSSProperties}
         />
       ))}
     </div>
@@ -106,17 +127,17 @@ function OTPInput({
 export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Props) {
   const { setCustomer } = useCustomerAuth()
 
-  const [screen, setScreen]               = useState<Screen>('phone')
-  const [phone, setPhone]                 = useState('')
-  const [otp, setOtp]                     = useState('')
-  const [displayName, setDisplayName]     = useState('')
-  const [loading, setLoading]             = useState(false)
-  const [error, setError]                 = useState('')
-  const [resendTimer, setResendTimer]     = useState(0)
-  const confirmRef                        = useRef<ConfirmationResult | null>(null)
-  const timerRef                          = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [screen, setScreen]           = useState<Screen>('phone')
+  const [phone, setPhone]             = useState('')
+  const [otp, setOtp]                 = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState('')
+  const [resendTimer, setResendTimer] = useState(0)
+  const confirmRef                    = useRef<ConfirmationResult | null>(null)
+  const timerRef                      = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // reset on open
+  // Reset on open
   useEffect(() => {
     if (isOpen) {
       setScreen('phone'); setPhone(''); setOtp('')
@@ -124,6 +145,9 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [isOpen])
+
+  // Clear loading if an error arrives
+  useEffect(() => { if (error) setLoading(false) }, [error])
 
   const startResendTimer = useCallback(() => {
     setResendTimer(30)
@@ -152,43 +176,40 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
 
   // ── verify OTP ──
   const handleVerifyOTP = useCallback(async () => {
-  if (otp.replace(/\s/g, '').length < 6) { setError('Enter the 6-digit OTP'); return }
-  if (!confirmRef.current) { setError('Session expired. Resend OTP.'); return }
-  setError(''); setLoading(true)
-  try {
-    const { uid, phone: fbPhone } = await verifyOTP(confirmRef.current, otp.replace(/\s/g, ''))
-    // Store for next step
-    confirmRef.current = { uid, phone: fbPhone ?? `+91${phone}` } as any
+    const code = otp.replace(/\s/g, '')
+    if (code.length < 6) { setError('Enter the 6-digit OTP'); return }
+    if (!confirmRef.current) { setError('Session expired. Resend OTP.'); return }
+    setError(''); setLoading(true)
+    try {
+      const { uid, phone: fbPhone } = await verifyOTP(confirmRef.current, code)
+      confirmRef.current = { uid, phone: fbPhone ?? `+91${phone}` } as any
 
-    // ✅ Check if they already have a profile with a name
-    const res = await fetch('/api/auth/customer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        firebase_uid:  uid,
-        phone:         fbPhone ?? `+91${phone}`,
-        display_name:  null,   // don't overwrite existing name
-        restaurant_id: restaurantId ?? null,
-        table_number:  tableNumber ?? null,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error)
+      const res = await fetch('/api/auth/customer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebase_uid:  uid,
+          phone:         fbPhone ?? `+91${phone}`,
+          display_name:  null,
+          restaurant_id: restaurantId ?? null,
+          table_number:  tableNumber ?? null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
 
-    if (data.customer.display_name) {
-      // Returning user — skip name screen entirely
-      setCustomer(data.customer)
-      setScreen('done')
-      setTimeout(onClose, 1800)
-    } else {
-      // New user — ask for name
-      setScreen('name')
-    }
-  } catch (err: any) {
-    setError('Incorrect OTP. Please try again.')
-    setOtp('')
-  } finally { setLoading(false) }
-}, [otp, phone, restaurantId, tableNumber, setCustomer, onClose])
+      if (data.customer.display_name) {
+        setCustomer(data.customer)
+        setScreen('done')
+        setTimeout(onClose, 1800)
+      } else {
+        setScreen('name')
+      }
+    } catch {
+      setError('Incorrect OTP. Please try again.')
+      setOtp('')
+    } finally { setLoading(false) }
+  }, [otp, phone, restaurantId, tableNumber, setCustomer, onClose])
 
   // ── save profile ──
   const handleSaveProfile = useCallback(async () => {
@@ -220,10 +241,10 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
 
   return (
     <>
-      {/* invisible recaptcha anchor */}
+      {/* Invisible reCAPTCHA anchor — must always be in the DOM when modal is open */}
       <div id="recaptcha-container" style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }} />
 
-      {/* backdrop */}
+      {/* Backdrop */}
       <div
         onClick={onClose}
         style={{
@@ -232,10 +253,9 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
           display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          padding: '0 0 0',
         }}
       >
-        {/* sheet */}
+        {/* Sheet */}
         <div
           onClick={(e) => e.stopPropagation()}
           style={{
@@ -248,14 +268,14 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
             position: 'relative',
           }}
         >
-          {/* gold top accent */}
+          {/* Gold top accent */}
           <div style={{
             height: 3,
             background: 'linear-gradient(90deg, transparent 0%, #E8C547 40%, #FF5C35 70%, transparent 100%)',
           }} />
 
           <div style={{ padding: '24px 24px 36px' }}>
-            {/* close */}
+            {/* Close button */}
             <button
               type="button"
               onClick={onClose}
@@ -293,8 +313,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                 }}>Enter your mobile</h2>
                 <p style={{
                   margin: '0 0 24px',
-                  fontSize: 13, color: 'rgba(250,250,247,0.45)',
-                  lineHeight: 1.5,
+                  fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5,
                 }}>
                   We'll send a one-time code to verify your number.
                 </p>
@@ -355,7 +374,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                       fontSize: 16, fontWeight: 500, letterSpacing: '0.04em',
                       color: '#FAFAF7', fontFamily: 'var(--font-body)',
                       padding: '0 16px',
-                    }}
+                      touchAction: 'manipulation',
+                    } as React.CSSProperties}
                   />
                 </div>
 
@@ -379,7 +399,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     cursor: loading || phone.length < 10 ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                     transition: 'all 0.2s',
-                  }}
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties}
                 >
                   {loading
                     ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Sending…</>
@@ -394,7 +415,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     background: 'none', border: 'none',
                     color: 'rgba(250,250,247,0.35)', cursor: 'pointer',
                     fontSize: 13, fontFamily: 'var(--font-body)',
-                  }}
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties}
                 >
                   Skip for now
                 </button>
@@ -419,25 +441,22 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   fontFamily: 'var(--font-display)',
                   fontSize: 22, fontWeight: 600, color: '#FAFAF7',
                 }}>Verify OTP</h2>
-                <p style={{
-                  margin: '0 0 28px',
-                  fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5,
-                }}>
+                <p style={{ margin: '0 0 28px', fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5 }}>
                   Sent to +91 {phone.replace(/(\d{5})(\d{5})/, '$1 $2')}
                   <button
-  type="button"
-  onClick={() => {
-    clearRecaptcha('recaptcha-container') // ← clear before going back
-    setScreen('phone')
-    setOtp('')
-    setError('')
-  }}
-  style={{
-    marginLeft: 8, background: 'none', border: 'none',
-    color: '#E8C547', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-    fontFamily: 'var(--font-body)',
-  }}
->Edit</button>
+                    type="button"
+                    onClick={() => {
+                      clearRecaptcha('recaptcha-container')
+                      setScreen('phone')
+                      setOtp('')
+                      setError('')
+                    }}
+                    style={{
+                      marginLeft: 8, background: 'none', border: 'none',
+                      color: '#E8C547', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >Edit</button>
                 </p>
 
                 <OTPInput value={otp} onChange={setOtp} disabled={loading} />
@@ -462,7 +481,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     cursor: loading || otp.replace(/\s/g, '').length < 6 ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                     transition: 'all 0.2s',
-                  }}
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties}
                 >
                   {loading
                     ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Verifying…</>
@@ -481,7 +501,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                           color: '#E8C547', cursor: 'pointer',
                           fontSize: 12, fontWeight: 600,
                           fontFamily: 'var(--font-body)',
-                        }}
+                          touchAction: 'manipulation',
+                        } as React.CSSProperties}
                       >Resend OTP</button>
                     )}
                 </div>
@@ -504,10 +525,9 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   fontFamily: 'var(--font-display)',
                   fontSize: 22, fontWeight: 600, color: '#FAFAF7',
                 }}>What should we call you?</h2>
-                <p style={{
-                  margin: '0 0 24px',
-                  fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5,
-                }}>Optional — we'll personalise your experience.</p>
+                <p style={{ margin: '0 0 24px', fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5 }}>
+                  Optional — we'll personalise your experience.
+                </p>
 
                 <input
                   type="text"
@@ -527,9 +547,10 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     boxSizing: 'border-box',
                     marginBottom: 20,
                     transition: 'border-color 0.2s',
-                  }}
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties}
                   onFocus={(e) => { e.target.style.borderColor = 'rgba(232,197,71,0.4)' }}
-                  onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)' }}
+                  onBlur={(e)  => { e.target.style.borderColor = 'rgba(255,255,255,0.1)' }}
                 />
 
                 <button
@@ -546,7 +567,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     cursor: loading ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                     transition: 'all 0.2s',
-                  }}
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties}
                 >
                   {loading
                     ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Setting up…</>
@@ -561,7 +583,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     background: 'none', border: 'none',
                     color: 'rgba(250,250,247,0.3)', cursor: 'pointer',
                     fontSize: 12, fontFamily: 'var(--font-body)',
-                  }}
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties}
                 >
                   Skip, continue without name
                 </button>
