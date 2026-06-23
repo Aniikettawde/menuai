@@ -277,7 +277,7 @@ export default function QRPage() {
   const [tokensLoading, setTokensLoading] = useState(false)
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
-const cardRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({})
   useEffect(() => { setBaseUrl(window.location.origin) }, [])
 
   useEffect(() => {
@@ -579,7 +579,7 @@ const cardRefs = useRef<Record<number, HTMLDivElement | null>>({})
           </div>
 
           <div className="bg-[#13101a] p-4 sm:p-6">
-            <div className="grid max-h-[860px] grid-cols-1 gap-6 overflow-auto pr-1 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 justify-items-center">
               {tableNumbers.length === 0 ? (
                 <div className="col-span-full rounded-2xl border border-dashed border-zinc-700 bg-zinc-900 p-8 text-center">
                   <Table size={20} className="mx-auto text-zinc-500" />
@@ -588,18 +588,18 @@ const cardRefs = useRef<Record<number, HTMLDivElement | null>>({})
                 </div>
               ) : (
                 tableNumbers.map((tableNo) => (
-  <FixedQrCard
-    key={tableNo}
-    cardRef={(el) => {
-      cardRefs.current[tableNo] = el
-    }}
-    tableNo={tableNo}
-    restaurantName={restaurant.name}
-    qrDataUrl={tablePreviewMap[tableNo]}
-    logoDataUrl={logoDataUrl}
-    isLoading={tokensLoading || !tokenMap.has(tableNo)}
-  />
-))
+                  <FixedQrCard
+                    key={tableNo}
+                    cardRef={(el) => {
+                      cardRefs.current[tableNo] = el
+                    }}
+                    tableNo={tableNo}
+                    restaurantName={restaurant.name}
+                    qrDataUrl={tablePreviewMap[tableNo]}
+                    logoDataUrl={logoDataUrl}
+                    isLoading={tokensLoading || !tokenMap.has(tableNo)}
+                  />
+                ))
               )}
             </div>
           </div>
