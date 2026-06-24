@@ -18,19 +18,17 @@ const PUBLIC_PATHS = [
 ]
 
 export async function middleware(request: NextRequest) {
-	
-	const host = request.headers.get('host') || ''
-const pathname = request.nextUrl.pathname
+  const host = request.headers.get('host') || ''
+  const pathname = request.nextUrl.pathname
 
-if (host === 'explore.dinezy.in' || host.startsWith('explore.dinezy.in:')) {
-  const url = request.nextUrl.clone()
-
-  if (pathname === '/') {
-    url.pathname = '/discovery'
-    return NextResponse.rewrite(url)
+  // Route explore.dinezy.in/ -> /discovery
+  if (host === 'explore.dinezy.in' || host.startsWith('explore.dinezy.in:')) {
+    if (pathname === '/') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/discovery'
+      return NextResponse.rewrite(url)
+    }
   }
-}
-
 
   let supabaseResponse = NextResponse.next({ request })
 
@@ -39,7 +37,9 @@ if (host === 'explore.dinezy.in' || host.startsWith('explore.dinezy.in:')) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() { return request.cookies.getAll() },
+        getAll() {
+          return request.cookies.getAll()
+        },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({ request })
@@ -51,9 +51,13 @@ if (host === 'explore.dinezy.in' || host.startsWith('explore.dinezy.in:')) {
     },
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-  const { pathname } = request.nextUrl
-  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const isPublic = PUBLIC_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(p + '/'),
+  )
 
   if (!user) {
     if (pathname.startsWith('/dashboard') && !isPublic) {
@@ -68,8 +72,10 @@ if (host === 'explore.dinezy.in' || host.startsWith('explore.dinezy.in:')) {
   if (pathname === '/dashboard/login') {
     const context = await resolveDashboardContext(user.id, user.email ?? null)
     if (!context) return supabaseResponse
+
     const sub = await getOwnerSubscriptionState(context.ownerId)
     if (!sub?.hasAccess) return supabaseResponse
+
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = getLandingPath(context.role)
     return NextResponse.redirect(redirectUrl)
