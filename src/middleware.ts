@@ -18,6 +18,20 @@ const PUBLIC_PATHS = [
 ]
 
 export async function middleware(request: NextRequest) {
+	
+	const host = request.headers.get('host') || ''
+const pathname = request.nextUrl.pathname
+
+if (host === 'explore.dinezy.in' || host.startsWith('explore.dinezy.in:')) {
+  const url = request.nextUrl.clone()
+
+  if (pathname === '/') {
+    url.pathname = '/discovery'
+    return NextResponse.rewrite(url)
+  }
+}
+
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -111,5 +125,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/api/billing/:path*', '/admin/:path*', '/api/admin/:path*'],
+  matcher: [
+    '/',
+    '/discovery/:path*',
+    '/dashboard/:path*',
+    '/api/billing/:path*',
+    '/admin/:path*',
+    '/api/admin/:path*',
+  ],
 }

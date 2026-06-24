@@ -1,16 +1,39 @@
-// app/r/[slug]/discovery-view.tsx
 'use client'
 
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
-  MapPin, Star, BadgePercent, Phone, Sparkles, ArrowRight, ArrowLeft, Loader2,
-  CheckCircle2, MessageSquare, Search, X, Navigation, Share2, Clock, ChefHat,
-  Flame, Leaf, Wifi, ParkingCircle, Wind, CreditCard, UtensilsCrossed,
+  MapPin,
+  Star,
+  BadgePercent,
+  Phone,
+  Sparkles,
+  ArrowRight,
+  ArrowLeft,
+  Loader2,
+  CheckCircle2,
+  MessageSquare,
+  Search,
+  X,
+  Navigation,
+  Share2,
+  ChefHat,
+  Flame,
+  Leaf,
+  Wifi,
+  ParkingCircle,
+  Wind,
+  CreditCard,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { getDiscoveryBrowser } from '@/lib/discovery'
 import type {
-  DiscoveryRestaurant, DiscoveryCategory, DiscoveryItem, DiscoveryOffer, DiscoveryReview,
+  DiscoveryRestaurant,
+  DiscoveryCategory,
+  DiscoveryItem,
+  DiscoveryOffer,
+  DiscoveryReview,
 } from '@/lib/discovery'
 
 export type DiscoveryPageData = {
@@ -27,6 +50,7 @@ type ExtendedRestaurant = DiscoveryRestaurant & {
 }
 
 const DISCOVERY_BUCKET = 'restaurant-assets'
+const IST_TIME_ZONE = 'Asia/Kolkata'
 
 function priceLabel(cents: number) {
   return `₹${Math.round((cents || 0) / 100)}`
@@ -45,7 +69,7 @@ function toText(value: unknown): string {
 }
 
 function getSessionId(): string {
-  if (typeof window === 'undefined') return ''   // SSR guard
+  if (typeof window === 'undefined') return ''
   const KEY = 'dinezy_discovery_session'
   try {
     let id = window.sessionStorage.getItem(KEY)
@@ -68,7 +92,33 @@ function resolveUrl(raw: unknown): string {
   return base ? `${base}/storage/v1/object/public/${DISCOVERY_BUCKET}/${v.replace(/^\/+/, '')}` : v
 }
 
-const amenityIconMap: Record<string, React.ReactNode> = {
+function formatDiscoveryDateTime(iso: string | null | undefined) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: IST_TIME_ZONE,
+  }).format(d)
+}
+
+function formatDiscoveryDate(iso: string | null | undefined) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: IST_TIME_ZONE,
+  }).format(d)
+}
+
+const amenityIconMap: Record<string, ReactNode> = {
   wifi: <Wifi size={12} />,
   parking: <ParkingCircle size={12} />,
   ac: <Wind size={12} />,
@@ -87,22 +137,19 @@ function AmenityIcon({ label }: { label: string }) {
 export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
   const supabase = useMemo(() => getDiscoveryBrowser(), [])
   const r = data.restaurant as ExtendedRestaurant
-   const [sessionId, setSessionId] = useState('')
+
+  const [sessionId, setSessionId] = useState('')
   const [trackedMenuView, setTrackedMenuView] = useState(false)
   const [offerFeedback, setOfferFeedback] = useState<string | null>(null)
+  const [copiedOffer, setCopiedOffer] = useState<string | null>(null)
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)
-  const [heroLoaded, setHeroLoaded] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
-  const galleryImages = useMemo(() => {
-    const urls: string[] = []
-    if (r.cover_image_url) urls.push(r.cover_image_url)
-    for (const item of data.items) {
-      if (item.image_url && !urls.includes(item.image_url) && urls.length < 8) urls.push(item.image_url)
-    }
-    return urls
-  }, [r.cover_image_url, data.items])
-  const [heroImage, setHeroImage] = useState(galleryImages[0] ?? '')
+  const heroCover = r.cover_image_url ? resolveUrl(r.cover_image_url) : ''
+
+  useEffect(() => {
+    setSessionId(getSessionId())
+  }, [])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60)
@@ -111,42 +158,67 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
   }, [])
 
   useEffect(() => {
+    if (!sessionId) return
+
     void fetch('/api/discovery/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        restaurantId: r.id, eventType: 'page_view', sessionId,
-        currentViews: r.views_count ?? 0, metadata: { slug: r.slug },
+        restaurantId: r.id,
+        eventType: 'page_view',
+        sessionId,
+        currentViews: r.views_count ?? 0,
+        metadata: { slug: r.slug },
       }),
     }).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [r.id, r.slug, r.views_count, sessionId])
 
   function trackMenuView() {
-    if (trackedMenuView) return
+    if (trackedMenuView || !sessionId) return
     setTrackedMenuView(true)
+
     void fetch('/api/discovery/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        restaurantId: r.id, eventType: 'menu_view', sessionId,
+        restaurantId: r.id,
+        eventType: 'menu_view',
+        sessionId,
         currentMenuViews: r.menu_views_count ?? 0,
       }),
     }).catch(() => {})
   }
 
   function claimOffer(offer: DiscoveryOffer) {
+    if (!sessionId) return
+
     setOfferFeedback(offer.id)
+    const code = (offer as unknown as { coupon_code?: string | null }).coupon_code
+
+    if (code && typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard
+        .writeText(code)
+        .then(() => {
+          setCopiedOffer(offer.id)
+          setTimeout(() => setCopiedOffer(null), 3000)
+        })
+        .catch(() => {})
+    }
+
     void fetch('/api/discovery/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        restaurantId: r.id, eventType: 'offer_click', sessionId,
-        itemId: offer.id, itemName: offer.title,
+        restaurantId: r.id,
+        eventType: 'offer_click',
+        sessionId,
+        itemId: offer.id,
+        itemName: offer.title,
         currentOfferClicks: offer.clicks_count ?? 0,
       }),
     }).catch(() => {})
-    setTimeout(() => setOfferFeedback(null), 4000)
+
+    setTimeout(() => setOfferFeedback(null), 5000)
   }
 
   const directionsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -159,6 +231,7 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
       text: `${r.name} on Dinezy Discovery`,
       url: typeof window !== 'undefined' ? window.location.href : '',
     }
+
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share(shareData)
@@ -167,7 +240,9 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
         setShareFeedback('Link copied!')
         setTimeout(() => setShareFeedback(null), 2200)
       }
-    } catch { /* dismissed */ }
+    } catch {
+      // dismissed
+    }
   }
 
   const avgPriceForTwo = useMemo(() => {
@@ -179,10 +254,13 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
 
   const ratingBreakdown = useMemo(() => {
     const counts = [0, 0, 0, 0, 0]
-    data.reviews.forEach((rev) => { if (rev.score >= 1 && rev.score <= 5) counts[rev.score - 1]++ })
+    data.reviews.forEach((rev) => {
+      if (rev.score >= 1 && rev.score <= 5) counts[rev.score - 1]++
+    })
     const total = data.reviews.length
     return [5, 4, 3, 2, 1].map((star) => ({
-      star, count: counts[star - 1],
+      star,
+      count: counts[star - 1],
       pct: total ? Math.round((counts[star - 1] / total) * 100) : 0,
     }))
   }, [data.reviews])
@@ -195,637 +273,1102 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
   const [reviewError, setReviewError] = useState('')
 
   async function submitReview() {
-    setReviewSubmitting(true); setReviewError('')
+    setReviewSubmitting(true)
+    setReviewError('')
+
     try {
       const { error } = await supabase.from('reviews').insert({
-        restaurant_id: r.id, session_id: sessionId,
+        restaurant_id: r.id,
+        session_id: sessionId,
         customer_name: reviewName.trim() || null,
-        score: reviewScore, comment: reviewComment.trim() || null, is_public: true,
+        score: reviewScore,
+        comment: reviewComment.trim() || null,
+        is_public: true,
       })
+
       if (error) throw error
       setReviewSubmitted(true)
     } catch (err) {
       setReviewError(err instanceof Error ? err.message : 'Could not submit review')
-    } finally { setReviewSubmitting(false) }
+    } finally {
+      setReviewSubmitting(false)
+    }
   }
+
+  const restaurantInfoRows = [
+    toText(r.address) ? { icon: <MapPin size={13} />, label: 'Address', value: toText(r.address) } : null,
+    r.phone ? { icon: <Phone size={13} />, label: 'Phone', value: r.phone } : null,
+  ].filter(Boolean) as Array<{ icon: ReactNode; label: string; value: string }>
 
   return (
     <main className="dv-root">
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-          --cream: #F7F3EC;
-          --cream-deep: #EDE7DA;
-          --cream-border: #D9D0C0;
-          --espresso: #1A1209;
-          --espresso-mid: #2C200F;
-          --espresso-soft: #3D2E18;
-          --gold: #C4922A;
-          --gold-light: #E8B84B;
-          --gold-pale: #F5E6C4;
-          --spice: #C0411A;
-          --spice-pale: #F9E8E2;
-          --sage: #4A7C59;
-          --sage-pale: #E4F0E8;
-          --text-primary: #1A1209;
-          --text-muted: #6B5B45;
-          --text-faint: #9C8C75;
-          --font-display: 'Cormorant Garamond', Georgia, serif;
-          --font-body: 'DM Sans', system-ui, sans-serif;
-          --font-mono: 'DM Mono', monospace;
+          --ink: #0f0f0f;
+          --ink-soft: #1c1c1c;
+          --surface: #fafaf8;
+          --surface-raised: #ffffff;
+          --surface-sunken: #f2f0eb;
+          --border: #e4e0d8;
+          --border-strong: #c8c2b6;
+          --gold: #b8892a;
+          --gold-bright: #d4a843;
+          --gold-glow: rgba(184, 137, 42, 0.15);
+          --gold-pale: #fdf5e4;
+          --ember: #c04a1c;
+          --ember-pale: #fff0eb;
+          --leaf: #3d6b4a;
+          --leaf-pale: #ebf3ee;
+          --muted: #6b6560;
+          --faint: #a09a92;
+          --font-display: 'Playfair Display', Georgia, serif;
+          --font-body: 'Inter', system-ui, sans-serif;
+          --font-mono: 'JetBrains Mono', monospace;
+          --radius-sm: 8px;
+          --radius-md: 14px;
+          --radius-lg: 20px;
+          --radius-xl: 28px;
+          --shadow-sm: 0 1px 4px rgba(15, 15, 15, 0.06), 0 2px 8px rgba(15, 15, 15, 0.04);
+          --shadow-md: 0 4px 16px rgba(15, 15, 15, 0.08), 0 1px 4px rgba(15, 15, 15, 0.04);
+          --shadow-lg: 0 12px 40px rgba(15, 15, 15, 0.12), 0 4px 12px rgba(15, 15, 15, 0.06);
         }
 
         .dv-root {
           font-family: var(--font-body);
-          background: var(--cream);
-          color: var(--text-primary);
+          background: var(--surface);
+          color: var(--ink);
           min-height: 100dvh;
-          padding-bottom: 4rem;
+          padding-bottom: 5rem;
+          -webkit-font-smoothing: antialiased;
         }
 
-        /* ── Hero ── */
+        .dv-shell {
+          max-width: 920px;
+          margin: 0 auto;
+        }
+
+        /* HERO */
         .dv-hero {
           position: relative;
-          height: 26rem;
+          min-height: 24rem;
           overflow: hidden;
-          background: var(--espresso);
+          background: linear-gradient(135deg, #151515 0%, #241911 50%, #111111 100%);
         }
-        @media (min-width: 640px) { .dv-hero { height: 34rem; } }
+        @media (min-width: 640px) {
+          .dv-hero { min-height: 34rem; }
+        }
 
         .dv-hero-img {
-          width: 100%; height: 100%; object-fit: cover;
-          opacity: 0; transition: opacity 0.7s ease;
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: center center;
+          opacity: 0.42;
+          transform: none;
         }
-        .dv-hero-img.loaded { opacity: 1; }
 
         .dv-hero-overlay {
-          position: absolute; inset: 0;
-          background: linear-gradient(
-            to top,
-            rgba(26,18,9,0.92) 0%,
-            rgba(26,18,9,0.45) 45%,
-            rgba(26,18,9,0.15) 100%
-          );
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(to top, rgba(15,15,15,0.96) 0%, rgba(15,15,15,0.72) 38%, rgba(15,15,15,0.2) 100%),
+            linear-gradient(135deg, rgba(184,137,42,0.08), transparent 48%);
         }
 
         .dv-hero-top {
-          position: absolute; top: 0; left: 0; right: 0;
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 1.25rem 1.25rem 0;
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1.05rem 1.1rem 0;
+          z-index: 2;
+        }
+        @media (min-width: 640px) {
+          .dv-hero-top { padding: 1.25rem 1.5rem 0; }
         }
 
         .dv-back-btn {
-          display: inline-flex; align-items: center; gap: 6px;
-          background: rgba(247,243,236,0.12); backdrop-filter: blur(12px);
-          border: 1px solid rgba(247,243,236,0.2);
-          color: var(--cream); border-radius: 100px;
-          padding: 7px 14px; font-size: 13px; font-weight: 500;
-          text-decoration: none; transition: background 0.2s;
-          font-family: var(--font-body);
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(255,255,255,0.08);
+          backdrop-filter: blur(16px) saturate(180%);
+          border: 1px solid rgba(255,255,255,0.14);
+          color: rgba(255,255,255,0.92);
+          border-radius: 100px;
+          padding: 8px 14px;
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: none;
+          transition: all 0.2s;
+          letter-spacing: -0.01em;
         }
-        .dv-back-btn:hover { background: rgba(247,243,236,0.2); }
+        .dv-back-btn:hover {
+          background: rgba(255,255,255,0.14);
+          border-color: rgba(255,255,255,0.24);
+        }
 
         .dv-city-pill {
-          display: inline-flex; align-items: center; gap: 5px;
-          background: rgba(196,146,42,0.25); backdrop-filter: blur(12px);
-          border: 1px solid rgba(196,146,42,0.4);
-          color: var(--gold-light); border-radius: 100px;
-          padding: 7px 14px; font-size: 12px; font-weight: 500;
-          letter-spacing: 0.03em;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: rgba(184,137,42,0.18);
+          backdrop-filter: blur(16px);
+          border: 1px solid rgba(212,168,67,0.36);
+          color: var(--gold-bright);
+          border-radius: 100px;
+          padding: 8px 14px;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          white-space: nowrap;
         }
 
         .dv-hero-bottom {
-          position: absolute; bottom: 0; left: 0; right: 0;
-          padding: 0 1.25rem 1.5rem;
-          max-width: 860px;
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 2;
+          padding: 0 1.1rem 1.3rem;
         }
-        @media (min-width: 640px) { .dv-hero-bottom { padding: 0 2rem 2rem; } }
+        @media (min-width: 640px) {
+          .dv-hero-bottom { padding: 0 1.5rem 1.7rem; }
+        }
 
-        .dv-logo-name {
-          display: flex; align-items: flex-end; gap: 1rem;
+        .dv-hero-inner {
+          max-width: 920px;
+          margin: 0 auto;
+        }
+
+        .dv-logo-row {
+          display: flex;
+          align-items: flex-end;
+          gap: 0.9rem;
+          margin-bottom: 0.65rem;
         }
 
         .dv-logo {
-          width: 64px; height: 64px; border-radius: 16px;
-          border: 2.5px solid rgba(247,243,236,0.3);
-          object-fit: cover; flex-shrink: 0;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+          width: 62px;
+          height: 62px;
+          border-radius: 16px;
+          border: 2px solid rgba(255,255,255,0.2);
+          object-fit: cover;
+          flex-shrink: 0;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+          background: rgba(255,255,255,0.04);
         }
-        @media (min-width: 640px) { .dv-logo { width: 80px; height: 80px; } }
+        @media (min-width: 640px) {
+          .dv-logo { width: 78px; height: 78px; border-radius: 18px; }
+        }
 
         .dv-restaurant-name {
           font-family: var(--font-display);
-          font-size: clamp(2.2rem, 6vw, 4rem);
-          font-weight: 700; line-height: 1.0;
-          color: var(--cream);
-          letter-spacing: -0.01em;
+          font-size: clamp(2rem, 7vw, 4.5rem);
+          font-weight: 700;
+          line-height: 0.98;
+          color: #fff;
+          letter-spacing: -0.03em;
+          text-wrap: balance;
         }
 
-        .dv-gallery-strip {
-          display: flex; gap: 8px; margin-top: 1rem;
-          overflow-x: auto; padding-bottom: 4px;
-          scrollbar-width: none;
+        .dv-hero-meta {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 0.75rem;
         }
-        .dv-gallery-strip::-webkit-scrollbar { display: none; }
 
-        .dv-gallery-thumb {
-          width: 48px; height: 48px; flex-shrink: 0;
-          border-radius: 10px; overflow: hidden;
-          border: 2px solid transparent; cursor: pointer;
-          transition: border-color 0.2s, transform 0.15s;
+        .dv-hero-tag,
+        .dv-hero-rating {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          border-radius: 100px;
+          padding: 6px 12px;
+          font-size: 12px;
+          font-weight: 600;
         }
-        .dv-gallery-thumb:hover { transform: scale(1.05); }
-        .dv-gallery-thumb.active { border-color: var(--gold-light); }
-        .dv-gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
+        .dv-hero-tag {
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.14);
+          color: rgba(255,255,255,0.82);
+        }
+        .dv-hero-rating {
+          background: rgba(184,137,42,0.2);
+          border: 1px solid rgba(212,168,67,0.34);
+          color: var(--gold-bright);
+        }
 
-        /* ── Sticky bar ── */
+        /* sticky */
         .dv-sticky {
-          position: sticky; top: 0; z-index: 40;
-          background: rgba(247,243,236,0.92);
-          backdrop-filter: blur(20px);
-          border-bottom: 1px solid var(--cream-border);
+          position: sticky;
+          top: 0;
+          z-index: 40;
+          background: rgba(250,250,248,0.95);
+          backdrop-filter: blur(22px) saturate(180%);
+          border-bottom: 1px solid var(--border);
           transition: box-shadow 0.3s;
         }
-        .dv-sticky.scrolled {
-          box-shadow: 0 2px 24px rgba(26,18,9,0.08);
-        }
+        .dv-sticky.scrolled { box-shadow: 0 2px 20px rgba(15,15,15,0.07); }
 
         .dv-sticky-inner {
-          max-width: 860px; margin: 0 auto;
-          display: flex; align-items: center; gap: 12px;
-          padding: 12px 1.25rem;
+          max-width: 920px;
+          margin: 0 auto;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 1.1rem;
         }
-        @media (min-width: 640px) { .dv-sticky-inner { padding: 12px 2rem; } }
+        @media (min-width: 640px) {
+          .dv-sticky-inner { padding: 10px 1.5rem; }
+        }
+
+        .dv-sticky-name {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--ink);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          letter-spacing: -0.01em;
+          display: none;
+        }
+        @media (min-width: 480px) {
+          .dv-sticky-name { display: block; }
+        }
 
         .dv-meta-row {
-          flex: 1; display: flex; flex-wrap: wrap;
-          align-items: center; gap: 6px 16px;
+          flex: 1;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 4px 12px;
         }
 
-        .dv-meta-item {
-          display: inline-flex; align-items: center; gap: 5px;
-          font-size: 13px; color: var(--text-muted);
+        .dv-meta-item,
+        .dv-rating-inline {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 13px;
+          white-space: nowrap;
         }
-
-        .dv-rating {
-          font-weight: 600; color: var(--text-primary);
-          display: inline-flex; align-items: center; gap: 4px;
-          font-size: 14px;
-        }
-        .dv-rating-count { font-weight: 400; color: var(--text-faint); font-size: 12px; }
+        .dv-meta-item { color: var(--muted); }
+        .dv-rating-inline { color: var(--ink); font-weight: 700; }
+        .dv-rating-count { font-weight: 400; color: var(--faint); font-size: 11px; }
 
         .dv-price-two {
           font-family: var(--font-mono);
-          font-size: 12px; color: var(--text-faint);
+          font-size: 11px;
+          color: var(--faint);
         }
 
         .dv-action-btns {
-          display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-shrink: 0;
         }
 
         .dv-icon-btn {
-          width: 38px; height: 38px;
-          display: grid; place-items: center;
+          width: 36px;
+          height: 36px;
+          display: grid;
+          place-items: center;
           border-radius: 50%;
-          border: 1px solid var(--cream-border);
-          background: white; color: var(--text-muted);
-          cursor: pointer; transition: all 0.2s;
+          border: 1px solid var(--border);
+          background: var(--surface-raised);
+          color: var(--muted);
+          cursor: pointer;
+          transition: all 0.18s;
           text-decoration: none;
         }
         .dv-icon-btn:hover {
           border-color: var(--gold);
           color: var(--gold);
           background: var(--gold-pale);
-          transform: scale(1.05);
+          transform: translateY(-1px);
         }
-        .dv-icon-btn:active { transform: scale(0.95); }
+        .dv-icon-btn:active { transform: scale(0.94); }
 
         .dv-share-toast {
-          text-align: center; padding: 6px 1.25rem 10px;
-          font-size: 12px; font-weight: 500; color: var(--gold);
+          text-align: center;
+          padding: 4px 1.1rem 8px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--gold);
         }
 
-        /* ── Content ── */
-        .dv-content {
-          max-width: 860px; margin: 0 auto;
-          padding: 2rem 1.25rem 0;
+        /* body */
+        .dv-body {
+          max-width: 920px;
+          margin: 0 auto;
+          padding: 0 1.1rem;
         }
-        @media (min-width: 640px) { .dv-content { padding: 2.5rem 2rem 0; } }
+        @media (min-width: 640px) {
+          .dv-body { padding: 0 1.5rem; }
+        }
 
-        .dv-description {
-          font-size: 16px; line-height: 1.75;
-          color: var(--text-muted); max-width: 640px;
+        .dv-info-card {
+          margin-top: 1.4rem;
+          background: var(--surface-raised);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-xl);
+          padding: 1.2rem;
+          box-shadow: var(--shadow-sm);
+        }
+
+        .dv-info-grid {
+          display: grid;
+          gap: 10px;
+        }
+        @media (min-width: 580px) {
+          .dv-info-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        .dv-info-row {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 12px;
+          background: linear-gradient(180deg, #fcfcfb, #f7f5ef);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+        }
+
+        .dv-info-row-icon {
+          width: 28px;
+          height: 28px;
+          flex-shrink: 0;
+          display: grid;
+          place-items: center;
+          background: var(--gold-pale);
+          border-radius: var(--radius-sm);
+          color: var(--gold);
+          margin-top: 1px;
+        }
+
+        .dv-info-row-label {
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--faint);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: 2px;
+        }
+
+        .dv-info-row-val {
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--ink);
+          line-height: 1.5;
+        }
+
+        .dv-amenity-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 0.9rem;
+        }
+
+        .dv-amenity-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 5px 12px;
+          border-radius: 100px;
+          background: var(--surface-raised);
+          border: 1px solid var(--border);
+          font-size: 12px;
+          color: var(--muted);
+          font-weight: 500;
+          box-shadow: var(--shadow-sm);
+        }
+
+        .dv-section { margin-top: 2rem; }
+
+        .dv-section-head {
+          display: flex;
+          align-items: baseline;
+          gap: 10px;
+          margin-bottom: 1rem;
+        }
+
+        .dv-section-title {
           font-family: var(--font-display);
-          font-style: italic; font-weight: 400;
+          font-size: clamp(1.4rem, 4vw, 2rem);
+          font-weight: 700;
+          color: var(--ink);
+          letter-spacing: -0.02em;
+          line-height: 1.1;
         }
 
-        .dv-tags {
-          display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1.25rem;
+        .dv-section-rule {
+          flex: 1;
+          height: 1px;
+          background: linear-gradient(to right, var(--border), transparent);
+          margin-bottom: 3px;
         }
 
-        .dv-tag {
-          display: inline-flex; align-items: center; gap: 5px;
-          padding: 5px 12px; border-radius: 100px;
-          background: white; border: 1px solid var(--cream-border);
-          font-size: 12px; color: var(--text-muted);
-          font-weight: 500; letter-spacing: 0.01em;
-          transition: border-color 0.2s, color 0.2s;
-        }
-        .dv-tag:hover { border-color: var(--gold); color: var(--gold); }
-
-        .dv-tag-hours {
-          background: var(--espresso); color: var(--cream-deep);
-          border-color: var(--espresso);
-        }
-        .dv-tag-hours:hover { color: var(--gold-light); border-color: var(--espresso); }
-
-        /* ── Section heading ── */
-        .dv-section-heading {
-          font-family: var(--font-display);
-          font-size: 2rem; font-weight: 700;
-          color: var(--text-primary); letter-spacing: -0.01em;
-          margin-bottom: 1.25rem;
-          display: flex; align-items: baseline; gap: 12px;
-        }
-        .dv-section-heading::after {
-          content: ''; flex: 1;
-          height: 1px; background: var(--cream-border);
-          margin-bottom: 4px;
-        }
-
-        /* ── Offers ── */
-        .dv-offers { margin-top: 2.5rem; }
-
+        /* offers */
         .dv-offer-grid {
-          display: grid; gap: 12px;
+          display: grid;
+          gap: 12px;
         }
-        @media (min-width: 640px) { .dv-offer-grid { grid-template-columns: 1fr 1fr; } }
+        @media (min-width: 580px) {
+          .dv-offer-grid { grid-template-columns: 1fr 1fr; }
+        }
 
         .dv-offer-card {
-          border-radius: 16px;
-          background: var(--espresso);
-          padding: 1.25rem;
-          position: relative; overflow: hidden;
+          border-radius: var(--radius-lg);
+          background: var(--ink);
+          padding: 1.1rem 1.15rem;
+          position: relative;
+          overflow: hidden;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .dv-offer-card:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-lg);
         }
         .dv-offer-card::before {
           content: '';
-          position: absolute; top: -30px; right: -30px;
-          width: 120px; height: 120px; border-radius: 50%;
-          background: rgba(196,146,42,0.12);
+          position: absolute;
+          top: -40px;
+          right: -40px;
+          width: 130px;
+          height: 130px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(184,137,42,0.18) 0%, transparent 70%);
+        }
+        .dv-offer-card::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          height: 2px;
+          background: linear-gradient(to right, var(--gold), transparent);
+        }
+
+        .dv-offer-type-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--gold);
+          background: rgba(184,137,42,0.15);
+          border: 1px solid rgba(184,137,42,0.3);
+          border-radius: 100px;
+          padding: 3px 10px;
+          margin-bottom: 10px;
         }
 
         .dv-offer-title {
-          display: flex; align-items: center; gap: 8px;
-          font-size: 15px; font-weight: 600; color: var(--gold-light);
+          font-size: 16px;
+          font-weight: 700;
+          color: #fff;
           margin-bottom: 6px;
+          letter-spacing: -0.01em;
+          line-height: 1.3;
         }
 
         .dv-offer-desc {
-          font-size: 13px; color: rgba(247,243,236,0.65);
-          line-height: 1.5; margin-bottom: 1rem;
+          font-size: 13px;
+          color: rgba(255,255,255,0.58);
+          line-height: 1.55;
+          margin-bottom: 1rem;
+        }
+
+        .dv-offer-footer {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
         }
 
         .dv-offer-btn {
-          display: inline-flex; align-items: center; gap: 6px;
-          background: var(--gold); color: var(--espresso);
-          border: none; border-radius: 100px;
-          padding: 8px 18px; font-size: 13px; font-weight: 600;
-          cursor: pointer; transition: all 0.2s;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: var(--gold);
+          color: var(--ink);
+          border: none;
+          border-radius: 100px;
+          padding: 9px 16px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
           font-family: var(--font-body);
+          letter-spacing: -0.01em;
         }
-        .dv-offer-btn:hover { background: var(--gold-light); transform: translateY(-1px); }
+        .dv-offer-btn:hover { background: var(--gold-bright); transform: translateY(-1px); }
         .dv-offer-btn:active { transform: scale(0.97); }
 
-        .dv-offer-feedback {
-          margin-top: 8px; font-size: 12px;
-          color: var(--gold-light); font-weight: 500;
+        .dv-offer-code {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(255,255,255,0.06);
+          border: 1px dashed rgba(255,255,255,0.2);
+          border-radius: var(--radius-sm);
+          padding: 6px 10px;
+          font-family: var(--font-mono);
+          font-size: 12px;
+          font-weight: 500;
+          color: rgba(255,255,255,0.7);
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .dv-offer-code:hover {
+          background: rgba(255,255,255,0.1);
+          color: #fff;
+        }
+        .dv-offer-code.copied {
+          border-color: rgba(110,231,183,0.5);
+          color: #6ee7b7;
+          background: rgba(110,231,183,0.08);
         }
 
-        /* ── Menu ── */
-        .dv-menu { margin-top: 2.5rem; }
+        .dv-offer-feedback {
+          margin-top: 10px;
+          font-size: 12px;
+          color: var(--gold-bright);
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
 
+        /* menu controls */
         .dv-menu-controls {
-          display: flex; align-items: center;
-          justify-content: space-between; gap: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
           margin-bottom: 1rem;
         }
 
         .dv-veg-toggle {
-          display: inline-flex; align-items: center; gap: 6px;
-          border-radius: 100px; padding: 7px 14px;
-          font-size: 12px; font-weight: 600; cursor: pointer;
-          border: 1.5px solid var(--cream-border);
-          background: white; color: var(--text-muted);
-          transition: all 0.2s; flex-shrink: 0;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          border-radius: 100px;
+          padding: 8px 14px;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          border: 1.5px solid var(--border);
+          background: var(--surface-raised);
+          color: var(--muted);
+          transition: all 0.18s;
+          flex-shrink: 0;
           font-family: var(--font-body);
+          box-shadow: var(--shadow-sm);
+          white-space: nowrap;
         }
         .dv-veg-toggle.active {
-          border-color: var(--sage); background: var(--sage-pale);
-          color: var(--sage);
+          border-color: var(--leaf);
+          background: var(--leaf-pale);
+          color: var(--leaf);
+          box-shadow: 0 0 0 3px rgba(61,107,74,0.1);
         }
-        .dv-veg-toggle:active { transform: scale(0.96); }
 
         .dv-search-box {
-          display: flex; align-items: center; gap: 10px;
-          background: white; border: 1.5px solid var(--cream-border);
-          border-radius: 14px; padding: 10px 14px;
-          transition: border-color 0.2s;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: var(--surface-raised);
+          border: 1.5px solid var(--border);
+          border-radius: var(--radius-md);
+          padding: 10px 14px;
+          transition: border-color 0.2s, box-shadow 0.2s;
+          box-shadow: var(--shadow-sm);
         }
-        .dv-search-box:focus-within { border-color: var(--gold); }
+        .dv-search-box:focus-within {
+          border-color: var(--gold);
+          box-shadow: 0 0 0 3px var(--gold-glow);
+        }
 
         .dv-search-input {
-          flex: 1; background: transparent; border: none; outline: none;
-          font-size: 14px; color: var(--text-primary);
+          flex: 1;
+          background: transparent;
+          border: none;
+          outline: none;
+          font-size: 14px;
+          color: var(--ink);
           font-family: var(--font-body);
         }
-        .dv-search-input::placeholder { color: var(--text-faint); }
+        .dv-search-input::placeholder { color: var(--faint); }
 
         .dv-search-clear {
-          background: none; border: none; cursor: pointer;
-          color: var(--text-faint); padding: 0; line-height: 1;
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--faint);
+          padding: 0;
+          line-height: 1;
           transition: color 0.15s;
         }
-        .dv-search-clear:hover { color: var(--text-primary); }
+        .dv-search-clear:hover { color: var(--ink); }
 
-        /* ── Bestsellers rail ── */
-        .dv-bestsellers { margin: 1.25rem 0; }
+        /* bestsellers */
+        .dv-bestsellers { margin: 1.15rem 0; }
 
         .dv-bestseller-label {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
-          text-transform: uppercase; color: var(--spice);
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--ember);
           margin-bottom: 10px;
         }
 
         .dv-bestseller-rail {
-          display: flex; gap: 10px; overflow-x: auto;
-          padding-bottom: 6px; scrollbar-width: none;
+          display: flex;
+          gap: 10px;
+          overflow-x: auto;
+          padding-bottom: 8px;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
         }
         .dv-bestseller-rail::-webkit-scrollbar { display: none; }
 
         .dv-bestseller-card {
-          width: 130px; flex-shrink: 0; border-radius: 14px;
-          overflow: hidden; background: white;
-          border: 1px solid var(--cream-border);
+          width: 136px;
+          flex-shrink: 0;
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          background: var(--surface-raised);
+          border: 1px solid var(--border);
           transition: transform 0.2s, box-shadow 0.2s;
-          cursor: default;
+          box-shadow: var(--shadow-sm);
         }
         .dv-bestseller-card:hover {
           transform: translateY(-3px);
-          box-shadow: 0 8px 24px rgba(26,18,9,0.1);
+          box-shadow: var(--shadow-md);
         }
 
         .dv-bestseller-img {
-          height: 90px; width: 100%; object-fit: cover;
+          height: 92px;
+          width: 100%;
+          object-fit: cover;
         }
         .dv-bestseller-placeholder {
-          height: 90px; display: flex; align-items: center;
-          justify-content: center; font-size: 2rem;
-          background: var(--cream);
+          height: 92px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 2.25rem;
+          background: var(--surface-sunken);
         }
 
         .dv-bestseller-info { padding: 8px 10px; }
         .dv-bestseller-name {
-          font-size: 12px; font-weight: 600; color: var(--text-primary);
-          line-height: 1.3; margin-bottom: 3px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--ink);
+          line-height: 1.3;
+          margin-bottom: 3px;
+          display: -webkit-box;
+          -webkit-line-clamp: 1;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
         .dv-bestseller-price {
-          font-family: var(--font-mono); font-size: 12px;
-          font-weight: 500; color: var(--spice);
+          font-family: var(--font-mono);
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--ember);
         }
 
-        /* ── Category tabs ── */
+        /* categories */
         .dv-cat-tabs {
-          display: flex; gap: 6px; overflow-x: auto;
-          padding-bottom: 6px; margin-bottom: 1rem;
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 6px;
+          margin-bottom: 1rem;
           scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
         }
         .dv-cat-tabs::-webkit-scrollbar { display: none; }
 
         .dv-cat-tab {
-          flex-shrink: 0; padding: 8px 18px; border-radius: 100px;
-          font-size: 13px; font-weight: 500;
-          border: 1.5px solid var(--cream-border);
-          background: white; color: var(--text-muted);
-          cursor: pointer; transition: all 0.2s;
+          flex-shrink: 0;
+          padding: 8px 16px;
+          border-radius: 100px;
+          font-size: 13px;
+          font-weight: 600;
+          border: 1.5px solid var(--border);
+          background: var(--surface-raised);
+          color: var(--muted);
+          cursor: pointer;
+          transition: all 0.18s;
           font-family: var(--font-body);
+          box-shadow: var(--shadow-sm);
+          white-space: nowrap;
         }
-        .dv-cat-tab:hover { border-color: var(--gold); color: var(--gold); }
+        .dv-cat-tab:hover {
+          border-color: var(--gold);
+          color: var(--gold);
+        }
         .dv-cat-tab.active {
-          background: var(--espresso); color: var(--cream);
-          border-color: var(--espresso);
+          background: var(--ink);
+          color: #fff;
+          border-color: var(--ink);
         }
-        .dv-cat-tab:active { transform: scale(0.96); }
 
-        /* ── Menu items grid ── */
+        /* items */
         .dv-items-grid {
-          display: grid; gap: 10px;
+          display: grid;
+          gap: 10px;
         }
-        @media (min-width: 580px) { .dv-items-grid { grid-template-columns: 1fr 1fr; } }
+        @media (min-width: 580px) {
+          .dv-items-grid { grid-template-columns: 1fr 1fr; }
+        }
 
         .dv-item-card {
-          display: flex; gap: 12px; padding: 14px;
-          background: white; border-radius: 16px;
-          border: 1px solid var(--cream-border);
-          transition: box-shadow 0.2s, transform 0.2s;
+          display: flex;
+          gap: 14px;
+          padding: 14px;
+          background: var(--surface-raised);
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--border);
+          transition: box-shadow 0.2s, transform 0.18s;
+          box-shadow: var(--shadow-sm);
         }
         .dv-item-card:hover {
-          box-shadow: 0 4px 20px rgba(26,18,9,0.08);
+          box-shadow: var(--shadow-md);
           transform: translateY(-1px);
+          border-color: var(--border-strong);
         }
 
         .dv-item-img {
-          width: 72px; height: 72px; flex-shrink: 0;
-          border-radius: 12px; object-fit: cover;
+          width: 76px;
+          height: 76px;
+          flex-shrink: 0;
+          border-radius: var(--radius-md);
+          object-fit: cover;
         }
         .dv-item-placeholder {
-          width: 72px; height: 72px; flex-shrink: 0;
-          border-radius: 12px; background: var(--cream);
-          display: grid; place-items: center; font-size: 1.75rem;
+          width: 76px;
+          height: 76px;
+          flex-shrink: 0;
+          border-radius: var(--radius-md);
+          background: var(--surface-sunken);
+          display: grid;
+          place-items: center;
+          font-size: 1.75rem;
         }
 
         .dv-item-body { flex: 1; min-width: 0; }
 
         .dv-item-header {
-          display: flex; align-items: flex-start;
-          justify-content: space-between; gap: 8px;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 8px;
           margin-bottom: 4px;
         }
 
         .dv-item-name {
-          font-size: 14px; font-weight: 600;
-          color: var(--text-primary); line-height: 1.3;
-          display: -webkit-box; -webkit-line-clamp: 1;
-          -webkit-box-orient: vertical; overflow: hidden;
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--ink);
+          line-height: 1.3;
+          display: -webkit-box;
+          -webkit-line-clamp: 1;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          letter-spacing: -0.01em;
         }
 
         .dv-item-price {
-          font-family: var(--font-mono); font-size: 14px;
-          font-weight: 500; color: var(--spice); flex-shrink: 0;
+          font-family: var(--font-mono);
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--ember);
+          flex-shrink: 0;
         }
 
         .dv-item-desc {
-          font-size: 12px; color: var(--text-faint);
-          line-height: 1.5; margin-bottom: 8px;
-          display: -webkit-box; -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical; overflow: hidden;
+          font-size: 12px;
+          color: var(--faint);
+          line-height: 1.5;
+          margin-bottom: 8px;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
 
         .dv-item-badges {
-          display: flex; flex-wrap: wrap; gap: 5px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
         }
 
         .dv-badge {
-          font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
-          padding: 3px 8px; border-radius: 100px;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.02em;
+          padding: 3px 8px;
+          border-radius: 100px;
         }
-        .dv-badge-veg { background: var(--sage-pale); color: var(--sage); }
-        .dv-badge-nonveg { background: var(--spice-pale); color: var(--spice); }
+        .dv-badge-veg { background: var(--leaf-pale); color: var(--leaf); }
+        .dv-badge-nonveg { background: var(--ember-pale); color: var(--ember); }
         .dv-badge-best { background: var(--gold-pale); color: var(--gold); }
-        .dv-badge-unavail { background: var(--cream); color: var(--text-faint); }
-        .dv-badge-cat {
-          background: var(--cream); color: var(--text-faint);
-          font-weight: 500;
+        .dv-badge-unavail { background: var(--surface-sunken); color: var(--faint); }
+        .dv-badge-cat { background: var(--surface-sunken); color: var(--faint); font-weight: 600; }
+
+        /* reviews */
+        .dv-rating-summary {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          background: var(--surface-raised);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          padding: 1.15rem 1.25rem;
+          margin-bottom: 1.1rem;
+          box-shadow: var(--shadow-sm);
         }
 
-        /* ── Reviews ── */
-        .dv-reviews { margin-top: 2.5rem; }
-
-        .dv-rating-grid {
-          display: grid; gap: 1.5rem; margin-top: 1.25rem;
+        .dv-rating-big {
+          font-family: var(--font-display);
+          font-size: 3.25rem;
+          font-weight: 700;
+          color: var(--ink);
+          line-height: 1;
+          letter-spacing: -0.02em;
         }
-        @media (min-width: 640px) {
-          .dv-rating-grid { grid-template-columns: 160px 1fr; }
-        }
 
-        .dv-star-bars { space-y: 6px; }
+        .dv-rating-stars-row { display: flex; gap: 3px; margin-bottom: 4px; }
+        .dv-rating-total { font-size: 12px; color: var(--faint); font-weight: 600; }
+
+        .dv-star-bars { flex: 1; }
         .dv-star-row {
-          display: flex; align-items: center; gap: 8px;
-          font-size: 12px; color: var(--text-faint);
-          margin-bottom: 6px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 11px;
+          color: var(--faint);
+          margin-bottom: 5px;
         }
         .dv-star-row:last-child { margin-bottom: 0; }
+        .dv-star-num { min-width: 10px; font-family: var(--font-mono); }
         .dv-star-track {
-          flex: 1; height: 5px; border-radius: 100px;
-          background: var(--cream-deep); overflow: hidden;
+          flex: 1;
+          height: 5px;
+          border-radius: 100px;
+          background: var(--surface-sunken);
+          overflow: hidden;
         }
         .dv-star-fill {
-          height: 100%; border-radius: 100px;
-          background: var(--gold); transition: width 0.6s ease;
+          height: 100%;
+          border-radius: 100px;
+          background: linear-gradient(to right, var(--gold), var(--gold-bright));
+          transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .dv-star-count {
-          min-width: 20px; text-align: right;
-          font-family: var(--font-mono);
-        }
+        .dv-star-count { min-width: 16px; text-align: right; font-family: var(--font-mono); }
 
-        .dv-review-list { display: flex; flex-direction: column; gap: 10px; }
+        .dv-review-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
 
         .dv-review-card {
-          background: white; border-radius: 16px;
-          border: 1px solid var(--cream-border);
-          padding: 1rem 1.25rem;
+          background: var(--surface-raised);
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--border);
+          padding: 1rem 1.1rem;
+          box-shadow: var(--shadow-sm);
         }
 
         .dv-review-header {
-          display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
-        }
-        .dv-reviewer-avatar {
-          width: 32px; height: 32px; border-radius: 50%;
-          background: var(--espresso); color: var(--cream);
-          display: grid; place-items: center;
-          font-size: 13px; font-weight: 600; flex-shrink: 0;
-        }
-        .dv-reviewer-name {
-          font-size: 14px; font-weight: 600; color: var(--text-primary);
-        }
-        .dv-review-stars { display: flex; gap: 2px; margin-left: auto; }
-        .dv-review-comment {
-          font-size: 13px; color: var(--text-muted); line-height: 1.6;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 8px;
         }
 
-        /* ── Write review form ── */
+        .dv-reviewer-avatar {
+          width: 34px;
+          height: 34px;
+          border-radius: 50%;
+          background: var(--ink);
+          color: var(--surface);
+          display: grid;
+          place-items: center;
+          font-size: 13px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+
+        .dv-reviewer-name {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--ink);
+          letter-spacing: -0.01em;
+        }
+
+        .dv-review-date {
+          margin-left: auto;
+          font-size: 11px;
+          color: var(--faint);
+          font-family: var(--font-mono);
+        }
+
+        .dv-review-stars { display: flex; gap: 2px; margin-bottom: 6px; }
+        .dv-review-comment {
+          font-size: 13px;
+          color: var(--muted);
+          line-height: 1.65;
+        }
+
         .dv-review-form {
-          margin-top: 1.25rem;
-          background: var(--espresso);
-          border-radius: 20px; padding: 1.5rem;
+          margin-top: 1.5rem;
+          background: var(--ink);
+          border-radius: var(--radius-xl);
+          padding: 1.35rem;
+          box-shadow: var(--shadow-lg);
         }
 
         .dv-form-title {
-          display: flex; align-items: center; gap: 8px;
-          font-size: 15px; font-weight: 600; color: var(--cream);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 16px;
+          font-weight: 700;
+          color: #fff;
           margin-bottom: 1rem;
+          font-family: var(--font-display);
+          font-style: italic;
         }
 
         .dv-star-picker { display: flex; gap: 4px; margin-bottom: 1rem; }
         .dv-star-pick-btn {
-          background: none; border: none; cursor: pointer;
-          padding: 2px; transition: transform 0.15s;
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 3px;
+          transition: transform 0.15s;
         }
         .dv-star-pick-btn:hover { transform: scale(1.2); }
         .dv-star-pick-btn:active { transform: scale(0.9); }
 
         .dv-form-input {
-          width: 100%; background: rgba(247,243,236,0.08);
-          border: 1px solid rgba(247,243,236,0.15);
-          border-radius: 12px; padding: 11px 14px;
-          font-size: 14px; color: var(--cream);
-          outline: none; margin-bottom: 10px;
-          transition: border-color 0.2s; font-family: var(--font-body);
+          width: 100%;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: var(--radius-md);
+          padding: 11px 14px;
+          font-size: 14px;
+          color: #fff;
+          outline: none;
+          margin-bottom: 10px;
+          transition: border-color 0.2s, background 0.2s;
+          font-family: var(--font-body);
         }
-        .dv-form-input::placeholder { color: rgba(247,243,236,0.35); }
-        .dv-form-input:focus { border-color: var(--gold); }
+        .dv-form-input::placeholder { color: rgba(255,255,255,0.3); }
+        .dv-form-input:focus {
+          border-color: var(--gold);
+          background: rgba(255,255,255,0.09);
+        }
 
         .dv-form-textarea {
-          width: 100%; background: rgba(247,243,236,0.08);
-          border: 1px solid rgba(247,243,236,0.15);
-          border-radius: 12px; padding: 11px 14px;
-          font-size: 14px; color: var(--cream); resize: none;
-          outline: none; margin-bottom: 12px;
-          transition: border-color 0.2s; font-family: var(--font-body);
-          line-height: 1.5;
+          width: 100%;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: var(--radius-md);
+          padding: 11px 14px;
+          font-size: 14px;
+          color: #fff;
+          resize: none;
+          outline: none;
+          margin-bottom: 12px;
+          transition: border-color 0.2s, background 0.2s;
+          font-family: var(--font-body);
+          line-height: 1.6;
         }
-        .dv-form-textarea::placeholder { color: rgba(247,243,236,0.35); }
-        .dv-form-textarea:focus { border-color: var(--gold); }
+        .dv-form-textarea::placeholder { color: rgba(255,255,255,0.3); }
+        .dv-form-textarea:focus {
+          border-color: var(--gold);
+          background: rgba(255,255,255,0.09);
+        }
 
         .dv-submit-btn {
-          display: inline-flex; align-items: center; gap: 8px;
-          background: var(--gold); color: var(--espresso);
-          border: none; border-radius: 100px;
-          padding: 10px 22px; font-size: 14px; font-weight: 600;
-          cursor: pointer; transition: all 0.2s; font-family: var(--font-body);
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: var(--gold);
+          color: var(--ink);
+          border: none;
+          border-radius: 100px;
+          padding: 11px 22px;
+          font-size: 14px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-family: var(--font-body);
+          letter-spacing: -0.01em;
         }
-        .dv-submit-btn:hover { background: var(--gold-light); }
+        .dv-submit-btn:hover { background: var(--gold-bright); transform: translateY(-1px); }
         .dv-submit-btn:active { transform: scale(0.97); }
-        .dv-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .dv-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
         .dv-form-error { font-size: 12px; color: #f87171; margin-bottom: 10px; }
 
         .dv-form-success {
-          display: flex; align-items: center; gap: 8px;
-          font-size: 14px; font-weight: 600; color: #6ee7b7;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 15px;
+          font-weight: 700;
+          color: #6ee7b7;
+          font-family: var(--font-display);
+          font-style: italic;
         }
 
-        .dv-empty { font-size: 14px; color: var(--text-faint); }
+        .dv-empty {
+          font-size: 14px;
+          color: var(--faint);
+          padding: 1rem 0;
+        }
+
+        .dv-divider {
+          height: 1px;
+          background: var(--border);
+          margin: 2rem 0;
+        }
       `}</style>
 
-      {/* ── Hero ── */}
       <section className="dv-hero">
-        {heroImage ? (
+        {heroCover ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={resolveUrl(heroImage)}
-            alt={r.name}
-            className={`dv-hero-img${heroLoaded ? ' loaded' : ''}`}
-            onLoad={() => setHeroLoaded(true)}
-          />
-        ) : (
-          <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-            <ChefHat size={56} style={{ color: 'rgba(247,243,236,0.1)' }} />
-          </div>
-        )}
+          <img src={heroCover} alt={r.name} className="dv-hero-img" />
+        ) : null}
         <div className="dv-hero-overlay" />
 
         <div className="dv-hero-top">
@@ -833,152 +1376,226 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
             <ArrowLeft size={13} /> Discovery
           </Link>
           <div className="dv-city-pill">
-            <Sparkles size={11} /> {toText(r.city)}
+            <Sparkles size={10} /> {toText(r.city)}
           </div>
         </div>
 
         <div className="dv-hero-bottom">
-          <div className="dv-logo-name">
-            {r.logo_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={resolveUrl(r.logo_url)} alt={`${r.name} logo`} className="dv-logo" />
-            )}
-            <h1 className="dv-restaurant-name">{r.name}</h1>
-          </div>
+          <div className="dv-hero-inner">
+            <div className="dv-logo-row">
+              {r.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={resolveUrl(r.logo_url)} alt={`${r.name} logo`} className="dv-logo" />
+              )}
+              <h1 className="dv-restaurant-name">{r.name}</h1>
+            </div>
 
-          {galleryImages.length > 1 && (
-            <div className="dv-gallery-strip">
-              {galleryImages.map((img) => (
-                <button
-                  key={img}
-                  type="button"
-                  onClick={() => setHeroImage(img)}
-                  aria-label="View photo"
-                  className={`dv-gallery-thumb${heroImage === img ? ' active' : ''}`}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={resolveUrl(img)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </button>
+            <div className="dv-hero-meta">
+              {toText(r.area) && (
+                <span className="dv-hero-tag">
+                  <MapPin size={11} /> {toText(r.area)}
+                </span>
+              )}
+              {Number(r.rating_count ?? 0) > 0 && (
+                <span className="dv-hero-rating">
+                  <Star size={11} fill="currentColor" /> {Number(r.rating_avg ?? 0).toFixed(1)}
+                  <span style={{ opacity: 0.7, fontWeight: 500 }}>({r.rating_count})</span>
+                </span>
+              )}
+              {(r.cuisine_tags ?? []).slice(0, 2).map((t, i) => (
+                <span key={i} className="dv-hero-tag">
+                  {toText(t)}
+                </span>
               ))}
             </div>
-          )}
+          </div>
         </div>
       </section>
 
-      {/* ── Sticky bar ── */}
       <div className={`dv-sticky${scrolled ? ' scrolled' : ''}`}>
         <div className="dv-sticky-inner">
+          <p className="dv-sticky-name">{r.name}</p>
           <div className="dv-meta-row">
             <span className="dv-meta-item">
-              <MapPin size={13} style={{ color: 'var(--gold)' }} />
+              <MapPin size={12} style={{ color: 'var(--gold)' }} />
               {toText(r.area) || toText(r.city)}
             </span>
             {Number(r.rating_count ?? 0) > 0 && (
-              <span className="dv-rating">
-                <Star size={13} fill="var(--gold)" color="var(--gold)" />
+              <span className="dv-rating-inline">
+                <Star size={12} fill="var(--gold)" color="var(--gold)" />
                 {Number(r.rating_avg ?? 0).toFixed(1)}
                 <span className="dv-rating-count">({r.rating_count})</span>
               </span>
             )}
-            {avgPriceForTwo && (
-              <span className="dv-price-two">≈ ₹{avgPriceForTwo} for 2</span>
-            )}
+            {avgPriceForTwo && <span className="dv-price-two">≈ ₹{avgPriceForTwo} for 2</span>}
           </div>
 
           <div className="dv-action-btns">
             {r.phone && (
               <a href={`tel:${r.phone}`} aria-label="Call restaurant" className="dv-icon-btn">
-                <Phone size={15} />
+                <Phone size={14} />
               </a>
             )}
-            <a href={directionsUrl} target="_blank" rel="noreferrer" aria-label="Get directions" className="dv-icon-btn">
-              <Navigation size={15} />
+            <a
+              href={directionsUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Get directions"
+              className="dv-icon-btn"
+            >
+              <Navigation size={14} />
             </a>
-            <button type="button" onClick={() => void handleShare()} aria-label="Share" className="dv-icon-btn" style={{ background: 'none', cursor: 'pointer' }}>
-              <Share2 size={15} />
+            <button
+              type="button"
+              onClick={() => void handleShare()}
+              aria-label="Share"
+              className="dv-icon-btn"
+              style={{ background: 'none', cursor: 'pointer' }}
+            >
+              <Share2 size={14} />
             </button>
           </div>
         </div>
         {shareFeedback && <p className="dv-share-toast">{shareFeedback}</p>}
       </div>
 
-      {/* ── Main content ── */}
-      <div className="dv-content">
-        {toText(r.description) && (
-          <p className="dv-description">"{toText(r.description)}"</p>
-        )}
+      <div className="dv-body">
+       {(toText(r.description) || restaurantInfoRows.length > 0 || ((r as ExtendedRestaurant).amenities ?? []).length > 0) && (
+  <div className="dv-info-card">
+    {toText(r.description) && (
+      <p className="dv-description">"{toText(r.description)}"</p>
+    )}
 
-        {((r.cuisine_tags ?? []).length > 0 || r.opening_hours || (r.amenities ?? []).length > 0) && (
-          <div className="dv-tags">
-            {(r.cuisine_tags ?? []).map((t, i) => (
-              <span key={i} className="dv-tag">{toText(t)}</span>
-            ))}
-            {r.opening_hours && (
-              <span className="dv-tag dv-tag-hours">
-                <Clock size={11} /> {toText(r.opening_hours)}
-              </span>
-            )}
-            {(r.amenities ?? []).map((a, i) => (
-              <span key={i} className="dv-tag">
-                <AmenityIcon label={toText(a)} /> {toText(a)}
-              </span>
-            ))}
+    {restaurantInfoRows.length > 0 && (
+      <div
+        className="dv-info-grid"
+        style={{ marginTop: toText(r.description) ? '1rem' : 0 }}
+      >
+        {restaurantInfoRows.map((row) => (
+          <div key={row.label} className="dv-info-row">
+            <div className="dv-info-row-icon">{row.icon}</div>
+            <div>
+              <p className="dv-info-row-label">{row.label}</p>
+              <p className="dv-info-row-val">{row.value}</p>
+            </div>
           </div>
-        )}
+        ))}
+      </div>
+    )}
 
-        {/* ── Offers ── */}
+    {((r as ExtendedRestaurant).amenities ?? []).length > 0 && (
+      <div className="dv-amenity-row">
+        {((r as ExtendedRestaurant).amenities ?? []).map((a, i) => (
+          <span key={i} className="dv-amenity-tag">
+            <AmenityIcon label={toText(a)} /> {toText(a)}
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+)}
+
         {data.offers.length > 0 && (
-          <div className="dv-offers">
-            <h2 className="dv-section-heading">
-              <BadgePercent size={20} style={{ color: 'var(--gold)' }} /> Live offers
-            </h2>
+          <div className="dv-section">
+            <div className="dv-section-head">
+              <h2 className="dv-section-title">Live offers</h2>
+              <div className="dv-section-rule" />
+            </div>
+
             <div className="dv-offer-grid">
-              {data.offers.map((offer) => (
-                <div key={offer.id} className="dv-offer-card">
-                  <div className="dv-offer-title">
-                    <BadgePercent size={15} /> {toText(offer.title)}
+              {data.offers.map((offer) => {
+                const code = (offer as unknown as { coupon_code?: string | null }).coupon_code
+                const isCopied = copiedOffer === offer.id
+                const isClaimed = offerFeedback === offer.id
+
+                let typeBadge = 'Offer'
+                if (offer.discount_type === 'percent') typeBadge = `${offer.discount_value}% Off`
+                else if (offer.discount_type === 'flat') typeBadge = `₹${offer.discount_value} Off`
+                else if (offer.discount_type === 'free_item') typeBadge = 'Free Item'
+
+                return (
+                  <div key={offer.id} className="dv-offer-card">
+                    <div className="dv-offer-type-badge">
+                      <BadgePercent size={9} /> {typeBadge}
+                    </div>
+                    <p className="dv-offer-title">{toText(offer.title)}</p>
+                    {toText(offer.description) && <p className="dv-offer-desc">{toText(offer.description)}</p>}
+
+                    <div className="dv-offer-footer">
+                      <button className="dv-offer-btn" onClick={() => claimOffer(offer)}>
+                        {toText(offer.cta_label) || 'Claim offer'} <ArrowRight size={13} />
+                      </button>
+
+                      {code && (
+                        <button
+                          type="button"
+                          className={`dv-offer-code${isCopied ? ' copied' : ''}`}
+                          onClick={() => claimOffer(offer)}
+                          title="Copy code"
+                        >
+                          {isCopied ? <Check size={11} /> : <Copy size={11} />}
+                          {code}
+                        </button>
+                      )}
+                    </div>
+
+                    {isClaimed && (
+                      <p className="dv-offer-feedback">
+                        <CheckCircle2 size={12} />
+                        {code ? 'Code copied — show at counter to redeem' : 'Show this to staff to redeem'}
+                      </p>
+                    )}
                   </div>
-                  {toText(offer.description) && (
-                    <p className="dv-offer-desc">{toText(offer.description)}</p>
-                  )}
-                  <button className="dv-offer-btn" onClick={() => claimOffer(offer)}>
-                    {toText(offer.cta_label) || 'Claim offer'} <ArrowRight size={13} />
-                  </button>
-                  {offerFeedback === offer.id && (
-                    <p className="dv-offer-feedback">✓ Show this to staff to redeem</p>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* ── Menu ── */}
         <MenuSection categories={data.categories} items={data.items} onBrowse={trackMenuView} />
 
-        {/* ── Reviews ── */}
-        <div className="dv-reviews">
-          <h2 className="dv-section-heading">
-            <Star size={20} style={{ color: 'var(--gold)' }} /> Reviews
-          </h2>
+        <div className="dv-divider" />
+
+        <div className="dv-section">
+          <div className="dv-section-head">
+            <h2 className="dv-section-title">Reviews</h2>
+            <div className="dv-section-rule" />
+          </div>
 
           {data.reviews.length === 0 ? (
             <p className="dv-empty">No reviews yet — be the first to share your experience.</p>
           ) : (
-            <div className="dv-rating-grid">
-              <div>
-                {ratingBreakdown.map(({ star, count, pct }) => (
-                  <div key={star} className="dv-star-row">
-                    <span style={{ fontFamily: 'var(--font-mono)', minWidth: 8 }}>{star}</span>
-                    <Star size={10} fill="var(--gold)" color="var(--gold)" />
-                    <div className="dv-star-track">
-                      <div className="dv-star-fill" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="dv-star-count">{count}</span>
+            <>
+              <div className="dv-rating-summary">
+                <div>
+                  <p className="dv-rating-big">{Number(r.rating_avg ?? 0).toFixed(1)}</p>
+                  <div className="dv-rating-stars-row">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        size={14}
+                        fill={s <= Math.round(Number(r.rating_avg ?? 0)) ? 'var(--gold)' : 'transparent'}
+                        color={s <= Math.round(Number(r.rating_avg ?? 0)) ? 'var(--gold)' : 'var(--border)'}
+                      />
+                    ))}
                   </div>
-                ))}
+                  <p className="dv-rating-total">{r.rating_count} reviews</p>
+                </div>
+
+                <div className="dv-star-bars">
+                  {ratingBreakdown.map(({ star, count, pct }) => (
+                    <div key={star} className="dv-star-row">
+                      <span className="dv-star-num">{star}</span>
+                      <Star size={9} fill="var(--gold)" color="var(--gold)" />
+                      <div className="dv-star-track">
+                        <div className="dv-star-fill" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="dv-star-count">{count}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
+
               <div className="dv-review-list">
                 {data.reviews.map((rev) => (
                   <div key={rev.id} className="dv-review-card">
@@ -989,52 +1606,65 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
                       <span className="dv-reviewer-name">
                         {toText(rev.customer_name) || 'Anonymous'}
                       </span>
-                      <div className="dv-review-stars">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star key={s} size={12}
-                            fill={s <= rev.score ? 'var(--gold)' : 'transparent'}
-                            color={s <= rev.score ? 'var(--gold)' : 'var(--cream-border)'}
-                          />
-                        ))}
-                      </div>
+                      <span className="dv-review-date">{formatDiscoveryDate(rev.created_at)}</span>
                     </div>
-                    {toText(rev.comment) && (
-                      <p className="dv-review-comment">{toText(rev.comment)}</p>
-                    )}
+
+                    <div className="dv-review-stars">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          size={13}
+                          fill={s <= rev.score ? 'var(--gold)' : 'transparent'}
+                          color={s <= rev.score ? 'var(--gold)' : 'var(--border)'}
+                        />
+                      ))}
+                    </div>
+
+                    {toText(rev.comment) && <p className="dv-review-comment">{toText(rev.comment)}</p>}
                   </div>
                 ))}
               </div>
-            </div>
+            </>
           )}
 
           <div className="dv-review-form">
             {reviewSubmitted ? (
               <div className="dv-form-success">
-                <CheckCircle2 size={18} /> Thanks for your review!
+                <CheckCircle2 size={20} /> Thanks for your review!
               </div>
             ) : (
               <>
                 <p className="dv-form-title">
                   <MessageSquare size={16} /> Leave a review
                 </p>
+
                 {reviewError && <p className="dv-form-error">{reviewError}</p>}
+
                 <div className="dv-star-picker">
                   {[1, 2, 3, 4, 5].map((s) => (
-                    <button key={s} type="button" className="dv-star-pick-btn"
-                      onClick={() => setReviewScore(s)} aria-label={`${s} star`}>
-                      <Star size={26}
+                    <button
+                      key={s}
+                      type="button"
+                      className="dv-star-pick-btn"
+                      onClick={() => setReviewScore(s)}
+                      aria-label={`${s} star`}
+                    >
+                      <Star
+                        size={28}
                         fill={s <= reviewScore ? 'var(--gold)' : 'transparent'}
-                        color={s <= reviewScore ? 'var(--gold)' : 'rgba(247,243,236,0.25)'}
+                        color={s <= reviewScore ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}
                       />
                     </button>
                   ))}
                 </div>
+
                 <input
                   className="dv-form-input"
                   value={reviewName}
                   onChange={(e) => setReviewName(e.target.value)}
                   placeholder="Your name (optional)"
                 />
+
                 <textarea
                   className="dv-form-textarea"
                   value={reviewComment}
@@ -1042,6 +1672,7 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
                   placeholder="Share your experience…"
                   rows={3}
                 />
+
                 <button className="dv-submit-btn" onClick={() => void submitReview()} disabled={reviewSubmitting}>
                   {reviewSubmitting ? <Loader2 size={15} className="animate-spin" /> : null}
                   Submit review
@@ -1055,9 +1686,10 @@ export function DiscoveryRestaurantView({ data }: { data: DiscoveryPageData }) {
   )
 }
 
-// ─── Menu section ────────────────────────────────────────────────────────────
 function MenuSection({
-  categories, items, onBrowse,
+  categories,
+  items,
+  onBrowse,
 }: {
   categories: DiscoveryCategory[]
   items: DiscoveryItem[]
@@ -1067,39 +1699,54 @@ function MenuSection({
   const [query, setQuery] = useState('')
   const [vegOnly, setVegOnly] = useState(false)
 
+  useEffect(() => {
+    setActiveCat(categories[0]?.id ?? null)
+  }, [categories])
+
   const bestsellers = useMemo(() => items.filter((i) => i.is_bestseller && i.is_available), [items])
   const searching = query.trim().length > 0
 
   const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase()
+
     let list = searching
-      ? items.filter((i) => i.name.toLowerCase().includes(q) || (i.description ?? '').toLowerCase().includes(q))
+      ? items.filter(
+          (i) =>
+            i.name.toLowerCase().includes(q) ||
+            (i.description ?? '').toLowerCase().includes(q)
+        )
       : items.filter((i) => i.category_id === activeCat)
+
     if (vegOnly) list = list.filter((i) => i.is_veg)
     return list
   }, [items, activeCat, query, vegOnly, searching])
 
   function selectCategory(id: string) {
-    setActiveCat(id); setQuery(''); onBrowse()
+    setActiveCat(id)
+    setQuery('')
+    onBrowse()
   }
 
   if (categories.length === 0) {
     return (
-      <div className="dv-menu">
-        <h2 className="dv-section-heading">
-          <UtensilsCrossed size={20} style={{ color: 'var(--gold)' }} /> Menu
-        </h2>
+      <div className="dv-section">
+        <div className="dv-section-head">
+          <h2 className="dv-section-title">Menu</h2>
+          <div className="dv-section-rule" />
+        </div>
         <p className="dv-empty">Menu coming soon.</p>
       </div>
     )
   }
 
   return (
-    <div className="dv-menu">
+    <div className="dv-section">
       <div className="dv-menu-controls">
-        <h2 className="dv-section-heading" style={{ marginBottom: 0, flex: 1 }}>
-          <UtensilsCrossed size={20} style={{ color: 'var(--gold)' }} /> Menu
-        </h2>
+        <div className="dv-section-head" style={{ marginBottom: 0, flex: 1 }}>
+          <h2 className="dv-section-title">Menu</h2>
+          <div className="dv-section-rule" />
+        </div>
+
         <button
           type="button"
           className={`dv-veg-toggle${vegOnly ? ' active' : ''}`}
@@ -1110,12 +1757,15 @@ function MenuSection({
         </button>
       </div>
 
-      <div className="dv-search-box">
-        <Search size={15} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+      <div className="dv-search-box" style={{ marginBottom: '1rem' }}>
+        <Search size={15} style={{ color: 'var(--faint)', flexShrink: 0 }} />
         <input
           className="dv-search-input"
           value={query}
-          onChange={(e) => { setQuery(e.target.value); onBrowse() }}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            onBrowse()
+          }}
           placeholder="Search dishes…"
           aria-label="Search the menu"
         />
@@ -1178,14 +1828,15 @@ function MenuSection({
               ) : (
                 <div className="dv-item-placeholder">{item.is_veg ? '🥗' : '🍖'}</div>
               )}
+
               <div className="dv-item-body">
                 <div className="dv-item-header">
                   <p className="dv-item-name">{toText(item.name)}</p>
                   <p className="dv-item-price">{priceLabel(item.price)}</p>
                 </div>
-                {toText(item.description) && (
-                  <p className="dv-item-desc">{toText(item.description)}</p>
-                )}
+
+                {toText(item.description) && <p className="dv-item-desc">{toText(item.description)}</p>}
+
                 <div className="dv-item-badges">
                   <span className={`dv-badge ${item.is_veg ? 'dv-badge-veg' : 'dv-badge-nonveg'}`}>
                     {item.is_veg ? 'Veg' : 'Non-veg'}

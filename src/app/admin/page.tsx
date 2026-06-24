@@ -44,6 +44,9 @@ type Restaurant = {
   owner_id: string
   owner_email: string
   is_active: boolean
+  is_published: boolean
+    show_in_discovery: boolean
+
   avg_rating: number
   total_ratings: number
   created_at: string
@@ -267,29 +270,44 @@ function SubModal({ restaurant, onClose, onDone }: { restaurant: Restaurant; onC
 
 // ─── Restaurant Row ───────────────────────────────────────────────────────────
 
-function RestaurantRow({ restaurant, onManage }: { restaurant: Restaurant; onManage: () => void }) {
+function RestaurantRow({
+  restaurant,
+  onManage,
+  onToggleDiscovery,
+}: {
+  restaurant: Restaurant
+  onManage: () => void
+  onToggleDiscovery: () => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const badge = planBadge(restaurant)
 
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[#111111] transition hover:border-white/[0.09]">
       <div className="flex items-center gap-3 px-4 py-3.5">
-        {/* Status dot */}
-        <div className={`h-2 w-2 shrink-0 rounded-full ${restaurant.has_access ? 'bg-emerald-400' : 'bg-red-500'}`} />
+        <div
+          className={`h-2 w-2 shrink-0 rounded-full ${
+            restaurant.has_access ? 'bg-emerald-400' : 'bg-red-500'
+          }`}
+        />
 
-        {/* Main info */}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-white">{restaurant.name}</p>
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badge.color}`}>{badge.label}</span>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badge.color}`}>
+              {badge.label}
+            </span>
             {!restaurant.is_active && (
-              <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-600">Inactive</span>
+              <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-600">
+                Inactive
+              </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-zinc-600">{restaurant.owner_email} · {restaurant.cuisine_type}</p>
+          <p className="mt-0.5 text-xs text-zinc-600">
+            {restaurant.owner_email} · {restaurant.cuisine_type}
+          </p>
         </div>
 
-        {/* Quick stats */}
         <div className="hidden items-center gap-5 sm:flex">
           <div className="text-center">
             <p className="text-sm font-bold text-purple-400">{restaurant.visitors_30d}</p>
@@ -305,7 +323,6 @@ function RestaurantRow({ restaurant, onManage }: { restaurant: Restaurant; onMan
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onManage}
@@ -313,6 +330,20 @@ function RestaurantRow({ restaurant, onManage }: { restaurant: Restaurant; onMan
           >
             Manage
           </button>
+
+          <button
+  onClick={onToggleDiscovery}
+  className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+    restaurant.show_in_discovery
+      ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+      : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+  }`}
+>
+  {restaurant.show_in_discovery
+    ? 'Hide from discovery'
+    : 'Show in discovery'}
+</button>
+
           <a
             href={`/r/${restaurant.slug}`}
             target="_blank"
@@ -321,13 +352,16 @@ function RestaurantRow({ restaurant, onManage }: { restaurant: Restaurant; onMan
           >
             View
           </a>
-          <button onClick={() => setExpanded(v => !v)} className="rounded-xl p-1.5 text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-300">
+
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="rounded-xl p-1.5 text-zinc-600 hover:bg-white/[0.04] hover:text-zinc-300"
+          >
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
       </div>
 
-      {/* Expanded details */}
       {expanded && (
         <div className="border-t border-white/[0.05] px-4 py-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
@@ -348,14 +382,43 @@ function RestaurantRow({ restaurant, onManage }: { restaurant: Restaurant; onMan
 
           {restaurant.subscription && (
             <div className="mt-3 rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Subscription details</p>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                Subscription details
+              </p>
               <div className="flex flex-wrap gap-4 text-xs text-zinc-400">
-                <span>Plan: <strong className="text-zinc-200">{restaurant.subscription.plan}</strong></span>
-                {restaurant.subscription.plan_id && <span>Tier: <strong className="text-zinc-200">{restaurant.subscription.plan_id}</strong></span>}
-                {restaurant.subscription.billing_cycle && <span>Cycle: <strong className="text-zinc-200">{restaurant.subscription.billing_cycle}</strong></span>}
-                {restaurant.subscription.amount_paise && <span>Amount: <strong className="text-zinc-200">{money(restaurant.subscription.amount_paise)}</strong></span>}
-                {restaurant.subscription.trial_end && <span>Trial ends: <strong className="text-zinc-200">{formatDate(restaurant.subscription.trial_end)}</strong></span>}
-                {restaurant.subscription.current_period_end && <span>Renews: <strong className="text-zinc-200">{formatDate(restaurant.subscription.current_period_end)}</strong></span>}
+                <span>
+                  Plan: <strong className="text-zinc-200">{restaurant.subscription.plan}</strong>
+                </span>
+                {restaurant.subscription.plan_id && (
+                  <span>
+                    Tier: <strong className="text-zinc-200">{restaurant.subscription.plan_id}</strong>
+                  </span>
+                )}
+                {restaurant.subscription.billing_cycle && (
+                  <span>
+                    Cycle: <strong className="text-zinc-200">{restaurant.subscription.billing_cycle}</strong>
+                  </span>
+                )}
+                {restaurant.subscription.amount_paise && (
+                  <span>
+                    Amount:{' '}
+                    <strong className="text-zinc-200">{money(restaurant.subscription.amount_paise)}</strong>
+                  </span>
+                )}
+                {restaurant.subscription.trial_end && (
+                  <span>
+                    Trial ends:{' '}
+                    <strong className="text-zinc-200">{formatDate(restaurant.subscription.trial_end)}</strong>
+                  </span>
+                )}
+                {restaurant.subscription.current_period_end && (
+                  <span>
+                    Renews:{' '}
+                    <strong className="text-zinc-200">
+                      {formatDate(restaurant.subscription.current_period_end)}
+                    </strong>
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -371,12 +434,22 @@ export default function AdminPage() {
   const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics'>('overview')
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
-  const [analytics, setAnalytics] = useState<{ daily: DailyPoint[]; event_counts: Record<string, number>; hour_counts: number[]; recent_events: RecentEvent[]; total_events: number } | null>(null)
+  const [analytics, setAnalytics] = useState<{
+    daily: DailyPoint[]
+    event_counts: Record<string, number>
+    hour_counts: number[]
+    recent_events: RecentEvent[]
+    total_events: number
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterPlan, setFilterPlan] = useState<'all' | 'trial' | 'paid' | 'expired'>('all')
   const [managingRestaurant, setManagingRestaurant] = useState<Restaurant | null>(null)
-  const [paymentSummary, setPaymentSummary] = useState<{ total_revenue_paise: number; total_payments: number; total_failed: number } | null>(null)
+  const [paymentSummary, setPaymentSummary] = useState<{
+    total_revenue_paise: number
+    total_payments: number
+    total_failed: number
+  } | null>(null)
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -386,9 +459,11 @@ export default function AdminPage() {
         fetch('/api/admin/payments'),
         fetch('/api/admin/analytics'),
       ])
+
       const rData = await rRes.json()
       const pData = await pRes.json()
       const aData = await aRes.json()
+
       setRestaurants(rData.restaurants ?? [])
       setPayments(pData.payments ?? [])
       setPaymentSummary(pData.summary ?? null)
@@ -400,7 +475,40 @@ export default function AdminPage() {
     }
   }, [])
 
-  useEffect(() => { void loadAll() }, [loadAll])
+  const toggleDiscovery = useCallback(
+    async (restaurant: Restaurant) => {
+      const nextValue = !restaurant.show_in_discovery
+
+      const confirmText = nextValue
+        ? `Publish ${restaurant.name} to discovery?`
+        : `Hide ${restaurant.name} from discovery?`
+
+      if (!window.confirm(confirmText)) return
+
+      try {
+        const res = await fetch(`/api/admin/restaurants/${restaurant.id}/discovery`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+  show_in_discovery: nextValue,
+}),
+        })
+
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to update discovery status')
+
+        await loadAll()
+      } catch (err) {
+        console.error(err)
+        alert(err instanceof Error ? err.message : 'Failed to update discovery status')
+      }
+    },
+    [loadAll],
+  )
+
+  useEffect(() => {
+    void loadAll()
+  }, [loadAll])
 
   // ── Computed stats ──
   const totalRestaurants = restaurants.length
@@ -584,9 +692,14 @@ export default function AdminPage() {
               <p className="text-xs text-zinc-600">{filtered.length} of {totalRestaurants} restaurants</p>
 
               <div className="space-y-2">
-                {filtered.map(r => (
-                  <RestaurantRow key={r.id} restaurant={r} onManage={() => setManagingRestaurant(r)} />
-                ))}
+             {filtered.map((r) => (
+  <RestaurantRow
+    key={r.id}
+    restaurant={r}
+    onManage={() => setManagingRestaurant(r)}
+    onToggleDiscovery={() => toggleDiscovery(r)}
+  />
+))}
                 {filtered.length === 0 && (
                   <div className="rounded-2xl border border-white/[0.06] bg-[#111111] py-12 text-center text-sm text-zinc-600">
                     No restaurants found
