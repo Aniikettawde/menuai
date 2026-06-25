@@ -196,13 +196,13 @@ export async function POST(req: NextRequest) {
 
     // Log the restaurant visit
     if (body.restaurant_id && customer?.id) {
-      await supabase.from('customer_visits').insert({
-        customer_id:   customer.id,
-        restaurant_id: body.restaurant_id,
-        table_number:  body.table_number ?? null,
-        visited_at:    new Date().toISOString(),
-      })
-    }
+  await supabase.from('customer_profiles').insert({
+    customer_id: customer.id,
+    restaurant_id: body.restaurant_id,
+    table_number: body.table_number ?? null,
+    visited_at: new Date().toISOString(),
+  })
+}
 
     return NextResponse.json({ customer })
   } catch (err) {
