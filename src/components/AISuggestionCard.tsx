@@ -142,6 +142,8 @@ function ItemCard({ item }: { item: MenuItem }) {
   const role = getRoleLabel(item)
   // respect per-restaurant orders toggle
   const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
+const hasTableToken = useAppStore(s => s.hasTableToken)
+const canOrder = ordersEnabled && hasTableToken
 
   const onAdd = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -185,7 +187,7 @@ function ItemCard({ item }: { item: MenuItem }) {
       </div>
 
       {/* Only render add/stepper when orders are enabled */}
-      {ordersEnabled && (
+     {canOrder && (
         <div className="asc-action">
           {qty === 0 ? (
             <>

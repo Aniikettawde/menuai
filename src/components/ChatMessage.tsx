@@ -70,6 +70,8 @@ function DarkDishCard({
 }) {
   const { cartItems, increaseCartItem, decreaseCartItem, dishOptions, openCustomiseSheet } = useAppStore()
   const ordersEnabled = useAppStore(s => s.restaurant?.orders_enabled ?? true)
+const hasTableToken = useAppStore(s => s.hasTableToken)
+const canOrder = ordersEnabled && hasTableToken
   const [justAdded, setJustAdded] = useState(false)
   const [imgErr, setImgErr] = useState(false)
 
@@ -220,7 +222,7 @@ function DarkDishCard({
                 </button>
               )}
               {/* Only show add/stepper when orders are enabled */}
-              {ordersEnabled && (
+             {canOrder && (
                 qty === 0 ? (
                   <button
                     type="button"

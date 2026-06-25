@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { ChatRequest, ChatResponse, QuickReply, PsychTrigger, ConvoStage } from '@/types'
 
+export const runtime = 'nodejs'
+export const maxDuration = 30
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+const GEMINI_MODEL = 'gemini-2.5-flash'
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 
-type PsychTriggerOrNone = PsychTrigger | 'none'
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type DietPreference = 'veg' | 'non-veg' | 'unknown'
 
 interface MenuItemAIContext {
+  id?: string
   name: string
   description?: string
   price?: number
@@ -30,51 +38,17 @@ type MenuContextPayload = NonNullable<ChatRequest['menu_context']> & {
   menu_items?: MenuItemAIContext[]
 }
 
-const COURSE_ORDER: Record<string, number> = {
-  main: 0, starter: 1, bread: 2, rice: 3, dessert: 4, drink: 5, other: 6,
+interface GeminiAIResponse {
+  reply: string
+  mentioned_items: string[]
+  upsell_items: string[]
+  psych_trigger: string
+  convo_stage: string
+  suggestions: Array<{ label: string; action: string }>
+  needs_clarification: boolean
 }
 
-const REVENUE_PAIR_RULES: Array<{
-  primaryPatterns: RegExp[]
-  preferredGroups: Array<'bread' | 'rice' | 'starter' | 'main' | 'dessert' | 'drink' | 'other'>
-  preferredNameHints: string[]
-}> = [
-  {
-    primaryPatterns: [/paneer butter masala/, /paneer makhani/, /butter paneer/, /shahi paneer/, /kadai paneer/],
-    preferredGroups: ['bread', 'rice', 'dessert', 'drink'],
-    preferredNameHints: ['garlic butter naan', 'butter naan', 'tandoori roti', 'naan', 'roti', 'gulab jamun', 'kheer'],
-  },
-  {
-    primaryPatterns: [/dal tadka/, /dal fry/, /dal makhani/],
-    preferredGroups: ['rice', 'bread', 'starter', 'dessert', 'drink'],
-    preferredNameHints: ['jeera rice', 'plain rice', 'tandoori roti', 'roti', 'naan', 'gulab jamun'],
-  },
-  {
-    primaryPatterns: [/jeera rice/, /plain rice/, /steamed rice/],
-    preferredGroups: ['main', 'starter', 'dessert', 'drink'],
-    preferredNameHints: ['dal tadka', 'dal makhani', 'raita', 'gulab jamun', 'kheer'],
-  },
-  {
-    primaryPatterns: [/biryani/, /pulao/, /fried rice/],
-    preferredGroups: ['starter', 'dessert', 'drink'],
-    preferredNameHints: ['raita', 'papad', 'gulab jamun', 'ice cream', 'lassi'],
-  },
-  {
-    primaryPatterns: [/butter chicken/, /chicken tikka masala/, /kadai chicken/, /chicken masala/],
-    preferredGroups: ['bread', 'rice', 'dessert', 'drink'],
-    preferredNameHints: ['garlic naan', 'butter naan', 'tandoori roti', 'naan', 'jeera rice', 'gulab jamun'],
-  },
-  {
-    primaryPatterns: [/chole bhature/, /chana bhatura/],
-    preferredGroups: ['drink', 'dessert'],
-    preferredNameHints: ['lassi', 'gulab jamun', 'tea'],
-  },
-  {
-    primaryPatterns: [/gulab jamun/, /kheer/, /kulfi/, /ice cream/, /brownie/, /cake/],
-    preferredGroups: ['drink'],
-    preferredNameHints: ['tea', 'coffee', 'masala chai'],
-  },
-]
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getSupabaseAdminClient() {
   if (!SUPABASE_URL) throw new Error('NEXT_PUBLIC_SUPABASE_URL is missing')
@@ -92,19 +66,9 @@ function uniq(values: string[]) {
   return [...new Set(values.map(v => v.trim()).filter(Boolean))]
 }
 
-function sanitizeReply(text: string) {
-  return String(text ?? '')
-    .replace(/\[SUGGESTIONS:[\s\S]*?\]/g, '')
-    .replace(/\[ITEMS:[\s\S]*?\]/g, '')
-    .replace(/\[UPSELL:[\s\S]*?\]/g, '')
-    .replace(/\[PSYCH:[\s\S]*?\]/g, '')
-    .replace(/\[STAGE:[\s\S]*?\]/g, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim()
+function formatPrice(paise: number | undefined) {
+  if (!paise || paise <= 0) return ''
+  return `₹${Math.round(paise / 100)}`
 }
 
 function hasNonVegMenu(menuItems: MenuItemAIContext[]) {
@@ -112,626 +76,246 @@ function hasNonVegMenu(menuItems: MenuItemAIContext[]) {
 }
 
 function detectDietPreference(history: ChatRequest['history'] | undefined, message: string): DietPreference {
-  const text = `${history?.map(m => m.content).join(' ')} ${message}`.toLowerCase()
-  if (/\bnon[- ]?veg\b|\bnonveg\b|\bnon vegetarian\b|\bchicken\b|\bmutton\b|\bfish\b|\begg\b/.test(text)) return 'non-veg'
+  const text = `${(history ?? []).map(m => m.content).join(' ')} ${message}`.toLowerCase()
+  if (/\bnon[- ]?veg\b|\bnonveg\b|\bchicken\b|\bmutton\b|\bfish\b|\begg\b/.test(text)) return 'non-veg'
   if (/\bveg\b|\bvegetarian\b|\bjain\b/.test(text)) return 'veg'
   return 'unknown'
 }
 
-function detectConvoStage(history: ChatRequest['history'] | undefined, message: string): ConvoStage {
-  const userMessages = (history ?? []).filter(m => m.role === 'user').length
-  const msg = message.toLowerCase()
-  if (/add|order|cart|place|confirm|want|get me|i'll have|i'll take|i want/.test(msg)) return 'ready_to_order'
-  if (/price|cost|how much|₹|options|varieties|difference|budget|cheap/.test(msg)) return 'deciding'
-  if (userMessages >= 3) return 'browsing'
-  return 'early'
+// ─── Format menu for Gemini ───────────────────────────────────────────────────
+
+function formatMenuForPrompt(items: MenuItemAIContext[]): string {
+  return items.map((item, idx) => {
+    const parts: string[] = [`${idx + 1}. ${item.name}`]
+    if (item.price) parts.push(`₹${Math.round(item.price / 100)}`)
+    parts.push(item.is_veg === false ? 'non-veg' : 'veg')
+    if (item.is_bestseller) parts.push('⭐bestseller')
+    if (item.is_special) parts.push('👨‍🍳chef-special')
+    if (item.description) parts.push(`"${item.description.slice(0, 80)}"`)
+    if (item.spice_level) parts.push(`spice:${item.spice_level}`)
+    if (item.tags?.length) parts.push(`tags:${item.tags.slice(0, 3).join(',')}`)
+    if (item.best_with?.length) parts.push(`pairs-with:${item.best_with.slice(0, 2).join(',')}`)
+    if (item.course_type) parts.push(`course:${item.course_type}`)
+    return parts.join(' | ')
+  }).join('\n')
 }
 
-function isBroadChoiceQuery(message: string) {
-  return /suggest|recommend|help me choose|what should i eat|what do you suggest|i'm hungry|hungry|something good|best dish|top dish|show me something|pick for me/i.test(message)
+// ─── System prompt ────────────────────────────────────────────────────────────
+
+function buildSystemPrompt(restaurantName: string, menuItems: MenuItemAIContext[], hasNonVeg: boolean): string {
+  const menuText = formatMenuForPrompt(menuItems)
+  const totalItems = menuItems.length
+
+  // Pre-compute all exact item names so Gemini has a strict allowlist
+  const allItemNames = menuItems.map(i => i.name).join(', ')
+
+  // Detect what cuisine categories actually exist in this menu
+  const menuNormalized = menuItems.map(i => normalizeText(i.name)).join(' ')
+  const hasSouthIndian = /dosa|idli|uttapam|vada|upma|poha|sheera|sambhar|filter coffee/.test(menuNormalized)
+  const hasChinese = /manchurian|fried rice|noodles|chilli|chowmein|hakka|schezwan/.test(menuNormalized)
+  const hasPavBhaji = /pav bhaji|pav|bhaji/.test(menuNormalized)
+  const hasPizza = /pizza/.test(menuNormalized)
+  const hasPasta = /pasta|penne/.test(menuNormalized)
+  const hasSizzler = /sizzler/.test(menuNormalized)
+  const hasBiryani = /biryani|pulao|pulav/.test(menuNormalized)
+  const hasPaneer = /paneer/.test(menuNormalized)
+  const hasDal = /dal/.test(menuNormalized)
+  const hasDesert = /gulab|jamun|ice cream|brownie|kheer|halwa|dessert|sundae/.test(menuNormalized)
+  const hasDrinks = /coffee|tea|lassi|juice|shake|milkshake|mocktail|falooda/.test(menuNormalized)
+
+  const availableCuisines: string[] = []
+  if (hasSouthIndian) availableCuisines.push('South Indian (dosa, idli, etc.)')
+  if (hasChinese) availableCuisines.push('Chinese (manchurian, fried rice, noodles)')
+  if (hasPavBhaji) availableCuisines.push('Pav Bhaji')
+  if (hasPizza) availableCuisines.push('Pizza')
+  if (hasPasta) availableCuisines.push('Pasta')
+  if (hasSizzler) availableCuisines.push('Sizzlers')
+  if (hasBiryani) availableCuisines.push('Biryani & Rice')
+  if (hasPaneer) availableCuisines.push('Paneer dishes')
+  if (hasDal) availableCuisines.push('Dal')
+  if (hasDesert) availableCuisines.push('Desserts')
+  if (hasDrinks) availableCuisines.push('Drinks & Beverages')
+
+  return `You are a smart, warm, experienced waiter at ${restaurantName}. You are NOT an AI — you're a real person who knows this menu inside out and genuinely wants guests to have a great experience.
+
+YOUR PERSONALITY:
+- Casual, friendly, knowledgeable — like a trusted friend who works here
+- Natural language: "okay so", "honestly", "you'll love", "trust me", "this one's special", "no cap"
+- Short replies: 2-4 sentences MAX
+- NO markdown, NO bullet points, NO asterisks, NO emoji in the reply text
+- Sound human. Never robotic. Never say "I recommend" or "I suggest" — just say "go with" or "you gotta try"
+
+════════════════════════════════════════════════
+⚠️  ABSOLUTE RULE #1 — NEVER HALLUCINATE DISHES
+════════════════════════════════════════════════
+You may ONLY mention dishes from this exact list:
+${allItemNames}
+
+If a customer asks for something we don't have (e.g. "south indian" when there's no dosa/idli, or "pasta" when there's no pasta):
+- Be honest: "We don't have [what they asked] on the menu right now."
+- Then pivot: "But we do have [closest thing we actually have] — want me to suggest something from that?"
+- NEVER invent dishes. NEVER say "our Dosa" if Dosa is not in the list above.
+- If you're unsure if something is on the menu, DON'T mention it.
+
+════════════════════════════════════════════════
+WHAT THIS RESTAURANT ACTUALLY SERVES:
+════════════════════════════════════════════════
+Available cuisine types at ${restaurantName}:
+${availableCuisines.length > 0 ? availableCuisines.join(', ') : 'General Indian and multi-cuisine'}
+
+NOT available (do NOT claim we have these if they're absent):
+${!hasSouthIndian ? '- South Indian (no dosa, idli, uttapam, vada, sambhar)' : ''}
+${!hasChinese ? '- Chinese (no manchurian, noodles, fried rice)' : ''}
+${!hasPizza ? '- Pizza' : ''}
+${!hasPasta ? '- Pasta' : ''}
+${!hasBiryani ? '- Biryani' : ''}
+
+════════════════════════════════════════════════
+CONVERSATION FLOW
+════════════════════════════════════════════════
+When customer gives a vague request ("something good", "help me choose", "what's nice here"):
+1. DON'T immediately suggest dishes
+2. Ask 1 smart qualifying question
+3. Based on answer, suggest something real from the menu
+
+Good qualifying questions (pick based on what's relevant):
+- "What's the vibe today — something light or a full meal?"
+- "Spicy works for you or you'd rather keep it mild?"
+- "Any particular mood — Indian, ${hasChinese ? 'Chinese, ' : ''}${hasPavBhaji ? 'Pav Bhaji, ' : ''}snacks, or dessert?"
+- "Dining solo or with a group?"
+
+When customer asks for a SPECIFIC cuisine or item we DON'T have:
+→ Honestly say we don't have it, then offer what we do have
+
+When customer is specific and we DO have it:
+→ Answer what they asked FIRST, then light upsell at the end
+
+UPSELL RULES:
+- Only suggest real pairings that exist in the menu
+- MAX 2 upsell items
+- Upsell always LAST, never first
+
+ANTI-REPETITION:
+- Check conversation history — NEVER repeat dishes already mentioned
+- Each response should introduce something fresh
+
+FULL MENU (${totalItems} items):
+${menuText}
+
+RESPONSE FORMAT — return ONLY valid JSON:
+{
+  "reply": "plain text, 2-4 sentences, no markdown, no emoji",
+  "mentioned_items": ["EXACT names from menu only — dishes you talked about as primary"],
+  "upsell_items": ["EXACT names from menu only — 1-2 pairings, different from mentioned_items"],
+  "psych_trigger": "social_proof | completion | reciprocity | fomo | scarcity | none",
+  "convo_stage": "early | browsing | deciding | ready_to_order",
+  "suggestions": [{"label": "short chip label", "action": "follow-up message text"}],
+  "needs_clarification": false
 }
 
-function isDessertQuery(message: string) {
-  return /dessert|sweet|after meal|after-meal|gulab|jamun|kheer|ice cream|icecream|kulfi|cake|brownie|sweet dish/.test(message.toLowerCase())
+suggestions: 2-4 natural follow-up chips. If you asked a qualifying question → chips = the likely answers to that question.
+needs_clarification: true ONLY when you asked a question and are waiting for their answer.`
 }
 
-function isSpicyQuery(message: string) {
-  return /spicy|hot|heat|chilli|chili|mirchi|fiery|extra spice/.test(message.toLowerCase())
-}
+// ─── Call Gemini ──────────────────────────────────────────────────────────────
 
-function isFillingQuery(message: string) {
-  return /filling|hearty|full meal|complete meal|combo|satisfying|proper meal|lunch|dinner/.test(message.toLowerCase())
-}
+async function callGeminiChat(
+  systemPrompt: string,
+  history: Array<{ role: string; content: string }>,
+  message: string,
+): Promise<GeminiAIResponse> {
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing')
 
-function isVegQuery(message: string) {
-  return /veg|vegetarian|jain/.test(message.toLowerCase())
-}
+  // Build conversation turns
+  const turns: Array<{ role: string; parts: Array<{ text: string }> }> = []
 
-function isDrinkQuery(message: string) {
-  return /drink|lassi|juice|shake|coffee|tea|mocktail|beverage/.test(message.toLowerCase())
-}
-
-function isBreadQuery(message: string) {
-  return /roti|naan|paratha|kulcha|bread/.test(message.toLowerCase())
-}
-
-function isRiceQuery(message: string) {
-  return /rice|biryani|pulao|jeera rice|plain rice/.test(message.toLowerCase())
-}
-
-function getSpiceScore(raw: unknown): number {
-  const value = String(raw ?? '').toLowerCase().trim()
-  if (!value) return 0
-  if (/extra|very hot|super hot|5/.test(value)) return 5
-  if (/hot|4/.test(value)) return 4
-  if (/medium|3/.test(value)) return 3
-  if (/mild|2/.test(value)) return 2
-  if (/low|1/.test(value)) return 1
-  return 0
-}
-
-function getCourseGroup(item: MenuItemAIContext): 'dessert' | 'drink' | 'bread' | 'rice' | 'starter' | 'main' | 'other' {
-  const hay = normalizeText([
-    item.course_type ?? '', item.name ?? '', item.description ?? '',
-    ...(item.tags ?? []), ...(item.taste_profile ?? []), ...(item.best_with ?? []),
-  ].join(' '))
-
-  if (/(dessert|sweet|gulab|jamun|kheer|ice cream|icecream|kulfi|cake|brownie|halwa|pudding|falooda)/.test(hay)) return 'dessert'
-  if (/(drink|lassi|juice|shake|coffee|tea|mocktail|soda|buttermilk|chaas)/.test(hay)) return 'drink'
-  if (/(bread|roti|naan|paratha|parotta|kulcha|phulka|tandoor)/.test(hay)) return 'bread'
-  if (/(rice|biryani|pulao|fried rice|jeera rice|plain rice|steam rice|steamed rice)/.test(hay)) return 'rice'
-  if (/(starter|appetizer|snack|tikka|pakora|salad|fries|chaat|kebab|kabab)/.test(hay)) return 'starter'
-  if (/(main|curry|gravy|masala|korma|butter|chicken|paneer|mutton|fish|dal|sabzi|thali|combo)/.test(hay)) return 'main'
-  return 'other'
-}
-
-function formatPrice(paise: number | undefined) {
-  if (!paise || paise <= 0) return ''
-  return `₹${Math.round(paise / 100)}`
-}
-
-function formatMenuItemForPrompt(item: MenuItemAIContext, index: number) {
-  const parts: string[] = []
-  parts.push(`${index + 1}. ${item.name}`)
-  if (typeof item.price === 'number') parts.push(`price=${formatPrice(item.price)}`)
-  if (item.is_veg === true) parts.push('veg')
-  if (item.is_veg === false) parts.push('non-veg')
-  if (item.is_bestseller) parts.push('bestseller')
-  if (item.is_special) parts.push('special')
-  if (item.course_type) parts.push(`course=${item.course_type}`)
-  if (item.spice_level !== undefined && item.spice_level !== null) parts.push(`spice=${item.spice_level}`)
-  if (item.taste_profile?.length) parts.push(`taste=${item.taste_profile.slice(0, 4).join(', ')}`)
-  if (item.best_with?.length) parts.push(`pairs=${item.best_with.slice(0, 3).join(', ')}`)
-  if (item.tags?.length) parts.push(`tags=${item.tags.slice(0, 5).join(', ')}`)
-  if (item.chef_note) parts.push(`chef=${item.chef_note}`)
-  if (item.description) parts.push(`desc=${item.description}`)
-  return parts.join(' | ')
-}
-
-function buildQuickReplies(params: {
-  hasNonVeg: boolean
-  preference: DietPreference
-  menuItems: MenuItemAIContext[]
-}): QuickReply[] {
-  const { hasNonVeg, preference, menuItems } = params
-  const hasDessert = menuItems.some(i => getCourseGroup(i) === 'dessert')
-  const hasSpecial = menuItems.some(i => i.is_special)
-  const hasBestseller = menuItems.some(i => i.is_bestseller)
-
-  const chips: QuickReply[] = []
-
-  if (preference === 'unknown' && hasNonVeg) {
-    chips.push(
-      { label: '🥗 Veg only', action: 'I want veg food' },
-      { label: '🍖 Non-veg', action: 'I want non-veg food' },
-    )
+  // Add history (max last 10 messages to keep context window small)
+  const recentHistory = history.slice(-10)
+  for (const msg of recentHistory) {
+    turns.push({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }],
+    })
   }
 
-  if (hasBestseller) chips.push({ label: '⭐ Best sellers', action: 'Show me your best selling dishes' })
-  if (hasSpecial) chips.push({ label: '👨‍🍳 Chef special', action: "What is today's special?" })
-  if (hasDessert) chips.push({ label: '🍮 Dessert', action: 'Show me dessert options' })
-  chips.push({ label: '🔥 Full meal suggestion', action: 'Suggest the best compatible meal bundle' })
+  // Add current message
+  turns.push({ role: 'user', parts: [{ text: message }] })
 
-  return chips.slice(0, 4)
-}
+  const response = await fetch(
+    `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: turns,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+          responseMimeType: 'application/json',
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      }),
+    },
+  )
 
-function scoreMenuItem(item: MenuItemAIContext, message: string): number {
-  const lower = message.toLowerCase()
-  const name = normalizeText(item.name)
-  const desc = normalizeText(item.description ?? '')
-  const tags = (item.tags ?? []).map(normalizeText)
-  const bestWith = (item.best_with ?? []).map(normalizeText)
-  const course = getCourseGroup(item)
-
-  const spicyQuery = isSpicyQuery(message)
-  const vegQuery = isVegQuery(message)
-  const bestQuery = /best|popular|what's good|what is good|recommended|top seller|top pick/.test(lower)
-  const specialQuery = /special|chef pick|chef special|today's special|today special|chef's pick/.test(lower)
-  const mealQuery = isFillingQuery(message)
-  const dessertQuery = isDessertQuery(message)
-  const drinkQuery = isDrinkQuery(message)
-  const breadQuery = isBreadQuery(message)
-  const riceQuery = isRiceQuery(message)
-
-  let score = 0
-
-  if (lower.includes(name)) score += 22
-  if (name.includes(lower) && lower.length >= 4) score += 12
-  if (desc && lower.includes(desc.slice(0, Math.min(desc.length, 24)))) score += 4
-
-  if (spicyQuery) {
-    const spiceScore = getSpiceScore(item.spice_level)
-    if (spiceScore > 0) score += spiceScore * 4
-    if (tags.includes('spicy') || /spicy|hot|fiery/.test(desc)) score += 6
-    if (/(main|starter|curry|gravy|masala|korma|biryani|tikka)/.test(course)) score += 2
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '')
+    throw new Error(`Gemini API error ${response.status}: ${errText.slice(0, 500)}`)
   }
 
-  if (vegQuery && item.is_veg) score += 8
-  if (vegQuery && item.is_veg === false) score -= 999
+  const data = await response.json()
+  const rawText: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
 
-  if (bestQuery && item.is_bestseller) score += 6
-  if (specialQuery && item.is_special) score += 7
+  if (!rawText.trim()) throw new Error('Gemini returned empty response')
 
-  if (mealQuery && /(main|bread|rice|starter|combo|thali|curry|gravy|masala|biryani)/.test(course)) score += 6
-  if (dessertQuery && course === 'dessert') score += 10
-  if (drinkQuery && course === 'drink') score += 8
-  if (breadQuery && course === 'bread') score += 8
-  if (riceQuery && course === 'rice') score += 8
+  // Parse JSON response
+  const clean = rawText.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/m, '').trim()
+  const start = clean.indexOf('{')
+  const end = clean.lastIndexOf('}')
+  if (start === -1 || end === -1) throw new Error('No JSON in Gemini response')
 
-  if (bestWith.some(pair => lower.includes(pair))) score += 6
-  if ((item.taste_profile ?? []).some(t => lower.includes(normalizeText(t)))) score += 3
-  if (tags.some(t => lower.includes(t))) score += 2
+  const parsed = JSON.parse(clean.slice(start, end + 1)) as GeminiAIResponse
 
-  if (course === 'main') score += 3
-  if (course === 'bread' || course === 'rice' || course === 'dessert') score += 1
-
-  score += Math.min(4, Math.round((item.price ?? 0) / 1000))
-
-  return score
-}
-
-function sortByIntent(items: MenuItemAIContext[], message: string) {
-  const orderedGroups: Array<ReturnType<typeof getCourseGroup>> = []
-
-  if (isDessertQuery(message)) orderedGroups.push('dessert', 'drink', 'main', 'starter', 'bread', 'rice', 'other')
-  else if (isDrinkQuery(message)) orderedGroups.push('drink', 'starter', 'dessert', 'main', 'bread', 'rice', 'other')
-  else if (isBreadQuery(message)) orderedGroups.push('bread', 'main', 'rice', 'starter', 'dessert', 'drink', 'other')
-  else if (isRiceQuery(message)) orderedGroups.push('rice', 'main', 'starter', 'bread', 'dessert', 'drink', 'other')
-  else if (isSpicyQuery(message) || isFillingQuery(message)) orderedGroups.push('main', 'starter', 'bread', 'rice', 'drink', 'dessert', 'other')
-  else orderedGroups.push('main', 'starter', 'bread', 'rice', 'dessert', 'drink', 'other')
-
-  const groupRank = new Map(orderedGroups.map((g, idx) => [g, idx]))
-
-  return items.slice().sort((a, b) => {
-    const ag = groupRank.get(getCourseGroup(a)) ?? 99
-    const bg = groupRank.get(getCourseGroup(b)) ?? 99
-    if (ag !== bg) return ag - bg
-    return (
-      Number(b.is_special) - Number(a.is_special) ||
-      Number(b.is_bestseller) - Number(a.is_bestseller) ||
-      (b.price ?? 0) - (a.price ?? 0)
-    )
-  })
-}
-
-function selectRelevantItems(message: string, items: MenuItemAIContext[]) {
-  const scored = items
-    .map(item => ({ item, score: scoreMenuItem(item, message) }))
-    .sort((a, b) => b.score - a.score)
-
-  const positive = scored.filter(x => x.score > 0).map(x => x.item)
-  if (positive.length > 0) {
-    return uniq(positive.map(i => i.name))
-      .map(name => positive.find(i => i.name === name)!)
-      .slice(0, 10)
+  // Validate and fill defaults
+  return {
+    reply: typeof parsed.reply === 'string' ? parsed.reply.trim() : "What are you in the mood for today?",
+    mentioned_items: Array.isArray(parsed.mentioned_items) ? parsed.mentioned_items : [],
+    upsell_items: Array.isArray(parsed.upsell_items) ? parsed.upsell_items.slice(0, 2) : [],
+    psych_trigger: typeof parsed.psych_trigger === 'string' ? parsed.psych_trigger : 'none',
+    convo_stage: typeof parsed.convo_stage === 'string' ? parsed.convo_stage : 'early',
+    suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 4) : [],
+    needs_clarification: Boolean(parsed.needs_clarification),
   }
-
-  return sortByIntent(items, message).slice(0, 10)
 }
 
-function normalizeMenuNames(values: unknown, menuItems: MenuItemAIContext[]) {
-  if (!Array.isArray(values)) return []
+// ─── Normalize item names against actual menu ─────────────────────────────────
 
-  const byNormalized = new Map<string, string>()
-  for (const item of menuItems) byNormalized.set(normalizeText(item.name), item.name)
+function normalizeItemNames(names: unknown, menuItems: MenuItemAIContext[]): string[] {
+  if (!Array.isArray(names)) return []
 
-  const matches: string[] = []
-  for (const value of values) {
-    if (typeof value !== 'string') continue
-    const normalized = normalizeText(value)
-    const direct = byNormalized.get(normalized)
-    if (direct) { matches.push(direct); continue }
+  const byNorm = new Map<string, string>()
+  for (const item of menuItems) byNorm.set(normalizeText(item.name), item.name)
+
+  const result: string[] = []
+  for (const name of names) {
+    if (typeof name !== 'string') continue
+    const norm = normalizeText(name)
+    const exact = byNorm.get(norm)
+    if (exact) { result.push(exact); continue }
+    // Fuzzy match
     const fuzzy = menuItems.find(item => {
       const itemNorm = normalizeText(item.name)
-      return itemNorm.includes(normalized) || normalized.includes(itemNorm)
+      return itemNorm.includes(norm) || norm.includes(itemNorm)
     })
-    if (fuzzy) matches.push(fuzzy.name)
+    if (fuzzy) result.push(fuzzy.name)
   }
-
-  return uniq(matches)
+  return uniq(result)
 }
 
-function choosePrimaryItem(
-  message: string,
-  items: MenuItemAIContext[],
-  preference: DietPreference,
-): MenuItemAIContext | undefined {
-  const lower = message.toLowerCase()
-  let candidates = items.slice()
+// ─── Analytics ────────────────────────────────────────────────────────────────
 
-  if (preference === 'veg') candidates = candidates.filter(i => i.is_veg !== false)
-  if (preference === 'non-veg') candidates = candidates.filter(i => i.is_veg === false || i.is_veg === undefined)
-  if (!candidates.length) candidates = items.slice()
-
-  const directName = candidates.find(item => lower.includes(normalizeText(item.name)))
-  if (directName) return directName
-
-  const scored = candidates
-    .map(item => {
-      let score = scoreMenuItem(item, message)
-      const course = getCourseGroup(item)
-      if (isBroadChoiceQuery(message)) {
-        if (course === 'main') score += 8
-        if (course === 'starter') score += 4
-        if (course === 'bread' || course === 'rice') score += 2
-      }
-      if ((item.best_with?.length ?? 0) > 0) score += 3
-      if (item.is_bestseller) score += 2
-      return { item, score }
-    })
-    .sort((a, b) => b.score - a.score)
-
-  return scored[0]?.item
-}
-
-function compatibilityHintsForPrimary(primary: MenuItemAIContext) {
-  const name = normalizeText(primary.name)
-  const desc = normalizeText(primary.description ?? '')
-  const combined = `${name} ${desc}`
-  for (const rule of REVENUE_PAIR_RULES) {
-    if (rule.primaryPatterns.some(rx => rx.test(combined))) return rule
-  }
-  return undefined
-}
-
-function bestNameMatch(items: MenuItemAIContext[], hints: string[]) {
-  for (const hint of hints) {
-    const h = normalizeText(hint)
-    const exact = items.find(i => normalizeText(i.name) === h)
-    if (exact) return exact
-  }
-  for (const hint of hints) {
-    const h = normalizeText(hint)
-    const includes = items.find(i => normalizeText(i.name).includes(h) || h.includes(normalizeText(i.name)))
-    if (includes) return includes
-  }
-  return undefined
-}
-
-function findBestByGroup(
-  items: MenuItemAIContext[],
-  groups: Array<'dessert' | 'drink' | 'bread' | 'rice' | 'starter' | 'main' | 'other'>,
-  exclude: Set<string>,
-  message: string,
-): MenuItemAIContext | undefined {
-  const lower = message.toLowerCase()
-  const candidates = items.filter(item => !exclude.has(item.name))
-
-  const scored = candidates.map(item => {
-    const group = getCourseGroup(item)
-    let score = groups.includes(group) ? 10 : 0
-
-    const hay = normalizeText([
-      item.course_type ?? '', item.name ?? '', item.description ?? '',
-      ...(item.tags ?? []), ...(item.taste_profile ?? []),
-    ].join(' '))
-
-    if (groups.includes('bread') && /tandoor|roti|naan|kulcha|paratha|phulka|chapati/.test(hay)) score += 8
-    if (groups.includes('rice') && /rice|jeera|biryani|pulao|steam|plain/.test(hay)) score += 8
-    if (groups.includes('dessert') && /gulab|jamun|kheer|ice cream|kulfi|sweet|dessert/.test(hay)) score += 8
-    if (groups.includes('drink') && /tea|coffee|lassi|juice|shake|mocktail|buttermilk|chaas/.test(hay)) score += 8
-    if (groups.includes('starter') && /(tikka|starter|snack|salad|papad|chaat|kebab)/.test(hay)) score += 8
-    if (groups.includes('main') && /(curry|gravy|masala|korma|butter|paneer|chicken|mutton|fish|dal|sabzi|thali|combo)/.test(hay)) score += 5
-
-    if (lower.includes(normalizeText(item.name))) score += 12
-    if (item.is_special) score += 1
-    if (item.is_bestseller) score += 1
-    if (item.is_veg && /veg|vegetarian|jain/.test(lower)) score += 1
-    if (item.is_veg === false && /non-veg|chicken|mutton|fish|egg/.test(lower)) score += 1
-    score += Math.min(4, Math.round((item.price ?? 0) / 1000))
-
-    return { item, score }
-  })
-
-  scored.sort((a, b) => b.score - a.score)
-  return scored[0]?.item
-}
-
-function chooseUpsells(primary: MenuItemAIContext | undefined, items: MenuItemAIContext[], message: string) {
-  if (!primary) return []
-
-  const exclude = new Set<string>([primary.name])
-  const pairings: MenuItemAIContext[] = []
-  const primaryGroup = getCourseGroup(primary)
-  const lower = message.toLowerCase()
-
-  const pushUnique = (item?: MenuItemAIContext) => {
-    if (!item) return
-    if (exclude.has(item.name)) return
-    if (pairings.some(x => x.name === item.name)) return
-    pairings.push(item)
-    exclude.add(item.name)
-  }
-
-  if (isDessertQuery(message)) {
-    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
-    pushUnique(findBestByGroup(items, ['drink'], exclude, message))
-    return pairings.slice(0, 2).map(x => x.name)
-  }
-
-  if (isDrinkQuery(message) && primaryGroup === 'drink') {
-    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
-    pushUnique(findBestByGroup(items, ['starter'], exclude, message))
-    return pairings.slice(0, 2).map(x => x.name)
-  }
-
-  if (isBreadQuery(message) && primaryGroup === 'bread') {
-    pushUnique(findBestByGroup(items, ['main'], exclude, message))
-    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
-    return pairings.slice(0, 2).map(x => x.name)
-  }
-
-  const explicitRule = compatibilityHintsForPrimary(primary)
-
-  for (const bw of primary.best_with ?? []) {
-    const match = items.find(item => normalizeText(item.name) === normalizeText(bw))
-    if (match) pushUnique(match)
-    if (pairings.length >= 2) return pairings.slice(0, 2).map(x => x.name)
-  }
-
-  if (explicitRule) {
-    for (const hint of explicitRule.preferredNameHints) {
-      const match = bestNameMatch(items.filter(i => !exclude.has(i.name)), [hint])
-      if (match) pushUnique(match)
-      if (pairings.length >= 2) return pairings.slice(0, 2).map(x => x.name)
-    }
-    for (const group of explicitRule.preferredGroups) {
-      const match = findBestByGroup(items, [group], exclude, message)
-      pushUnique(match)
-      if (pairings.length >= 2) return pairings.slice(0, 2).map(x => x.name)
-    }
-  }
-
-  if (primaryGroup === 'main' || /biryani|curry|masala|gravy|korma|thali|combo/.test(lower)) {
-    pushUnique(findBestByGroup(items, ['bread'], exclude, message))
-    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
-  }
-
-  if (primaryGroup === 'rice' || /biryani|jeera rice|pulao/.test(lower)) {
-    pushUnique(findBestByGroup(items, ['main'], exclude, message))
-    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
-  }
-
-  if (primaryGroup === 'bread') {
-    pushUnique(findBestByGroup(items, ['main'], exclude, message))
-    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
-  }
-
-  if (primaryGroup === 'starter') {
-    pushUnique(findBestByGroup(items, ['main'], exclude, message))
-    pushUnique(findBestByGroup(items, ['drink'], exclude, message))
-  }
-
-  if (pairings.length === 0) {
-    pushUnique(findBestByGroup(items, ['main'], exclude, message))
-    pushUnique(findBestByGroup(items, ['dessert'], exclude, message))
-  }
-
-  return pairings.slice(0, 2).map(x => x.name)
-}
-
-function buildNaturalList(names: string[]) {
-  const cleaned = uniq(names.filter(Boolean))
-  if (cleaned.length === 0) return ''
-  if (cleaned.length === 1) return cleaned[0]
-  if (cleaned.length === 2) return `${cleaned[0]} and ${cleaned[1]}`
-  return `${cleaned.slice(0, -1).join(', ')}, and ${cleaned[cleaned.length - 1]}`
-}
-
-function inferPsychTrigger(
-  message: string,
-  primary: MenuItemAIContext | undefined,
-  upsell: string[],
-): PsychTriggerOrNone {
-  const lower = message.toLowerCase()
-  if (/today|special|chef/.test(lower)) return 'reciprocity'
-  if (primary?.is_bestseller) return 'social_proof'
-  if (upsell.length > 0 && /pair|complete meal|meal|bundle|combo/.test(lower)) return 'completion'
-  if (/limited|running out|fast today/.test(lower)) return 'scarcity'
-  if (/trending|most ordered|many guests/.test(lower)) return 'fomo'
-  return 'none'
-}
-
-/**
- * Compose a reply in gen-Z waiter voice:
- * 1. Answer what they actually asked (the primary dish)
- * 2. Light upsell at the END — feel natural, not pushy
- */
-function composeReply(
-  primary: MenuItemAIContext | undefined,
-  upsell: string[],
-  message: string,
-): string {
-  if (!primary) {
-    return "Honestly just tell me your vibe — spicy? filling? sweet tooth? — and I'll point you straight to the good stuff."
-  }
-
-  const price = formatPrice(primary.price)
-  const priceText = price ? ` (${price})` : ''
-  const descText = primary.description?.trim()
-    ? ` ${primary.description.trim().replace(/\.$/, '')} —`
-    : ''
-
-  // Build the core answer first
-  let core = ''
-
-  if (isSpicyQuery(message)) {
-    core = `Okay if you want heat, ${primary.name}${priceText} is the move.${descText} hits different.`
-  } else if (isDessertQuery(message)) {
-    core = `For dessert you gotta go with ${primary.name}${priceText}.${descText} it's genuinely so good.`
-  } else if (isFillingQuery(message)) {
-    core = `For a proper meal? ${primary.name}${priceText} every single time.${descText} you will not leave hungry.`
-  } else if (/best|bestseller|popular|most ordered/.test(message.toLowerCase())) {
-    core = `Everyone's getting the ${primary.name}${priceText} and for good reason.${descText} trust the crowd on this one.`
-  } else if (/special|chef/.test(message.toLowerCase())) {
-    core = `Chef's obsessed with the ${primary.name}${priceText} right now.${descText} it's lowkey the star of the menu.`
-  } else if (/starter|snack|appetizer/.test(message.toLowerCase())) {
-    core = `To start, I'd go with ${primary.name}${priceText}.${descText} solid choice while you settle in.`
-  } else {
-    core = `Okay so ${primary.name}${priceText} is genuinely a great pick.${descText}`
-  }
-
-  // Upsell — only if there are meaningful pairings, appended naturally
-  if (upsell.length > 0) {
-    const pairList = buildNaturalList(upsell)
-    const upsellLine = buildUpsellLine(primary, upsell, message)
-    core += ` ${upsellLine.replace('{pairs}', pairList)}`
-  }
-
-  return sanitizeReply(core)
-}
-
-/**
- * Returns a human-sounding pairing line. Never "would you like to add X".
- */
-function buildUpsellLine(primary: MenuItemAIContext, upsell: string[], message: string): string {
-  const pairName = buildNaturalList(upsell)
-
-  // Specific combos that feel like real waiter knowledge
-  const primaryLower = normalizeText(primary.name)
-  if (/paneer butter masala|butter chicken|paneer makhani/.test(primaryLower)) {
-    return `Honestly pair it with {pairs} — naan + gravy is a whole moment.`
-  }
-  if (/biryani|pulao/.test(primaryLower)) {
-    return `Grab {pairs} on the side, it just completes the whole thing.`
-  }
-  if (/dal tadka|dal makhani/.test(primaryLower)) {
-    return `{pairs} with it is *the* combo — been saying it for years.`
-  }
-  if (isDessertQuery(message)) {
-    return `Pair with {pairs} and you've got the perfect sign-off.`
-  }
-
-  const endings = [
-    `Throw in {pairs} and honestly that's a top-tier meal.`,
-    `{pairs} pairs with it perfectly — your future self will thank you.`,
-    `Most guests grab {pairs} alongside it, just saying.`,
-    `If you want the full experience, add {pairs} — chef-approved combo.`,
-  ]
-
-  return endings[Math.floor(pairName.length % endings.length)]
-}
-
-function buildSystemPrompt(restaurantName: string, ctx: MenuContextPayload, message: string): string {
-  const menuItems = ctx.menu_items ?? []
-  const relevantItems = selectRelevantItems(message, menuItems)
-  const allNames = uniq(menuItems.map(item => item.name)).join(', ')
-
-  const relevantDetails = relevantItems.length
-    ? relevantItems.map((item, idx) => formatMenuItemForPrompt(item, idx)).join('\n')
-    : 'none'
-
-  const allDetails = menuItems.length
-    ? menuItems.slice(0, 80).map((item, idx) => formatMenuItemForPrompt(item, idx)).join('\n')
-    : 'none'
-
-  return `
-You are a seasoned, gen-Z waiter at ${restaurantName}. You have years of hospitality experience and know this menu inside-out. You are NOT an AI — you are a real person who genuinely loves food and wants guests to have the best experience.
-
-Your personality:
-- Warm, real, slightly casual — like a waiter who actually gives a damn
-- Use natural gen-Z phrasing: "honestly", "no cap", "it hits", "lowkey", "okay so", "trust me on this", "real talk", "genuinely so good", "that's the move", "you're gonna love it"
-- Never robotic, never corporate, never "I recommend" or "I suggest" — just talk like a human
-- Short replies: 2-3 sentences max
-- DO NOT use markdown, bullet points, asterisks, or emoji in the reply field
-
-CRITICAL RULE — ANSWER FIRST, UPSELL SECOND:
-- ALWAYS address what the guest actually asked about FIRST
-- Only mention pairings at the END of your reply, as a natural add-on
-- If the guest asked about spicy food → first tell them which spicy dish to get → then optionally mention one pairing at the end
-- If the guest asked about a specific dish → first talk about that dish → then add one natural pairing
-- NEVER lead with the upsell
-- NEVER mention 3+ items in the same reply — keep it focused
-
-Upsell style examples (always at the END):
-- "Pair it with Garlic Butter Naan and honestly that's a whole vibe."
-- "Get the Gulab Jamun after and you're done for the night."
-- "Most people grab a Lassi with it — top combo no cap."
-
-Return ONLY valid JSON:
-{
-  "reply": "plain text, no markdown, 2-3 sentences, answer first then optional light upsell",
-  "mentioned_items": ["exact menu item names directly answered"],
-  "upsell_items": ["1-2 natural pairings, NOT in mentioned_items"],
-  "psych_trigger": "social_proof | scarcity | completion | anchoring | reciprocity | fomo | none",
-  "convo_stage": "early | browsing | deciding | ready_to_order"
-}
-
-Rules:
-- reply: plain text only, no asterisks, no markdown, no emoji, 2-3 sentences
-- Only mention real dishes from this menu
-- If asked for veg → only veg items
-- If asked for spicy → spicy items first, pairing after
-- If asked for dessert → dessert first, drink pairing after if applicable
-- Keep upsell_items to max 2 items
-- Don't suggest random fillers — only suggest pairings that genuinely make sense
-
-Relevant menu details for this query:
-${relevantDetails}
-
-All menu items:
-${allNames || 'none'}
-
-Full menu:
-${allDetails}
-`.trim()
-}
-
-function buildFallbackReply(
-  message: string,
-  stage: ConvoStage,
-  menuItems: MenuItemAIContext[],
-  preference: DietPreference,
-  hasNonVeg: boolean,
-) {
-  const isChipQuery =
-    isDessertQuery(message) || isDrinkQuery(message) || isBreadQuery(message) ||
-    isRiceQuery(message) || /best seller|chef special|veg|non-veg/i.test(message)
-
-  if (stage === 'early' && preference === 'unknown' && hasNonVeg && isBroadChoiceQuery(message) && !isChipQuery) {
-    return {
-      reply: 'Real quick — veg or non-veg today? Once I know that I can actually point you to something worth ordering.',
-      mentioned_items: [],
-      upsell_items: [],
-      psych_trigger: 'none' as const,
-      convo_stage: stage,
-    }
-  }
-
-  const primary = choosePrimaryItem(message, menuItems, preference)
-  const upsell = chooseUpsells(primary, menuItems, message).filter(name => menuItems.some(i => i.name === name))
-  const reply = composeReply(primary, upsell, message)
-
-  return {
-    reply,
-    mentioned_items: primary ? [primary.name] : [],
-    upsell_items: upsell,
-    psych_trigger: inferPsychTrigger(message, primary, upsell),
-    convo_stage: stage,
-  }
-}
-
-async function logChatEvents(params: {
+async function logChatEvent(params: {
   restaurant_id?: string
   session_id?: string
   query: string
@@ -741,21 +325,118 @@ async function logChatEvents(params: {
   const { restaurant_id, session_id, query, stage, preference } = params
   if (!restaurant_id || !session_id) return
 
-  const supabase = getSupabaseAdminClient()
-  const now = new Date()
-
-  const { error } = await supabase.from('analytics_events').insert([{
-    restaurant_id, session_id,
-    event_type: 'item_search',
-    item_name: null,
-    metadata: { query, stage, preference },
-    timestamp: now.toISOString(),
-    hour_of_day: now.getHours(),
-    day_of_week: now.getDay(),
-  }])
-
-  if (error) throw error
+  try {
+    const supabase = getSupabaseAdminClient()
+    const now = new Date()
+    await supabase.from('analytics_events').insert([{
+      restaurant_id, session_id,
+      event_type: 'item_search',
+      item_name: null,
+      metadata: { query, stage, preference },
+      timestamp: now.toISOString(),
+      hour_of_day: now.getHours(),
+      day_of_week: now.getDay(),
+    }])
+  } catch (err) {
+    console.error('[chat] Analytics error:', err)
+  }
 }
+
+// ─── Fallback (no Gemini) ─────────────────────────────────────────────────────
+
+function buildFallbackResponse(message: string, menuItems: MenuItemAIContext[]): GeminiAIResponse {
+  const lower = message.toLowerCase()
+  const menuNormalized = menuItems.map(i => normalizeText(i.name)).join(' ')
+
+  // South indian requested — check if we actually have it
+  if (/south indian|dosa|idli|uttapam|vada|sambhar/.test(lower)) {
+    const hasSouthIndian = /dosa|idli|uttapam|vada|upma|poha|sheera|sambhar/.test(menuNormalized)
+    if (!hasSouthIndian) {
+      return {
+        reply: "Honestly we don't have south indian on the menu right now. But we've got some really good options — want me to suggest something?",
+        mentioned_items: [],
+        upsell_items: [],
+        psych_trigger: 'none',
+        convo_stage: 'browsing',
+        suggestions: [
+          { label: '⭐ Best sellers', action: 'Show me your best selling dishes' },
+          { label: '🔥 Spicy options', action: 'Show me something spicy' },
+          { label: '🍽️ Full meal', action: 'Suggest a complete meal' },
+        ],
+        needs_clarification: false,
+      }
+    }
+    const southItems = menuItems.filter(item => /dosa|idli|uttapam|vada|upma|poha|sheera|medu|sabudana/.test(normalizeText(item.name)))
+    const primary = southItems.find(i => i.is_bestseller) ?? southItems[0]
+    return {
+      reply: primary
+        ? `For south indian, ${primary.name} is the one to go with${primary.price ? ` at ${formatPrice(primary.price)}` : ''}. Genuinely great.`
+        : "We have a solid south indian section. What sounds good?",
+      mentioned_items: primary ? [primary.name] : [],
+      upsell_items: [],
+      psych_trigger: 'none',
+      convo_stage: 'browsing',
+      suggestions: [{ label: '🥞 Dosa', action: 'Show me dosa options' }, { label: '🍲 Idli', action: 'What idli options?' }],
+      needs_clarification: false,
+    }
+  }
+
+  // Chinese requested
+  if (/chinese|manchurian|noodles|fried rice|chowmein/.test(lower)) {
+    const hasChinese = /manchurian|fried rice|noodles|chilli|chowmein|hakka|schezwan/.test(menuNormalized)
+    if (!hasChinese) {
+      return {
+        reply: "We don't have Chinese on the menu here. Want me to suggest something else that's really good?",
+        mentioned_items: [],
+        upsell_items: [],
+        psych_trigger: 'none',
+        convo_stage: 'browsing',
+        suggestions: [{ label: '⭐ Best sellers', action: 'Show me your best selling dishes' }, { label: '🍛 Indian options', action: 'Show me Indian food' }],
+        needs_clarification: false,
+      }
+    }
+  }
+
+  // Generic vague query — ask qualifying question with chips based on what actually exists
+  if (/something good|help me|what should|suggest|recommend|what|nice|hungry/.test(lower)) {
+    const chips: Array<{ label: string; action: string }> = []
+    if (/paneer|dal|curry|masala|tikka/.test(menuNormalized)) chips.push({ label: '🍛 Indian', action: 'I want Indian food' })
+    if (/manchurian|fried rice|noodles|chowmein/.test(menuNormalized)) chips.push({ label: '🥢 Chinese', action: 'I want Chinese food' })
+    if (/dosa|idli|uttapam/.test(menuNormalized)) chips.push({ label: '🥞 South Indian', action: 'I want south indian food' })
+    if (/pav bhaji/.test(menuNormalized)) chips.push({ label: '🍞 Pav Bhaji', action: 'I want pav bhaji' })
+    if (/pizza/.test(menuNormalized)) chips.push({ label: '🍕 Pizza', action: 'Show me pizza' })
+    if (/sandwich|snack|pakoda/.test(menuNormalized)) chips.push({ label: '🥪 Snacks', action: 'Show me snacks' })
+    if (chips.length < 2) chips.push({ label: '⭐ Best sellers', action: 'Show me your best selling dishes' })
+    if (chips.length < 3) chips.push({ label: '🔥 Spicy', action: 'I want something spicy' })
+    return {
+      reply: "Happy to help! What are you in the mood for today?",
+      mentioned_items: [],
+      upsell_items: [],
+      psych_trigger: 'none',
+      convo_stage: 'early',
+      suggestions: chips.slice(0, 4),
+      needs_clarification: true,
+    }
+  }
+
+  return {
+    reply: "Tell me what you're craving and I'll point you right to it.",
+    mentioned_items: [],
+    upsell_items: [],
+    psych_trigger: 'none',
+    convo_stage: 'early',
+    suggestions: [
+      { label: '⭐ Best sellers', action: 'Show me your best selling dishes' },
+      { label: '👨\u200d🍳 Chef special', action: "What is today\'s special?" },
+      { label: '🔥 Spicy', action: 'I want something spicy' },
+      { label: '🍮 Dessert', action: 'Show me dessert options' },
+    ],
+    needs_clarification: false,
+  }
+}
+
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -775,57 +456,53 @@ export async function POST(req: NextRequest) {
     }
 
     const menuItems = menu_context.menu_items ?? []
+    const restaurantName = menu_context.restaurant_name ?? 'this restaurant'
     const hasNonVeg = hasNonVegMenu(menuItems)
     const preference = detectDietPreference(history, message)
-    const stage = detectConvoStage(history, message)
 
-    // Early veg/non-veg gate for broad queries
-    if (stage === 'early' && preference === 'unknown' && hasNonVeg && isBroadChoiceQuery(message)) {
-      const suggestions = buildQuickReplies({ hasNonVeg, preference, menuItems })
-      return NextResponse.json({
-        reply: "Okay so before I say anything — veg or non-veg today? Makes a big difference in what I'd point you to.",
-        suggestions,
-        mentioned_items: [],
-        upsell_items: [],
-        psych_trigger: 'none',
-        convo_stage: stage,
-      } satisfies ChatResponse & { suggestions?: QuickReply[]; psych_trigger?: string; convo_stage?: string })
+    let aiResult: GeminiAIResponse
+
+    if (GEMINI_API_KEY && menuItems.length > 0) {
+      try {
+        const systemPrompt = buildSystemPrompt(restaurantName, menuItems, hasNonVeg)
+        aiResult = await callGeminiChat(systemPrompt, history, message)
+      } catch (err) {
+        console.error('[chat] Gemini error, using fallback:', err)
+        aiResult = buildFallbackResponse(message, menuItems)
+      }
+    } else {
+      aiResult = buildFallbackResponse(message, menuItems)
     }
 
-    // Deterministic waiter — answer first, upsell second
-    const primary = choosePrimaryItem(message, menuItems, preference)
-    const rawUpsell = chooseUpsells(primary, menuItems, message)
-    const upsell = rawUpsell.filter(name => menuItems.some(i => i.name === name))
-    const reply = composeReply(primary, upsell, message)
-    const suggestions = buildQuickReplies({ hasNonVeg, preference, menuItems })
+    // Normalize item names against actual menu
+    const mentionedItems = normalizeItemNames(aiResult.mentioned_items, menuItems)
+    const upsellItems = normalizeItemNames(aiResult.upsell_items, menuItems)
+      .filter(name => !mentionedItems.includes(name))
 
-    const response: ChatResponse & {
-      psych_trigger?: string
-      convo_stage?: string
-      suggestions?: QuickReply[]
-    } = {
-      reply,
-      suggestions,
-      mentioned_items: primary ? [primary.name] : [],
-      upsell_items: upsell,
-      psych_trigger: inferPsychTrigger(message, primary, upsell),
-      convo_stage: stage,
-    }
-
-    void logChatEvents({
+    // Fire analytics (non-blocking)
+    void logChatEvent({
       restaurant_id: body.restaurant_id,
       session_id: body.session_id,
       query: message,
-      stage,
+      stage: aiResult.convo_stage,
       preference,
-    }).catch(err => console.error('Analytics logging error:', err))
+    })
+
+    const response = {
+      reply: aiResult.reply,
+      suggestions: aiResult.suggestions ?? [],
+      mentioned_items: mentionedItems,
+      upsell_items: upsellItems,
+      psych_trigger: aiResult.psych_trigger ?? 'none',
+      convo_stage: aiResult.convo_stage ?? 'early',
+    }
 
     return NextResponse.json(response)
   } catch (err) {
-    console.error('Chat API error:', err)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+    console.error('[chat] API error:', err)
+    return NextResponse.json(
+      { error: 'Something went sideways — try again?' },
+      { status: 500 },
+    )
   }
 }
-
-export const runtime = 'nodejs'
-export const maxDuration = 15

@@ -59,38 +59,47 @@ function inferPreference(text: string): DiningPreference | null {
 function buildStarters(args: { restaurantType: RestaurantType; preference: DiningPreference | null }): QuickReply[] {
   const { restaurantType, preference } = args
 
+  // Mixed restaurant, no preference yet → use veg/nonveg gating + social proof
   if (restaurantType === 'mixed' && !preference) {
     return [
-      { label: '🥗 Veg', action: 'I want veg food' },
-      { label: '🍖 Non-veg', action: 'I want non-veg food' },
-      { label: '🔥 Help me choose', action: 'Suggest a complete meal for me' },
-      { label: '⭐ Best sellers', action: 'Show me your best selling dishes' },
+      { label: '⭐ Most ordered today', action: 'What are the most ordered dishes today?' },
+      { label: '🔴 Chef\'s pick right now', action: "What is the chef's special today?" },
+      { label: '🥗 Keep it veg', action: 'I want veg food' },
+      { label: '🍖 Go non-veg', action: 'I want non-veg food' },
+      { label: '₹200–₹350 range', action: 'Suggest good food between ₹200 and ₹350' },
+      { label: 'Feed 2 people', action: 'Suggest a meal for 2 people' },
     ]
   }
 
   if (restaurantType === 'veg' || preference === 'veg') {
     return [
-      { label: '⭐ Best veg dishes', action: 'Show me your best veg dishes' },
-      { label: '🍽️ Full veg meal', action: 'Suggest a complete veg meal for me' },
-      { label: '👨‍🍳 Chef special', action: "What is today's special?" },
-      { label: '💸 Under ₹300', action: 'Suggest veg food under ₹300' },
+      { label: '⭐ Most ordered today', action: 'What are the most ordered dishes today?' },
+      { label: '🔴 Chef\'s pick right now', action: "What is the chef's special today?" },
+      { label: '🍽️ Full meal combo', action: 'Suggest a complete veg meal combo' },
+      { label: '🔥 Spicy & bold', action: 'I want something spicy and bold' },
+      { label: 'Something light', action: 'Suggest something light and easy to eat' },
+      { label: 'Under ₹250', action: 'What good veg food do you have under ₹250?' },
     ]
   }
 
   if (restaurantType === 'non_veg' || preference === 'non_veg') {
     return [
-      { label: '⭐ Best dishes', action: 'Show me your best non-veg dishes' },
-      { label: '🍽️ Full meal', action: 'Suggest a complete meal for me' },
-      { label: '👨‍🍳 Chef special', action: "What is today's special?" },
-      { label: '💸 Under ₹300', action: 'Suggest non-veg food under ₹300' },
+      { label: '⭐ Most ordered today', action: 'What are the most ordered dishes today?' },
+      { label: '🔴 Chef\'s pick right now', action: "What is the chef's special today?" },
+      { label: '🍽️ Full meal combo', action: 'Suggest a complete non-veg meal combo' },
+      { label: '🔥 Spicy & bold', action: 'I want something spicy and bold' },
+      { label: 'Good for sharing', action: 'What dishes are good for sharing with someone?' },
+      { label: 'Under ₹350', action: 'What good non-veg food do you have under ₹350?' },
     ]
   }
 
   return [
-    { label: '⭐ Best sellers', action: 'Show me your best selling dishes' },
-    { label: '👨‍🍳 Chef special', action: "What is today's special?" },
-    { label: '🔥 Help me choose', action: 'Suggest a complete meal for me' },
-    { label: '💸 Under ₹300', action: 'Suggest food under ₹300' },
+    { label: '⭐ Most ordered today', action: 'What are the most ordered dishes today?' },
+    { label: '🔴 Chef\'s pick right now', action: "What is the chef's special today?" },
+    { label: '🍽️ Full meal combo', action: 'Suggest a complete meal combo for me' },
+    { label: '🔥 Spicy & bold', action: 'I want something spicy and bold' },
+    { label: 'Under ₹300', action: 'What good food do you have under ₹300?' },
+    { label: 'Surprise me', action: 'Surprise me with your best dish' },
   ]
 }
 
@@ -169,12 +178,19 @@ function PreferencePrompt({
 }
 
 function StarterChips({ starters, onSend }: { starters: QuickReply[]; onSend: (text: string) => void }) {
+  const isLive = (label: string) => label.includes('Chef\'s pick') || label.includes('right now')
+
   return (
     <div className="cp-starters">
       <p className="cp-starters-label">Try asking:</p>
       <div className="cp-chips-wrap">
         {starters.map(s => (
-          <button key={s.action} onClick={() => onSend(s.action)} className="cp-chip">
+          <button
+            key={s.action}
+            onClick={() => onSend(s.action)}
+            className={`cp-chip${isLive(s.label) ? ' cp-chip-live' : ''}`}
+          >
+            {isLive(s.label) && <span className="cp-chip-dot" />}
             {s.label}
           </button>
         ))}
@@ -469,6 +485,27 @@ export function ChatPanel() {
     <>
       <style>{`
         /* ── ChatPanel overlay (mobile bottom sheet + desktop sidebar) ── */
+		
+		.cp-chip-live {
+  border-color: rgba(255,92,53,0.4) !important;
+  background: rgba(255,92,53,0.08) !important;
+  color: rgba(255,140,100,0.9) !important;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.cp-chip-live:hover {
+  background: rgba(255,92,53,0.18) !important;
+  color: #FF5C35 !important;
+  border-color: rgba(255,92,53,0.7) !important;
+}
+.cp-chip-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #FF5C35; flex-shrink: 0;
+  animation: cp-dot-pulse 1.8s ease-in-out infinite;
+}
+@keyframes cp-dot-pulse {
+  0%,100% { opacity:1; transform: scale(1); }
+  50%      { opacity:.4; transform: scale(0.75); }
+}
 
         .cp-backdrop {
           position: fixed; inset: 0; z-index: 80;
