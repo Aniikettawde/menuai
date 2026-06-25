@@ -10,7 +10,7 @@ import {
   X, ToggleLeft, ToggleRight, Flame, Leaf, Zap, Settings2, GripVertical,
   CheckSquare, Circle, Link2,
 } from 'lucide-react'
-
+import { TodaysSpecialPicker } from '@/components/TodaysSpecialPicker'
 const BOTTOM_NAV_H = 72
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -944,6 +944,15 @@ export default function MenuPage() {
           <MiniStat value={bestsellers} label="Best" icon="🔥" />
         </div>
 
+
+{restaurant && (
+  <TodaysSpecialPicker
+    restaurantId={restaurant.id}
+    allItems={items}
+  />
+)}
+
+
         {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
         {mobileView === 'categories' && (
@@ -1079,6 +1088,13 @@ export default function MenuPage() {
           <DesktopStat value={availableDishes} label="Available" icon={<ToggleRight size={16} />} color="text-orange-400" bg="bg-orange-500/10" />
           <DesktopStat value={bestsellers} label="Bestsellers" icon={<Flame size={16} />} color="text-rose-400" bg="bg-rose-500/10" />
         </div>
+		
+		{restaurant && (
+  <TodaysSpecialPicker
+    restaurantId={restaurant.id}
+    allItems={items}
+  />
+)}
         {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
           <aside className="rounded-3xl border border-white/[0.07] bg-[#111111] p-4">

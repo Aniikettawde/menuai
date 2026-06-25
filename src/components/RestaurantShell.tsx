@@ -21,6 +21,7 @@ import { CallWaiterBell } from './CallWaiterBell'
 import { AISuggestionCard } from './AISuggestionCard'
 import { CustomerAuthProvider } from './CustomerAuthProvider'
 import { OffersCarousel } from './OffersCarousel'
+  import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
 
 
 type OfferRow = {
@@ -672,19 +673,23 @@ export function RestaurantShell({ initialData }: Props) {
           <MenuGrid
             onCallWaiter={handleCallWaiter}
             isWaiterLoading={waiterLoading}
-            upsellCard={
-              <>
-                {activeOffers.length > 0 && (
-                  <OffersCarousel
-                    offers={activeOffers}
-                    restaurantId={initialData.restaurant.id}
-                    restaurantName={initialData.restaurant.name}
-                    onLoginClick={() => setLoginOpen(true)}
-                  />
-                )}
-                <AISuggestionCard />
-              </>
-            }
+           upsellCard={
+    <>
+      {activeOffers.length > 0 && (
+        <OffersCarousel
+          offers={activeOffers}
+          restaurantId={initialData.restaurant.id}
+          restaurantName={initialData.restaurant.name}
+          onLoginClick={() => setLoginOpen(true)}
+        />
+      )}
+      <TodaysSpecialCarousel
+        restaurantId={initialData.restaurant.id}
+        allItems={initialData.items}
+      />
+      <AISuggestionCard />
+    </>
+  }
           />
         </main>
 
