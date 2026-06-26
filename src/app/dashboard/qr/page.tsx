@@ -20,6 +20,12 @@ import {
   AlertTriangle,
   ScanLine,
   Zap,
+  BellRing,
+  Sparkles,
+  ChefHat,
+  Star,
+  ArrowRight,
+  Shield,
 } from 'lucide-react'
 
 type RestaurantRecord = {
@@ -94,13 +100,6 @@ function getEffectivePlan(status: BillingStatus): BillingPlanKey {
 function getPlanLabel(status: BillingStatus): string { return PLAN_LABELS[getEffectivePlan(status)] }
 function getPlanLimit(status: BillingStatus): number { return QR_LIMITS[getEffectivePlan(status)] }
 
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace('#', '')
-  const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h, 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-// Generate QR on canvas with a white square hole in center for logo
 async function generateQRWithLogoHole(url: string, size: number, holeFraction = 0.22): Promise<string> {
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -173,7 +172,6 @@ async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
   }
 }
 
-// ─── Preview Card (web) ─── matches the neon Dinezy reference card ──────────
 function FixedQrCard({
   tableNo,
   restaurantName,
@@ -221,11 +219,7 @@ function FixedQrCard({
           ) : (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={qrDataUrl}
-                alt={`Table ${tableNo} QR`}
-                className="h-[220px] w-[220px]"
-              />
+              <img src={qrDataUrl} alt={`Table ${tableNo} QR`} className="h-[220px] w-[220px]" />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white">
                   {logoDataUrl ? (
@@ -256,6 +250,47 @@ function FixedQrCard({
           </span>
         </p>
       </div>
+    </div>
+  )
+}
+
+// ─── Feature Pill ─────────────────────────────────────────────────────────────
+function FeaturePill({
+  icon,
+  label,
+  sublabel,
+  gradient,
+  glowColor,
+}: {
+  icon: React.ReactNode
+  label: string
+  sublabel: string
+  gradient: string
+  glowColor: string
+}) {
+  return (
+    <div
+      className="relative flex items-center gap-3 rounded-2xl border p-4 transition-all duration-300 hover:scale-[1.02]"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        borderColor: 'rgba(255,255,255,0.08)',
+        boxShadow: `0 0 24px ${glowColor}22`,
+      }}
+    >
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+        style={{ background: gradient }}
+      >
+        {icon}
+      </div>
+      <div>
+        <p className="text-[13px] font-bold text-white">{label}</p>
+        <p className="text-[11px] text-zinc-500">{sublabel}</p>
+      </div>
+      <div
+        className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 hover:opacity-100"
+        style={{ background: `radial-gradient(circle at 50% 50%, ${glowColor}08 0%, transparent 70%)` }}
+      />
     </div>
   )
 }
@@ -435,68 +470,50 @@ export default function QRPage() {
     }
   }
 
-  // ─── PDF generation — mirrors the FixedQrCard preview exactly ─────────────
   async function downloadTableSheet() {
-  if (!restaurant) return
-  if (remainingQrLimit <= 0) {
-    alert('Your QR limit is exhausted.')
-    return
-  }
-  if (tableNumbers.length === 0) {
-    alert('Please choose at least one table.')
-    return
-  }
+    if (!restaurant) return
+    if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted.'); return }
+    if (tableNumbers.length === 0) { alert('Please choose at least one table.'); return }
 
-  setBusy(true)
-  try {
-    const JsPDF = await loadJsPDF()
-    const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
+    setBusy(true)
+    try {
+      const JsPDF = await loadJsPDF()
+      const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
 
-    const pageW = doc.internal.pageSize.getWidth()
-    const pageH = doc.internal.pageSize.getHeight()
-    const margin = 22
-    const gap = 12
-    const cols = 2
-    const rows = 2
-    const cardsPerPage = cols * rows
-    const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols
-    const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows
+      const pageW = doc.internal.pageSize.getWidth()
+      const pageH = doc.internal.pageSize.getHeight()
+      const margin = 22
+      const gap = 12
+      const cols = 2
+      const rows = 2
+      const cardsPerPage = cols * rows
+      const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols
+      const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows
 
-    for (let i = 0; i < tableNumbers.length; i++) {
-      const tableNo = tableNumbers[i]
-      const node = cardRefs.current[tableNo]
+      for (let i = 0; i < tableNumbers.length; i++) {
+        const tableNo = tableNumbers[i]
+        const node = cardRefs.current[tableNo]
+        if (!node) throw new Error(`Card not ready for Table ${tableNo}`)
+        if (i > 0 && i % cardsPerPage === 0) doc.addPage()
 
-      if (!node) {
-        throw new Error(`Card not ready for Table ${tableNo}`)
+        const posInPage = i % cardsPerPage
+        const col = posInPage % cols
+        const row = Math.floor(posInPage / cols)
+        const x = margin + col * (cardW + gap)
+        const y = margin + row * (cardH + gap)
+
+        const png = await toPng(node, { cacheBust: true, pixelRatio: 3, backgroundColor: '#ffffff' })
+        doc.addImage(png, 'PNG', x, y, cardW, cardH)
       }
 
-      if (i > 0 && i % cardsPerPage === 0) {
-        doc.addPage()
-      }
-
-      const posInPage = i % cardsPerPage
-      const col = posInPage % cols
-      const row = Math.floor(posInPage / cols)
-      const x = margin + col * (cardW + gap)
-      const y = margin + row * (cardH + gap)
-
-      const png = await toPng(node, {
-        cacheBust: true,
-        pixelRatio: 3,
-        backgroundColor: '#ffffff',
-      })
-
-      doc.addImage(png, 'PNG', x, y, cardW, cardH)
+      doc.save(`${restaurant.slug}-table-qr-sheet.pdf`)
+    } catch (err) {
+      console.error('Download error:', err)
+      alert('Could not generate PDF. Please try again.')
+    } finally {
+      setBusy(false)
     }
-
-    doc.save(`${restaurant.slug}-table-qr-sheet.pdf`)
-  } catch (err) {
-    console.error('Download error:', err)
-    alert('Could not generate PDF. Please try again.')
-  } finally {
-    setBusy(false)
   }
-}
 
   // ─── Loading / error states ────────────────────────────────────────────────
   if (contextLoading) {
@@ -554,45 +571,91 @@ export default function QRPage() {
   // ─── Main render ──────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mb-7">
-        <h1 className="text-2xl font-bold text-white">Table QR Codes</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Neon-glow premium card — your restaurant name up top, Dinezy branding at the base, centre logo and live table QR.
+
+      {/* ── Hero Header ──────────────────────────────────────────────────── */}
+      <div className="mb-8">
+        {/* eyebrow */}
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1">
+          <Sparkles size={11} className="text-purple-400" />
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-purple-400">Table QR System</span>
+        </div>
+
+        <h1 className="text-[28px] font-black leading-tight text-white">
+          One Scan.{' '}
+          <span className="bg-gradient-to-r from-[#c084fc] via-[#f97316] to-[#fb923c] bg-clip-text text-transparent">
+            Everything Unlocked.
+          </span>
+        </h1>
+        <p className="mt-2 max-w-lg text-sm text-zinc-500">
+          Print these cards, place them on tables — guests scan and instantly get your AI-powered digital menu, 
+          can call your waiter, and place orders. Zero friction.
         </p>
+
+        {/* Feature pills row */}
+        <div className="mt-5 flex flex-wrap gap-2">
+          {[
+            { icon: <Sparkles size={12} className="text-purple-300" />, label: 'AI Digital Menu', color: '#9333ea' },
+            { icon: <BellRing size={12} className="text-orange-300" />, label: 'Call Waiter', color: '#f97316' },
+            { icon: <ChefHat size={12} className="text-teal-300" />, label: 'Live Order Tracking', color: '#14b8a6' },
+            { icon: <Star size={12} className="text-yellow-300" />, label: 'Loyalty Rewards', color: '#eab308' },
+          ].map(({ icon, label, color }) => (
+            <div
+              key={label}
+              className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold text-zinc-300"
+              style={{ borderColor: `${color}30`, background: `${color}12` }}
+            >
+              {icon}
+              {label}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
-        {/* Left: preview */}
-        <div className="overflow-hidden rounded-[30px] border border-zinc-800 bg-zinc-900">
-          <div className="border-b border-zinc-800 px-4 py-4 sm:px-6">
+
+        {/* ── Left: Preview ──────────────────────────────────────────────── */}
+        <div className="overflow-hidden rounded-[28px] border border-zinc-800/80 bg-[#0c0a14]">
+
+          {/* Preview header */}
+          <div className="border-b border-zinc-800/60 px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-white">Print preview</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Matte-black card, purple-to-orange glow border. QR has a clear logo space in the centre.
+                <p className="text-sm font-bold text-white">Print Preview</p>
+                <p className="mt-0.5 text-[11px] text-zinc-600">
+                  Premium neon card · A4 · 4 cards/page · Print-ready
                 </p>
               </div>
-              <span className="rounded-full bg-zinc-800 px-3 py-1 text-[11px] font-semibold text-zinc-400 ring-1 ring-zinc-700">
-                A4 · 4 per page
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400 ring-1 ring-emerald-500/20">
+                  Live Preview
+                </span>
+                <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-[10px] font-semibold text-zinc-400 ring-1 ring-zinc-700">
+                  A4 · 4 per page
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="bg-[#13101a] p-4 sm:p-6">
+          {/* Dot-grid canvas */}
+          <div
+            className="p-5 sm:p-7"
+            style={{
+              backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+            }}
+          >
             <div className="grid grid-cols-1 gap-6 justify-items-center">
               {tableNumbers.length === 0 ? (
-                <div className="col-span-full rounded-2xl border border-dashed border-zinc-700 bg-zinc-900 p-8 text-center">
-                  <Table size={20} className="mx-auto text-zinc-500" />
-                  <p className="mt-3 text-sm font-semibold text-zinc-300">No QR cards to generate</p>
-                  <p className="mt-1 text-xs text-zinc-500">Increase the table count or upgrade your plan.</p>
+                <div className="col-span-full rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-10 text-center">
+                  <Table size={20} className="mx-auto text-zinc-600" />
+                  <p className="mt-3 text-sm font-semibold text-zinc-400">No QR cards to generate</p>
+                  <p className="mt-1 text-xs text-zinc-600">Increase the table count or upgrade your plan.</p>
                 </div>
               ) : (
                 tableNumbers.map((tableNo) => (
                   <FixedQrCard
                     key={tableNo}
-                    cardRef={(el) => {
-                      cardRefs.current[tableNo] = el
-                    }}
+                    cardRef={(el) => { cardRefs.current[tableNo] = el }}
                     tableNo={tableNo}
                     restaurantName={restaurant.name}
                     qrDataUrl={tablePreviewMap[tableNo]}
@@ -604,41 +667,98 @@ export default function QRPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 border-t border-zinc-800 p-4 sm:p-6 sm:grid-cols-2">
+          {/* CTA Footer */}
+          <div className="border-t border-zinc-800/60 p-5">
+            {/* Primary CTA */}
             <button
               onClick={downloadTableSheet}
               disabled={busy || isQuotaExhausted || tableNumbers.length === 0}
-              className="flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #f97316)' }}
+              className="group relative w-full overflow-hidden rounded-2xl py-4 text-sm font-bold text-white transition-all duration-300 hover:shadow-[0_0_30px_rgba(139,92,246,0.35)] disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 40%, #f97316 100%)' }}
             >
-              {busy ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Generating PDF…
-                </>
-              ) : (
-                <>
-                  <Download size={15} />
-                  Download PDF
-                </>
-              )}
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {busy ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Generating PDF…
+                  </>
+                ) : (
+                  <>
+                    <Download size={15} />
+                    Download Table Cards
+                    <ArrowRight size={14} className="transition-transform duration-200 group-hover:translate-x-1" />
+                  </>
+                )}
+              </span>
+              {/* shine sweep */}
+              <div className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
             </button>
-            <button
-              onClick={shareMenu}
-              className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-800 py-3.5 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700"
-            >
-              <Share2 size={15} />
-              Share Link
-            </button>
+
+            {/* Secondary CTAs */}
+            <div className="mt-3 grid grid-cols-2 gap-2.5">
+              <button
+                onClick={shareMenu}
+                className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700/60 bg-zinc-800/60 py-3 text-xs font-semibold text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-700/60"
+              >
+                <Share2 size={13} />
+                Share Menu Link
+              </button>
+              <button
+                onClick={copyLink}
+                className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700/60 bg-zinc-800/60 py-3 text-xs font-semibold text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-700/60"
+              >
+                {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                {copied ? 'Copied!' : 'Copy Link'}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Right: controls */}
-        <div className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Hash size={14} className="text-zinc-500" />
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">How many tables?</p>
+        {/* ── Right: Controls ─────────────────────────────────────────────── */}
+        <div className="flex flex-col gap-3">
+
+          {/* What guests unlock */}
+          <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+              What guests unlock on scan
+            </p>
+            <div className="space-y-2">
+              <FeaturePill
+                icon={<Sparkles size={16} className="text-white" />}
+                label="AI Digital Menu"
+                sublabel="Smart recommendations, AI item pairing"
+                gradient="linear-gradient(135deg, #7c3aed, #9333ea)"
+                glowColor="#9333ea"
+              />
+              <FeaturePill
+                icon={<BellRing size={16} className="text-white" />}
+                label="Call Waiter"
+                sublabel="Instant bell notification to your staff"
+                gradient="linear-gradient(135deg, #ea580c, #f97316)"
+                glowColor="#f97316"
+              />
+              <FeaturePill
+                icon={<ChefHat size={16} className="text-white" />}
+                label="Place Orders"
+                sublabel="Direct-to-kitchen, zero miscommunication"
+                gradient="linear-gradient(135deg, #0d9488, #14b8a6)"
+                glowColor="#14b8a6"
+              />
+              <FeaturePill
+                icon={<Star size={16} className="text-white" />}
+                label="Earn Loyalty Points"
+                sublabel="Auto rewards on every visit"
+                gradient="linear-gradient(135deg, #ca8a04, #eab308)"
+                glowColor="#eab308"
+              />
+            </div>
+          </div>
+
+          {/* Table count */}
+          <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+            <div className="mb-2.5 flex items-center gap-2">
+              <Hash size={12} className="text-zinc-500" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Number of Tables</p>
             </div>
             <input
               type="number"
@@ -647,129 +767,133 @@ export default function QRPage() {
               value={tableCount}
               onChange={(e) => setTableCount(Number(e.target.value || 1))}
               disabled={isQuotaExhausted}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl border border-zinc-700/60 bg-zinc-950 px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             />
-            <p className="mt-2 text-xs text-zinc-600">
+            <p className="mt-2 text-[11px] text-zinc-600">
               {isQuotaExhausted
                 ? 'Upgrade your plan to generate more QR codes.'
-                : `Cards for Table 1 – ${safeTableCount}. A4 PDF, 4 cards/page.`}
+                : `Generating cards for Table 1 – ${safeTableCount}`}
             </p>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Share2 size={13} className="text-zinc-500" />
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Share the link</p>
+          {/* WhatsApp share */}
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(`Hey! Scan this QR at our table to see the menu, call waiter & order 🍽️\n${menuUrl}`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between rounded-2xl border border-green-600/20 bg-green-600/8 px-4 py-3.5 transition hover:bg-green-600/15"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-600/20">
+                <MessageCircle size={16} className="text-green-400" />
+              </div>
+              <div>
+                <p className="text-[13px] font-bold text-green-300">Share via WhatsApp</p>
+                <p className="text-[11px] text-green-600">Send menu link to your customers</p>
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={copyLink}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-xs font-medium text-zinc-300 transition hover:bg-zinc-700"
-              >
-                {copied ? <Check size={12} /> : <Copy size={12} />}
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(`Here's our menu!\n${menuUrl}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-green-600/20 bg-green-600/10 py-2.5 text-xs font-medium text-green-400 transition hover:bg-green-600/20"
-              >
-                <MessageCircle size={12} />
-                WhatsApp
-              </a>
-              <a
-                href={menuUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-xs font-medium text-zinc-300 transition hover:bg-zinc-700"
-              >
-                <ExternalLink size={12} />
-                Open
-              </a>
-            </div>
-          </div>
+            <ExternalLink size={13} className="text-green-600" />
+          </a>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Printer size={13} className="text-zinc-500" />
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">How to set up</p>
-            </div>
+          {/* Setup steps */}
+          <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Setup in 3 Steps</p>
             <div className="space-y-3">
               {[
-                { icon: <Download size={12} />, text: 'Download PDF — A4, 4 cards per page, ready to print' },
-                { icon: <Printer size={12} />, text: 'Print at 100% scale and laminate one card per table' },
-                { icon: <ScanLine size={12} />, text: 'Guests open camera, point at QR, menu opens instantly' },
-                { icon: <QrCode size={12} />, text: 'Each QR is unique to that table number and token' },
-              ].map(({ icon, text }, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400">
-                    {icon}
+                { step: '01', icon: <Download size={11} />, text: 'Download PDF — A4, 4 cards per page' },
+                { step: '02', icon: <Printer size={11} />, text: 'Print & laminate one card per table' },
+                { step: '03', icon: <ScanLine size={11} />, text: 'Guests scan → menu opens instantly' },
+              ].map(({ step, icon, text }) => (
+                <div key={step} className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-800 font-mono text-[9px] font-bold text-zinc-500">
+                    {step}
                   </span>
-                  <p className="text-xs leading-relaxed text-zinc-400">{text}</p>
+                  <div className="flex items-center gap-2 text-xs text-zinc-400">
+                    <span className="text-zinc-600">{icon}</span>
+                    {text}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-800">
-                <Hash size={14} className="text-zinc-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-semibold text-zinc-300">
-                  {quotaLabel} · {Number.isFinite(remainingQrLimit) ? `${remainingQrLimit} remaining` : '∞ remaining'}
-                </p>
-                <div className="mt-2 flex flex-col gap-1">
-                  {[
-                    { plan: 'Trial', limit: 'Unlimited' },
-                    { plan: 'Small', limit: '20 codes' },
-                    { plan: 'Growth', limit: '50 codes' },
-                    { plan: 'Large', limit: '200 codes' },
-                  ].map(({ plan, limit }) => (
-                    <div key={plan} className="flex justify-between text-xs">
-                      <span className="text-zinc-500">{plan}</span>
-                      <span className="text-zinc-400">{limit}</span>
-                    </div>
-                  ))}
+          {/* Plan quota */}
+          <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Your Plan</p>
+              <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-400 ring-1 ring-purple-500/20">
+                {quotaLabel}
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {[
+                { plan: 'Trial', limit: 'Unlimited QR codes' },
+                { plan: 'Small', limit: '20 QR codes' },
+                { plan: 'Growth', limit: '50 QR codes' },
+                { plan: 'Large', limit: '200 QR codes' },
+              ].map(({ plan, limit }) => (
+                <div key={plan} className="flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-600">{plan}</span>
+                  <span className="text-zinc-500">{limit}</span>
                 </div>
-              </div>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-zinc-900 px-3 py-2">
+              <span className="text-[11px] text-zinc-500">Remaining</span>
+              <span className="font-mono text-[13px] font-bold text-purple-400">
+                {Number.isFinite(remainingQrLimit) ? remainingQrLimit : '∞'}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
+      {/* ── Quota exhausted banner ───────────────────────────────────────── */}
       {isQuotaExhausted && (
         <div className="mt-5 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
           <div className="flex items-start gap-3">
             <AlertTriangle size={16} className="mt-0.5 text-rose-400" />
             <div>
-              <p className="text-sm font-semibold text-rose-300">QR limit reached</p>
+              <p className="text-sm font-bold text-rose-300">QR limit reached</p>
               <p className="mt-0.5 text-xs text-zinc-500">Upgrade your plan to generate more table QR codes.</p>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── Stats strip ─────────────────────────────────────────────────── */}
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Current plan</p>
-          <p className="mt-2 text-sm font-semibold text-white">{quotaLabel}</p>
-          <p className="mt-1 text-xs text-zinc-500">
-            Max QR: <span className="text-purple-400">{Number.isFinite(allowedQrLimit) ? allowedQrLimit : 'Unlimited'}</span>
+        <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Current plan</p>
+          <p className="mt-2 text-sm font-bold text-white">{quotaLabel}</p>
+          <p className="mt-1 text-[11px] text-zinc-600">
+            Max QR:{' '}
+            <span className="font-semibold text-purple-400">
+              {Number.isFinite(allowedQrLimit) ? allowedQrLimit : 'Unlimited'}
+            </span>
           </p>
         </div>
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Used QR</p>
-          <p className="mt-2 text-sm font-semibold text-white">{usedQrCount}</p>
-          <p className="mt-1 text-xs text-zinc-500">
-            Remaining: <span className="text-purple-400">{Number.isFinite(remainingQrLimit) ? remainingQrLimit : '∞'}</span>
+        <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Used QR codes</p>
+          <p className="mt-2 text-sm font-bold text-white">{usedQrCount}</p>
+          <p className="mt-1 text-[11px] text-zinc-600">
+            Remaining:{' '}
+            <span className="font-semibold text-purple-400">
+              {Number.isFinite(remainingQrLimit) ? remainingQrLimit : '∞'}
+            </span>
           </p>
         </div>
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Menu link</p>
-          <p className="mt-2 break-all font-mono text-xs text-purple-400">{menuUrl}</p>
+        <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Menu link</p>
+          <a
+            href={menuUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 flex items-center gap-1.5 break-all font-mono text-xs text-purple-400 hover:text-purple-300"
+          >
+            {menuUrl}
+            <ExternalLink size={10} className="shrink-0" />
+          </a>
         </div>
       </div>
     </div>
