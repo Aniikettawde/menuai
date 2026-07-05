@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
-  X, Gift, MapPin, Clock, Star, LogOut, ChevronRight,
-  Award, TrendingUp, Utensils, Calendar, Tag,
+  X, Gift, MapPin, Clock, LogOut,
+  TrendingUp, Utensils, Tag,
 } from 'lucide-react'
-import { useCustomerAuth, type CustomerProfile } from '@/store/customer-auth-store'
+import { useCustomerAuth } from '@/store/customer-auth-store'
+import { QuestCard } from './QuestCard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,12 +41,10 @@ interface ClaimedOffer {
   is_active:       boolean
 }
 
-
 interface AccountData {
-  visits:  RestaurantVisit[]
-  offers:  CustomerOffer[]
-    claimedOffers:  ClaimedOffer[]   // ← add this
-
+  visits:        RestaurantVisit[]
+  offers:        CustomerOffer[]
+  claimedOffers: ClaimedOffer[]
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -76,83 +75,6 @@ function formatExpiry(iso: string | null) {
     if (diff <= 7) return `Expires in ${diff} days`
     return `Expires ${formatDate(iso)}`
   } catch { return null }
-}
-
-function tierLabel(pts: number) {
-  if (pts >= 1000) return { label: 'Gold', color: '#E8C547', bg: 'rgba(232,197,71,0.12)', border: 'rgba(232,197,71,0.25)' }
-  if (pts >= 400)  return { label: 'Silver', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.22)' }
-  return { label: 'Bronze', color: '#cd7c3a', bg: 'rgba(205,124,58,0.12)', border: 'rgba(205,124,58,0.22)' }
-}
-
-function tierProgress(pts: number) {
-  if (pts >= 1000) return 100
-  if (pts >= 400)  return Math.round(((pts - 400) / 600) * 100)
-  return Math.round((pts / 400) * 100)
-}
-
-function tierNextLabel(pts: number) {
-  if (pts >= 1000) return 'You\'ve reached the top tier! 🏆'
-  if (pts >= 400)  return `${1000 - pts} pts to Gold`
-  return `${400 - pts} pts to Silver`
-}
-
-// ─── Section: Loyalty card ────────────────────────────────────────────────────
-
-function LoyaltyCard({ customer }: { customer: CustomerProfile }) {
-  const pts    = customer.loyalty_points ?? 0
-  const tier   = tierLabel(pts)
-  const pct    = tierProgress(pts)
-  const nextLbl = tierNextLabel(pts)
-
-  return (
-    <div style={{
-      background: 'linear-gradient(135deg, rgba(232,197,71,0.08) 0%, rgba(255,92,53,0.05) 100%)',
-      border: '1px solid rgba(232,197,71,0.18)',
-      borderRadius: 20,
-      padding: '20px 20px 18px',
-      marginBottom: 20,
-    }}>
-      {/* Top row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
-            Loyalty Points
-          </p>
-          <p style={{ margin: '4px 0 0', fontSize: 36, fontWeight: 700, color: '#FAFAF7', fontFamily: 'var(--font-body)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-            {pts.toLocaleString('en-IN')}
-          </p>
-        </div>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '5px 12px',
-          background: tier.bg,
-          border: `1px solid ${tier.border}`,
-          borderRadius: 999,
-          fontSize: 11, fontWeight: 700,
-          color: tier.color,
-          fontFamily: 'var(--font-body)',
-        }}>
-          <Award size={11} />
-          {tier.label}
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div style={{ marginBottom: 6 }}>
-        <div style={{ height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 999, overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', width: `${pct}%`,
-            background: 'linear-gradient(90deg, #E8C547, #FF5C35)',
-            borderRadius: 999,
-            transition: 'width 0.6s ease',
-          }} />
-        </div>
-      </div>
-      <p style={{ margin: 0, fontSize: 11, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
-        {nextLbl}
-      </p>
-    </div>
-  )
 }
 
 // ─── Section: Quick stats ─────────────────────────────────────────────────────
@@ -233,7 +155,6 @@ function OffersSection({ offers }: { offers: CustomerOffer[] }) {
             position: 'relative',
             overflow: 'hidden',
           }}>
-            {/* Side accent */}
             {!offer.is_used && (
               <div style={{
                 position: 'absolute', left: 0, top: 0, bottom: 0,
@@ -291,10 +212,10 @@ function VisitHistorySection({ visits }: { visits: RestaurantVisit[] }) {
       }}>
         <MapPin size={22} style={{ color: 'rgba(250,250,247,0.2)', marginBottom: 8 }} />
         <p style={{ margin: 0, fontSize: 13, color: 'rgba(250,250,247,0.35)', fontFamily: 'var(--font-body)' }}>
-          No restaurant visits yet
+          No verified visits yet
         </p>
         <p style={{ margin: '4px 0 0', fontSize: 11, color: 'rgba(250,250,247,0.2)', fontFamily: 'var(--font-body)' }}>
-          Scan a QR code at any Dinezy restaurant to get started
+          Ask your waiter to verify your PIN after a meal to log a visit
         </p>
       </div>
     )
@@ -309,7 +230,6 @@ function VisitHistorySection({ visits }: { visits: RestaurantVisit[] }) {
           border: '1px solid rgba(255,255,255,0.07)',
           borderRadius: 14, padding: '12px 14px',
         }}>
-          {/* Icon */}
           <div style={{
             width: 38, height: 38, flexShrink: 0,
             borderRadius: 12,
@@ -331,9 +251,7 @@ function VisitHistorySection({ visits }: { visits: RestaurantVisit[] }) {
             </div>
           </div>
 
-          <div style={{
-            flexShrink: 0, textAlign: 'right',
-          }}>
+          <div style={{ flexShrink: 0, textAlign: 'right' }}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
               padding: '3px 9px',
@@ -357,10 +275,7 @@ function VisitHistorySection({ visits }: { visits: RestaurantVisit[] }) {
 
 function SectionLabel({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      marginBottom: 12,
-    }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
       <div style={{ color: 'rgba(250,250,247,0.35)' }}>{icon}</div>
       <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(250,250,247,0.35)', fontFamily: 'var(--font-body)' }}>
         {title}
@@ -415,7 +330,6 @@ function ClaimedOffersSection({ claimedOffers }: { claimedOffers: ClaimedOffer[]
             opacity: isExpired ? 0.5 : 1,
             position: 'relative', overflow: 'hidden',
           }}>
-            {/* Left accent */}
             {!isExpired && (
               <div style={{
                 position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
@@ -424,7 +338,6 @@ function ClaimedOffersSection({ claimedOffers }: { claimedOffers: ClaimedOffer[]
               }} />
             )}
             <div style={{ paddingLeft: isExpired ? 0 : 8 }}>
-              {/* Discount tag + restaurant name row */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -444,12 +357,10 @@ function ClaimedOffersSection({ claimedOffers }: { claimedOffers: ClaimedOffer[]
                 )}
               </div>
 
-              {/* Offer title */}
               <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#FAFAF7', fontFamily: 'var(--font-body)', lineHeight: 1.3 }}>
                 {claim.title}
               </p>
 
-              {/* Restaurant name */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 <MapPin size={9} color="rgba(250,250,247,0.35)" />
                 <p style={{ margin: 0, fontSize: 11, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
@@ -457,7 +368,6 @@ function ClaimedOffersSection({ claimedOffers }: { claimedOffers: ClaimedOffer[]
                 </p>
               </div>
 
-              {/* Coupon code */}
               {claim.coupon_code && (
                 <div style={{ marginTop: 8 }}>
                   <span style={{
@@ -471,7 +381,6 @@ function ClaimedOffersSection({ claimedOffers }: { claimedOffers: ClaimedOffer[]
                 </div>
               )}
 
-              {/* Expiry */}
               {expiry && !isExpired && (
                 <p style={{
                   margin: '6px 0 0', fontSize: 10.5, fontWeight: 600,
@@ -482,7 +391,6 @@ function ClaimedOffersSection({ claimedOffers }: { claimedOffers: ClaimedOffer[]
                 </p>
               )}
 
-              {/* Claimed date */}
               <p style={{ margin: '5px 0 0', fontSize: 10, color: 'rgba(250,250,247,0.2)', fontFamily: 'var(--font-body)' }}>
                 Claimed {formatDate(claim.claimed_at)}
               </p>
@@ -504,7 +412,6 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
   const [visible, setVisible] = useState(false)
   const fetchedRef            = useRef(false)
 
-  // Animate in/out
   useEffect(() => {
     if (isOpen) {
       setVisible(true)
@@ -515,7 +422,6 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
     return () => { document.body.style.overflow = '' }
   }, [isOpen])
 
-  // Fetch account data when drawer opens
   const fetchData = useCallback(async () => {
     if (!customer?.id || fetchedRef.current) return
     fetchedRef.current = true
@@ -554,21 +460,12 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
         @keyframes backdropIn  { from { opacity: 0; } to { opacity: 1; } }
         @keyframes backdropOut { from { opacity: 1; } to { opacity: 0; } }
 
-        .dinezy-drawer {
-          animation: drawerSlideIn 0.3s cubic-bezier(0.32, 0.72, 0, 1) both;
-        }
-        .dinezy-drawer.closing {
-          animation: drawerSlideOut 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
-        }
-        .dinezy-backdrop {
-          animation: backdropIn 0.25s ease both;
-        }
-        .dinezy-backdrop.closing {
-          animation: backdropOut 0.28s ease both;
-        }
+        .dinezy-drawer { animation: drawerSlideIn 0.3s cubic-bezier(0.32, 0.72, 0, 1) both; }
+        .dinezy-drawer.closing { animation: drawerSlideOut 0.28s cubic-bezier(0.32, 0.72, 0, 1) both; }
+        .dinezy-backdrop { animation: backdropIn 0.25s ease both; }
+        .dinezy-backdrop.closing { animation: backdropOut 0.28s ease both; }
       `}</style>
 
-      {/* Backdrop */}
       <div
         className={`dinezy-backdrop${!isOpen ? ' closing' : ''}`}
         onClick={handleClose}
@@ -580,7 +477,6 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
         }}
       />
 
-      {/* Drawer panel */}
       <div
         className={`dinezy-drawer${!isOpen ? ' closing' : ''}`}
         style={{
@@ -594,13 +490,11 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
           overscrollBehavior: 'contain',
         }}
       >
-        {/* Gold top accent */}
         <div style={{
           height: 3, flexShrink: 0,
           background: 'linear-gradient(90deg, transparent 0%, #E8C547 40%, #FF5C35 70%, transparent 100%)',
         }} />
 
-        {/* Header */}
         <div style={{
           flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -608,7 +502,6 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
           borderBottom: '1px solid rgba(255,255,255,0.07)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Avatar */}
             <div style={{
               width: 38, height: 38, borderRadius: 12,
               background: 'rgba(232,197,71,0.12)',
@@ -644,7 +537,6 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
           </button>
         </div>
 
-        {/* Body */}
         <div style={{ flex: 1, padding: '20px 20px 32px', overflowY: 'auto' }}>
           {!customer ? (
             <p style={{ color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)', fontSize: 13 }}>
@@ -652,8 +544,22 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
             </p>
           ) : (
             <>
-              {/* Loyalty card */}
-              <LoyaltyCard customer={customer} />
+              {/* Quest / points card — replaces old tier LoyaltyCard */}
+              {restaurantId ? (
+                <QuestCard customerId={customer.id} restaurantId={restaurantId} />
+              ) : (
+                <div style={{
+                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: 14, padding: '16px', marginBottom: 20, textAlign: 'center',
+                }}>
+                  <p style={{ margin: 0, fontSize: 12, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+                    Points: {(customer.loyalty_points ?? 0).toLocaleString('en-IN')}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 11, color: 'rgba(250,250,247,0.25)', fontFamily: 'var(--font-body)' }}>
+                    Open this from a restaurant page to verify a visit
+                  </p>
+                </div>
+              )}
 
               {/* Quick stats */}
               {data && <QuickStats visits={data.visits} offers={data.offers} />}
@@ -667,17 +573,18 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
               ) : (
                 <OffersSection offers={data?.offers ?? []} />
               )}
-			  {/* Claimed offers */}
-<SectionLabel icon={<Tag size={13} />} title="Claimed Offers" />
-{loading ? (
-  <div style={{ padding: '16px 0', textAlign: 'center' }}>
-    <p style={{ margin: 0, fontSize: 12, color: 'rgba(250,250,247,0.3)', fontFamily: 'var(--font-body)' }}>Loading…</p>
-  </div>
-) : (
-  <ClaimedOffersSection claimedOffers={data?.claimedOffers ?? []} />
-)}
 
-              {/* Restaurant history */}
+              {/* Claimed offers */}
+              <SectionLabel icon={<Tag size={13} />} title="Claimed Offers" />
+              {loading ? (
+                <div style={{ padding: '16px 0', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 12, color: 'rgba(250,250,247,0.3)', fontFamily: 'var(--font-body)' }}>Loading…</p>
+                </div>
+              ) : (
+                <ClaimedOffersSection claimedOffers={data?.claimedOffers ?? []} />
+              )}
+
+              {/* Verified visit history */}
               <SectionLabel icon={<MapPin size={13} />} title="Restaurant History" />
               {loading ? (
                 <div style={{ padding: '16px 0', textAlign: 'center' }}>
@@ -687,7 +594,6 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
                 <VisitHistorySection visits={data?.visits ?? []} />
               )}
 
-              {/* Member since */}
               {customer.created_at && (
                 <div style={{ marginTop: 20, textAlign: 'center' }}>
                   <p style={{ margin: 0, fontSize: 10.5, color: 'rgba(250,250,247,0.2)', fontFamily: 'var(--font-body)' }}>
@@ -699,7 +605,6 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
           )}
         </div>
 
-        {/* Footer: logout */}
         <div style={{
           flexShrink: 0,
           padding: '12px 20px 24px',

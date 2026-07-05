@@ -399,16 +399,37 @@ export default function QRPage() {
   )
 
   function getTableMenuUrl(tableNo: number): string {
-    if (!menuUrl) return ''
-    const token = tokenMap.get(tableNo)
-    if (token) return `${menuUrl}?t=${token}`
-    return ''
-  }
+  if (!baseUrl || !restaurant?.slug) return ''
+  const token = tokenMap.get(tableNo)
+  if (!token) return ''
+  const qs = new URLSearchParams({
+    slug: restaurant.slug,
+    table: String(tableNo),
+    t: token,
+  })
+  return `${baseUrl}/api/table-session/activate?${qs.toString()}`
+}
+
+async function regenerateTokens(tables: number[]): Promise<void> {
+  if (!restaurantId) return
+  const res = await fetch('/api/qr-tokens/upsert', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ restaurantId, tableNumbers: tables, regenerate: true }),
+  })
+  if (!res.ok) throw new Error(`Token regenerate failed: ${res.status}`)
+  const { tokens } = (await res.json()) as { tokens: { table_number: number; token: string }[] }
+  const updated = new Map(tokenMap)
+  for (const row of tokens) updated.set(row.table_number, row.token)
+  setTokenMap(updated)
+  setTablePreviewMap({}) // force QR images to regenerate with new tokens
+}
 
   async function ensureTokens(tables: number[]): Promise<TokenMap> {
     if (!restaurantId) return tokenMap
-    const missing = tables.filter((n) => !tokenMap.has(n))
-    if (missing.length === 0) return tokenMap
+   const missing = tables.filter((n) => !tokenMap.has(n))
+if (missing.length === 0) return tokenMap
     const res = await fetch('/api/qr-tokens/upsert', {
       method: 'POST',
       credentials: 'include',
@@ -590,6 +611,8 @@ export default function QRPage() {
           Print these cards, place them on tables — guests scan and instantly get your AI-powered digital menu, 
           can call your waiter, and place orders. Zero friction.
         </p>
+		
+		
 
         {/* Feature pills row */}
         <div className="mt-5 flex flex-wrap gap-2">
@@ -693,6 +716,17 @@ export default function QRPage() {
               {/* shine sweep */}
               <div className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
             </button>
+			
+			<button
+  onClick={() => {
+    if (!confirm('This invalidates all currently printed QR codes for these tables. Continue?')) return
+    void regenerateTokens(tableNumbers)
+  }}
+  className="flex items-center justify-center gap-2 rounded-xl border border-amber-700/40 bg-amber-900/20 py-3 text-xs font-semibold text-amber-300 transition hover:border-amber-600 hover:bg-amber-800/30"
+>
+  <Shield size={13} />
+  Regenerate QR Codes
+</button>
 
             {/* Secondary CTAs */}
             <div className="mt-3 grid grid-cols-2 gap-2.5">

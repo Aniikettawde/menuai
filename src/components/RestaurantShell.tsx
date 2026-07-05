@@ -21,6 +21,8 @@ import { CallWaiterBell } from './CallWaiterBell'
 import { AISuggestionCard } from './AISuggestionCard'
 import { CustomerAuthProvider } from './CustomerAuthProvider'
 import { OffersCarousel } from './OffersCarousel'
+import { TableSessionHeartbeat } from './TableSessionHeartbeat'   // ← add
+
   import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
 
 
@@ -36,6 +38,7 @@ interface Props {
   restaurantId?: string | null
   tableNumber?:  number | null
   initialData: MenuPageData
+  tableSessionValid?: boolean
 }
 
 interface OrderToastData {
@@ -72,7 +75,7 @@ function writePersistedOrderIds(slug: string, tableNumber: number | null, ids: s
 }
 
 
-export function RestaurantShell({ initialData }: Props) {
+export function RestaurantShell({ initialData, tableSessionValid }: Props) {
   const searchParams = useSearchParams()
   const {
     restaurant,
@@ -93,6 +96,7 @@ export function RestaurantShell({ initialData }: Props) {
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeOffers, setActiveOffers] = useState<OfferRow[]>([])
+const [sessionExpired, setSessionExpired] = useState(false)
 
   const tableToken = searchParams.get('t')
   const legacyTableParam = searchParams.get('table')
@@ -135,7 +139,6 @@ export function RestaurantShell({ initialData }: Props) {
           return
         }
         setTableNumber(data?.table_number ?? null)
-        setHasTableToken(true)     // ✅ valid token = ordering allowed
         return
       }
 
@@ -143,7 +146,6 @@ export function RestaurantShell({ initialData }: Props) {
       const n = legacyTableParam ? Number(legacyTableParam) : null
       const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
       setTableNumber(resolved)
-      setHasTableToken(false)      // ✅ no token = ordering NOT allowed
     }
 
     void resolveTable()
@@ -256,6 +258,10 @@ export function RestaurantShell({ initialData }: Props) {
     setIsOffline(!navigator.onLine)
     return () => { cleanup(); window.removeEventListener('offline', off); window.removeEventListener('online', on) }
   }, [setIsOffline])
+  
+    useEffect(() => {
+    setHasTableToken(tableSessionValid === true)
+  }, [tableSessionValid, setHasTableToken])
 
   // ── Page view analytics only (does NOT touch hasTableToken) ───────────────
   useEffect(() => {
@@ -325,7 +331,12 @@ export function RestaurantShell({ initialData }: Props) {
           }),
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; orderId?: string; orderCode?: string }
-        if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
+if (res.status === 401) {
+  setSessionExpired(true)
+  alert('Your table session has expired. Please scan the QR code again to continue.')
+  return
+}
+if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
 
         void track(restaurant.id, 'waiter_called', {
           metadata: {
@@ -384,12 +395,17 @@ export function RestaurantShell({ initialData }: Props) {
           }),
         })
 
-        const data = (await res.json().catch(() => ({}))) as {
+       const data = (await res.json().catch(() => ({}))) as {
           error?: string
           orderId?: string
           request?: { id?: string }
         }
 
+        if (res.status === 401) {
+          setSessionExpired(true)
+          alert('Your table session has expired. Please scan the QR code again to continue.')
+          return { ok: false }
+        }
         if (!res.ok) throw new Error(data.error ?? 'Failed to notify waiter')
 
         void track(restaurant.id, 'waiter_called', {
@@ -668,6 +684,12 @@ export function RestaurantShell({ initialData }: Props) {
         />
 
         <RestaurantHeader restaurant={restaurant} />
+		
+		<TableSessionHeartbeat
+  restaurantId={restaurant.id}
+  enabled={tableSessionValid === true}
+  onExpired={() => setSessionExpired(true)}
+/>
 
         <main className="pr-main">
           <MenuGrid
@@ -698,13 +720,13 @@ export function RestaurantShell({ initialData }: Props) {
         {showRating && <RatingModal />}
         {showRatingsList && <RatingsListModal restaurant={restaurant} />}
 
-        {(tableNumber !== null || tableToken) && (
-          <CallWaiterBell
-            slug={slug}
-            tableNumber={tableNumber}
-            onCall={handleRequestAssistance}
-          />
-        )}
+        {(tableNumber !== null || tableToken) && !sessionExpired && (
+  <CallWaiterBell
+    slug={slug}
+    tableNumber={tableNumber}
+    onCall={handleRequestAssistance}
+  />
+)}
 
         {activeOrder && (
           <WaiterCalledToast

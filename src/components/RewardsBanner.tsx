@@ -1,18 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { X, Gift, ChevronRight, Award, Sparkles } from 'lucide-react'
+import { X, Gift, ChevronRight } from 'lucide-react'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 
 interface Props {
   onLoginClick:    () => void
   onAccountClick?: () => void
-}
-
-function tierInfo(pts: number) {
-  if (pts >= 1000) return { label: 'Gold',   color: '#E8C547', bg: 'rgba(232,197,71,0.12)',  border: 'rgba(232,197,71,0.25)' }
-  if (pts >= 400)  return { label: 'Silver', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.22)' }
-  return               { label: 'Bronze', color: '#cd7c3a', bg: 'rgba(205,124,58,0.12)',  border: 'rgba(205,124,58,0.22)' }
 }
 
 export function RewardsBanner({ onLoginClick, onAccountClick }: Props) {
@@ -37,27 +31,20 @@ export function RewardsBanner({ onLoginClick, onAccountClick }: Props) {
     setTimeout(() => { dismissBanner(); onLoginClick() }, 350)
   }
 
-  // ── Logged-in: premium account pill ─────────────────────────────────────
+  // ── Logged-in: points pill ─────────────────────────────────────────────
   if (isLoggedIn && customer) {
-    const pts  = customer.loyalty_points ?? 0
-    const tier = tierInfo(pts)
+    const pts = customer.loyalty_points ?? 0
 
     return (
       <>
         <style jsx>{`
-          .account-bar {
-            animation: slideDown 0.35s cubic-bezier(0.34, 1.12, 0.64, 1) both;
-          }
+          .account-bar { animation: slideDown 0.35s cubic-bezier(0.34, 1.12, 0.64, 1) both; }
           @keyframes slideDown {
             from { transform: translateY(-100%); opacity: 0; }
             to   { transform: translateY(0);     opacity: 1; }
           }
-          .account-btn {
-            transition: background 0.15s;
-          }
-          .account-btn:hover {
-            background: rgba(232,197,71,0.12) !important;
-          }
+          .account-btn { transition: background 0.15s; }
+          .account-btn:hover { background: rgba(232,197,71,0.12) !important; }
         `}</style>
 
         <div className="account-bar" style={{
@@ -65,10 +52,7 @@ export function RewardsBanner({ onLoginClick, onAccountClick }: Props) {
           borderBottom: '1px solid rgba(232,197,71,0.12)',
           padding: '0 16px',
         }}>
-          <div style={{
-            maxWidth: 920, margin: '0 auto',
-            padding: '8px 0',
-          }}>
+          <div style={{ maxWidth: 920, margin: '0 auto', padding: '8px 0' }}>
             <button
               type="button"
               onClick={() => onAccountClick?.()}
@@ -114,20 +98,20 @@ export function RewardsBanner({ onLoginClick, onAccountClick }: Props) {
                 </p>
               </div>
 
-              {/* Tier badge */}
+              {/* Points badge (replaces tier badge) */}
               <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
                   padding: '4px 10px',
-                  background: tier.bg,
-                  border: `1px solid ${tier.border}`,
+                  background: 'rgba(232,197,71,0.12)',
+                  border: '1px solid rgba(232,197,71,0.25)',
                   borderRadius: 999,
                   fontSize: 10, fontWeight: 700,
-                  color: tier.color,
+                  color: '#E8C547',
                   fontFamily: 'var(--font-body)',
                 }}>
-                  <Award size={9} />
-                  {tier.label}
+                  <Gift size={9} />
+                  {pts} pts
                 </span>
                 <ChevronRight size={14} style={{ color: 'rgba(250,250,247,0.25)', flexShrink: 0 }} />
               </div>
@@ -149,16 +133,9 @@ export function RewardsBanner({ onLoginClick, onAccountClick }: Props) {
           opacity: 0;
           transition: transform 0.38s cubic-bezier(0.34, 1.12, 0.64, 1), opacity 0.3s ease;
         }
-        .rewards-banner.visible {
-          transform: translateY(0);
-          opacity: 1;
-        }
-        .login-cta-btn {
-          transition: background 0.15s;
-        }
-        .login-cta-btn:hover {
-          background: #d4a93c !important;
-        }
+        .rewards-banner.visible { transform: translateY(0); opacity: 1; }
+        .login-cta-btn { transition: background 0.15s; }
+        .login-cta-btn:hover { background: #d4a93c !important; }
       `}</style>
 
       <div
@@ -189,13 +166,13 @@ export function RewardsBanner({ onLoginClick, onAccountClick }: Props) {
               color: '#FAFAF7', fontFamily: 'var(--font-body)',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>
-              Login to unlock exclusive rewards &amp; offers
+              Login to start earning points
             </p>
             <p style={{
               margin: '1px 0 0', fontSize: 10.5,
               color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)',
             }}>
-              Earn points on every visit
+              50 points per verified visit — redeem at 150
             </p>
           </div>
 

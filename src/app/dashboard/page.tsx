@@ -1,5 +1,8 @@
 // src/app/dashboard/page.tsx
 'use client'
+
+import { VerifyVisitCard } from '@/components/dashboard/VerifyVisitCard'
+
 import { useRouter } from 'next/navigation'
 import { useDashboardContext } from '@/hooks/useDashboardContext'
 import AccessDenied from '@/components/dashboard/AccessDenied'
@@ -816,6 +819,8 @@ const [contextReady, setContextReady] = useState(false)
 <OrdersSection
   restaurantId={context.restaurantId}
 />
+
+<VerifyVisitCard restaurantId={context.restaurantId} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
         <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5 sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-3">

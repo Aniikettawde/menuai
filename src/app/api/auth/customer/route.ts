@@ -36,15 +36,16 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch visit history — joined with restaurants so we get the name
-    const { data: visitRows, error: visitErr } = await supabase
-      .from('customer_visits')
+   const { data: visitRows, error: visitErr } = await supabase
+      .from('visit_verifications')
       .select(`
         restaurant_id,
-        visited_at,
+        verified_at,
         restaurants ( name, slug )
       `)
       .eq('customer_id', customerId)
-      .order('visited_at', { ascending: false })
+      .eq('status', 'verified')
+      .order('verified_at', { ascending: false })
 
     if (visitErr) {
       console.error('[customer visits]', visitErr)
@@ -62,16 +63,16 @@ export async function GET(req: NextRequest) {
 
     for (const row of visitRows ?? []) {
       const rid  = row.restaurant_id as string
-      const rest = row.restaurants as unknown as { name: string; slug: string } | null
-      const name = rest?.name ?? 'Unknown Restaurant'
-      const slug = rest?.slug ?? ''
+      const rest = Array.isArray(row.restaurants) ? row.restaurants[0] : row.restaurants
+      const name = (rest as { name?: string } | null)?.name ?? 'Unknown Restaurant'
+      const slug = (rest as { slug?: string } | null)?.slug ?? ''
+      const verifiedAt = row.verified_at as string
 
       if (visitMap.has(rid)) {
         const existing = visitMap.get(rid)!
         existing.visit_count += 1
-        // keep the most recent visited_at
-        if (row.visited_at > existing.last_visited_at) {
-          existing.last_visited_at = row.visited_at as string
+        if (verifiedAt > existing.last_visited_at) {
+          existing.last_visited_at = verifiedAt
         }
       } else {
         visitMap.set(rid, {
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
           restaurant_name: name,
           restaurant_slug: slug,
           visit_count:     1,
-          last_visited_at: row.visited_at as string,
+          last_visited_at: verifiedAt,
         })
       }
     }
@@ -195,14 +196,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Log the restaurant visit
-    if (body.restaurant_id && customer?.id) {
-  await supabase.from('customer_profiles').insert({
-    customer_id: customer.id,
-    restaurant_id: body.restaurant_id,
-    table_number: body.table_number ?? null,
-    visited_at: new Date().toISOString(),
-  })
-}
+   
 
     return NextResponse.json({ customer })
   } catch (err) {

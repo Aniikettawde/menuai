@@ -7,6 +7,9 @@ import type { MenuPageData } from '@/types'
 import { RestaurantShell } from '@/components/RestaurantShell'
 import { TableGuard } from '@/components/TableGuard'
 import { DiscoveryRestaurantView, type DiscoveryPageData } from './discovery-view'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { getValidTableSession, sessionCookieName } from '@/lib/table-session'
 
 interface PageProps {
   params: { slug: string }
@@ -172,8 +175,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function RestaurantPage({ params, searchParams }: PageProps) {
   const tableParam = searchParams.table
   const tokenParam = searchParams.t
-  const hasTableIntent = !!(tableParam || tokenParam)
 
+  // Legacy/raw QR link with a secret token still in the URL → bounce it
+  // through activation, which mints a session and redirects to a clean URL.
+  if (tokenParam) {
+    const qs = new URLSearchParams({
+      slug: params.slug,
+      table: tableParam ?? '',
+      t: tokenParam,
+    })
+    redirect(`/api/table-session/activate?${qs.toString()}`)
+  }
+
+  const hasTableIntent = !!tableParam
   const result = await getRestaurantWithSub(params.slug)
 
   if (result) {
@@ -181,33 +195,36 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
     const subscriptionActive = hasPaidAccess(sub)
 
     if (hasTableIntent) {
-      // Someone scanned a QR code (has ?table= or ?t= param)
+      // Someone has a ?table= param (post-activation, or old-style link)
 
       if (!subscriptionActive) {
-        // Trial/subscription expired — QR codes are dead → 404
         notFound()
       }
 
-      // Sub is active — validate the token
-      const { valid } = await validateTableToken(restaurant.id, tableParam, tokenParam)
+      const tableNumber = parseInt(tableParam!, 10)
+      const sessionId = cookies().get(sessionCookieName(restaurant.id))?.value
+      const session = sessionId
+        ? await getValidTableSession(sessionId, restaurant.id, tableNumber)
+        : null
 
-      if (!valid) {
-        // Bad or deactivated token → 404
-        notFound()
-      }
-
-      // Valid token + active sub → full QR UI
+      // No valid session → this is either an expired visit or someone
+      // typed ?table=N by hand. TableGuard will show the right screen
+      // for each case; we don't 404 here since ?table= alone (no session)
+      // still needs to render browse mode gracefully.
       const menuData = await getMenuItems(restaurant.id)
       return (
         <Suspense fallback={null}>
-          <TableGuard restaurant={restaurant}>
-            <RestaurantShell initialData={{ restaurant, ...menuData }} />
+          <TableGuard restaurant={restaurant} tableSessionValid={!!session}>
+            <RestaurantShell
+              initialData={{ restaurant, ...menuData }}
+              tableSessionValid={!!session}
+            />
           </TableGuard>
         </Suspense>
       )
     }
 
-    // No table intent — if sub is active, still show full QR UI in browse mode
+    // No table intent — browse mode
     if (subscriptionActive) {
       const menuData = await getMenuItems(restaurant.id)
       return (
@@ -220,7 +237,6 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
     }
   }
 
-  // Sub expired or restaurant not in public schema → fall to discovery
   const discoveryData = await getDiscoveryData(params.slug)
   if (discoveryData) {
     return <DiscoveryRestaurantView data={discoveryData} />

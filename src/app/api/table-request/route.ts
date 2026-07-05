@@ -4,6 +4,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getMessaging } from 'firebase-admin/messaging'
+import { cookies } from 'next/headers'
+import { getValidTableSession, sessionCookieName } from '@/lib/table-session'
 
 export const runtime = 'nodejs'
 
@@ -225,10 +227,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const { restaurantSlug, tableNumber, tableToken, sessionId, items, subtotal, requestType } = body as {
+    const { restaurantSlug, sessionId, items, subtotal, requestType } = body as {
       restaurantSlug?: string
-      tableNumber?: number
-      tableToken?: string
       sessionId?: string
       items?: RequestItem[]
       subtotal?: number
@@ -241,7 +241,6 @@ export async function POST(req: NextRequest) {
 
     if (
       !restaurantSlug ||
-      (!tableToken && !Number.isInteger(tableNumber)) ||
       !sessionId ||
       !Array.isArray(items) ||
       typeof subtotal !== 'number'
@@ -263,30 +262,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
 
-    let resolvedTableNumber = Number.isInteger(tableNumber) ? Number(tableNumber) : null
+    // Table number is derived ONLY from the verified, httpOnly session cookie —
+    // never trusted from the request body. This is what stops someone from
+    // POSTing { tableNumber: 7 } from home once their physical presence
+    // at the table can no longer be confirmed server-side.
+    const sessionCookieId = cookies().get(sessionCookieName(restaurant.id))?.value
 
-    if (tableToken) {
-      const { data: qrTokenRow, error: qrError } = await admin
-        .from('qr_tokens')
-        .select('table_number')
-        .eq('restaurant_id', restaurant.id)
-        .eq('token', tableToken)
-        .maybeSingle()
-
-      if (qrError) {
-        return NextResponse.json({ error: qrError.message }, { status: 500 })
-      }
-
-      if (!qrTokenRow) {
-        return NextResponse.json({ error: 'Invalid table token' }, { status: 403 })
-      }
-
-      resolvedTableNumber = qrTokenRow.table_number
+    if (!sessionCookieId) {
+      return NextResponse.json(
+        { error: 'Table session expired. Please scan the QR code again.' },
+        { status: 401 },
+      )
     }
 
-    if (!resolvedTableNumber || resolvedTableNumber < 1) {
-      return NextResponse.json({ error: 'Missing or invalid table number' }, { status: 400 })
+    const tableSession = await getValidTableSession(sessionCookieId, restaurant.id)
+
+    if (!tableSession) {
+      return NextResponse.json(
+        { error: 'Table session expired. Please scan the QR code again.' },
+        { status: 401 },
+      )
     }
+
+    const resolvedTableNumber = tableSession.table_number
 
     const orderCode = makeOrderCode(resolvedTableNumber)
 

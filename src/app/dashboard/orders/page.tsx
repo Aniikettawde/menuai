@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { VerifyVisitCard } from '@/components/dashboard/VerifyVisitCard'
+
 import {
   BellRing,
   BellOff,
@@ -637,6 +639,9 @@ const historyRequests = useMemo(
           {error}
         </div>
       )}
+	  
+	        <VerifyVisitCard restaurantId={restaurantId!} />
+
 
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
