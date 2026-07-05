@@ -20,6 +20,7 @@ const firebaseProjectId = process.env.FIREBASE_PROJECT_ID
 const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL
 const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
 
+	
 if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey)
 }
@@ -87,6 +88,20 @@ async function getAssignedStaff(admin: SupabaseClient, restaurantId: string, tab
 
   const staff = (data ?? []) as AssignedStaff[]
   return staff.filter((row) => matchesTable(row, tableNumber))
+}
+
+function mergeItems(existing: RequestItem[], incoming: RequestItem[]): RequestItem[] {
+  const merged = existing.map((i) => ({ ...i }))
+  for (const inItem of incoming) {
+    const match = merged.find((m) => m.id === inItem.id)
+    if (match) {
+      match.qty += inItem.qty
+      match.total += inItem.total
+    } else {
+      merged.push({ ...inItem })
+    }
+  }
+  return merged
 }
 
 async function sendWebPushToStaff(
@@ -283,12 +298,91 @@ export async function POST(req: NextRequest) {
         { status: 401 },
       )
     }
-
-    const resolvedTableNumber = tableSession.table_number
-
+	
+	const resolvedTableNumber = tableSession.table_number
     const orderCode = makeOrderCode(resolvedTableNumber)
-
     const isOrderRequest = reqType === 'order'
+
+	
+	if (isOrderRequest) {
+  const { data: existingOrder, error: existingErr } = await admin
+    .from('table_requests')
+    .select('*')
+    .eq('restaurant_id', restaurant.id)
+    .eq('table_number', resolvedTableNumber)
+    .eq('request_type', 'order')
+    .in('status', ['pending', 'accepted'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existingErr) console.error('table-request existing lookup error:', existingErr)
+
+  if (existingOrder) {
+    const mergedItems = mergeItems(existingOrder.items as RequestItem[], items as RequestItem[])
+    const mergedSubtotal = mergedItems.reduce((sum, i) => sum + i.total, 0)
+
+    const patch: Record<string, unknown> = { items: mergedItems, subtotal: mergedSubtotal }
+    // Kitchen already printed the old ticket — flag it stale so staff reprint/re-enter
+    if (existingOrder.status === 'accepted' && existingOrder.kot_printed) {
+      patch.kot_printed = false
+      patch.kot_printed_at = null
+    }
+
+    const { data: updated, error: updateError } = await admin
+      .from('table_requests')
+      .update(patch)
+      .eq('id', existingOrder.id)
+      .select('*')
+      .single()
+
+    if (updateError) {
+      console.error('table-request merge update error:', updateError)
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    const assignedStaff = await getAssignedStaff(admin, restaurant.id, resolvedTableNumber)
+    const assignedStaffIds = assignedStaff.map((s) => s.id)
+    const addedSummary =
+      (items as RequestItem[]).slice(0, 2).map((i) => `${i.name} ×${i.qty}`).join(', ') +
+      ((items as RequestItem[]).length > 2 ? ` +${(items as RequestItem[]).length - 2} more` : '')
+
+    const title = `➕ Table ${resolvedTableNumber} — Order updated — ${restaurant.name}`
+    const bodyText = `Added: ${addedSummary}`
+    const pushTag = `order-${restaurant.id}-table-${resolvedTableNumber}`  // same tag as original order
+
+    const { data: fcmTokens } = await admin
+      .from('device_tokens')
+      .select('fcm_token, staff_id')
+      .eq('restaurant_slug', restaurantSlug)
+      .in('staff_id', assignedStaffIds)
+    const tokenList = (fcmTokens ?? []).map((t) => t.fcm_token).filter(Boolean)
+
+    await Promise.allSettled([
+      sendWebPushToStaff(admin, restaurant.id, assignedStaffIds, {
+        title, body: bodyText, tableNumber: resolvedTableNumber, requestId: updated.id, tag: pushTag,
+      }),
+      tokenList.length > 0
+        ? sendAndroidPushWithTokens(admin, tokenList, {
+            title, body: bodyText, tableNumber: resolvedTableNumber, requestId: updated.id,
+            items: mergedItems, subtotal: mergedSubtotal, requestType: 'order',
+          })
+        : Promise.resolve(),
+    ])
+
+    return NextResponse.json({
+      ok: true,
+      merged: true,
+      request: updated,
+      orderId: updated.id,
+      orderCode: updated.order_code,
+      tableNumber: resolvedTableNumber,
+      restaurantSlug,
+      assignedStaff: assignedStaff.map((s) => ({ id: s.id, email: s.email, table_start: s.table_start, table_end: s.table_end })),
+    })
+  }
+}
+
 
 const requestCode = isOrderRequest
   ? makeOrderCode(resolvedTableNumber)

@@ -90,6 +90,20 @@ export function WaiterCalledToast({
   // ── "Just accepted" celebration trigger ───────────────────────────────────────
   const prevStatusRef = useRef<OrderStatus>(status)
   const [showAcceptedBurst, setShowAcceptedBurst] = useState(false)
+  
+  const prevItemCountRef = useRef(items.reduce((s, i) => s + i.qty, 0))
+const [showItemsAddedBurst, setShowItemsAddedBurst] = useState(false)
+
+useEffect(() => {
+  const count = items.reduce((s, i) => s + i.qty, 0)
+  if (count > prevItemCountRef.current) {
+    setShowItemsAddedBurst(true)
+    const t = setTimeout(() => setShowItemsAddedBurst(false), 1800)
+    prevItemCountRef.current = count
+    return () => clearTimeout(t)
+  }
+  prevItemCountRef.current = count
+}, [items])
 
   useEffect(() => {
     const prev = prevStatusRef.current
@@ -519,6 +533,14 @@ export function WaiterCalledToast({
 
         {/* Items */}
         <div className="mt-4 space-y-1.5 border-t border-white/5 pt-3">
+  {showItemsAddedBurst && (
+    <div
+      className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-orange-500/30 bg-orange-500/15 px-2.5 py-1 text-[11px] font-semibold text-orange-300"
+      style={{ animation: 'fadeSlide 0.3s ease-out both' }}
+    >
+      New items added
+    </div>
+  )}
           {items.map((item) => (
             <div key={item.id} className="flex justify-between text-sm">
               <span className="text-zinc-400">{item.name}</span>

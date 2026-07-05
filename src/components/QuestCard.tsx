@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
 import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 interface QuestStatus {
   points: number
@@ -51,17 +51,30 @@ export function QuestCard({ customerId, restaurantId }: Props) {
   const [showRedeem, setShowRedeem] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
+  const [showToast, setShowToast] = useState(false)
+const [pointsGained, setPointsGained] = useState(0)
+const prevPointsRef = useRef<number | null>(null)
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/loyalty/status?customer_id=${customerId}`)
-      const json = await res.json()
-      if (res.ok) setStatus(json)
-    } catch {}
-    finally { setLoading(false) }
-  }, [customerId])
+const fetchStatus = useCallback(async () => {
+  try {
+    const res = await fetch(`/api/loyalty/status?customer_id=${customerId}`)
+    const json = await res.json()
+    if (res.ok) {
+      if (prevPointsRef.current !== null && json.points > prevPointsRef.current) {
+        setPointsGained(json.points - prevPointsRef.current)
+        setShowToast(true)
+        setTimeout(() => setShowToast(false), 3200)
+      }
+      prevPointsRef.current = json.points
+      setStatus(json)
+    }
+  } catch {}
+  finally { setLoading(false) }
+}, [customerId])
 
   useEffect(() => { void fetchStatus() }, [fetchStatus])
+  
+ 
 
   const secondsLeft = useCountdown(status?.pending_pin?.expires_at ?? null)
 
@@ -138,8 +151,62 @@ export function QuestCard({ customerId, restaurantId }: Props) {
   const showPinForThisRestaurant = pending_pin && pending_pin.restaurant_id === restaurantId && secondsLeft > 0
   const pendingRedemption = redemptions.find((r) => r.status === 'pending')
 
+
+useEffect(() => {
+  if (!showPinForThisRestaurant) return
+  const id = setInterval(() => { void fetchStatus() }, 4000)
+  return () => clearInterval(id)
+}, [showPinForThisRestaurant, fetchStatus])
+
+
   return (
     <div style={{ marginBottom: 20 }}>
+	<style>{`
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes toastIn {
+    0%   { transform: translateY(-16px) scale(0.92); opacity: 0; }
+    60%  { transform: translateY(2px) scale(1.02); opacity: 1; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
+  @keyframes toastOut {
+    from { transform: translateY(0); opacity: 1; }
+    to   { transform: translateY(-16px); opacity: 0; }
+  }
+  @keyframes toastPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(232,197,71,0.35); }
+    50%      { box-shadow: 0 0 0 8px rgba(232,197,71,0); }
+  }
+  .quest-toast { animation: toastIn 0.4s cubic-bezier(0.34,1.12,0.64,1) both, toastPulse 1.6s ease-out 0.4s; }
+  .quest-toast.leaving { animation: toastOut 0.3s ease both; }
+`}</style>
+
+{showToast && (
+  <div
+    className="quest-toast"
+    style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      background: 'linear-gradient(135deg, rgba(232,197,71,0.16) 0%, rgba(255,92,53,0.1) 100%)',
+      border: '1px solid rgba(232,197,71,0.3)',
+      borderRadius: 14, padding: '12px 14px', marginBottom: 12,
+    }}
+  >
+    <div style={{
+      width: 32, height: 32, flexShrink: 0, borderRadius: 10,
+      background: 'rgba(232,197,71,0.18)', border: '1px solid rgba(232,197,71,0.3)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Trophy size={15} color="#E8C547" />
+    </div>
+    <div>
+      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>
+        Visit verified! +{pointsGained} points
+      </p>
+      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(250,250,247,0.45)', fontFamily: 'var(--font-body)' }}>
+        Your waiter confirmed your PIN.
+      </p>
+    </div>
+  </div>
+)}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* Points header */}

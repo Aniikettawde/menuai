@@ -330,7 +330,13 @@ const [sessionExpired, setSessionExpired] = useState(false)
             sessionId, items: payload.items, subtotal: payload.subtotal,
           }),
         })
-        const data = (await res.json().catch(() => ({}))) as { error?: string; orderId?: string; orderCode?: string }
+        const data = (await res.json().catch(() => ({}))) as {
+  error?: string
+  orderId?: string
+  orderCode?: string
+  merged?: boolean
+    request?: { items?: OrderToastData['items']; subtotal?: number }
+}
 if (res.status === 401) {
   setSessionExpired(true)
   alert('Your table session has expired. Please scan the QR code again to continue.')
@@ -346,18 +352,38 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
           },
         })
         clearCart()
-        const orderId = String(data.orderId ?? '')
-        const newOrder: OrderToastData = {
-          tableNumber: tableNumber ?? 0, orderId,
-          orderCode: String(data.orderCode ?? orderId.slice(0, 8).toUpperCase()),
-          items: payload.items, subtotal: payload.subtotal,
+
+        if (data.merged) {
+          setWaiterToasts((prev) => {
+            const idx = prev.findIndex((o) => o.orderId === String(data.orderId))
+            const updatedOrder: OrderToastData = {
+              tableNumber: tableNumber ?? 0,
+              orderId: String(data.orderId),
+              orderCode: String(data.orderCode ?? data.orderId),
+              items: (data.request?.items ?? payload.items) as OrderToastData['items'],
+              subtotal: Number(data.request?.subtotal ?? payload.subtotal),
+            }
+            const next = [...prev]
+            if (idx >= 0) next[idx] = updatedOrder
+            else next.push(updatedOrder)
+            setActiveToastIndex(idx >= 0 ? idx : next.length - 1)
+            writePersistedOrderIds(slug, tableNumber, next.map((o) => o.orderId))
+            return next
+          })
+        } else {
+          const orderId = String(data.orderId ?? '')
+          const newOrder: OrderToastData = {
+            tableNumber: tableNumber ?? 0, orderId,
+            orderCode: String(data.orderCode ?? orderId.slice(0, 8).toUpperCase()),
+            items: payload.items, subtotal: payload.subtotal,
+          }
+          setWaiterToasts((prev) => {
+            const next = [...prev, newOrder]
+            writePersistedOrderIds(slug, tableNumber, next.map((o) => o.orderId))
+            setActiveToastIndex(next.length - 1)
+            return next
+          })
         }
-        setWaiterToasts((prev) => {
-          const next = [...prev, newOrder]
-          writePersistedOrderIds(slug, tableNumber, next.map((o) => o.orderId))
-          setActiveToastIndex(next.length - 1)
-          return next
-        })
       } catch (err) {
         void track(restaurant.id, 'waiter_call_failed', {
           metadata: { table_number: tableNumber, error: err instanceof Error ? err.message : 'unknown' },
@@ -395,11 +421,11 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
           }),
         })
 
-       const data = (await res.json().catch(() => ({}))) as {
-          error?: string
-          orderId?: string
-          request?: { id?: string }
-        }
+     const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        orderId?: string
+        request?: { id?: string }
+      }
 
         if (res.status === 401) {
           setSessionExpired(true)
