@@ -77,6 +77,17 @@ const fetchStatus = useCallback(async () => {
  
 
   const secondsLeft = useCountdown(status?.pending_pin?.expires_at ?? null)
+  
+  const showPinForThisRestaurant =
+    !!status?.pending_pin &&
+    status.pending_pin.restaurant_id === restaurantId &&
+    secondsLeft > 0
+
+  useEffect(() => {
+    if (!showPinForThisRestaurant) return
+    const id = setInterval(() => { void fetchStatus() }, 4000)
+    return () => clearInterval(id)
+  }, [showPinForThisRestaurant, fetchStatus])
 
   const handleGeneratePin = useCallback(async () => {
     setGenLoading(true)
@@ -147,16 +158,8 @@ const fetchStatus = useCallback(async () => {
     )
   }
 
-  const { points, quest, pending_pin, redemptions } = status
-  const showPinForThisRestaurant = pending_pin && pending_pin.restaurant_id === restaurantId && secondsLeft > 0
+const { points, quest, pending_pin, redemptions } = status
   const pendingRedemption = redemptions.find((r) => r.status === 'pending')
-
-
-useEffect(() => {
-  if (!showPinForThisRestaurant) return
-  const id = setInterval(() => { void fetchStatus() }, 4000)
-  return () => clearInterval(id)
-}, [showPinForThisRestaurant, fetchStatus])
 
 
   return (
