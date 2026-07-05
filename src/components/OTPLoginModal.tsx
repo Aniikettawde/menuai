@@ -143,7 +143,7 @@ function OTPInput({
           inputMode="numeric"
           pattern="[0-9]*"
           autoComplete={i === 0 ? 'one-time-code' : 'off'}
-          maxLength={6}
+          maxLength={1}
           value={digits[i] ?? ''}
           disabled={disabled}
           onChange={handleChange(i)}
