@@ -1,11 +1,6 @@
 'use client'
 
 // src/components/MenuGrid.tsx
-// Premium dark theme — matches .pr-shell tokens (--pr-black, --pr-gold, --pr-orange)
-//   1. Accordion-style categories (collapsed by default, click to expand)
-//   2. Floating search bar that filters items across all categories
-//   3. BestSellers section stays at top (always expanded)
-
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ChevronRight,
@@ -17,6 +12,8 @@ import {
   TrendingUp,
   Search,
   X,
+  Wine,
+  UtensilsCrossed,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { MenuItemCard } from './MenuItemCard'
@@ -24,7 +21,8 @@ import { FloatingCartBar } from './FloatingCartBar'
 import type { MenuItem, MenuCategory } from '@/types'
 import type { ReactNode } from 'react'
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+import type { WaiterCallItem } from '@/types'
+
 
 function formatPrice(paise: number) {
   if (!paise || paise <= 0) return ''
@@ -59,19 +57,19 @@ function PsychBadge({ badge }: { badge: Badge }) {
   return <span className={`mg-badge mg-badge--${badge.kind}`}>{BADGE_ICONS[badge.kind]}{badge.label}</span>
 }
 
-function ChefsPickCard({ item, onAsk }: { item: MenuItem; onAsk?: (t: string) => void }) {
+function ChefsPickCard({ item, onAsk, label }: { item: MenuItem; onAsk?: (t: string) => void; label: string }) {
   const price = formatPrice(item.price)
   const cleanDesc = item.description?.replace(/[,;:\s]+$/, '') ?? null
 
   return (
     <button
       type="button"
-      onClick={() => onAsk?.(`Tell me more about ${item.name} — why is it the chef's pick?`)}
+      onClick={() => onAsk?.(`Tell me more about ${item.name} — why is it the ${label.toLowerCase()}?`)}
       className="mg-chefspick"
     >
       <div className="mg-chefspick-icon"><ChefHat size={16} /></div>
       <div className="mg-chefspick-body">
-        <span className="mg-chefspick-eyebrow">Chef&apos;s pick</span>
+        <span className="mg-chefspick-eyebrow">{label}</span>
         <p className="mg-chefspick-name">{item.name}</p>
         {cleanDesc && <p className="mg-chefspick-desc">{cleanDesc}</p>}
         <div className="mg-chefspick-meta">
@@ -89,9 +87,7 @@ function CategoryHeaderPlaceholder({ name }: { name: string }) {
   return <div className="mg-cat-thumb-placeholder">{letter}</div>
 }
 
-// ── BestSellers (always visible, never in accordion) ──────────────────────────
-
-function BestSellersSection({ items }: { items: MenuItem[] }) {
+function BestSellersSection({ items, label, sublabel }: { items: MenuItem[]; label: string; sublabel: string }) {
   if (items.length === 0) return null
   return (
     <section className="mg-section mg-bestsellers">
@@ -99,9 +95,9 @@ function BestSellersSection({ items }: { items: MenuItem[] }) {
         <div>
           <div className="mg-bestsellers-title-row">
             <Flame size={16} className="mg-flame" />
-            <h2 className="mg-section-title">Best sellers</h2>
+            <h2 className="mg-section-title">{label}</h2>
           </div>
-          <p className="mg-section-sub">Most ordered dishes</p>
+          <p className="mg-section-sub">{sublabel}</p>
         </div>
         <span className="mg-popular-pill"><Sparkles size={9} /> Popular now</span>
       </div>
@@ -114,13 +110,11 @@ function BestSellersSection({ items }: { items: MenuItem[] }) {
   )
 }
 
-// ── Search results list ───────────────────────────────────────────────────────
-
-function SearchResults({ results }: { results: MenuItem[] }) {
+function SearchResults({ results, emptyLabel }: { results: MenuItem[]; emptyLabel: string }) {
   if (results.length === 0) {
     return (
       <div className="mg-empty-state">
-        <p className="mg-empty-title">No dishes found</p>
+        <p className="mg-empty-title">{emptyLabel}</p>
         <p className="mg-empty-sub">Try a different keyword</p>
       </div>
     )
@@ -137,15 +131,8 @@ function SearchResults({ results }: { results: MenuItem[] }) {
   )
 }
 
-// ── Accordion category section ────────────────────────────────────────────────
-
 function CategorySection({
-  category,
-  items,
-  isOpen,
-  onToggle,
-  showChefsPick,
-  onAsk,
+  category, items, isOpen, onToggle, showChefsPick, onAsk, pickLabel,
 }: {
   category: MenuCategory
   items: MenuItem[]
@@ -153,6 +140,7 @@ function CategorySection({
   onToggle: () => void
   showChefsPick: boolean
   onAsk?: (t: string) => void
+  pickLabel: string
 }) {
   const chefsPick = showChefsPick ? getChefsPick(items) : null
   const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
@@ -198,7 +186,7 @@ function CategorySection({
           <div className="mg-divided-list">
             {chefsPick && (
               <div className="mg-chefspick-wrap">
-                <ChefsPickCard item={chefsPick} onAsk={onAsk} />
+                <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
               </div>
             )}
             {otherItems.map((item) => {
@@ -221,16 +209,13 @@ function CategorySection({
   )
 }
 
-// ── Floating search bar ───────────────────────────────────────────────────────
-
 function SearchBar({
-  value,
-  onChange,
-  onClear,
+  value, onChange, onClear, placeholder,
 }: {
   value: string
   onChange: (v: string) => void
   onClear: () => void
+  placeholder: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -243,7 +228,7 @@ function SearchBar({
         inputMode="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search dishes…"
+        placeholder={placeholder}
         className="mg-search-input"
       />
       {value && (
@@ -260,15 +245,11 @@ function SearchBar({
   )
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
 
 interface MenuGridProps {
   onAsk?: (text: string) => void
   onOpenChat?: () => void
-  onCallWaiter?: (payload: {
-    items: { id: string; name: string; qty: number; price: number; total: number }[]
-    subtotal: number
-  }) => void
+  onCallWaiter?: (payload: { items: WaiterCallItem[]; subtotal: number }) => void
   isWaiterLoading?: boolean
   upsellCard?: ReactNode
 }
@@ -280,18 +261,41 @@ export function MenuGrid({
   isWaiterLoading = false,
   upsellCard,
 }: MenuGridProps = {}) {
-  const { categories, items } = useAppStore()
+  const { categories, items, activeMenuType, hasBarMenu, switchMenuType } = useAppStore()
+  const menuType = activeMenuType ?? 'food'
+  const isBarView = menuType === 'bar'
 
   const [query, setQuery] = useState('')
   const [openCategoryIds, setOpenCategoryIds] = useState<Set<string>>(new Set())
 
+  // Reset local UI state when menu type changes so stale open/query state
+  // from the food menu doesn't bleed into the bar menu view.
+  const [lastMenuType, setLastMenuType] = useState(menuType)
+  if (lastMenuType !== menuType) {
+    setLastMenuType(menuType)
+    setQuery('')
+    setOpenCategoryIds(new Set())
+  }
+
+  const categoriesForType = useMemo(
+    () => categories.filter((c) => c.menu_type === menuType),
+    [categories, menuType],
+  )
+
   const sortedCategories = useMemo(() => {
-    return [...categories].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
-  }, [categories])
+    return [...categoriesForType].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+  }, [categoriesForType])
+
+  const categoryIdSet = useMemo(() => new Set(sortedCategories.map((c) => c.id)), [sortedCategories])
+
+  const itemsForType = useMemo(
+    () => items.filter((i) => categoryIdSet.has(i.category_id)),
+    [items, categoryIdSet],
+  )
 
   const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
-  }, [items])
+    return [...itemsForType].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+  }, [itemsForType])
 
   const categoriesWithItems = useMemo(
     () => sortedCategories.filter((cat) => sortedItems.some((i) => i.category_id === cat.id && i.is_available)),
@@ -300,25 +304,25 @@ export function MenuGrid({
 
   const bestSellerItems = useMemo(
     () =>
-      items
+      itemsForType
         .filter((i) => i.is_available && i.is_bestseller)
         .slice()
         .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
         .slice(0, 4),
-    [items],
+    [itemsForType],
   )
 
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    return items.filter(
+    return itemsForType.filter(
       (i) =>
         i.is_available &&
         (i.name.toLowerCase().includes(q) ||
           i.description?.toLowerCase().includes(q) ||
           i.tags?.some((t) => t.toLowerCase().includes(q))),
     )
-  }, [items, query])
+  }, [itemsForType, query])
 
   const isSearching = query.trim().length > 0
 
@@ -336,18 +340,18 @@ export function MenuGrid({
     setOpenCategoryIds(new Set())
   }, [])
 
+  const searchPlaceholder = isBarView ? 'Search drinks…' : 'Search dishes…'
+  const emptyLabel = isBarView ? 'No drinks found' : 'No dishes found'
+  const bestSellersLabel = isBarView ? 'Bar favourites' : 'Best sellers'
+  const bestSellersSub = isBarView ? 'Most ordered drinks' : 'Most ordered dishes'
+  const pickLabel = isBarView ? "Bartender's pick" : "Chef's pick"
+
   return (
     <div className="mg-root">
       <style jsx>{`
         .mg-root { position: relative; width: 100%; padding-bottom: 11rem; padding-top: 0.25rem; }
 
-        /* ── search bar ── */
-        .mg-search-sticky {
-  margin-bottom: 14px;
-  position: static;
-  top: auto;
-  z-index: auto;
-}
+        .mg-search-sticky { margin-bottom: 8px; position: static; top: auto; z-index: auto; }
         .mg-search-sticky-inner { border-radius: 16px; background: color-mix(in srgb, var(--surface-bg) 92%, transparent); backdrop-filter: blur(10px); padding: 6px 0; }
 
         :global(.mg-search-wrap) {
@@ -374,9 +378,17 @@ export function MenuGrid({
         }
         :global(.mg-search-clear:hover) { color: var(--pr-text); }
 
-        /* ── layout ── */
+        .mg-switch-row { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+        .mg-switch-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          border-radius: 999px; border: 1px solid var(--pr-border);
+          background: rgba(255,255,255,0.04); color: var(--pr-text-muted);
+          padding: 6px 12px; font-size: 11.5px; font-weight: 600;
+          cursor: pointer; font-family: var(--font-body); transition: all 0.15s;
+        }
+        .mg-switch-btn:hover { border-color: rgba(232,197,71,0.3); color: var(--pr-gold); }
+
         .mg-stack { display: flex; flex-direction: column; gap: 14px; }
-        .mg-upsell-wrap { border-radius: 18px; overflow: hidden; }
 
         :global(.mg-section) {
           border-radius: 26px;
@@ -384,17 +396,10 @@ export function MenuGrid({
           border: 1px solid var(--pr-border);
           overflow: hidden;
         }
-		:global(.mg-bestsellers::before) {
-  content: '';
-  display: block; height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(212,168,75,0.45), transparent);
-}
-
-        /* ── bestsellers ── */
-       :global(.mg-bestsellers) {
-  border-color: rgba(212,168,75,0.16);
-  background: linear-gradient(180deg, rgba(212,168,75,0.04) 0%, var(--pr-card) 60%);
-}
+        :global(.mg-bestsellers) {
+          border-color: rgba(212,168,75,0.16);
+          background: linear-gradient(180deg, rgba(212,168,75,0.04) 0%, var(--pr-card) 60%);
+        }
         :global(.mg-bestsellers-head) {
           display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
           padding: 16px 16px 14px; border-bottom: 1px solid rgba(232,197,71,0.12);
@@ -414,10 +419,7 @@ export function MenuGrid({
           letter-spacing: 0.1em; text-transform: uppercase;
         }
         :global(.mg-bestsellers-list) { display: flex; flex-direction: column; }
-        :global(.mg-bestseller-row:first-child) { border-top: none; }
-        
 
-        /* ── category accordion ── */
         :global(.mg-cat-header) {
           display: flex; align-items: center; gap: 12px; width: 100%;
           padding: 14px 16px; background: none; border: none; cursor: pointer;
@@ -466,7 +468,6 @@ export function MenuGrid({
         :global(.mg-item-pad) { padding-top: 10px; }
         :global(.mg-badge-overlay) { position: absolute; top: -1px; left: 14px; z-index: 5; transform: translateY(8px); }
 
-        /* ── psych badges ── */
         :global(.mg-badge) {
           display: inline-flex; align-items: center; gap: 4px;
           border-radius: 999px; padding: 3px 9px;
@@ -477,7 +478,6 @@ export function MenuGrid({
         :global(.mg-badge--anchoring) { background: rgba(255,255,255,0.06); border-color: var(--pr-border); color: var(--pr-text-muted); }
         :global(.mg-badge--scarcity) { background: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.22); color: #fb7185; }
 
-        /* ── chef's pick ── */
         :global(.mg-chefspick-wrap) { padding: 12px 14px; }
         :global(.mg-chefspick) {
           display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
@@ -506,13 +506,9 @@ export function MenuGrid({
         :global(.mg-chefspick-hint) { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--pr-text-faint); }
         :global(.mg-chefspick-chevron) { color: var(--pr-text-faint); margin-top: 2px; flex-shrink: 0; }
 
-        /* ── search results ── */
-        :global(.mg-search-results-head) {
-          padding: 12px 16px; border-bottom: 1px solid var(--pr-border);
-        }
+        :global(.mg-search-results-head) { padding: 12px 16px; border-bottom: 1px solid var(--pr-border); }
         :global(.mg-search-results-head p) { margin: 0; font-size: 12px; font-weight: 500; color: var(--pr-text-muted); }
 
-        /* ── empty state ── */
         .mg-empty-state {
           border-radius: 18px; border: 1px solid var(--pr-border); background: var(--pr-card);
           padding: 44px 16px; text-align: center;
@@ -521,21 +517,36 @@ export function MenuGrid({
         .mg-empty-sub { margin: 4px 0 0; font-size: 12px; color: var(--pr-text-faint); }
       `}</style>
 
-      {/* Search bar */}
+      {hasBarMenu && (
+        <div className="mg-switch-row">
+          <button type="button" className="mg-switch-btn" onClick={switchMenuType}>
+            {isBarView ? <UtensilsCrossed size={12} /> : <Wine size={12} />}
+            Switch to {isBarView ? 'Food' : 'Bar'} Menu
+          </button>
+        </div>
+      )}
+
       <div className="mg-search-sticky">
         <div className="mg-search-sticky-inner">
-          <SearchBar value={query} onChange={setQuery} onClear={handleClearSearch} />
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            onClear={handleClearSearch}
+            placeholder={searchPlaceholder}
+          />
         </div>
       </div>
 
       <div className="mg-stack">
-        {upsellCard && !isSearching && <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{upsellCard}</div>}
+        {upsellCard && !isSearching && !isBarView && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{upsellCard}</div>
+        )}
 
         {isSearching ? (
-          <SearchResults results={searchResults} />
+          <SearchResults results={searchResults} emptyLabel={emptyLabel} />
         ) : (
           <>
-            <BestSellersSection items={bestSellerItems} />
+            <BestSellersSection items={bestSellerItems} label={bestSellersLabel} sublabel={bestSellersSub} />
 
             {categoriesWithItems.map((cat, catIndex) => {
               const catItems = sortedItems.filter((i) => i.category_id === cat.id && i.is_available)
@@ -550,6 +561,7 @@ export function MenuGrid({
                   onToggle={() => toggleCategory(cat.id)}
                   showChefsPick={catIndex === 0 || catItems.some((i) => i.is_special)}
                   onAsk={onAsk}
+                  pickLabel={pickLabel}
                 />
               )
             })}

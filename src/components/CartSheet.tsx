@@ -4,21 +4,18 @@ import { computeItemUnitPrice } from '@/lib/pricing'
 import {
   X, Minus, Plus, Trash2, HandMetal, Loader2, Sparkles,
   Flame, TrendingUp, Star, Zap, ShoppingBag, ChevronDown,
-  ChevronUp, AlertCircle, Clock,
+  ChevronUp, AlertCircle, Clock, GlassWater, Split,
 } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Image from 'next/image'
-import { useAppStore } from '@/store/app-store'
+import { useAppStore, isBarItem } from '@/store/app-store'
 import { track } from '@/lib/analytics'
-import type { MenuItem } from '@/types'
+import type { MenuItem, WaiterCallItem, DeliveryPreference } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Props = {
-  onCallWaiter?: (payload: {
-    items: { id: string; name: string; qty: number; price: number; total: number }[]
-    subtotal: number
-  }) => void
+  onCallWaiter?: (payload: { items: WaiterCallItem[]; subtotal: number }) => void
   isWaiterLoading?: boolean
 }
 
@@ -86,7 +83,6 @@ function buildGenericSuggestions(
   const cartCourses = new Set(cartItems.map((c) => getCourse(c.item)))
   const primary = cartItems[0]?.item.name ?? 'your order'
 
-  // Stable FOMO numbers per item id
   const stableFomoCount = (id: string, min: number, max: number) => {
     const n = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
     return min + (n % (max - min + 1))
@@ -134,7 +130,7 @@ function buildGenericSuggestions(
   const picked: typeof candidates = []
   const pickedCourses = new Set<string>()
   for (const entry of candidates) {
-    if (picked.length >= 2) break   // MAX 2 — focused upsell, not a buffet
+    if (picked.length >= 2) break
     if (pickedCourses.has(entry.course)) continue
     picked.push(entry)
     pickedCourses.add(entry.course)
@@ -199,6 +195,13 @@ function formatPrice(paise: number) {
   return `₹${Math.round(paise / 100)}`
 }
 
+function formatDeliveryPreference(pref: DeliveryPreference | undefined, qty: number): string {
+  if (!pref) return 'Choose delivery'
+  if (pref.mode === 'all_at_once') return 'All at once'
+  if (pref.mode === 'one_by_one') return 'One at a time'
+  return `${pref.firstBatch} now, ${pref.remaining} later`
+}
+
 // ─── Pulsing Live Dot ─────────────────────────────────────────────────────────
 
 function LiveDot() {
@@ -232,7 +235,6 @@ function UpsellStripCard({
         ? 'border-emerald-200 bg-emerald-50'
         : 'border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50',
     ].join(' ')}>
-      {/* Image */}
       <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-orange-100">
         {imageUrl ? (
           <Image src={imageUrl} alt={suggestion.name} fill className="object-cover" sizes="44px" />
@@ -241,28 +243,23 @@ function UpsellStripCard({
             {suggestion.is_veg ? '🥗' : '🍖'}
           </div>
         )}
-        {/* Veg dot */}
         <div className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-sm border bg-white ${suggestion.is_veg ? 'border-emerald-500' : 'border-red-500'}`}>
           <div className={`m-px h-1.5 w-1.5 rounded-full ${suggestion.is_veg ? 'bg-emerald-500' : 'bg-red-500'}`} />
         </div>
       </div>
 
-      {/* Info */}
       <div className="min-w-0 flex-1">
-        {/* Hook pill */}
         <div className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-orange-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-orange-600">
           <Zap size={7} />
           {suggestion.hook}
         </div>
         <p className="truncate text-[12px] font-semibold text-slate-900">{suggestion.name}</p>
-        {/* FOMO line */}
         <div className="mt-0.5 flex items-center gap-1">
           <LiveDot />
           <span className="text-[10px] font-medium text-slate-500">{suggestion.fomo ?? suggestion.urgency}</span>
         </div>
       </div>
 
-      {/* Price + Add */}
       <div className="flex shrink-0 flex-col items-end gap-1">
         <span className="text-[11px] font-bold text-slate-800">{formatPrice(suggestion.price)}</span>
         {isAdded ? (
@@ -282,7 +279,6 @@ function UpsellStripCard({
 }
 
 // ─── Checkout Intercept Modal ─────────────────────────────────────────────────
-// Fires BEFORE waiter is called. Customer must explicitly skip or add.
 
 function CheckoutInterceptModal({
   suggestions,
@@ -315,16 +311,13 @@ function CheckoutInterceptModal({
   }
 
   return (
-    // Backdrop
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 backdrop-blur-sm px-0">
       <div className="w-full max-w-2xl animate-in slide-in-from-bottom duration-300 rounded-t-[28px] bg-white shadow-2xl">
 
-        {/* Handle */}
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-10 rounded-full bg-slate-200" />
         </div>
 
-        {/* Header */}
         <div className="px-5 pb-3 pt-1">
           <div className="flex items-center gap-2 mb-1">
             <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-500">
@@ -337,7 +330,6 @@ function CheckoutInterceptModal({
           </p>
         </div>
 
-        {/* Suggestion cards */}
         <div className="px-4 space-y-2.5 pb-4">
           {suggestions.map((s) => {
             const menuItem = menuItemMap.get(s.id)
@@ -356,7 +348,6 @@ function CheckoutInterceptModal({
                     : 'border-slate-100 bg-slate-50 hover:border-orange-200',
                 ].join(' ')}
               >
-                {/* Image */}
                 <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-orange-50">
                   {imageUrl ? (
                     <Image src={imageUrl} alt={s.name} fill className="object-cover" sizes="56px" />
@@ -370,20 +361,16 @@ function CheckoutInterceptModal({
                   </div>
                 </div>
 
-                {/* Text */}
                 <div className="min-w-0 flex-1">
-                  {/* Hook */}
                   <p className="text-[10px] font-bold uppercase tracking-wider text-orange-500 mb-0.5">{s.hook}</p>
                   <p className="text-[13px] font-semibold text-slate-900 leading-tight">{s.name}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{s.reason}</p>
-                  {/* FOMO */}
                   <div className="mt-1 flex items-center gap-1.5">
                     <LiveDot />
                     <span className="text-[10px] font-semibold text-slate-600">{s.fomo ?? s.urgency}</span>
                   </div>
                 </div>
 
-                {/* Price + Checkbox */}
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <span className="text-sm font-bold text-slate-900">{formatPrice(s.price)}</span>
                   <div className={[
@@ -402,7 +389,6 @@ function CheckoutInterceptModal({
           })}
         </div>
 
-        {/* Actions */}
         <div className="border-t border-slate-100 px-4 py-4 flex flex-col gap-2">
           <button
             type="button"
@@ -433,16 +419,42 @@ function CheckoutInterceptModal({
 
 // ─── Cart Item Row ─────────────────────────────────────────────────────────────
 
+function DeliveryPrefChip({
+  pref, qty, onOpen,
+}: { pref?: DeliveryPreference; qty: number; onOpen: () => void }) {
+  const label = formatDeliveryPreference(pref, qty)
+  const isUnset = !pref
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={[
+        'mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold transition',
+        isUnset
+          ? 'border border-amber-300 bg-amber-50 text-amber-700 animate-pulse'
+          : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300',
+      ].join(' ')}
+    >
+      {pref?.mode === 'custom_split' ? <Split size={10} /> : <GlassWater size={10} />}
+      {label}
+    </button>
+  )
+}
+
 function CartItemRow({
   c,
+  isBar,
   onIncrease,
   onDecrease,
   onRemove,
+  onOpenDeliveryPrompt,
 }: {
-  c: { item: MenuItem; quantity: number; selectedOptions?: import('@/types').SelectedOption[]; cartKey: string }
+  c: { item: MenuItem; quantity: number; selectedOptions?: import('@/types').SelectedOption[]; cartKey: string; deliveryPreference?: DeliveryPreference }
+  isBar: boolean
   onIncrease: () => void
   onDecrease: () => void
   onRemove: () => void
+  onOpenDeliveryPrompt: () => void
 }) {
   const unitPrice = computeItemUnitPrice(c.item.price, c.selectedOptions ?? [])
   const optionSummary =
@@ -450,33 +462,47 @@ function CartItemRow({
       ? c.selectedOptions.flatMap((o) => o.choices.map((ch) => ch.choice_name)).join(', ')
       : null
 
+  const showDeliveryChip = isBar && c.quantity >= 2
+
   return (
-    <div className="flex items-center gap-2.5 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-      <div className={`h-3.5 w-3.5 shrink-0 rounded-sm border-2 bg-white ${c.item.is_veg ? 'border-emerald-500' : 'border-red-500'}`}>
-        <div className={`m-px h-1.5 w-1.5 rounded-full ${c.item.is_veg ? 'bg-emerald-500' : 'bg-red-500'}`} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-slate-900">{c.item.name}</p>
-        {optionSummary && <p className="mt-0.5 truncate text-[10px] text-slate-400">{optionSummary}</p>}
-        <p className="mt-0.5 text-xs text-slate-400">{formatPrice(unitPrice)} each</p>
-      </div>
-      <span className="shrink-0 text-sm font-bold text-slate-900">{formatPrice(unitPrice * c.quantity)}</span>
-      <div className="inline-flex shrink-0 items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50">
-        <button type="button" onClick={onDecrease} className="flex h-7 w-7 items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200">
-          <Minus size={12} />
+    <div className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+      <div className="flex items-center gap-2.5">
+        <div className={`h-3.5 w-3.5 shrink-0 rounded-sm border-2 bg-white ${c.item.is_veg ? 'border-emerald-500' : 'border-red-500'}`}>
+          <div className={`m-px h-1.5 w-1.5 rounded-full ${c.item.is_veg ? 'bg-emerald-500' : 'bg-red-500'}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-slate-900">{c.item.name}</p>
+          {optionSummary && <p className="mt-0.5 truncate text-[10px] text-slate-400">{optionSummary}</p>}
+          <p className="mt-0.5 text-xs text-slate-400">{formatPrice(unitPrice)} each</p>
+        </div>
+        <span className="shrink-0 text-sm font-bold text-slate-900">{formatPrice(unitPrice * c.quantity)}</span>
+        <div className="inline-flex shrink-0 items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50">
+          <button type="button" onClick={onDecrease} className="flex h-7 w-7 items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200">
+            <Minus size={12} />
+          </button>
+          <span className="min-w-6 px-1 text-center text-xs font-semibold text-slate-900">{c.quantity}</span>
+          <button type="button" onClick={onIncrease} className="flex h-7 w-7 items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200">
+            <Plus size={12} />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-300 hover:bg-red-50 hover:text-red-400 transition-colors"
+        >
+          <Trash2 size={12} />
         </button>
-        <span className="min-w-6 px-1 text-center text-xs font-semibold text-slate-900">{c.quantity}</span>
-        <button type="button" onClick={onIncrease} className="flex h-7 w-7 items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200">
-          <Plus size={12} />
-        </button>
       </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-300 hover:bg-red-50 hover:text-red-400 transition-colors"
-      >
-        <Trash2 size={12} />
-      </button>
+
+      {showDeliveryChip && (
+        <div className="pl-6">
+          <DeliveryPrefChip
+            pref={c.deliveryPreference}
+            qty={c.quantity}
+            onOpen={onOpenDeliveryPrompt}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -503,9 +529,9 @@ function SuggestionSkeleton() {
 
 export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
   const {
-    cartItems, items: allItems, isCartOpen, closeCart,
+    cartItems, items: allItems, categories, isCartOpen, closeCart,
     increaseCartItem, decreaseCartItem, removeFromCart,
-    clearCart, addToCart, restaurant,
+    clearCart, addToCart, restaurant, openDeliveryPrompt,
   } = useAppStore()
 
   const subtotal = cartItems.reduce((sum, c) => {
@@ -514,18 +540,24 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
   }, 0)
   const itemCount = cartItems.reduce((sum, c) => sum + c.quantity, 0)
 
+  // Bar items with 2+ qty and no delivery preference chosen yet block checkout —
+  // the DeliveryPreferenceModal (rendered globally in RestaurantShell) auto-opens
+  // for these as soon as quantity crosses the threshold, but if the customer
+  // dismissed it without choosing, we re-block at call-waiter time instead of
+  // silently guessing.
+  const pendingDeliveryDecision = cartItems.find(
+    (c) => isBarItem(c.item.category_id, categories) && c.quantity >= 2 && !c.deliveryPreference,
+  )
+
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([])
   const [aiLoading, setAiLoading] = useState(false)
-  // Track which suggestion ids have been added from the strip
   const [addedFromStrip, setAddedFromStrip] = useState<Set<string>>(new Set())
-  // Intercept modal visibility
   const [showIntercept, setShowIntercept] = useState(false)
 
   const fetchedKeyRef = useRef<string>('')
   const networkAttemptedRef = useRef<Set<string>>(new Set())
   const shownTrackedRef = useRef<Set<string>>(new Set())
 
-  // Reset strip added state when cart changes
   useEffect(() => {
     setAddedFromStrip(new Set())
   }, [cartItems.length])
@@ -582,7 +614,6 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
     void fetchAI()
   }, [isCartOpen, cartItems, allItems])
 
-  // Track upsell shown
   useEffect(() => {
     if (!isCartOpen || !restaurant || aiSuggestions.length === 0) return
     const key = getCacheKey(cartItems)
@@ -638,8 +669,12 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
     }
   }
 
-  // Called when user clicks "Call waiter" — show intercept if suggestions exist and none were added
   const handleCallWaiterClick = () => {
+    // Bar items with 2+ qty must have a delivery preference before checkout.
+    if (pendingDeliveryDecision) {
+      openDeliveryPrompt(pendingDeliveryDecision.cartKey)
+      return
+    }
     const unaddedSuggestions = aiSuggestions.filter((s) => !addedFromStrip.has(s.id))
     if (unaddedSuggestions.length > 0) {
       setShowIntercept(true)
@@ -655,10 +690,13 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
 
   const proceedToCallWaiter = useCallback(() => {
     if (!restaurant) return
-    const itemsWithSource = cartItems.map((c) => ({
-      id: c.item.id, name: c.item.name, qty: c.quantity,
-      price: c.item.price, total: c.item.price * c.quantity,
-    }))
+    const itemsWithSource: WaiterCallItem[] = cartItems.map((c) => {
+      const base: WaiterCallItem = {
+        id: c.item.id, name: c.item.name, qty: c.quantity,
+        price: c.item.price, total: c.item.price * c.quantity,
+      }
+      return c.deliveryPreference ? { ...base, delivery_preference: c.deliveryPreference } : base
+    })
     void track(restaurant.id, 'cart_submitted', {
       metadata: { item_count: itemCount, subtotal, items: itemsWithSource },
     })
@@ -673,7 +711,6 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
       if (suggestion) handleAddFromStrip(suggestion)
     })
     setShowIntercept(false)
-    // Small delay so cart updates before proceeding
     setTimeout(proceedToCallWaiter, 150)
   }
 
@@ -682,7 +719,6 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
 
   return (
     <>
-      {/* ── Intercept Modal ── */}
       {showIntercept && unaddedSuggestions.length > 0 && (
         <CheckoutInterceptModal
           suggestions={unaddedSuggestions}
@@ -693,9 +729,7 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
         />
       )}
 
-      {/* ── Cart Sheet ── */}
       <div className={['fixed inset-0 z-[80] transition', isCartOpen ? 'pointer-events-auto' : 'pointer-events-none'].join(' ')}>
-        {/* Backdrop */}
         <button
           type="button"
           onClick={closeCart}
@@ -703,7 +737,6 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
           aria-label="Close cart"
         />
 
-        {/* Sheet */}
         <div className={[
           'absolute inset-x-0 bottom-0 mx-auto w-full max-w-2xl',
           'rounded-t-[28px] border border-slate-200 bg-slate-50',
@@ -711,12 +744,10 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
           isCartOpen ? 'translate-y-0' : 'translate-y-full',
         ].join(' ')}>
 
-          {/* Handle */}
           <div className="flex justify-center pt-3 pb-1">
             <div className="h-1 w-10 rounded-full bg-slate-200" />
           </div>
 
-          {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-500">
@@ -736,10 +767,7 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
             </button>
           </div>
 
-          {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto overscroll-contain max-h-[55vh]">
-
-            {/* Cart Items */}
             <div className="px-4 pt-4 pb-3">
               {cartItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -760,9 +788,11 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
                       <CartItemRow
                         key={c.cartKey}
                         c={c}
+                        isBar={isBarItem(c.item.category_id, categories)}
                         onIncrease={() => increaseCartItem(c.cartKey)}
                         onDecrease={() => decreaseCartItem(c.cartKey)}
                         onRemove={() => handleRemove(c.cartKey, c.item.name)}
+                        onOpenDeliveryPrompt={() => openDeliveryPrompt(c.cartKey)}
                       />
                     ))}
                   </div>
@@ -771,13 +801,9 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
             </div>
           </div>
 
-          {/* ── Sticky Bottom Area ── */}
           <div className="border-t border-slate-200 bg-white">
-
-            {/* Upsell Strip — always visible above CTA when suggestions exist */}
             {cartItems.length > 0 && (aiSuggestions.length > 0 || aiLoading) && (
               <div className="px-4 pt-3 pb-2">
-                {/* Strip Header */}
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <div className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-400">
@@ -795,7 +821,6 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
                   )}
                 </div>
 
-                {/* Cards */}
                 <div className="space-y-2">
                   {aiLoading && aiSuggestions.length === 0
                     ? Array.from({ length: 2 }).map((_, i) => <SuggestionSkeleton key={i} />)
@@ -812,8 +837,16 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
               </div>
             )}
 
-            {/* Subtotal + CTA */}
             <div className="px-4 pb-4 pt-2">
+              {pendingDeliveryDecision && (
+                <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <AlertCircle size={14} className="mt-px shrink-0 text-amber-500" />
+                  <p className="text-[11px] leading-relaxed text-amber-700">
+                    Let us know how you'd like <strong>{pendingDeliveryDecision.item.name}</strong> served before we send this to the bar.
+                  </p>
+                </div>
+              )}
+
               <div className="mb-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                 <span className="text-sm text-slate-500">Subtotal</span>
                 <span className="text-base font-bold text-slate-900">{formatPrice(subtotal)}</span>
@@ -827,6 +860,8 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
               >
                 {isWaiterLoading ? (
                   <><Loader2 size={16} className="animate-spin" />Notifying waiter…</>
+                ) : pendingDeliveryDecision ? (
+                  <><GlassWater size={17} />Choose delivery preference</>
                 ) : (
                   <><HandMetal size={17} />Call waiter · {formatPrice(subtotal)}</>
                 )}

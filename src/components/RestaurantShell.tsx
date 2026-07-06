@@ -23,7 +23,9 @@ import { CustomerAuthProvider } from './CustomerAuthProvider'
 import { OffersCarousel } from './OffersCarousel'
 import { TableSessionHeartbeat } from './TableSessionHeartbeat'   // ← add
 import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
-
+import { MenuTypeSelector } from './MenuTypeSelector'
+import { DeliveryPreferenceModal } from './DeliveryPreferenceModal'
+import type { WaiterCallItem } from '@/types'
 
 
 type OfferRow = {
@@ -45,7 +47,7 @@ interface OrderToastData {
   tableNumber: number
   orderId: string
   orderCode: string
-  items: { id: string; name: string; qty: number; price: number; total: number }[]
+  items: (WaiterCallItem)[]
   subtotal: number
 }
 
@@ -91,7 +93,10 @@ export function RestaurantShell({ initialData, tableSessionValid }: Props) {
     showRating,
     showRatingsList,
 	openRatingsList,        // ← add this
+    activeMenuType,      // ← add this: drives the bar-vs-food theme
   } = useAppStore()
+
+  const menuTheme = activeMenuType ?? 'food'
 
 const heroItems = (items ?? [])
   .filter((i) => i.is_available && (i.is_bestseller || i.is_special))
@@ -321,8 +326,8 @@ const [sessionExpired, setSessionExpired] = useState(false)
   }, [initialData.restaurant.id, initialData.items, refreshMenu, fetchDishOptions])
 
   // ── Waiter call ───────────────────────────────────────────────────────────
-  const handleCallWaiter = useCallback(
-    async (payload: { items: { id: string; name: string; qty: number; price: number; total: number }[]; subtotal: number }) => {
+ const handleCallWaiter = useCallback(
+  async (payload: { items: WaiterCallItem[]; subtotal: number }) => {
       if (!restaurant) return
       const token = searchParams.get('t')
       if (!tableNumber && !token) { alert('Table number missing. Please scan the table QR again.'); return }
@@ -509,6 +514,45 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
           display: flex;
           flex-direction: column;
           background: var(--surface-bg);
+          position: relative;
+          isolation: isolate;
+          transition: background 0.5s ease;
+        }
+
+        /* ── Bar Menu theme ─────────────────────────────────────────────────
+           Same layout, warmer/moodier palette: charcoal-espresso instead of
+           flat black, brass/copper instead of gold-orange, plus a soft
+           lounge-lighting glow layer behind the content.                    */
+        .pr-shell[data-menu='bar'] {
+          --pr-black:        #0A0806;
+          --pr-black-soft:   #17120D;
+          --pr-card:         #1F1812;
+          --pr-card-hover:   #292017;
+          --pr-border:       rgba(214,158,89,0.14);
+          --pr-border-hover: rgba(214,158,89,0.26);
+          --pr-gold:         #D9A24B;
+          --pr-gold-dim:     rgba(217,162,75,0.14);
+          --pr-orange:       #E0873E;
+          --pr-orange-dim:   rgba(224,135,62,0.12);
+          --pr-text:         #F7F1E8;
+          --pr-text-muted:   rgba(247,241,232,0.55);
+          --pr-text-faint:   rgba(247,241,232,0.28);
+          --surface-bg:      #0A0806;
+        }
+        .pr-shell[data-menu='bar']::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          background:
+            radial-gradient(circle at 12% 8%,  rgba(217,162,75,0.10), transparent 42%),
+            radial-gradient(circle at 88% 18%, rgba(224,135,62,0.07), transparent 40%),
+            radial-gradient(circle at 50% 95%, rgba(217,162,75,0.05), transparent 50%);
+        }
+        .pr-shell[data-menu='bar'] > * {
+          position: relative;
+          z-index: 1;
         }
 
         .pr-main {
@@ -705,9 +749,10 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
         }
       `}</style>
 
-      <div className="pr-shell">
+      <div className="pr-shell" data-menu={menuTheme}>
         <OfflineBanner />
-
+<MenuTypeSelector />
+<DeliveryPreferenceModal />
         <CustomerAuthProvider
           restaurantId={restaurant?.id ?? null}
           tableNumber={tableNumber}

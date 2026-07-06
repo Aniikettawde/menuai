@@ -321,9 +321,9 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
 
 // ─── ItemActionSheet ──────────────────────────────────────────────────────────
 
-function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle, onCustomize }: {
+function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle, onCustomize, isBar }: {
   item: MenuItemRow; onClose: () => void; onEdit: () => void; onDelete: () => void
-  onToggle: () => void; onCustomize: () => void
+  onToggle: () => void; onCustomize: () => void; isBar?: boolean
 }) {
   return (
     <BottomSheet onClose={onClose} maxWidthClass="max-w-md">
@@ -333,7 +333,7 @@ function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle, onCustomiz
             {item.image_url
               // eslint-disable-next-line @next/next/no-img-element
               ? <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-14 w-14 rounded-2xl object-cover" />
-              : <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-800 text-2xl">{item.is_veg ? '🥗' : '🍖'}</div>
+              : <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-800 text-2xl">{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
             }
             <div>
               <p className="font-semibold text-white">{item.name}</p>
@@ -352,15 +352,15 @@ function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle, onCustomiz
           </button>
           <button onClick={() => { onEdit(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/40 px-4 py-4 text-left hover:bg-zinc-800 active:scale-[0.99] transition">
             <Pencil size={18} className="text-orange-400 shrink-0" />
-            <div><p className="text-sm font-medium text-zinc-200">Edit Dish</p><p className="text-xs text-zinc-500">Update name, price, description…</p></div>
+            <div><p className="text-sm font-medium text-zinc-200">Edit {isBar ? 'Drink' : 'Dish'}</p><p className="text-xs text-zinc-500">Update name, price, description…</p></div>
           </button>
           <button onClick={() => { onCustomize(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/40 px-4 py-4 text-left hover:bg-zinc-800 active:scale-[0.99] transition">
             <Settings2 size={18} className="text-purple-400 shrink-0" />
-            <div><p className="text-sm font-medium text-zinc-200">Customisation Options</p><p className="text-xs text-zinc-500">Add choices like base, size, extras</p></div>
+            <div><p className="text-sm font-medium text-zinc-200">{isBar ? 'Serving Sizes & Variants' : 'Customisation Options'}</p><p className="text-xs text-zinc-500">{isBar ? 'e.g. 30ml / 60ml, Pint / Bottle' : 'Add choices like base, size, extras'}</p></div>
           </button>
           <button onClick={() => { onDelete(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-4 text-left hover:bg-red-500/10 active:scale-[0.99] transition">
             <Trash2 size={18} className="text-red-400 shrink-0" />
-            <div><p className="text-sm font-medium text-zinc-200">Delete Dish</p><p className="text-xs text-zinc-500">This cannot be undone</p></div>
+            <div><p className="text-sm font-medium text-zinc-200">Delete {isBar ? 'Drink' : 'Dish'}</p><p className="text-xs text-zinc-500">This cannot be undone</p></div>
           </button>
         </div>
       </div>
@@ -368,16 +368,50 @@ function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle, onCustomiz
   )
 }
 
+// ─── Bar variant presets ──────────────────────────────────────────────────────
+
+type VariantPreset = {
+  key: string
+  label: string
+  icon: string
+  optionName: string
+  choiceNames: string[]
+}
+
+const BAR_VARIANT_PRESETS: VariantPreset[] = [
+  { key: 'spirit_3', label: 'Whisky/Spirit (30/60/90ml)', icon: '🥃', optionName: 'Serving Size', choiceNames: ['30 ml', '60 ml', '90 ml'] },
+  { key: 'spirit_2', label: 'Whisky/Spirit (30/60ml)', icon: '🥃', optionName: 'Serving Size', choiceNames: ['30 ml', '60 ml'] },
+  { key: 'beer', label: 'Beer (Pint/Bottle)', icon: '🍺', optionName: 'Size', choiceNames: ['330 ml (Bottle)', '650 ml (Pint)'] },
+  { key: 'wine', label: 'Wine (Glass/Bottle)', icon: '🍷', optionName: 'Serving', choiceNames: ['Glass (150 ml)', 'Bottle (750 ml)'] },
+  { key: 'cocktail', label: 'Cocktail (Regular/Strong)', icon: '🍸', optionName: 'Strength', choiceNames: ['Regular', 'Strong'] },
+  { key: 'mocktail', label: 'Mocktail/Soft Drink (Regular/Large)', icon: '🥤', optionName: 'Size', choiceNames: ['Regular', 'Large'] },
+]
+
+function presetToDraft(preset: VariantPreset, position: number): DishOptionDraft {
+  return {
+    name: preset.optionName,
+    is_required: true,
+    min_selections: 1,
+    max_selections: 1,
+    position,
+    price_mode: 'override',
+    choices: preset.choiceNames.map((name, i) => ({
+      name, extra_price: 0, is_default: i === 0, is_available: true, position: i,
+    })),
+  }
+}
+
 // ─── CustomiseOptionsModal ────────────────────────────────────────────────────
 
 function CustomiseOptionsModal({
   item, onClose,
-  existingOptions, onSave,
+  existingOptions, onSave, isBar,
 }: {
   item: MenuItemRow
   onClose: () => void
   existingOptions: DishOption[]
   onSave: (drafts: DishOptionDraft[]) => Promise<void>
+  isBar?: boolean
 }) {
   const [drafts, setDrafts] = useState<DishOptionDraft[]>(() =>
     existingOptions.length > 0
@@ -396,6 +430,7 @@ function CustomiseOptionsModal({
   const [error, setError] = useState('')
 
   function addOption() { setDrafts((prev) => [...prev, emptyOptionDraft(prev.length)]) }
+  function addPreset(preset: VariantPreset) { setDrafts((prev) => [...prev, presetToDraft(preset, prev.length)]) }
   function removeOption(idx: number) { setDrafts((prev) => prev.filter((_, i) => i !== idx)) }
   function updateOption(idx: number, patch: Partial<DishOptionDraft>) {
     setDrafts((prev) => prev.map((d, i) => i === idx ? { ...d, ...patch } : d))
@@ -429,7 +464,7 @@ function CustomiseOptionsModal({
       <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
         <div>
           <div className="flex items-center gap-2 text-sm font-bold text-purple-400">
-            <Settings2 size={15} /> Customisation Options
+            <Settings2 size={15} /> {isBar ? 'Serving Sizes & Variants' : 'Customisation Options'}
           </div>
           <p className="mt-0.5 text-xs text-zinc-500 truncate max-w-[240px]">{item.name}</p>
         </div>
@@ -438,18 +473,44 @@ function CustomiseOptionsModal({
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3">
-          <p className="text-xs text-purple-300 font-medium">What are customisation options?</p>
+          <p className="text-xs text-purple-300 font-medium">
+            {isBar ? 'What are serving sizes & variants?' : 'What are customisation options?'}
+          </p>
           <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
-            Two kinds of groups: <span className="text-zinc-300 font-medium">Add-ons</span> let customers add extras on top of the dish price (e.g. "Extra cheese +₹50").
-            <span className="text-zinc-300 font-medium"> Variants</span> let customers pick a version that has its own price, replacing the dish price entirely (e.g. "Half Plate ₹320 / Full Plate ₹640").
+            {isBar ? (
+              <>Set up sizes like <span className="text-zinc-300 font-medium">30ml / 60ml / 90ml</span>, or <span className="text-zinc-300 font-medium">Pint / Bottle</span> — each with its own price. Use a quick preset below or build your own.</>
+            ) : (
+              <><span className="text-zinc-300 font-medium">Add-ons</span> let customers add extras on top of the dish price (e.g. "Extra cheese +₹50"). <span className="text-zinc-300 font-medium">Variants</span> let customers pick a version that has its own price, replacing the dish price entirely (e.g. "Half Plate ₹320 / Full Plate ₹640").</>
+            )}
           </p>
         </div>
+
+        {isBar && (
+          <div>
+            <p className="mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Quick presets</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {BAR_VARIANT_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  onClick={() => addPreset(preset)}
+                  className="flex flex-col items-start gap-1 rounded-2xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-left transition hover:border-amber-500/50 hover:bg-amber-500/10"
+                >
+                  <span className="text-lg">{preset.icon}</span>
+                  <span className="text-xs font-semibold text-amber-200 leading-tight">{preset.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {drafts.length === 0 && (
           <div className="rounded-2xl border border-dashed border-zinc-700 p-8 text-center">
             <Settings2 size={24} className="mx-auto text-zinc-600 mb-3" />
             <p className="text-sm font-medium text-zinc-400">No options yet</p>
-            <p className="mt-1 text-xs text-zinc-600">Add option groups like "Choose base", "Size", "Extras"</p>
+            <p className="mt-1 text-xs text-zinc-600">
+              {isBar ? 'Tap a preset above, or add a custom group like "Size" or "Strength"' : 'Add option groups like "Choose base", "Size", "Extras"'}
+            </p>
           </div>
         )}
 
@@ -463,7 +524,7 @@ function CustomiseOptionsModal({
                   <input
                     value={opt.name}
                     onChange={(e) => updateOption(optIdx, { name: e.target.value })}
-                    placeholder='Group name, e.g. "Choose base"'
+                    placeholder={isBar ? 'Group name, e.g. "Serving Size"' : 'Group name, e.g. "Choose base"'}
                     className={`${INPUT} flex-1`}
                   />
                   <button onClick={() => removeOption(optIdx)} className="shrink-0 rounded-xl p-2 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 transition">
@@ -534,7 +595,7 @@ function CustomiseOptionsModal({
                     <input
                       value={choice.name}
                       onChange={(e) => updateChoice(optIdx, choiceIdx, { name: e.target.value })}
-                      placeholder={`Choice ${choiceIdx + 1}, e.g. Chapati`}
+                      placeholder={`Choice ${choiceIdx + 1}, e.g. ${isBar ? '60 ml' : 'Chapati'}`}
                       className={`${INPUT} flex-1 min-w-0 py-2 text-xs`}
                     />
                     <div className="flex items-center gap-1 shrink-0">
@@ -580,7 +641,7 @@ function CustomiseOptionsModal({
           onClick={addOption}
           className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-700 py-4 text-sm font-semibold text-zinc-500 hover:border-purple-500/40 hover:text-purple-400 transition"
         >
-          <Plus size={16} /> Add option group
+          <Plus size={16} /> Add {isBar ? 'custom' : 'option'} group
         </button>
       </div>
 
@@ -622,9 +683,26 @@ export default function MenuPage() {
   const { context, loading: contextLoading } = useDashboardContext()
 
   const [draggedCatId, setDraggedCatId] = useState<string | null>(null)
-  const orderedCategories = useMemo(() => {
-    return [...categories].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
-  }, [categories])
+  const [menuTab, setMenuTab] = useState<'food' | 'bar'>('food')
+   const orderedCategories = useMemo(() => {
+    return [...categories]
+      .filter((c) => (c.menu_type ?? 'food') === menuTab)
+      .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+  }, [categories, menuTab])
+
+  // Is the item currently being added/edited/viewed a bar item?
+  const activeCatData0 = orderedCategories.find((c) => c.id === activeCat) ?? null
+  const isBarTab = menuTab === 'bar'
+  const editingIsBar = editingItem
+    ? (categories.find((c) => c.id === (editingItem.category_id || activeCat))?.menu_type ?? 'food') === 'bar'
+    : isBarTab
+
+  function itemLabel(capitalized = true, plural = false) {
+    const barWord = plural ? 'Drinks' : 'Drink'
+    const foodWord = plural ? 'Dishes' : 'Dish'
+    const word = isBarTab ? barWord : foodWord
+    return capitalized ? word : word.toLowerCase()
+  }
 
   function normalizeCategoryPositions(next: MenuCategoryRow[]) {
     return next.map((cat, index) => ({ ...cat, position: index }))
@@ -748,7 +826,13 @@ export default function MenuPage() {
     try {
       const { data, error: insertError } = await supabase
         .from('menu_categories')
-        .insert({ restaurant_id: restaurant.id, name: catName, position: orderedCategories.length, is_active: true })
+        .insert({
+          restaurant_id: restaurant.id,
+          name: catName,
+          position: orderedCategories.length,
+          is_active: true,
+          menu_type: menuTab,
+        })
         .select().single()
       if (insertError) throw insertError
       if (data) { setCategories((prev) => [...prev, data as MenuCategoryRow]); setActiveCat((data as MenuCategoryRow).id); setNewCatName('') }
@@ -757,7 +841,7 @@ export default function MenuPage() {
   }
 
   async function deleteCategory(id: string) {
-    if (!confirm('Delete this category and all its items?')) return
+    if (!confirm(`Delete this category and all its ${itemLabel(false, true)}?`)) return
     setError('')
     try {
       const { error } = await supabase.from('menu_categories').delete().eq('id', id)
@@ -797,7 +881,7 @@ export default function MenuPage() {
         if (data) setItems((prev) => [...prev, data as MenuItemRow])
       }
       setEditingItem(null)
-    } catch (err) { console.error('Failed to save dish:', err); setError(err instanceof Error ? err.message : 'Failed to save dish') }
+    } catch (err) { console.error('Failed to save dish:', err); setError(err instanceof Error ? err.message : `Failed to save ${itemLabel(false)}`) }
     finally { setItemSaving(false) }
   }
 
@@ -818,13 +902,13 @@ export default function MenuPage() {
   }
 
   async function deleteItem(id: string) {
-    if (!confirm('Delete this dish?')) return
+    if (!confirm(`Delete this ${itemLabel(false)}?`)) return
     setError('')
     try {
       const { error } = await supabase.from('menu_items').delete().eq('id', id)
       if (error) throw error
       setItems((prev) => prev.filter((x) => x.id !== id))
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete dish') }
+    } catch (err) { setError(err instanceof Error ? err.message : `Failed to delete ${itemLabel(false)}`) }
   }
 
   async function toggleAvailable(item: MenuItemRow) {
@@ -870,8 +954,8 @@ export default function MenuPage() {
     const basePosition = orderedCategories.length
     for (let i = 0; i < result.categories.length; i++) {
       const parsedCat = result.categories[i]
-      const { data: catData, error: catError } = await supabase.from('menu_categories')
-        .insert({ restaurant_id: restaurant.id, name: parsedCat.name.trim(), position: basePosition + i, is_active: true })
+       const { data: catData, error: catError } = await supabase.from('menu_categories')
+        .insert({ restaurant_id: restaurant.id, name: parsedCat.name.trim(), position: basePosition + i, is_active: true, menu_type: menuTab })
         .select().single()
       if (catError) throw catError
       if (!catData) continue
@@ -896,10 +980,18 @@ export default function MenuPage() {
 
   // ── Derived stats ──────────────────────────────────────────────────────────
 
-  const totalDishes = items.length
-  const totalCategories = categories.length
-  const availableDishes = items.filter((x) => x.is_available).length
-  const bestsellers = items.filter((x) => x.is_bestseller).length
+ const categoryIdsForTab = useMemo(
+    () => new Set(categories.filter((c) => (c.menu_type ?? 'food') === menuTab).map((c) => c.id)),
+    [categories, menuTab],
+  )
+  const itemsForTab = useMemo(
+    () => items.filter((x) => categoryIdsForTab.has(x.category_id)),
+    [items, categoryIdsForTab],
+  )
+  const totalDishes = itemsForTab.length
+  const totalCategories = orderedCategories.length
+  const availableDishes = itemsForTab.filter((x) => x.is_available).length
+  const bestsellers = itemsForTab.filter((x) => x.is_bestseller).length
 
   if (loading || contextLoading) {
     return (
@@ -927,19 +1019,28 @@ export default function MenuPage() {
 
       {/* ══ MOBILE LAYOUT ══ */}
       <div className="lg:hidden space-y-3">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-[#111111] px-4 py-3">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-[#111111] px-4 py-3">
           <div>
             <p className="text-base font-bold text-white">Menu</p>
-            <p className="text-xs text-zinc-500">{totalCategories} categories · {totalDishes} dishes</p>
+            <p className="text-xs text-zinc-500">{totalCategories} categories · {totalDishes} {itemLabel(false, true)}</p>
           </div>
           <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-400">
             <Sparkles size={12} /> AI Import
           </button>
         </div>
 
+        {restaurant?.has_bar_menu && (
+          <div className="flex justify-center">
+            <MenuTabToggle
+              active={menuTab}
+              onChange={(t) => { setMenuTab(t); setActiveCat(null); setMobileView('categories') }}
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-4 gap-2">
           <MiniStat value={totalCategories} label="Categories" icon="🗂️" />
-          <MiniStat value={totalDishes} label="Dishes" icon="🍽️" />
+          <MiniStat value={totalDishes} label={itemLabel(false, true)} icon={isBarTab ? '🍹' : '🍽️'} />
           <MiniStat value={availableDishes} label="Live" icon="✅" />
           <MiniStat value={bestsellers} label="Best" icon="🔥" />
         </div>
@@ -989,7 +1090,7 @@ export default function MenuPage() {
                           {catWithImage.image_url
                             // eslint-disable-next-line @next/next/no-img-element
                             ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
-                            : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">🍱</div>
+                            : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">{isBarTab ? '🍸' : '🍱'}</div>
                           }
                           <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
                             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
@@ -1000,7 +1101,7 @@ export default function MenuPage() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-zinc-100">{cat.name}</p>
-                          <p className="text-xs text-zinc-500">{count} dishes · {avail} available</p>
+                          <p className="text-xs text-zinc-500">{count} {itemLabel(false, true)} · {avail} available</p>
                         </div>
                         <ChevronRight size={16} className="text-zinc-600 shrink-0" />
                       </button>
@@ -1013,7 +1114,7 @@ export default function MenuPage() {
             <div className="rounded-2xl border border-white/[0.07] bg-[#111111] p-4 space-y-2.5 mt-2">
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">New Category</p>
               <div className="flex gap-2">
-                <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder="e.g. Starters, Mains…" className={INPUT} />
+                <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder={isBarTab ? 'e.g. Whisky, Beer, Cocktails…' : 'e.g. Starters, Mains…'} className={INPUT} />
                 <button onClick={() => void addCategory()} disabled={addingCat || !newCatName.trim()} className="rounded-xl bg-orange-500 px-4 text-sm font-bold text-white disabled:opacity-40">
                   {addingCat ? '…' : '+'}
                 </button>
@@ -1029,7 +1130,7 @@ export default function MenuPage() {
                 className="fixed right-4 z-20 flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/30"
                 style={{ bottom: `${BOTTOM_NAV_H + 12}px` }}
               >
-                <Plus size={16} /> Add Dish
+                <Plus size={16} /> Add {itemLabel()}
               </button>
             )}
           </div>
@@ -1041,7 +1142,7 @@ export default function MenuPage() {
               <button onClick={() => setMobileView('categories')} className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300 shrink-0"><ArrowLeft size={16} /></button>
               <div className="text-center min-w-0">
                 <p className="truncate text-sm font-bold text-white">{activeCatData?.name ?? 'Category'}</p>
-                <p className="text-xs text-zinc-500">{catItems.length} {catItems.length === 1 ? 'dish' : 'dishes'}</p>
+                <p className="text-xs text-zinc-500">{catItems.length} {catItems.length === 1 ? itemLabel(false) : itemLabel(false, true)}</p>
               </div>
               <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? '' })} className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-bold text-white shrink-0">
                 <Plus size={13} /> Add
@@ -1049,9 +1150,9 @@ export default function MenuPage() {
             </div>
             {catItems.length === 0 ? (
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-center">
-                <p className="text-3xl">🍽️</p>
-                <p className="mt-3 text-sm font-semibold text-white">No dishes yet</p>
-                <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? '' })} className="mt-5 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white">+ Add First Dish</button>
+                <p className="text-3xl">{isBarTab ? '🍹' : '🍽️'}</p>
+                <p className="mt-3 text-sm font-semibold text-white">No {itemLabel(false, true)} yet</p>
+                <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? '' })} className="mt-5 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white">+ Add First {itemLabel()}</button>
               </div>
             ) : (
               <div className="space-y-2">
@@ -1059,6 +1160,7 @@ export default function MenuPage() {
                   <MobileItemRow
                     key={item.id} item={item}
                     optionCount={(optionsByItem[item.id] ?? []).length}
+                    isBar={isBarTab}
                     onTap={() => setActionSheetItem(item)}
                     onToggle={() => void toggleAvailable(item)}
                     onCustomize={() => setCustomiseItem(item)}
@@ -1072,19 +1174,22 @@ export default function MenuPage() {
 
       {/* ══ DESKTOP LAYOUT ══ */}
       <div className="hidden lg:block space-y-4">
-        <div className="flex items-center justify-between gap-4 rounded-3xl border border-white/[0.07] bg-[#111111] p-5">
+       <div className="flex items-center justify-between gap-4 rounded-3xl border border-white/[0.07] bg-[#111111] p-5">
           <div>
             <p className="text-2xl font-bold text-white">Menu</p>
-            <p className="mt-1 text-sm text-zinc-500">{totalDishes} dishes across {totalCategories} categories</p>
+            <p className="mt-1 text-sm text-zinc-500">{totalDishes} {itemLabel(false, true)} across {totalCategories} categories</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {restaurant?.has_bar_menu && (
+              <MenuTabToggle active={menuTab} onChange={(t) => { setMenuTab(t); setActiveCat(null) }} />
+            )}
             <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5 text-sm font-semibold text-orange-400"><Sparkles size={14} /> Import with AI</button>
-            <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? categories[0]?.id ?? '' })} className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={14} /> Add Dish</button>
+            <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? categories[0]?.id ?? '' })} className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={14} /> Add {itemLabel()}</button>
           </div>
         </div>
         <div className="grid grid-cols-4 gap-2.5">
           <DesktopStat value={totalCategories} label="Categories" icon={<UtensilsCrossed size={16} />} color="text-blue-400" bg="bg-blue-500/10" />
-          <DesktopStat value={totalDishes} label="Dishes" icon={<Plus size={16} />} color="text-green-400" bg="bg-green-500/10" />
+          <DesktopStat value={totalDishes} label={itemLabel(false, true)} icon={<Plus size={16} />} color="text-green-400" bg="bg-green-500/10" />
           <DesktopStat value={availableDishes} label="Available" icon={<ToggleRight size={16} />} color="text-orange-400" bg="bg-orange-500/10" />
           <DesktopStat value={bestsellers} label="Bestsellers" icon={<Flame size={16} />} color="text-rose-400" bg="bg-rose-500/10" />
         </div>
@@ -1129,7 +1234,7 @@ export default function MenuPage() {
                         {catWithImage.image_url
                           // eslint-disable-next-line @next/next/no-img-element
                           ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-8 w-8 rounded-xl object-cover shrink-0" />
-                          : <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-sm shrink-0">🍱</div>
+                          : <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-sm shrink-0">{isBarTab ? '🍸' : '🍱'}</div>
                         }
                         <span className="truncate text-sm">{cat.name}</span>
                       </div>
@@ -1154,7 +1259,7 @@ export default function MenuPage() {
               })}
             </div>
             <div className="mt-4 space-y-2">
-              <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder="New category name…" className={INPUT} />
+              <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder={isBarTab ? 'e.g. Whisky, Beer, Wine…' : 'New category name…'} className={INPUT} />
               <button onClick={() => void addCategory()} disabled={addingCat || !newCatName.trim()} className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/10 py-2.5 text-xs font-semibold text-orange-400 disabled:cursor-not-allowed disabled:opacity-40">
                 {addingCat ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                 {addingCat ? 'Adding…' : 'Add Category'}
@@ -1166,18 +1271,18 @@ export default function MenuPage() {
             {activeCat ? (
               <>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <div><p className="text-lg font-bold text-white">{activeCatData?.name}</p><p className="text-xs text-zinc-500">{catItems.length} dishes</p></div>
+                  <div><p className="text-lg font-bold text-white">{activeCatData?.name}</p><p className="text-xs text-zinc-500">{catItems.length} {itemLabel(false, true)}</p></div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white">+ Add Dish</button>
+                    <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white">+ Add {itemLabel()}</button>
                     <button onClick={() => setShowImport(true)} className="rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-300">Import AI</button>
                   </div>
                 </div>
                 {catItems.length === 0 ? (
                   <div className="flex min-h-[280px] flex-col items-center justify-center rounded-3xl border border-dashed border-zinc-800 text-center">
-                    <p className="text-2xl">🍽️</p>
-                    <p className="mt-2 text-sm font-semibold text-white">No dishes in this category</p>
+                    <p className="text-2xl">{isBarTab ? '🍹' : '🍽️'}</p>
+                    <p className="mt-2 text-sm font-semibold text-white">No {itemLabel(false, true)} in this category</p>
                     <div className="mt-5 flex gap-2">
-                      <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white">+ Add Dish</button>
+                      <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white">+ Add {itemLabel()}</button>
                       <button onClick={() => setShowImport(true)} className="rounded-2xl border border-zinc-700 bg-zinc-800 px-5 py-2.5 text-sm font-medium text-zinc-300">Import with AI</button>
                     </div>
                   </div>
@@ -1187,6 +1292,7 @@ export default function MenuPage() {
                       <DesktopItemCard
                         key={item.id} item={item}
                         optionCount={(optionsByItem[item.id] ?? []).length}
+                        isBar={isBarTab}
                         onEdit={() => setEditingItem({ ...item, best_with: item.best_with ?? [] })}
                         onDelete={() => void deleteItem(item.id)}
                         onToggle={() => void toggleAvailable(item)}
@@ -1194,7 +1300,7 @@ export default function MenuPage() {
                       />
                     ))}
                     <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-zinc-800 text-zinc-600 hover:border-orange-500/40 hover:text-orange-500/70 transition">
-                      <Plus size={24} /><span className="text-sm">Add dish</span>
+                      <Plus size={24} /><span className="text-sm">Add {itemLabel(false)}</span>
                     </button>
                   </div>
                 )}
@@ -1215,30 +1321,32 @@ export default function MenuPage() {
         <BottomSheet onClose={() => setEditingItem(null)} zIndex="z-[70]">
           <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
             <div>
-              <p className="text-base font-bold text-white">{editingItem.id ? 'Edit Dish' : 'New Dish'}</p>
+              <p className="text-base font-bold text-white">{editingItem.id ? `Edit ${editingIsBar ? 'Drink' : 'Dish'}` : `New ${editingIsBar ? 'Drink' : 'Dish'}`}</p>
               <p className="text-xs text-zinc-500">Fill in the details below</p>
             </div>
             <button onClick={() => setEditingItem(null)} className="rounded-xl p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-            <div className="mb-4 flex gap-2">
-              <button onClick={() => setEditingItem((f) => (f ? { ...f, is_veg: true } : f))}
-                className={`flex-1 rounded-2xl border py-3 text-sm font-semibold transition ${editingItem.is_veg ? 'border-green-500/50 bg-green-500/15 text-green-400' : 'border-zinc-700 bg-zinc-800/40 text-zinc-500'}`}>
-                <Leaf size={13} className="mr-1.5 inline" /> Veg
-              </button>
-              <button onClick={() => setEditingItem((f) => (f ? { ...f, is_veg: false } : f))}
-                className={`flex-1 rounded-2xl border py-3 text-sm font-semibold transition ${!editingItem.is_veg ? 'border-red-500/50 bg-red-500/15 text-red-400' : 'border-zinc-700 bg-zinc-800/40 text-zinc-500'}`}>
-                <Zap size={13} className="mr-1.5 inline" /> Non-Veg
-              </button>
-            </div>
+            {!editingIsBar && (
+              <div className="mb-4 flex gap-2">
+                <button onClick={() => setEditingItem((f) => (f ? { ...f, is_veg: true } : f))}
+                  className={`flex-1 rounded-2xl border py-3 text-sm font-semibold transition ${editingItem.is_veg ? 'border-green-500/50 bg-green-500/15 text-green-400' : 'border-zinc-700 bg-zinc-800/40 text-zinc-500'}`}>
+                  <Leaf size={13} className="mr-1.5 inline" /> Veg
+                </button>
+                <button onClick={() => setEditingItem((f) => (f ? { ...f, is_veg: false } : f))}
+                  className={`flex-1 rounded-2xl border py-3 text-sm font-semibold transition ${!editingItem.is_veg ? 'border-red-500/50 bg-red-500/15 text-red-400' : 'border-zinc-700 bg-zinc-800/40 text-zinc-500'}`}>
+                  <Zap size={13} className="mr-1.5 inline" /> Non-Veg
+                </button>
+              </div>
+            )}
             <div className="space-y-4">
-              <Field label="Dish Name">
-                <input value={editingItem.name ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, name: e.target.value } : f))} placeholder="e.g. Butter Chicken" className={INPUT} autoFocus />
+              <Field label={editingIsBar ? 'Drink Name' : 'Dish Name'}>
+                <input value={editingItem.name ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, name: e.target.value } : f))} placeholder={editingIsBar ? 'e.g. Jack Daniel\'s' : 'e.g. Butter Chicken'} className={INPUT} autoFocus />
               </Field>
               <Field label="Description">
                 <div className="space-y-2">
-                  <textarea value={editingItem.description ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, description: e.target.value } : f))} rows={3} placeholder="Rich, creamy tomato-based curry…" className={`${INPUT} resize-none`} />
+                  <textarea value={editingItem.description ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, description: e.target.value } : f))} rows={3} placeholder={editingIsBar ? 'Smooth Tennessee whiskey, oak-aged…' : 'Rich, creamy tomato-based curry…'} className={`${INPUT} resize-none`} />
                   {editingItem.name?.trim() && (
                     <button type="button" onClick={() => void generateDescription()} disabled={descriptionGenerating}
                       className="inline-flex items-center gap-2 rounded-xl border border-orange-500/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-400 transition hover:bg-orange-500/15 disabled:cursor-not-allowed disabled:opacity-50">
@@ -1248,11 +1356,14 @@ export default function MenuPage() {
                   )}
                 </div>
               </Field>
-              <Field label="Price (₹)">
+              <Field label={editingIsBar ? 'Base Price (₹) — or set per size below' : 'Price (₹)'}>
                 <input type="number" min={0}
                   value={editingItem.price ? (Number(editingItem.price) / 100).toFixed(0) : ''}
                   onChange={(e) => setEditingItem((f) => f ? { ...f, price: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 } : f)}
                   placeholder="299" className={INPUT} />
+                {editingIsBar && (
+                  <p className="mt-1.5 text-xs text-zinc-600">If you add serving sizes/variants below, each size's own price will be shown to customers instead.</p>
+                )}
               </Field>
               <Field label="Photo">
                 <div className="flex items-center gap-3">
@@ -1272,7 +1383,7 @@ export default function MenuPage() {
                 </div>
               </Field>
               <div className="space-y-2">
-                <ToggleRow label="Bestseller" description="Highlight as a top dish" checked={Boolean(editingItem.is_bestseller)} onChange={(checked) => setEditingItem((f) => (f ? { ...f, is_bestseller: checked } : f))} />
+                <ToggleRow label="Bestseller" description={editingIsBar ? 'Highlight as a top pour' : 'Highlight as a top dish'} checked={Boolean(editingItem.is_bestseller)} onChange={(checked) => setEditingItem((f) => (f ? { ...f, is_bestseller: checked } : f))} />
                 <ToggleRow label="Available" description="Show to customers" checked={Boolean(editingItem.is_available)} onChange={(checked) => setEditingItem((f) => (f ? { ...f, is_available: checked } : f))} />
               </div>
 
@@ -1283,15 +1394,15 @@ export default function MenuPage() {
                     const fullItem = items.find((i) => i.id === editingItem.id)
                     if (fullItem) { setEditingItem(null); setCustomiseItem(fullItem) }
                   }}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3 text-left hover:bg-purple-500/15 transition"
+                  className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${editingIsBar ? 'border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15' : 'border-purple-500/20 bg-purple-500/10 hover:bg-purple-500/15'}`}
                 >
-                  <Settings2 size={16} className="text-purple-400 shrink-0" />
+                  <Settings2 size={16} className={`shrink-0 ${editingIsBar ? 'text-amber-400' : 'text-purple-400'}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-purple-300">Customisation Options</p>
+                    <p className={`text-sm font-semibold ${editingIsBar ? 'text-amber-300' : 'text-purple-300'}`}>{editingIsBar ? 'Serving Sizes & Variants' : 'Customisation Options'}</p>
                     <p className="text-xs text-zinc-500">
                       {editingItem.id && (optionsByItem[editingItem.id] ?? []).length > 0
                         ? `${(optionsByItem[editingItem.id] ?? []).length} option group(s) configured`
-                        : 'Add choices like base, size, extras…'}
+                        : editingIsBar ? 'e.g. 30ml / 60ml / 90ml, Pint / Bottle…' : 'Add choices like base, size, extras…'}
                     </p>
                   </div>
                   <ChevronRight size={14} className="text-zinc-600 shrink-0" />
@@ -1315,11 +1426,11 @@ export default function MenuPage() {
                     ...f,
                     best_with: e.target.value.split(',').map((t) => t.trim()).filter(Boolean)
                   } : f)}
-                  placeholder="e.g. Cold Coffee, French Fries, Brownie"
+                  placeholder={editingIsBar ? 'e.g. Peanut Masala, Chicken Wings, Nachos' : 'e.g. Cold Coffee, French Fries, Brownie'}
                   className={INPUT}
                 />
                 <p className="mt-1.5 text-xs text-zinc-500">
-                  Items this dish pairs well with — AI uses this for smart upsell suggestions. Separate with commas.
+                  {editingIsBar ? 'Snacks or sides this drink pairs well with — AI uses this for smart upsell suggestions.' : 'Items this dish pairs well with — AI uses this for smart upsell suggestions.'} Separate with commas.
                 </p>
                 {/* Show existing pairings as quick-remove chips */}
                 {(editingItem.best_with ?? []).length > 0 && (
@@ -1348,7 +1459,7 @@ export default function MenuPage() {
               </Field>
 
               <Field label="Tags">
-                <input value={(editingItem.tags ?? []).join(', ')} onChange={(e) => setEditingItem((f) => f ? { ...f, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) } : f)} placeholder="spicy, new, chef-special" className={INPUT} />
+                <input value={(editingItem.tags ?? []).join(', ')} onChange={(e) => setEditingItem((f) => f ? { ...f, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) } : f)} placeholder={editingIsBar ? 'smoky, single-malt, chilled' : 'spicy, new, chef-special'} className={INPUT} />
                 <p className="mt-1.5 text-xs text-zinc-600">Separate with commas</p>
               </Field>
               <Field label="Allergens">
@@ -1362,7 +1473,7 @@ export default function MenuPage() {
             <div className="flex gap-2.5">
               <button onClick={() => { setEditingItem(null); setError('') }} className="flex-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-3.5 text-sm font-semibold text-zinc-300 hover:bg-zinc-700 active:scale-[0.98] transition">Cancel</button>
               <button onClick={() => void saveItem()} disabled={itemSaving || !editingItem.name?.trim()} className="flex-[2] rounded-2xl bg-orange-500 py-3.5 text-sm font-bold text-white disabled:opacity-50 active:scale-[0.98] transition">
-                {itemSaving ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" /> Saving…</span> : editingItem.id ? 'Save Changes' : 'Add Dish'}
+                {itemSaving ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" /> Saving…</span> : editingItem.id ? 'Save Changes' : `Add ${editingIsBar ? 'Drink' : 'Dish'}`}
               </button>
             </div>
           </div>
@@ -1372,6 +1483,7 @@ export default function MenuPage() {
       {actionSheetItem && (
         <ItemActionSheet
           item={actionSheetItem}
+          isBar={isBarTab}
           onClose={() => setActionSheetItem(null)}
           onEdit={() => { setEditingItem({ ...actionSheetItem, best_with: actionSheetItem.best_with ?? [] }); setActionSheetItem(null) }}
           onDelete={() => { void deleteItem(actionSheetItem.id); setActionSheetItem(null) }}
@@ -1383,6 +1495,7 @@ export default function MenuPage() {
       {customiseItem && (
         <CustomiseOptionsModal
           item={customiseItem}
+          isBar={(categories.find((c) => c.id === customiseItem.category_id)?.menu_type ?? 'food') === 'bar'}
           onClose={() => setCustomiseItem(null)}
           existingOptions={optionsByItem[customiseItem.id] ?? []}
           onSave={(drafts) => saveDishOptions(customiseItem.id, drafts)}
@@ -1434,8 +1547,35 @@ function DesktopStat({ value, label, icon, color, bg }: { value: number; label: 
   )
 }
 
-function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize }: {
-  item: MenuItemRow; optionCount: number; onTap: () => void; onToggle: () => void; onCustomize: () => void
+function MenuTabToggle({
+  active, onChange,
+}: { active: 'food' | 'bar'; onChange: (t: 'food' | 'bar') => void }) {
+  return (
+    <div className="inline-flex items-center gap-1 rounded-2xl border border-zinc-800 bg-zinc-900 p-1">
+      <button
+        type="button"
+        onClick={() => onChange('food')}
+        className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+          active === 'food' ? 'bg-orange-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+        }`}
+      >
+        🍽️ Food Menu
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('bar')}
+        className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+          active === 'bar' ? 'bg-amber-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+        }`}
+      >
+        🍸 Bar Menu
+      </button>
+    </div>
+  )
+}
+
+function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize, isBar }: {
+  item: MenuItemRow; optionCount: number; onTap: () => void; onToggle: () => void; onCustomize: () => void; isBar?: boolean
 }) {
   return (
     <div className={`flex items-center gap-3 rounded-2xl border bg-zinc-900/80 p-3 transition active:scale-[0.99] ${item.is_available ? 'border-zinc-800' : 'border-zinc-800/40 opacity-50'}`}>
@@ -1443,7 +1583,7 @@ function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize }: {
         {item.image_url
           // eslint-disable-next-line @next/next/no-img-element
           ? <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-16 w-16 rounded-xl object-cover" />
-          : <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-zinc-800 text-3xl">{item.is_veg ? '🥗' : '🍖'}</div>
+          : <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-zinc-800 text-3xl">{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
         }
       </button>
       <button onClick={onTap} className="min-w-0 flex-1 text-left">
@@ -1453,16 +1593,18 @@ function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize }: {
         </div>
         {item.description && <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500">{item.description}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.is_veg ? 'bg-green-500/15 text-green-400 ring-1 ring-green-500/20' : 'bg-red-500/15 text-red-400 ring-1 ring-red-500/20'}`}>
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.is_veg ? '#22c55e' : '#ef4444' }} />
-            {item.is_veg ? 'Veg' : 'Non-veg'}
-          </span>
+          {!isBar && (
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.is_veg ? 'bg-green-500/15 text-green-400 ring-1 ring-green-500/20' : 'bg-red-500/15 text-red-400 ring-1 ring-red-500/20'}`}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.is_veg ? '#22c55e' : '#ef4444' }} />
+              {item.is_veg ? 'Veg' : 'Non-veg'}
+            </span>
+          )}
           {item.is_bestseller && <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-semibold text-orange-400 ring-1 ring-orange-500/20">🔥 Best</span>}
           {typeof item.prep_time_minutes === 'number' && <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500"><Clock size={9} /> {item.prep_time_minutes}m</span>}
           {!item.is_available && <span className="inline-flex rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">Unavailable</span>}
           {optionCount > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-semibold text-purple-400 ring-1 ring-purple-500/20">
-              <Settings2 size={8} /> {optionCount} opt
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${isBar ? 'bg-amber-500/15 text-amber-400 ring-amber-500/20' : 'bg-purple-500/15 text-purple-400 ring-purple-500/20'}`}>
+              <Settings2 size={8} /> {optionCount} {isBar ? 'size' : 'opt'}{optionCount > 1 ? 's' : ''}
             </span>
           )}
           {/* ✅ NEW: show pairing count badge */}
@@ -1477,7 +1619,7 @@ function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize }: {
         <button onClick={onToggle} className={`relative h-6 w-11 rounded-full ${item.is_available ? 'bg-green-500' : 'bg-zinc-600'}`}>
           <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${item.is_available ? 'translate-x-5' : 'translate-x-0.5'}`} />
         </button>
-        <button onClick={onCustomize} className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition" title="Customisation options">
+        <button onClick={onCustomize} className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${isBar ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'}`} title={isBar ? 'Serving sizes & variants' : 'Customisation options'}>
           <Settings2 size={13} />
         </button>
         <button onClick={onTap} className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"><MoreVertical size={14} /></button>
@@ -1486,20 +1628,22 @@ function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize }: {
   )
 }
 
-function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCustomize }: {
-  item: MenuItemRow; optionCount: number; onEdit: () => void; onDelete: () => void; onToggle: () => void; onCustomize: () => void
+function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCustomize, isBar }: {
+  item: MenuItemRow; optionCount: number; onEdit: () => void; onDelete: () => void; onToggle: () => void; onCustomize: () => void; isBar?: boolean
 }) {
   return (
     <div className={`group relative overflow-hidden rounded-3xl border bg-zinc-900 transition hover:border-zinc-700 ${item.is_available ? 'border-zinc-800' : 'border-zinc-800/40 opacity-60'}`}>
       {item.image_url
         // eslint-disable-next-line @next/next/no-img-element
         ? <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-36 w-full object-cover" />
-        : <div className="flex h-32 w-full items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 text-4xl">{item.is_veg ? '🥗' : '🍖'}</div>
+        : <div className="flex h-32 w-full items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 text-4xl">{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
       }
       <div className="absolute left-3 top-3 flex flex-wrap gap-1">
-        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${item.is_veg ? 'bg-green-500/20 text-green-400 ring-green-500/30' : 'bg-red-500/20 text-red-400 ring-red-500/30'}`}>{item.is_veg ? '🌿 Veg' : '🍖 Non-veg'}</span>
+        {!isBar && (
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${item.is_veg ? 'bg-green-500/20 text-green-400 ring-green-500/30' : 'bg-red-500/20 text-red-400 ring-red-500/30'}`}>{item.is_veg ? '🌿 Veg' : '🍖 Non-veg'}</span>
+        )}
         {item.is_bestseller && <span className="rounded-full bg-orange-500/20 px-2.5 py-1 text-[10px] font-bold text-orange-400 ring-1 ring-orange-500/30">🔥 Best</span>}
-        {optionCount > 0 && <span className="rounded-full bg-purple-500/20 px-2.5 py-1 text-[10px] font-bold text-purple-400 ring-1 ring-purple-500/30">⚙ {optionCount} opts</span>}
+        {optionCount > 0 && <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${isBar ? 'bg-amber-500/20 text-amber-400 ring-amber-500/30' : 'bg-purple-500/20 text-purple-400 ring-purple-500/30'}`}>⚙ {optionCount} {isBar ? 'sizes' : 'opts'}</span>}
         {/* ✅ NEW: pairing badge on desktop card */}
         {(item.best_with ?? []).length > 0 && (
           <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold text-amber-400 ring-1 ring-amber-500/30">
@@ -1528,7 +1672,7 @@ function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCust
         </div>
         <div className="flex gap-2">
           <button onClick={onEdit} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700"><Pencil size={12} /> Edit</button>
-          <button onClick={onCustomize} className="flex items-center justify-center rounded-xl bg-purple-500/10 px-3 py-2.5 text-purple-400 hover:bg-purple-500/20 transition" title="Options"><Settings2 size={13} /></button>
+          <button onClick={onCustomize} className={`flex items-center justify-center rounded-xl px-3 py-2.5 transition ${isBar ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'}`} title={isBar ? 'Serving sizes & variants' : 'Options'}><Settings2 size={13} /></button>
           <button onClick={onDelete} className="flex items-center justify-center rounded-xl bg-zinc-800 px-3 py-2.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400"><Trash2 size={13} /></button>
         </div>
       </div>

@@ -8,19 +8,11 @@ import { CartSheet } from './CartSheet'
 import { CustomiseSheet } from './CustomiseSheet'
 import type { SelectedOption } from '@/types'
 import { computeItemUnitPrice } from '@/lib/pricing'
+import type { WaiterCallItem } from '@/types'
 
 
 type Props = {
-  onCallWaiter?: (payload: {
-    items: {
-      id: string
-      name: string
-      qty: number
-      price: number
-      total: number
-    }[]
-    subtotal: number
-  }) => void
+  onCallWaiter?: (payload: { items: WaiterCallItem[]; subtotal: number }) => void
   isWaiterLoading?: boolean
 }
 

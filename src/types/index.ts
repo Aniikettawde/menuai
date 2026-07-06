@@ -14,6 +14,7 @@ export interface RestaurantStaff {
   created_at: string
   updated_at: string
   total_tables?: number | null
+  has_bar_menu: boolean
 
 }
 
@@ -49,6 +50,9 @@ instagram_url?: string | null
 google_review_count?: number | null
 google_rating?: number | null
 google_reviews_url?: string | null
+
+has_bar_menu?: boolean
+avg_prep_time?: number
   
 }
 
@@ -101,8 +105,15 @@ export interface MenuCategory {
   position: number
   is_active: boolean
   image_url?: string | null
+    menu_type: 'food' | 'bar'
+
 
 }
+export type DeliveryPreference =
+  | { mode: 'all_at_once' }
+  | { mode: 'one_by_one' }
+  | { mode: 'custom_split'; firstBatch: number; remaining: number }
+
 
 export interface MenuItem {
   id: string
@@ -285,6 +296,15 @@ export interface Rating {
   comment?: string | null
   is_public?: boolean
   created_at: string
+}
+
+export interface WaiterCallItem {
+  id: string
+  name: string
+  qty: number
+  price: number
+  total: number
+  delivery_preference?: DeliveryPreference
 }
 
 // ============================================================

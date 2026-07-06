@@ -56,6 +56,15 @@ type RequestItem = {
   total: number
 }
 
+type DeliveryPrefPayload =
+  | { mode: 'all_at_once' }
+  | { mode: 'one_by_one' }
+  | { mode: 'custom_split'; firstBatch: number; remaining: number }
+
+type RequestItemWithDelivery = RequestItem & {
+  delivery_preference?: DeliveryPrefPayload
+}
+
 type PushSubscriptionRow = {
   endpoint: string
   keys: { p256dh: string; auth: string }
@@ -97,6 +106,10 @@ function mergeItems(existing: RequestItem[], incoming: RequestItem[]): RequestIt
     if (match) {
       match.qty += inItem.qty
       match.total += inItem.total
+      // Newer delivery instructions for this dish win on merge
+      if ((inItem as RequestItemWithDelivery).delivery_preference) {
+        ;(match as RequestItemWithDelivery).delivery_preference = (inItem as RequestItemWithDelivery).delivery_preference
+      }
     } else {
       merged.push({ ...inItem })
     }
@@ -243,12 +256,12 @@ export async function POST(req: NextRequest) {
     }
 
     const { restaurantSlug, sessionId, items, subtotal, requestType } = body as {
-      restaurantSlug?: string
-      sessionId?: string
-      items?: RequestItem[]
-      subtotal?: number
-      requestType?: ReqType
-    }
+  restaurantSlug?: string
+  sessionId?: string
+  items?: RequestItemWithDelivery[]
+  subtotal?: number
+  requestType?: ReqType
+}
 
     const reqType: ReqType = (['assistance', 'water', 'bill'] as ReqType[]).includes(requestType as ReqType)
       ? (requestType as ReqType)
@@ -424,11 +437,18 @@ const { data: inserted, error: insertError } = await admin
         : `🍽️ Table ${resolvedTableNumber} — New order — ${restaurant.name}`
 
     const bodyText =
-      reqType === 'water'       ? `Table ${resolvedTableNumber} is asking for water`
-      : reqType === 'bill'      ? `Table ${resolvedTableNumber} wants the bill`
-      : reqType === 'assistance'? `Table ${resolvedTableNumber} is calling for a waiter`
-      : (items as RequestItem[]).slice(0, 2).map((i) => `${i.name} ×${i.qty}`).join(', ') +
-        ((items as RequestItem[]).length > 2 ? ` +${(items as RequestItem[]).length - 2} more` : '')
+  reqType === 'water'       ? `Table ${resolvedTableNumber} is asking for water`
+  : reqType === 'bill'      ? `Table ${resolvedTableNumber} wants the bill`
+  : reqType === 'assistance'? `Table ${resolvedTableNumber} is calling for a waiter`
+  : (items as RequestItemWithDelivery[]).slice(0, 2).map((i) => {
+      const pref = i.delivery_preference
+      const suffix =
+        pref?.mode === 'one_by_one' ? ' (one at a time)'
+        : pref?.mode === 'custom_split' ? ` (${pref.firstBatch} now, ${pref.remaining} later)`
+        : ''
+      return `${i.name} ×${i.qty}${suffix}`
+    }).join(', ') +
+    ((items as RequestItem[]).length > 2 ? ` +${(items as RequestItem[]).length - 2} more` : '')
 
     // FIX 2: meaningful tag for each type so dashboard can group/dedupe correctly
     const pushTag = `${reqType}-${restaurant.id}-table-${resolvedTableNumber}`
