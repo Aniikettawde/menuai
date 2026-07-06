@@ -22,8 +22,9 @@ import { AISuggestionCard } from './AISuggestionCard'
 import { CustomerAuthProvider } from './CustomerAuthProvider'
 import { OffersCarousel } from './OffersCarousel'
 import { TableSessionHeartbeat } from './TableSessionHeartbeat'   // ← add
+import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
+import { BestsellerHeroSlider } from './BestsellerHeroSlider'
 
-  import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
 
 
 type OfferRow = {
@@ -79,6 +80,7 @@ export function RestaurantShell({ initialData, tableSessionValid }: Props) {
   const searchParams = useSearchParams()
   const {
     restaurant,
+	items,                 // ← add this
     setRestaurantData,
     setDishOptions,
     setIsOffline,
@@ -89,8 +91,13 @@ export function RestaurantShell({ initialData, tableSessionValid }: Props) {
     clearCart,
     showRating,
     showRatingsList,
+	openRatingsList,        // ← add this
   } = useAppStore()
 
+const heroItems = (items ?? [])
+  .filter((i) => i.is_available && (i.is_bestseller || i.is_special))
+  .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+  
   const [waiterToasts, setWaiterToasts] = useState<OrderToastData[]>([])
   const [activeToastIndex, setActiveToastIndex] = useState(0)
   const [waiterLoading, setWaiterLoading] = useState(false)
@@ -709,37 +716,47 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
           onLoginOpenChange={setLoginOpen}
         />
 
-        <RestaurantHeader restaurant={restaurant} />
-		
-		<TableSessionHeartbeat
+      <BestsellerHeroSlider
+  restaurant={restaurant}
+  items={heroItems}
+  onRatingsClick={openRatingsList}
+  onAsk={(text) => {
+    // wire this to whatever opens ChatPanel + sends the message in your codebase,
+    // e.g. useAppStore.getState().openChatWithMessage?.(text)
+  }}
+/>
+
+
+<TableSessionHeartbeat
   restaurantId={restaurant.id}
   enabled={tableSessionValid === true}
   onExpired={() => setSessionExpired(true)}
 />
 
-        <main className="pr-main">
-          <MenuGrid
-            onCallWaiter={handleCallWaiter}
-            isWaiterLoading={waiterLoading}
-           upsellCard={
-    <>
-      {activeOffers.length > 0 && (
-        <OffersCarousel
-          offers={activeOffers}
-          restaurantId={initialData.restaurant.id}
-          restaurantName={initialData.restaurant.name}
-          onLoginClick={() => setLoginOpen(true)}
-        />
-      )}
-      <TodaysSpecialCarousel
-        restaurantId={initialData.restaurant.id}
-        allItems={initialData.items}
-      />
-      <AISuggestionCard />
-    </>
-  }
+<main className="pr-main">
+  <MenuGrid
+    onAsk={(text) => { /* same hook as above */ }}
+    onCallWaiter={handleCallWaiter}
+    isWaiterLoading={waiterLoading}
+    upsellCard={
+      <>
+        {activeOffers.length > 0 && (
+          <OffersCarousel
+            offers={activeOffers}
+            restaurantId={initialData.restaurant.id}
+            restaurantName={initialData.restaurant.name}
+            onLoginClick={() => setLoginOpen(true)}
           />
-        </main>
+        )}
+        <TodaysSpecialCarousel
+          restaurantId={initialData.restaurant.id}
+          allItems={initialData.items}
+        />
+        <AISuggestionCard />
+      </>
+    }
+  />
+</main>
 
         <ChatPanel />
 
