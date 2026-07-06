@@ -716,47 +716,37 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
           onLoginOpenChange={setLoginOpen}
         />
 
-      <BestsellerHeroSlider
-  restaurant={restaurant}
-  items={heroItems}
-  onRatingsClick={openRatingsList}
-  onAsk={(text) => {
-    // wire this to whatever opens ChatPanel + sends the message in your codebase,
-    // e.g. useAppStore.getState().openChatWithMessage?.(text)
-  }}
-/>
-
-
-<TableSessionHeartbeat
+        <RestaurantHeader restaurant={restaurant} />
+		
+		<TableSessionHeartbeat
   restaurantId={restaurant.id}
   enabled={tableSessionValid === true}
   onExpired={() => setSessionExpired(true)}
 />
 
-<main className="pr-main">
-  <MenuGrid
-    onAsk={(text) => { /* same hook as above */ }}
-    onCallWaiter={handleCallWaiter}
-    isWaiterLoading={waiterLoading}
-    upsellCard={
-      <>
-        {activeOffers.length > 0 && (
-          <OffersCarousel
-            offers={activeOffers}
-            restaurantId={initialData.restaurant.id}
-            restaurantName={initialData.restaurant.name}
-            onLoginClick={() => setLoginOpen(true)}
-          />
-        )}
-        <TodaysSpecialCarousel
+        <main className="pr-main">
+          <MenuGrid
+            onCallWaiter={handleCallWaiter}
+            isWaiterLoading={waiterLoading}
+           upsellCard={
+    <>
+      {activeOffers.length > 0 && (
+        <OffersCarousel
+          offers={activeOffers}
           restaurantId={initialData.restaurant.id}
-          allItems={initialData.items}
+          restaurantName={initialData.restaurant.name}
+          onLoginClick={() => setLoginOpen(true)}
         />
-        <AISuggestionCard />
-      </>
-    }
-  />
-</main>
+      )}
+      <TodaysSpecialCarousel
+        restaurantId={initialData.restaurant.id}
+        allItems={initialData.items}
+      />
+      <AISuggestionCard />
+    </>
+  }
+          />
+        </main>
 
         <ChatPanel />
 

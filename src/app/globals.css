@@ -1,6 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&display=swap');
-
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -766,194 +763,94 @@ input {
    Applies only inside RestaurantShell on /r/[slug] paid pages
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Hero (photo carousel + glass info card, matches RestaurantHeader.tsx) ── */
+/* ── Hero ── */
 .pr-shell .pr-hero {
   position: relative;
   width: 100%;
-  height: 320px;
+  aspect-ratio: 16 / 9;
+  min-height: 260px;
+  max-height: 520px;
   overflow: hidden;
   background: #0D0D0D;
-  isolation: isolate;
 }
 @media (min-width: 640px) {
-  .pr-shell .pr-hero { height: 420px; }
+  .pr-shell .pr-hero { aspect-ratio: auto; height: 420px; max-height: none; }
 }
 @media (min-width: 1024px) {
-  .pr-shell .pr-hero { height: 520px; }
+  .pr-shell .pr-hero { height: 500px; }
 }
 
-.pr-shell .pr-hero-slide {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity 1.4s ease;
-}
-.pr-shell .pr-hero-slide.is-active {
-  opacity: 1;
-  z-index: 1;
-}
 .pr-shell .pr-hero-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  filter: saturate(1.08) contrast(1.05) brightness(0.97);
-}
-
-.pr-shell .pr-hero-placeholder {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(232, 197, 71, 0.08), transparent 60%),
-    linear-gradient(160deg, #17140b 0%, #0d0d0d 65%);
-}
-.pr-shell .pr-hero-placeholder-initial {
-  font-family: var(--font-display);
-  font-size: 5rem;
-  font-weight: 700;
-  color: rgba(232, 197, 71, 0.35);
-}
-
-.pr-shell .pr-hero-gradient {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(13, 13, 13, 0.06) 0%,
-    rgba(13, 13, 13, 0.05) 30%,
-    rgba(13, 13, 13, 0.45) 65%,
-    rgba(13, 13, 13, 0.88) 100%
-  );
-}
-.pr-shell .pr-hero-grain {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  mix-blend-mode: overlay;
-  opacity: 0.5;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-}
-
-.pr-shell .pr-hero-indicators {
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 4;
-  display: flex;
-  gap: 6px;
-}
-.pr-shell .pr-hero-dot {
-  width: 18px;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.32);
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: background 0.25s ease, width 0.25s ease;
-}
-.pr-shell .pr-hero-dot.is-active {
-  background: var(--pr-gold);
-  width: 26px;
-}
-.pr-shell .pr-hero-dot:focus-visible {
-  outline: 2px solid var(--pr-gold);
-  outline-offset: 2px;
-}
-
-/* ── Glass info card overlay ── */
-.pr-shell .pr-info-card {
-  position: absolute;
-  left: 1rem;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: 20px;
-  background: rgba(13, 13, 13, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-@media (min-width: 640px) {
-  .pr-shell .pr-info-card {
-    left: 2rem; right: auto; bottom: 1.5rem;
-    max-width: 480px; padding: 18px 22px;
-  }
-}
-@media (min-width: 1024px) {
-  .pr-shell .pr-info-card { left: 2.5rem; bottom: 2rem; max-width: 540px; }
-}
-
-.pr-shell .pr-info-top { display: flex; align-items: center; gap: 12px; }
-
-.pr-shell .pr-info-logo {
-  position: relative;
-  flex-shrink: 0;
-  width: 52px; height: 52px;
-  border-radius: 14px; overflow: hidden;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-}
-@media (min-width: 640px) {
-  .pr-shell .pr-info-logo { width: 60px; height: 60px; border-radius: 16px; }
-}
-.pr-shell .pr-info-logo-initial {
   width: 100%; height: 100%;
-  display: grid; place-items: center;
-  font-family: var(--font-display); font-weight: 700; font-size: 1.4rem;
-  color: var(--pr-gold); background: var(--pr-gold-dim);
+  object-fit: cover; object-position: center;
+  transform: scale(1.04);
 }
 
-.pr-shell .pr-info-heading { min-width: 0; }
-.pr-shell .pr-info-name {
-  font-family: var(--font-display);
-  font-weight: 700; letter-spacing: -0.015em; line-height: 1.1;
-  color: var(--pr-text);
-  font-size: clamp(1.35rem, 4.5vw, 2rem);
-  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.4);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.pr-shell .pr-hero-vignette {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(to top, rgba(13,13,13,0.97) 0%, rgba(13,13,13,0.6) 35%, rgba(13,13,13,0.15) 65%, rgba(13,13,13,0.4) 100%),
+    linear-gradient(to right, rgba(13,13,13,0.3) 0%, transparent 50%, rgba(13,13,13,0.3) 100%);
 }
-.pr-shell .pr-info-cuisine {
+
+.pr-shell .pr-hero-grain {
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: 0.6; mix-blend-mode: overlay; pointer-events: none;
+}
+
+.pr-shell .pr-hero-content {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 1.5rem 1.75rem;
+}
+@media (min-width: 640px) {
+  .pr-shell .pr-hero-content { padding: 0 2.5rem 2.25rem; }
+}
+
+.pr-shell .pr-hero-logo {
+  position: absolute; top: 1.25rem; right: 1.5rem;
+  width: 56px; height: 56px;
+  border-radius: 14px; overflow: hidden;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+@media (min-width: 640px) {
+  .pr-shell .pr-hero-logo { width: 72px; height: 72px; border-radius: 18px; top: 1.5rem; right: 2.5rem; }
+}
+
+/* ── Eyebrow ── */
+.pr-shell .pr-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px;
   font-family: var(--font-body);
-  font-size: 12px; font-weight: 500;
-  letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--pr-gold); margin-top: 2px;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: #E8C547; margin-bottom: 10px;
+}
+.pr-shell .pr-eyebrow-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: #E8C547;
+  animation: pr-pulse-dot 2s ease-in-out infinite;
 }
 
-.pr-shell .pr-info-meta {
-  display: flex; align-items: center; gap: 8px;
-  font-family: var(--font-body); font-size: 12.5px;
-  color: var(--pr-text-muted); flex-wrap: wrap;
-}
-.pr-shell .pr-info-rating {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: none; border: none; padding: 0; cursor: pointer;
-  font-family: var(--font-body); color: var(--pr-text);
-  font-weight: 600; font-size: 12.5px;
-}
-.pr-shell .pr-info-rating:focus-visible {
-  outline: 2px solid var(--pr-gold); outline-offset: 3px; border-radius: 4px;
-}
-.pr-shell .pr-info-rating .count { color: var(--pr-text-muted); font-weight: 400; }
-.pr-shell .pr-info-divider { color: var(--pr-text-faint); }
-.pr-shell .pr-info-address { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
-.pr-shell .pr-info-address span {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;
+/* ── Restaurant name ── */
+.pr-shell .pr-restaurant-name {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(2.2rem, 7vw, 4.5rem);
+  font-weight: 700; line-height: 1.0;
+  letter-spacing: -0.02em;
+  color: #FAFAF7; margin: 0 0 6px;
+  text-shadow: 0 2px 30px rgba(0,0,0,0.5);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .pr-shell .pr-hero-slide { transition: none; }
+.pr-shell .pr-cuisine-line {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px; font-weight: 400;
+  color: rgba(250,250,247,0.55);
+  letter-spacing: 0.01em; margin-bottom: 1.25rem;
 }
 
 /* ── Features strip ── */
@@ -1297,147 +1194,6 @@ input {
   font-size: 14px; color: rgba(250,250,247,0.28);
   font-family: 'Inter', system-ui, sans-serif; padding: 1rem 0;
 }
-
-/* ── Bestseller hero slider (BestsellerHeroSlider.tsx) ── */
-.pr-shell .bhs-fallback {
-  background: var(--pr-black-soft);
-  border-bottom: 1px solid var(--pr-border);
-  padding: 1.75rem 1.5rem;
-  text-align: center;
-}
-.pr-shell .bhs-fallback h1 {
-  font-family: var(--font-display);
-  font-size: clamp(1.6rem, 5vw, 2.4rem);
-  color: var(--pr-text);
-  margin: 0;
-}
-
-.pr-shell .bhs-root {
-  position: relative;
-  width: 100%;
-  height: 62vw;
-  min-height: 380px;
-  max-height: 520px;
-  background: radial-gradient(ellipse at 50% 38%, #161616 0%, #060606 62%, #000 100%);
-  overflow: hidden;
-}
-@media (min-width: 640px) { .pr-shell .bhs-root { height: 460px; } }
-
-.pr-shell .bhs-grain {
-  position: absolute; inset: 0; pointer-events: none; opacity: 0.5; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
-}
-
-.pr-shell .bhs-topbar {
-  position: absolute; top: 0; left: 0; right: 0; z-index: 20;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
-}
-.pr-shell .bhs-brand { display: flex; align-items: center; gap: 8px; }
-.pr-shell .bhs-brand-logo {
-  width: 30px; height: 30px; border-radius: 8px; overflow: hidden;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
-  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-}
-.pr-shell .bhs-brand-logo img { width: 100%; height: 100%; object-fit: cover; }
-.pr-shell .bhs-brand-name {
-  font-family: var(--font-display); font-weight: 600; font-size: 15px;
-  color: #FAFAF7; letter-spacing: -0.01em;
-}
-.pr-shell .bhs-rating-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 600;
-  color: #E8C547; cursor: pointer; backdrop-filter: blur(6px);
-}
-
-.pr-shell .bhs-slide {
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
-  opacity: 0; transform: scale(1.03);
-  transition: opacity 700ms ease, transform 900ms ease;
-  pointer-events: none;
-}
-.pr-shell .bhs-slide.active { opacity: 1; transform: scale(1); pointer-events: auto; }
-
-.pr-shell .bhs-spotlight {
-  position: absolute; top: 6%; left: 50%; transform: translateX(-50%);
-  width: 78%; max-width: 460px; aspect-ratio: 1/1;
-  background: radial-gradient(circle, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.05) 45%, transparent 72%);
-  filter: blur(2px);
-}
-
-.pr-shell .bhs-dish-wrap {
-  position: relative; z-index: 5;
-  width: 62%; max-width: 320px; aspect-ratio: 1/1;
-  margin-top: 8%;
-}
-.pr-shell .bhs-dish-img {
-  width: 100%; height: 100%; object-fit: cover;
-  -webkit-mask-image: radial-gradient(circle at 50% 46%, black 54%, transparent 78%);
-  mask-image: radial-gradient(circle at 50% 46%, black 54%, transparent 78%);
-  filter: drop-shadow(0 22px 28px rgba(0,0,0,0.65)) saturate(1.08) contrast(1.04);
-}
-.pr-shell .bhs-floor {
-  position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%);
-  width: 46%; height: 22px; border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(0,0,0,0.65) 0%, transparent 72%);
-  filter: blur(2px); z-index: 4;
-}
-
-.pr-shell .bhs-content {
-  position: relative; z-index: 10;
-  width: 100%; padding: 40px 24px 26px;
-  text-align: center;
-  background: linear-gradient(to top, rgba(0,0,0,0.85) 10%, rgba(0,0,0,0.3) 55%, transparent 100%);
-}
-.pr-shell .bhs-eyebrow {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
-  color: #E8C547; margin-bottom: 8px;
-}
-.pr-shell .bhs-name {
-  font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(1.3rem, 5.5vw, 1.9rem); color: #FAFAF7;
-  margin: 0 0 6px; letter-spacing: -0.01em; line-height: 1.15;
-}
-.pr-shell .bhs-desc {
-  font-size: 12px; color: rgba(250,250,247,0.55); max-width: 320px;
-  margin: 0 auto 10px; line-height: 1.5;
-  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
-}
-.pr-shell .bhs-meta-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
-.pr-shell .bhs-price { font-size: 17px; font-weight: 700; color: #FAFAF7; }
-.pr-shell .bhs-cta {
-  display: inline-flex; align-items: center; gap: 6px;
-  border-radius: 100px; border: 1px solid rgba(232,197,71,0.35);
-  background: rgba(232,197,71,0.14); color: #E8C547;
-  padding: 7px 16px; font-size: 12px; font-weight: 700;
-  cursor: pointer; letter-spacing: 0.02em;
-}
-
-.pr-shell .bhs-arrow {
-  position: absolute; top: 44%; z-index: 15;
-  width: 34px; height: 34px; border-radius: 50%;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16);
-  color: #FAFAF7; display: none; align-items: center; justify-content: center;
-  cursor: pointer; backdrop-filter: blur(6px);
-}
-@media (min-width: 768px) { .pr-shell .bhs-arrow { display: flex; } }
-.pr-shell .bhs-arrow.left { left: 16px; }
-.pr-shell .bhs-arrow.right { right: 16px; }
-
-.pr-shell .bhs-dots {
-  position: absolute; bottom: 10px; left: 0; right: 0; z-index: 20;
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-}
-.pr-shell .bhs-dot {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: rgba(255,255,255,0.3);
-  transition: all 0.25s;
-}
-.pr-shell .bhs-dot.active { width: 16px; border-radius: 3px; background: #E8C547; }
 
 /* ── Scrollbar ── */
 .pr-shell ::-webkit-scrollbar { width: 4px; }
