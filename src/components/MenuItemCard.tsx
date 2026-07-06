@@ -60,7 +60,7 @@ function ItemImage({ src, alt }: { src?: string | null; alt: string }) {
       flexShrink: 0,
       borderRadius: 14,
       overflow: 'hidden',
-      background: 'rgba(255,255,255,0.05)',
+      background: 'var(--pr-black-soft)',
     }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -97,11 +97,11 @@ function AddButton({
             borderRadius: 10,
             border: adding
               ? '1.5px solid rgba(34,197,94,0.4)'
-              : '1.5px solid rgba(255,92,53,0.5)',
+              : '1.5px solid var(--pr-orange)',
             background: adding
               ? 'rgba(34,197,94,0.1)'
-              : 'rgba(255,92,53,0.12)',
-            color: adding ? '#22c55e' : '#FF5C35',
+              : 'var(--pr-orange-dim)',
+            color: adding ? '#22c55e' : 'var(--pr-orange)',
             fontSize: 11, fontWeight: 700,
             letterSpacing: '0.05em',
             cursor: 'pointer',
@@ -114,7 +114,7 @@ function AddButton({
         {hasOptions && !adding && (
           <span style={{
             fontSize: 9, fontWeight: 500,
-            color: 'rgba(250,250,247,0.3)',
+            color: 'var(--pr-text-faint)',
             letterSpacing: '0.04em',
           }}>
             customisable
@@ -130,7 +130,7 @@ function AddButton({
         display: 'flex', height: 32, width: 76,
         alignItems: 'center', justifyContent: 'space-between',
         borderRadius: 10,
-        background: '#FF5C35',
+        background: 'var(--pr-orange)',
         overflow: 'hidden',
       }}>
         <button type="button" onClick={onDec} aria-label="Decrease"
@@ -156,7 +156,7 @@ function AddButton({
         </button>
       </div>
       {hasOptions && (
-        <span style={{ fontSize: 9, fontWeight: 500, color: 'rgba(250,250,247,0.3)', letterSpacing: '0.04em' }}>
+        <span style={{ fontSize: 9, fontWeight: 500, color: 'var(--pr-text-faint)', letterSpacing: '0.04em' }}>
           customisable
         </span>
       )}
@@ -233,12 +233,12 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
       style={{
         position: 'relative',
         background: isInCart
-          ? 'linear-gradient(135deg, rgba(255,92,53,0.06) 0%, rgba(36,36,36,1) 60%)'
-          : '#242424',
+          ? 'linear-gradient(135deg, var(--pr-orange-dim) 0%, var(--pr-card) 60%)'
+          : 'var(--pr-card)',
         borderRadius: 16,
         border: isInCart
           ? '1px solid rgba(255,92,53,0.2)'
-          : '1px solid rgba(255,255,255,0.06)',
+          : '1px solid var(--pr-border)',
         overflow: 'hidden',
         transition: 'all 0.2s',
       }}
@@ -249,7 +249,8 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0,
           height: 2,
-          background: 'linear-gradient(90deg, transparent, rgba(232,197,71,0.6), transparent)',
+          background: 'linear-gradient(90deg, transparent, var(--pr-gold), transparent)',
+          opacity: 0.6,
         }} />
       )}
 
@@ -274,24 +275,24 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
             {item.is_bestseller && (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
-                background: 'rgba(232,197,71,0.12)',
+                background: 'var(--pr-gold-dim)',
                 border: '1px solid rgba(232,197,71,0.2)',
-                color: '#E8C547',
+                color: 'var(--pr-gold)',
                 borderRadius: 5, padding: '2px 7px',
                 fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 fontFamily: 'var(--font-body)',
               }}>
-                <Star size={7} style={{ fill: '#E8C547' }} /> Bestseller
+                <Star size={7} style={{ fill: 'var(--pr-gold)' }} /> Bestseller
               </span>
             )}
 			
 			{showMostOrdered && (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
-      background: 'rgba(212,168,75,0.08)',
+      background: 'var(--pr-gold-dim)',
       border: '1px solid rgba(212,168,75,0.18)',
-      color: '#D4A84B',
+      color: 'var(--pr-gold)',
       borderRadius: 5, padding: '2px 7px',
       fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
       textTransform: 'uppercase',
@@ -351,7 +352,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
           {cleanDescription && (
             <p style={{
               fontSize: 11.5, lineHeight: 1.6,
-              color: 'rgba(250,250,247,0.4)',
+              color: 'var(--pr-text-muted)',
               fontFamily: 'var(--font-body)',
               display: '-webkit-box',
               WebkitLineClamp: isExpanded ? undefined : 2,
@@ -382,7 +383,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
                   {item.prep_time_minutes && (
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 4,
-                      fontSize: 10.5, color: 'rgba(250,250,247,0.35)',
+                      fontSize: 10.5, color: 'var(--pr-text-faint)',
                       fontFamily: 'var(--font-body)',
                     }}>
                       <Clock size={10} /> ~{item.prep_time_minutes} min
@@ -390,7 +391,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
                   )}
                   {item.calories && (
                     <span style={{
-                      fontSize: 10.5, color: 'rgba(250,250,247,0.35)',
+                      fontSize: 10.5, color: 'var(--pr-text-faint)',
                       fontFamily: 'var(--font-body)',
                     }}>
                       {item.calories} cal
@@ -403,15 +404,15 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5 }}>
                   <span style={{
                     fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-                    letterSpacing: '0.06em', color: 'rgba(250,250,247,0.3)',
+                    letterSpacing: '0.06em', color: 'var(--pr-text-faint)',
                     fontFamily: 'var(--font-body)',
                   }}>Contains:</span>
                   {item.allergens.map((a) => (
                     <span key={a} style={{
                       background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.08)',
+                      border: '1px solid var(--pr-border)',
                       borderRadius: 100, padding: '2px 8px',
-                      fontSize: 10, color: 'rgba(250,250,247,0.55)',
+                      fontSize: 10, color: 'var(--pr-text-muted)',
                       fontFamily: 'var(--font-body)',
                     }}>{a}</span>
                   ))}
@@ -422,11 +423,12 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                   {item.tags?.filter((t) => t !== 'new' && t !== 'spicy').map((tag) => (
                     <span key={tag} style={{
-                      background: 'rgba(255,92,53,0.08)',
+                      background: 'var(--pr-orange-dim)',
                       border: '1px solid rgba(255,92,53,0.15)',
                       borderRadius: 100, padding: '2px 8px',
-                      fontSize: 10, color: 'rgba(255,92,53,0.8)',
+                      fontSize: 10, color: 'var(--pr-orange)',
                       fontFamily: 'var(--font-body)',
+                      opacity: 0.9,
                     }}>{tag}</span>
                   ))}
                 </div>
@@ -453,7 +455,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
                 }}>
                   <p style={{
                     fontSize: 8, fontWeight: 700, textTransform: 'uppercase',
-                    letterSpacing: '0.08em', color: '#E8C547',
+                    letterSpacing: '0.08em', color: 'var(--pr-gold)',
                     fontFamily: 'var(--font-body)',
                   }}>★ Best</p>
                 </div>
@@ -464,7 +466,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
             <div style={{
               width: 90, height: 90, borderRadius: 14,
               background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.06)',
+              border: '1px solid var(--pr-border)',
               display: 'grid', placeItems: 'center',
               fontSize: '1.6rem',
               flexShrink: 0,

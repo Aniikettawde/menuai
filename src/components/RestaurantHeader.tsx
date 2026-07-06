@@ -61,215 +61,205 @@ export function RestaurantHeader({ restaurant }: Props) {
 
   return (
     <>
+      {/* NOTE: no local color variables here on purpose — this component now
+          consumes the same --pr-* design tokens defined in RestaurantShell's
+          global style block, so it automatically matches the food/bar theme
+          instead of carrying its own separate light palette. */}
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap');
-
-        :root {
-          --rh-bg: #FFFFFF;
-          --rh-ink: #221F1B;
-          --rh-ink-soft: #6B645C;
-          --rh-ink-faint: #A39C92;
-          --rh-hairline: rgba(34,31,27,0.09);
-          --rh-gold: #A9832F;
-          --rh-gold-dim: rgba(169,131,47,0.10);
-          --rh-wine: #7A2331;
-          --rh-wine-dim: rgba(122,35,49,0.08);
-          --rh-open: #1F7A54;
-          --rh-open-dim: rgba(31,122,84,0.09);
-          --rh-closed: #B23A3A;
-          --rh-closed-dim: rgba(178,58,58,0.09);
-          --rh-font-display: 'Playfair Display', Georgia, serif;
-          --rh-font-body: 'Inter', system-ui, sans-serif;
-        }
-
         .rh-wrap {
-          padding: 14px 14px 0;
-          max-width: 640px;
+          padding: 12px 14px 0;
+          max-width: 920px;
           margin: 0 auto;
         }
-        @media (min-width: 640px) { .rh-wrap { padding: 20px 20px 0; } }
+        @media (min-width: 640px) { .rh-wrap { padding: 16px 20px 0; } }
 
-        /* ── Hero card ── */
         .rh-card {
           position: relative;
-          border-radius: 26px;
+          border-radius: 22px;
           overflow: hidden;
-          background: var(--rh-bg);
-          box-shadow: 0 18px 40px rgba(34,31,27,0.16), 0 2px 8px rgba(34,31,27,0.06);
+          background: var(--pr-card);
+          border: 1px solid var(--pr-border);
+          box-shadow: 0 14px 34px rgba(0,0,0,0.35);
         }
 
+        /* Short, horizontal banner — a glance, not a wall */
         .rh-media {
           position: relative;
           width: 100%;
-          aspect-ratio: 4 / 5;
-          max-height: 460px;
-          background: linear-gradient(160deg, #F1E9DB 0%, #E7D9C2 55%, #DCC9A8 100%);
+          height: 130px;
+          overflow: hidden;
+          background: var(--pr-black-soft);
         }
-        @media (min-width: 640px) { .rh-media { aspect-ratio: 16 / 8; max-height: 340px; } }
+        @media (min-width: 390px) { .rh-media { height: 150px; } }
+        @media (min-width: 640px) { .rh-media { height: 190px; } }
+        @media (min-width: 1024px) { .rh-media { height: 220px; } }
 
         .rh-media img {
           width: 100%; height: 100%;
           object-fit: cover; object-position: center;
+          transform: scale(1.02);
+          transition: transform 6s ease;
         }
+        .rh-card:hover .rh-media img { transform: scale(1.06); }
 
         .rh-media-placeholder {
           position: absolute; inset: 0;
           display: grid; place-items: center;
-          font-family: var(--rh-font-display);
-          font-size: 3.2rem; font-weight: 600;
-          color: rgba(122,35,49,0.18);
+          font-family: var(--font-display);
+          font-size: 2.6rem; font-weight: 600;
+          color: var(--pr-text-faint);
         }
 
-        .rh-scrim {
-          position: absolute; inset: 0;
-          background: linear-gradient(to top, rgba(20,16,12,0.86) 0%, rgba(20,16,12,0.42) 42%, rgba(20,16,12,0.02) 68%),
-                      linear-gradient(to bottom, rgba(20,16,12,0.35) 0%, transparent 22%);
-        }
-
-        /* Top bar: logo left, actions right */
-        .rh-topbar {
-          position: absolute; top: 14px; left: 14px; right: 14px;
-          display: flex; align-items: flex-start; justify-content: space-between;
-          z-index: 2;
-        }
-
-        .rh-logo-badge {
-          width: 46px; height: 46px;
-          border-radius: 14px;
-          background: rgba(255,255,255,0.94);
-          border: 1px solid rgba(255,255,255,0.6);
-          box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-          display: grid; place-items: center;
-          overflow: hidden;
-          position: relative;
-        }
-        .rh-logo-initial {
-          font-family: var(--rh-font-display);
-          font-size: 1.15rem; font-weight: 700;
-          color: var(--rh-wine);
+        .rh-scrim-top {
+          position: absolute; top: 0; left: 0; right: 0; height: 64px;
+          background: linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 100%);
+          pointer-events: none;
         }
 
         .rh-actions {
+          position: absolute; top: 10px; right: 10px;
           display: flex; gap: 8px;
+          z-index: 2;
         }
 
         .rh-icon-btn {
-          width: 38px; height: 38px;
-          border-radius: 12px;
-          background: rgba(255,255,255,0.92);
-          border: none;
+          width: 32px; height: 32px;
+          border-radius: 11px;
+          background: rgba(20,20,20,0.55);
+          backdrop-filter: blur(6px);
+          border: 1px solid rgba(255,255,255,0.14);
           display: grid; place-items: center;
           cursor: pointer;
-          color: var(--rh-ink);
-          box-shadow: 0 4px 14px rgba(0,0,0,0.16);
+          color: var(--pr-text);
+          box-shadow: 0 4px 14px rgba(0,0,0,0.3);
           transition: transform 0.15s ease, background 0.15s ease;
           position: relative;
         }
-        .rh-icon-btn:hover { transform: translateY(-1px); background: #fff; }
+        .rh-icon-btn:hover { transform: translateY(-1px); background: rgba(30,30,30,0.7); }
         .rh-icon-btn:active { transform: translateY(0) scale(0.96); }
-        .rh-icon-btn.is-liked { color: var(--rh-wine); }
+        .rh-icon-btn.is-liked { color: var(--pr-orange); border-color: rgba(255,92,53,0.35); }
 
         .rh-copy-toast {
-          position: absolute; top: 44px; right: 0;
-          background: var(--rh-ink); color: #fff;
-          font-family: var(--rh-font-body);
+          position: absolute; top: 40px; right: 0;
+          background: var(--pr-black); color: var(--pr-text);
+          border: 1px solid var(--pr-border);
+          font-family: var(--font-body);
           font-size: 11px; font-weight: 600;
           padding: 5px 10px; border-radius: 8px;
           white-space: nowrap;
         }
 
-        /* Overlay text block */
-        .rh-overlay {
-          position: absolute; left: 0; right: 0; bottom: 0;
-          padding: 0 18px 18px;
-          z-index: 2;
+        /* ── Content block below the photo ── */
+        .rh-body {
+          position: relative;
+          padding: 0 16px 14px;
+          background: var(--pr-card);
+        }
+
+        .rh-logo-badge {
+          width: 52px; height: 52px;
+          border-radius: 16px;
+          background: var(--pr-black-soft);
+          border: 3px solid var(--pr-card);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+          display: grid; place-items: center;
+          overflow: hidden;
+          position: relative;
+          margin-top: -26px;
+          flex-shrink: 0;
+        }
+        .rh-logo-initial {
+          font-family: var(--font-display);
+          font-size: 1.3rem; font-weight: 700;
+          color: var(--pr-gold);
+        }
+
+        .rh-title-row {
+          display: flex;
+          align-items: flex-end;
+          gap: 10px;
+          padding-top: 10px;
         }
 
         .rh-name {
-          font-family: var(--rh-font-display);
-          font-size: clamp(1.7rem, 6.5vw, 2.5rem);
+          font-family: var(--font-display);
+          font-size: clamp(1.25rem, 4.6vw, 1.7rem);
           font-weight: 700;
-          line-height: 1.06;
+          line-height: 1.1;
           letter-spacing: -0.01em;
-          color: #FFFFFF;
-          margin: 0 0 3px;
-          text-shadow: 0 2px 16px rgba(0,0,0,0.35);
+          color: var(--pr-text);
+          margin: 0;
         }
 
         .rh-cuisine {
-          font-family: var(--rh-font-body);
-          font-size: 12.5px; font-weight: 500;
-          color: rgba(255,255,255,0.78);
-          margin: 0 0 12px;
+          font-family: var(--font-body);
+          font-size: 12px; font-weight: 500;
+          color: var(--pr-text-muted);
+          margin: 3px 0 0;
         }
 
         .rh-meta-row {
-          display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+          display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
+          margin-top: 10px;
         }
 
         .rh-chip {
           display: inline-flex; align-items: center; gap: 5px;
-          padding: 6px 11px; border-radius: 100px;
-          font-family: var(--rh-font-body);
-          font-size: 12px; font-weight: 600;
-          border: none; cursor: default;
+          padding: 5px 10px; border-radius: 100px;
+          font-family: var(--font-body);
+          font-size: 11px; font-weight: 600;
+          border: 1px solid transparent; cursor: default;
           white-space: nowrap;
         }
         .rh-chip.is-button { cursor: pointer; transition: transform 0.15s ease; }
         .rh-chip.is-button:hover { transform: translateY(-1px); }
 
         .rh-chip-rating {
-          background: rgba(255,255,255,0.96);
-          color: var(--rh-ink);
+          background: var(--pr-gold-dim);
+          border-color: rgba(232,197,71,0.22);
+          color: var(--pr-text);
         }
-        .rh-chip-rating .rh-chip-sub { color: var(--rh-ink-soft); font-weight: 500; }
+        .rh-chip-rating .rh-chip-sub { color: var(--pr-text-muted); font-weight: 500; }
 
         .rh-chip-time {
-          background: rgba(255,255,255,0.16);
-          color: #fff;
-          border: 1px solid rgba(255,255,255,0.3);
+          background: rgba(255,255,255,0.05);
+          color: var(--pr-text-muted);
+          border-color: var(--pr-border);
         }
 
-        .rh-chip-status {
-          background: rgba(255,255,255,0.16);
-          color: #fff;
-          border: 1px solid rgba(255,255,255,0.3);
-        }
+        .rh-chip-status.is-open { background: rgba(34,197,94,0.1); color: #4ade80; border-color: rgba(34,197,94,0.22); }
+        .rh-chip-status.is-closed { background: rgba(239,68,68,0.1); color: #f87171; border-color: rgba(239,68,68,0.22); }
         .rh-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-        .rh-chip-status.is-open .rh-status-dot { color: #6EE7B7; animation: rh-blink 1.5s ease-in-out infinite; }
-        .rh-chip-status.is-closed .rh-status-dot { color: #FCA5A5; }
+        .rh-chip-status.is-open .rh-status-dot { animation: rh-blink 1.5s ease-in-out infinite; }
         @keyframes rh-blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
-        /* ── Secondary info strip beneath the card ── */
+        /* ── Secondary pill strip — pulled away from the card so it reads
+           as its own row, not a fused extension of the card's bottom edge ── */
         .rh-info-strip {
-          display: flex; align-items: center; gap: 6px;
+          display: flex; align-items: center; gap: 8px;
           overflow-x: auto; scrollbar-width: none;
-          padding: 12px 2px 4px;
+          padding: 4px 2px 4px;
+          margin-top: 14px;
         }
         .rh-info-strip::-webkit-scrollbar { display: none; }
 
         .rh-pill {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 7px 13px; border-radius: 100px;
-          font-family: var(--rh-font-body);
+          font-family: var(--font-body);
           font-size: 12px; font-weight: 500;
           white-space: nowrap; flex-shrink: 0;
-          border: 1px solid var(--rh-hairline);
-          background: var(--rh-bg);
-          color: var(--rh-ink-soft);
+          border: 1px solid var(--pr-border);
+          background: var(--pr-card);
+          color: var(--pr-text-muted);
           text-decoration: none;
-          transition: transform 0.15s ease, border-color 0.15s ease;
+          transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
         }
-        .rh-pill:hover { transform: translateY(-1px); border-color: rgba(34,31,27,0.18); }
+        .rh-pill:hover { transform: translateY(-1px); border-color: var(--pr-border-hover); background: var(--pr-card-hover); }
 
-        .rh-pill-google { color: #3B6FE0; border-color: rgba(59,111,224,0.25); background: rgba(59,111,224,0.06); }
-        .rh-pill-directions { color: var(--rh-open); border-color: rgba(31,122,84,0.22); background: var(--rh-open-dim); }
-        .rh-pill-instagram { color: var(--rh-wine); border-color: rgba(122,35,49,0.2); background: var(--rh-wine-dim); }
-
-        .rh-divider-dot {
-          width: 3px; height: 3px; border-radius: 50%;
-          background: var(--rh-ink-faint); flex-shrink: 0;
-        }
+        .rh-pill-google { color: #7fa8f5; border-color: rgba(127,168,245,0.22); background: rgba(127,168,245,0.08); }
+        .rh-pill-directions { color: #4ade80; border-color: rgba(74,222,128,0.22); background: rgba(74,222,128,0.08); }
+        .rh-pill-instagram { color: var(--pr-orange); border-color: rgba(255,92,53,0.22); background: var(--pr-orange-dim); }
       `}</style>
 
       <header className="w-full">
@@ -284,69 +274,70 @@ export function RestaurantHeader({ restaurant }: Props) {
                   {restaurant.name?.[0]?.toUpperCase() ?? 'R'}
                 </div>
               )}
-              <div className="rh-scrim" />
+              <div className="rh-scrim-top" />
 
-              <div className="rh-topbar">
+              <div className="rh-actions">
+                <button
+                  type="button"
+                  className={`rh-icon-btn${liked ? ' is-liked' : ''}`}
+                  onClick={() => setLiked((v) => !v)}
+                  aria-label={liked ? 'Remove from favourites' : 'Add to favourites'}
+                  aria-pressed={liked}
+                >
+                  <Heart size={15} fill={liked ? 'currentColor' : 'none'} />
+                </button>
+                <button
+                  type="button"
+                  className="rh-icon-btn"
+                  onClick={handleShare}
+                  aria-label="Share this menu"
+                >
+                  <Share2 size={14} />
+                  {justCopied && <span className="rh-copy-toast">Link copied</span>}
+                </button>
+              </div>
+            </div>
+
+            <div className="rh-body">
+              <div className="rh-title-row">
                 <div className="rh-logo-badge">
                   {hasLogo ? (
                     <Image
                       src={restaurant.logo_url as string}
                       alt={`${restaurant.name} logo`}
                       fill
-                      sizes="46px"
+                      sizes="52px"
                       className="object-contain p-1.5"
                     />
                   ) : (
                     <span className="rh-logo-initial">{restaurant.name?.[0]?.toUpperCase() ?? 'R'}</span>
                   )}
                 </div>
-
-                <div className="rh-actions">
-                  <button
-                    type="button"
-                    className={`rh-icon-btn${liked ? ' is-liked' : ''}`}
-                    onClick={() => setLiked((v) => !v)}
-                    aria-label={liked ? 'Remove from favourites' : 'Add to favourites'}
-                    aria-pressed={liked}
-                  >
-                    <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
-                  </button>
-                  <button
-                    type="button"
-                    className="rh-icon-btn"
-                    onClick={handleShare}
-                    aria-label="Share this menu"
-                  >
-                    <Share2 size={15} />
-                    {justCopied && <span className="rh-copy-toast">Link copied</span>}
-                  </button>
+                <div>
+                  <h1 className="rh-name">{restaurant.name}</h1>
+                  {restaurant.cuisine_type && (
+                    <p className="rh-cuisine">{restaurant.cuisine_type} Restaurant</p>
+                  )}
                 </div>
               </div>
 
-              <div className="rh-overlay">
-                <h1 className="rh-name">{restaurant.name}</h1>
-                {restaurant.cuisine_type && (
-                  <p className="rh-cuisine">{restaurant.cuisine_type} Restaurant</p>
+              <div className="rh-meta-row">
+                <button type="button" onClick={openRatingsList} className="rh-chip rh-chip-rating is-button">
+                  <Star size={12} fill="var(--pr-gold)" color="var(--pr-gold)" />
+                  {rating.toFixed(1)}
+                  <span className="rh-chip-sub">({formatRatings(totalRatings)})</span>
+                </button>
+
+                {!!restaurant.avg_prep_time && (
+                  <span className="rh-chip rh-chip-time">
+                    <Clock size={11} /> ~{restaurant.avg_prep_time} min
+                  </span>
                 )}
 
-                <div className="rh-meta-row">
-                  <button type="button" onClick={openRatingsList} className="rh-chip rh-chip-rating is-button">
-                    <Star size={12} fill="var(--rh-gold)" color="var(--rh-gold)" />
-                    {rating.toFixed(1)}
-                    <span className="rh-chip-sub">({formatRatings(totalRatings)})</span>
-                  </button>
-
-                  {!!restaurant.avg_prep_time && (
-                    <span className="rh-chip rh-chip-time">
-                      <Clock size={11} /> ~{restaurant.avg_prep_time} min
-                    </span>
-                  )}
-
-                  <span className={`rh-chip rh-chip-status ${open ? 'is-open' : 'is-closed'}`}>
-                    <span className="rh-status-dot" />
-                    {open ? 'Open now' : 'Closed'}
-                  </span>
-                </div>
+                <span className={`rh-chip rh-chip-status ${open ? 'is-open' : 'is-closed'}`}>
+                  <span className="rh-status-dot" />
+                  {open ? 'Open now' : 'Closed'}
+                </span>
               </div>
             </div>
           </div>
@@ -361,7 +352,7 @@ export function RestaurantHeader({ restaurant }: Props) {
               )}
               {hasGoogleReviews && (
                 <a href={restaurant.google_reviews_url!} target="_blank" rel="noopener noreferrer" className="rh-pill rh-pill-google">
-                  <Star size={11} fill="#3B6FE0" color="#3B6FE0" />
+                  <Star size={11} fill="#7fa8f5" color="#7fa8f5" />
                   {googleRating.toFixed(1)} <span style={{ opacity: 0.75 }}>({formatRatings(googleReviewCount)} Google)</span>
                 </a>
               )}

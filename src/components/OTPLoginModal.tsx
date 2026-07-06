@@ -5,10 +5,7 @@ import {
   useRef,
   useEffect,
   useCallback,
-  useMemo,
-  type KeyboardEvent,
   type ChangeEvent,
-  type ClipboardEvent,
 } from 'react'
 import { type ConfirmationResult } from 'firebase/auth'
 import { sendOTP, verifyOTP, clearRecaptcha, prepareRecaptcha } from '@/lib/firebase'
@@ -24,153 +21,71 @@ interface Props {
 
 type Screen = 'phone' | 'otp' | 'name' | 'done'
 
-function OTPInput({
+// ─── Single OTP input (replaces the 6-box grid) ───────────────────────────────
+
+function SingleOTPInput({
   value,
   onChange,
   disabled,
+  onSubmit,
 }: {
   value: string
   onChange: (v: string) => void
   disabled: boolean
+  onSubmit: () => void
 }) {
-  const inputRefs = useRef<Array<HTMLInputElement | null>>([])
-
-  const digits = useMemo(
-    () => Array.from({ length: 6 }, (_, i) => value[i] ?? ''),
-    [value],
-  )
-
-  const focusAt = useCallback((index: number) => {
-    inputRefs.current[index]?.focus()
-  }, [])
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
-    const firstEmpty = digits.findIndex((d) => !d)
-    const target = firstEmpty === -1 ? 5 : firstEmpty
-    const t = window.setTimeout(() => focusAt(target), 50)
+    const t = window.setTimeout(() => inputRef.current?.focus(), 50)
     return () => window.clearTimeout(t)
-  }, [digits, focusAt])
+  }, [])
 
-  const commitValue = useCallback(
-    (startIndex: number, raw: string) => {
-      const cleaned = raw.replace(/\D/g, '')
-      const next = [...digits]
-
-      if (!cleaned) {
-        next[startIndex] = ''
-        onChange(next.join('').slice(0, 6))
-        return
-      }
-
-      if (cleaned.length === 1) {
-        next[startIndex] = cleaned
-      } else {
-        let pos = startIndex
-        for (const ch of cleaned) {
-          if (pos >= 6) break
-          next[pos] = ch
-          pos += 1
-        }
-      }
-
-      onChange(next.join('').slice(0, 6))
-
-      const nextFocus = Math.min(startIndex + cleaned.length, 5)
-      window.setTimeout(() => focusAt(nextFocus), 0)
-    },
-    [digits, focusAt, onChange],
-  )
-
-  const handleChange = (i: number) => (e: ChangeEvent<HTMLInputElement>) => {
-    commitValue(i, e.target.value)
-  }
-
-  const handleKeyDown = (i: number) => (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      e.preventDefault()
-
-      if (digits[i]) {
-        const next = [...digits]
-        next[i] = ''
-        onChange(next.join('').slice(0, 6))
-        return
-      }
-
-      if (i > 0) {
-        const next = [...digits]
-        next[i - 1] = ''
-        onChange(next.join('').slice(0, 6))
-        focusAt(i - 1)
-      }
-      return
-    }
-
-    if (e.key === 'ArrowLeft' && i > 0) {
-      e.preventDefault()
-      focusAt(i - 1)
-      return
-    }
-
-    if (e.key === 'ArrowRight' && i < 5) {
-      e.preventDefault()
-      focusAt(i + 1)
-      return
-    }
-
-    if (/^\d$/.test(e.key)) {
-      e.preventDefault()
-      const next = [...digits]
-      next[i] = e.key
-      onChange(next.join('').slice(0, 6))
-      if (i < 5) focusAt(i + 1)
-    }
-  }
-
-  const handlePaste = (i: number) => (e: ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault()
-    commitValue(i, e.clipboardData.getData('text'))
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const cleaned = e.target.value.replace(/\D/g, '').slice(0, 6)
+    onChange(cleaned)
   }
 
   return (
-    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <input
-          key={i}
-          ref={(el) => {
-            inputRefs.current[i] = el
-          }}
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          autoComplete={i === 0 ? 'one-time-code' : 'off'}
-          maxLength={1}
-          value={digits[i] ?? ''}
-          disabled={disabled}
-          onChange={handleChange(i)}
-          onKeyDown={handleKeyDown(i)}
-          onPaste={handlePaste(i)}
-          onFocus={(e) => e.target.select()}
-          style={{
-            width: 44,
-            height: 52,
-            textAlign: 'center',
-            fontSize: 20,
-            fontWeight: 700,
-            fontFamily: 'var(--font-body)',
-            background: digits[i] ? 'rgba(232,197,71,0.08)' : 'rgba(255,255,255,0.05)',
-            border: `1.5px solid ${digits[i] ? 'rgba(232,197,71,0.4)' : 'rgba(255,255,255,0.1)'}`,
-            borderRadius: 12,
-            color: '#FAFAF7',
-            outline: 'none',
-            transition: 'all 0.15s',
-            opacity: disabled ? 0.5 : 1,
-            WebkitAppearance: 'none',
-            MozAppearance: 'textfield',
-            touchAction: 'manipulation',
-          } as React.CSSProperties}
-        />
-      ))}
-    </div>
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      autoComplete="one-time-code"
+      maxLength={6}
+      placeholder="• • • • • •"
+      value={value}
+      disabled={disabled}
+      onChange={handleChange}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && value.length === 6) onSubmit()
+      }}
+      onFocus={(e) => e.target.select()}
+      style={{
+        width: '100%',
+        height: 60,
+        textAlign: 'center',
+        fontSize: 26,
+        fontWeight: 700,
+        letterSpacing: '0.5em',
+        // Nudge the text left slightly so the visual center accounts for
+        // the extra letter-spacing trailing the last character.
+        textIndent: '0.5em',
+        fontFamily: 'var(--font-body)',
+        background: value ? 'rgba(232,197,71,0.08)' : 'rgba(255,255,255,0.05)',
+        border: `1.5px solid ${value ? 'rgba(232,197,71,0.4)' : 'rgba(255,255,255,0.1)'}`,
+        borderRadius: 16,
+        color: '#FAFAF7',
+        outline: 'none',
+        transition: 'all 0.15s',
+        opacity: disabled ? 0.5 : 1,
+        WebkitAppearance: 'none',
+        MozAppearance: 'textfield',
+        touchAction: 'manipulation',
+        boxSizing: 'border-box',
+      } as React.CSSProperties}
+    />
   )
 }
 
@@ -661,7 +576,12 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   </button>
                 </p>
 
-                <OTPInput value={otp} onChange={setOtp} disabled={loading} />
+                <SingleOTPInput
+                  value={otp}
+                  onChange={setOtp}
+                  disabled={loading}
+                  onSubmit={handleVerifyOTP}
+                />
 
                 {error && (
                   <p
