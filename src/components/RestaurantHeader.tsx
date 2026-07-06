@@ -1,9 +1,9 @@
 'use client'
 
 import Image from 'next/image'
-import { MapPin, Star, Clock, Utensils, Award, ShieldCheck, ChefHat, Wifi } from 'lucide-react'
 import type { Restaurant } from '@/types'
 import { useAppStore } from '@/store/app-store'
+import { MapPin, Star, Clock, Utensils, Award, ShieldCheck, Navigation } from 'lucide-react'
 
 interface Props {
   restaurant: Restaurant
@@ -31,10 +31,16 @@ function formatRatings(count: number): string {
 export function RestaurantHeader({ restaurant }: Props) {
   const openRatingsList = useAppStore((s) => s.openRatingsList)
   const open = isOpenNow(restaurant.opening_hours)
-  const hasBanner = Boolean(restaurant.cover_url?.trim())
   const hasLogo = Boolean(restaurant.logo_url?.trim())
   const rating = Number(restaurant.avg_rating ?? 0)
   const totalRatings = restaurant.total_ratings ?? 0
+  const hasGoogleReviews = Boolean(restaurant.google_reviews_url && restaurant.google_review_count)
+  const googleRating = Number(restaurant.google_rating ?? 0)
+  const googleReviewCount = restaurant.google_review_count ?? 0
+
+  const directionsUrl = restaurant.address
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(restaurant.address)}`
+    : restaurant.google_reviews_url ?? null
 
   return (
     <>
@@ -64,122 +70,133 @@ export function RestaurantHeader({ restaurant }: Props) {
           background: var(--surface-bg) !important;
         }
 
-        /* ── Ambient glow behind hero ── */
-        .pr-hero-glow {
-          position: absolute;
-          top: -120px; left: 50%; transform: translateX(-50%);
-          width: 700px; height: 400px;
-          background: radial-gradient(ellipse, rgba(232,197,71,0.12) 0%, transparent 70%);
-          pointer-events: none; z-index: 0;
-        }
-
-        /* ── Hero ── */
-        .pr-hero {
+        /* ── Compact header (replaces hero banner) ── */
+        .pr-header {
           position: relative;
-          width: 100%;
-          aspect-ratio: 16/9;
-          min-height: 260px;
-          max-height: 520px;
+          background: var(--pr-black-soft);
+          border-bottom: 1px solid var(--pr-border);
+          padding: 1.25rem 1.25rem 0;
+        }
+        @media (min-width: 640px) {
+          .pr-header { padding: 1.75rem 2.5rem 0; }
+        }
+
+        .pr-header-row {
+          max-width: 900px;
+          margin: 0 auto;
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+        }
+
+        .pr-avatar {
+          position: relative;
+          width: 56px; height: 56px;
+          border-radius: 16px;
           overflow: hidden;
-          background: var(--pr-black);
+          flex-shrink: 0;
+          border: 1px solid var(--pr-border);
+          background: rgba(255,255,255,0.04);
         }
         @media (min-width: 640px) {
-          .pr-hero { aspect-ratio: auto; height: 420px; max-height: none; }
-        }
-        @media (min-width: 1024px) {
-          .pr-hero { height: 500px; }
+          .pr-avatar { width: 68px; height: 68px; border-radius: 18px; }
         }
 
-        .pr-hero-img {
-          width: 100%; height: 100%;
-          object-fit: cover; object-position: center;
-          transition: transform 8s ease;
-          transform: scale(1.04);
-        }
-
-        /* Dark vignette layers */
-        .pr-hero-vignette {
-          position: absolute; inset: 0;
-          background:
-            linear-gradient(to top, rgba(13,13,13,0.97) 0%, rgba(13,13,13,0.6) 35%, rgba(13,13,13,0.15) 65%, rgba(13,13,13,0.4) 100%),
-            linear-gradient(to right, rgba(13,13,13,0.3) 0%, transparent 50%, rgba(13,13,13,0.3) 100%);
-        }
-
-        /* Subtle grain texture */
-        .pr-hero-grain {
-          position: absolute; inset: 0;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-          opacity: 0.6; mix-blend-mode: overlay; pointer-events: none;
-        }
-
-        /* ── Hero content ── */
-        .pr-hero-content {
-          position: absolute; inset: 0;
-          display: flex; flex-direction: column;
-          justify-content: flex-end;
-          padding: 0 1.5rem 1.75rem;
-        }
-        @media (min-width: 640px) {
-          .pr-hero-content { padding: 0 2.5rem 2.25rem; }
-        }
-
-        /* Eyebrow */
-        .pr-eyebrow {
-          display: inline-flex; align-items: center; gap: 6px;
-          font-family: var(--font-body);
-          font-size: 10px; font-weight: 600;
-          letter-spacing: 0.18em; text-transform: uppercase;
-          color: var(--pr-gold); margin-bottom: 10px;
-        }
-        .pr-eyebrow-dot {
-          width: 4px; height: 4px; border-radius: 50%;
-          background: var(--pr-gold); animation: pulse-dot 2s ease-in-out infinite;
-        }
-        @keyframes pulse-dot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(0.7); }
-        }
-
-        /* Name */
-        .pr-restaurant-name {
+        .pr-avatar-initial {
+          display: grid; place-items: center;
+          background: var(--pr-gold-dim);
+          border-color: rgba(232,197,71,0.25);
           font-family: var(--font-display);
-          font-size: clamp(2.2rem, 7vw, 4.5rem);
+          font-size: 1.5rem; font-weight: 700;
+          color: var(--pr-gold);
+        }
+
+        .pr-header-text {
+          flex: 1;
+          min-width: 0;
+          padding-top: 2px;
+        }
+
+        .pr-name {
+          font-family: var(--font-display);
+          font-size: clamp(1.4rem, 5.5vw, 2.25rem);
           font-weight: 700;
-          line-height: 1.0;
+          line-height: 1.08;
           letter-spacing: -0.02em;
           color: var(--pr-text);
-          margin: 0 0 6px;
-          text-shadow: 0 2px 30px rgba(0,0,0,0.5);
+          margin: 0 0 7px;
+          overflow-wrap: anywhere;
         }
 
-        .pr-cuisine-line {
+        .pr-subline {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .pr-cuisine-badge {
           font-family: var(--font-body);
-          font-size: 13px; font-weight: 400;
+          font-size: 12.5px;
           color: var(--pr-text-muted);
-          letter-spacing: 0.01em;
-          margin-bottom: 1.25rem;
+          white-space: nowrap;
         }
 
-        /* Logo in hero */
-        .pr-hero-logo {
-          position: absolute; top: 1.25rem; right: 1.5rem;
-          width: 56px; height: 56px;
-          border-radius: 14px;
-          overflow: hidden;
-          border: 1.5px solid rgba(255,255,255,0.15);
-          background: rgba(255,255,255,0.06);
-          backdrop-filter: blur(12px);
-          box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        .pr-rating-inline {
+          display: inline-flex; align-items: center; gap: 5px;
+          background: var(--pr-gold-dim);
+          border: 1px solid rgba(232,197,71,0.25);
+          color: var(--pr-gold);
+          border-radius: 100px;
+          padding: 4px 10px 4px 8px;
+          font-size: 12px; font-weight: 600;
+          font-family: var(--font-body);
+          cursor: pointer;
+          transition: transform 0.15s ease, background 0.15s ease;
         }
-        @media (min-width: 640px) {
-          .pr-hero-logo { width: 72px; height: 72px; border-radius: 18px; top: 1.5rem; right: 2.5rem; }
+        .pr-rating-inline:hover {
+          background: rgba(232,197,71,0.22);
+          transform: translateY(-1px);
+        }
+        .pr-rating-inline .pr-rating-count {
+          opacity: 0.65; font-weight: 400;
         }
 
-        /* ── Status bar beneath hero ── */
+        .pr-open-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 6px 12px; border-radius: 100px;
+          font-size: 12px; font-weight: 600;
+          font-family: var(--font-body);
+          flex-shrink: 0; white-space: nowrap;
+          margin-top: 4px;
+        }
+        .pr-open-badge.is-open {
+          background: rgba(52,211,153,0.1);
+          border: 1px solid rgba(52,211,153,0.2);
+          color: #34d399;
+        }
+        .pr-open-badge.is-closed {
+          background: rgba(248,113,113,0.1);
+          border: 1px solid rgba(248,113,113,0.2);
+          color: #f87171;
+        }
+        .pr-open-badge .pr-open-dot {
+          width: 6px; height: 6px; border-radius: 50%;
+          background: currentColor;
+        }
+        .pr-open-badge.is-open .pr-open-dot {
+          animation: dot-blink 1.4s ease-in-out infinite;
+        }
+        @keyframes dot-blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+
+        /* ── Status bar (secondary, scrollable) ── */
         .pr-status-bar {
           background: var(--pr-black-soft);
           border-bottom: 1px solid var(--pr-border);
-          padding: 0 1.5rem;
+          padding: 0 1.25rem;
         }
         @media (min-width: 640px) { .pr-status-bar { padding: 0 2.5rem; } }
 
@@ -192,7 +209,6 @@ export function RestaurantHeader({ restaurant }: Props) {
         }
         .pr-status-inner::-webkit-scrollbar { display: none; }
 
-        /* Pill */
         .pr-pill {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 7px 14px; border-radius: 100px;
@@ -204,26 +220,19 @@ export function RestaurantHeader({ restaurant }: Props) {
           text-decoration: none;
         }
 
-        .pr-pill-rating {
-          background: var(--pr-gold-dim);
-          border-color: rgba(232,197,71,0.25);
-          color: var(--pr-gold);
+        .pr-pill-google {
+          background: rgba(66,133,244,0.10);
+          border-color: rgba(66,133,244,0.22);
+          color: #8ab4f8;
         }
-        .pr-pill-rating:hover {
-          background: rgba(232,197,71,0.22);
-          transform: translateY(-1px);
-        }
+        .pr-pill-google:hover { transform: translateY(-1px); background: rgba(66,133,244,0.18); }
 
-        .pr-pill-open {
-          background: rgba(52,211,153,0.1);
+        .pr-pill-directions {
+          background: rgba(52,211,153,0.08);
           border-color: rgba(52,211,153,0.2);
           color: #34d399;
         }
-        .pr-pill-closed {
-          background: rgba(248,113,113,0.1);
-          border-color: rgba(248,113,113,0.2);
-          color: #f87171;
-        }
+        .pr-pill-directions:hover { transform: translateY(-1px); background: rgba(52,211,153,0.16); }
 
         .pr-pill-meta {
           background: rgba(255,255,255,0.05);
@@ -255,65 +264,11 @@ export function RestaurantHeader({ restaurant }: Props) {
           flex-shrink: 0; margin: 0 4px;
         }
 
-        .pr-dot-live {
-          width: 6px; height: 6px; border-radius: 50%;
-          background: currentColor;
-        }
-        .pr-dot-live.pulse { animation: dot-blink 1.4s ease-in-out infinite; }
-        @keyframes dot-blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-
-        /* ── Feature strip (no banner fallback) ── */
-        .pr-no-banner {
-          background: var(--pr-black-soft);
-          border-bottom: 1px solid var(--pr-border);
-          padding: 1.5rem 1.5rem 0;
-        }
-        @media (min-width: 640px) { .pr-no-banner { padding: 2rem 2.5rem 0; } }
-
-        .pr-no-banner-inner {
-          max-width: 900px; margin: 0 auto;
-          display: flex; align-items: center; gap: 1rem;
-        }
-
-        .pr-no-banner-logo {
-          width: 64px; height: 64px;
-          border-radius: 16px; overflow: hidden;
-          border: 1px solid var(--pr-border);
-          flex-shrink: 0;
-        }
-
-        .pr-no-banner-initial {
-          width: 64px; height: 64px;
-          border-radius: 16px; flex-shrink: 0;
-          background: var(--pr-gold-dim);
-          border: 1px solid rgba(232,197,71,0.2);
-          display: grid; place-items: center;
-          font-family: var(--font-display);
-          font-size: 1.75rem; font-weight: 700;
-          color: var(--pr-gold);
-        }
-
-        .pr-no-banner-name {
-          font-family: var(--font-display);
-          font-size: clamp(1.6rem, 4vw, 2.5rem);
-          font-weight: 700; color: var(--pr-text);
-          letter-spacing: -0.015em; line-height: 1.1;
-        }
-
-        .pr-no-banner-sub {
-          font-family: var(--font-body);
-          font-size: 13px; color: var(--pr-text-muted);
-          margin-top: 2px;
-        }
-
-        /* ── Feature badges ── */
+        /* ── Feature strip ── */
         .pr-features {
           display: flex; gap: 1px;
           border-top: 1px solid var(--pr-border);
-          margin-top: 1.5rem;
+          margin-top: 1.25rem;
         }
 
         .pr-feature {
@@ -346,137 +301,101 @@ export function RestaurantHeader({ restaurant }: Props) {
       `}</style>
 
       <header className="w-full">
-        {hasBanner ? (
-          <>
-            <div className="pr-hero">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={restaurant.cover_url as string}
-                alt={`${restaurant.name}`}
-                className="pr-hero-img"
-              />
-              <div className="pr-hero-vignette" />
-              <div className="pr-hero-grain" />
+        {/* ── Compact identity row: everything a diner needs, visible instantly ── */}
+        <div className="pr-header">
+          <div className="pr-header-row">
+            {hasLogo ? (
+              <div className="pr-avatar">
+                <Image
+                  src={restaurant.logo_url as string}
+                  alt={`${restaurant.name} logo`}
+                  fill
+                  sizes="68px"
+                  className="object-contain p-1.5"
+                />
+              </div>
+            ) : (
+              <div className="pr-avatar pr-avatar-initial">
+                {restaurant.name?.[0]?.toUpperCase() ?? 'R'}
+              </div>
+            )}
 
-              {/* Logo floating top-right */}
-              {hasLogo && (
-                <div className="pr-hero-logo">
-                  <Image
-                    src={restaurant.logo_url as string}
-                    alt={`${restaurant.name} logo`}
-                    fill
-                    sizes="72px"
-                    className="object-contain p-1.5"
-                  />
-                </div>
-              )}
-
-              <div className="pr-hero-content">
-                <div className="pr-eyebrow">
-                  <span className="pr-eyebrow-dot" />
-                  Live Menu
-                </div>
-                <h1 className="pr-restaurant-name">{restaurant.name}</h1>
+            <div className="pr-header-text">
+              <h1 className="pr-name">{restaurant.name}</h1>
+              <div className="pr-subline">
                 {restaurant.cuisine_type && (
-                  <p className="pr-cuisine-line">{restaurant.cuisine_type} Restaurant</p>
+                  <span className="pr-cuisine-badge">{restaurant.cuisine_type} Restaurant</span>
                 )}
+                <button onClick={openRatingsList} className="pr-rating-inline">
+                  <Star size={11} fill="var(--pr-gold)" color="var(--pr-gold)" />
+                  {rating.toFixed(1)}
+                  <span className="pr-rating-count">({formatRatings(totalRatings)})</span>
+                </button>
               </div>
             </div>
 
-            {/* Features strip */}
-            <div className="pr-features" style={{ background: 'var(--pr-black-soft)' }}>
-              <div className="pr-feature">
-                <div className="pr-feature-icon"><Utensils size={15} /></div>
-                <span className="pr-feature-title">{restaurant.cuisine_type ?? 'Multi Cuisine'}</span>
-                <span className="pr-feature-sub">Chef's specialties</span>
-              </div>
-              <div className="pr-feature">
-                <div className="pr-feature-icon"><Award size={15} /></div>
-                <span className="pr-feature-title">Premium Quality</span>
-                <span className="pr-feature-sub">Fresh every day</span>
-              </div>
-              <div className="pr-feature">
-                <div className="pr-feature-icon"><ShieldCheck size={15} /></div>
-                <span className="pr-feature-title">Hygienic Kitchen</span>
-                <span className="pr-feature-sub">Made with care</span>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="pr-no-banner">
-            <div className="pr-no-banner-inner">
-              {hasLogo ? (
-                <div className="pr-no-banner-logo">
-                  <Image
-                    src={restaurant.logo_url as string}
-                    alt={`${restaurant.name} logo`}
-                    fill
-                    sizes="64px"
-                    className="object-contain p-1"
-                  />
-                </div>
-              ) : (
-                <div className="pr-no-banner-initial">
-                  {restaurant.name?.[0]?.toUpperCase() ?? 'R'}
-                </div>
-              )}
-              <div>
-                <h1 className="pr-no-banner-name">{restaurant.name}</h1>
-                {restaurant.cuisine_type && (
-                  <p className="pr-no-banner-sub">{restaurant.cuisine_type} Restaurant</p>
-                )}
-              </div>
-            </div>
-
-            <div className="pr-features" style={{ marginLeft: '-1.5rem', marginRight: '-1.5rem' }}>
-              <div className="pr-feature">
-                <div className="pr-feature-icon"><Utensils size={15} /></div>
-                <span className="pr-feature-title">{restaurant.cuisine_type ?? 'Multi Cuisine'}</span>
-                <span className="pr-feature-sub">Our speciality</span>
-              </div>
-              <div className="pr-feature">
-                <div className="pr-feature-icon"><Award size={15} /></div>
-                <span className="pr-feature-title">Premium Quality</span>
-                <span className="pr-feature-sub">Fresh every day</span>
-              </div>
-              <div className="pr-feature">
-                <div className="pr-feature-icon"><ShieldCheck size={15} /></div>
-                <span className="pr-feature-title">Hygienic Kitchen</span>
-                <span className="pr-feature-sub">Made with care</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Status bar ── */}
-        <div className="pr-status-bar">
-          <div className="pr-status-inner">
-            {/* Rating */}
-            <button
-              onClick={openRatingsList}
-              className="pr-pill pr-pill-rating"
-              style={{ border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)' }}
-            >
-              <Star size={12} fill="var(--pr-gold)" color="var(--pr-gold)" />
-              <span style={{ color: 'var(--pr-gold)', fontWeight: 600 }}>
-                {rating.toFixed(1)}
-              </span>
-              <span style={{ color: 'rgba(232,197,71,0.6)', fontWeight: 400 }}>
-                ({formatRatings(totalRatings)})
-              </span>
-              <span style={{ color: 'rgba(232,197,71,0.7)', fontSize: 11 }}>
-                Reviews →
-              </span>
-            </button>
-
-            <div className="pr-pill-divider" />
-
-            {/* Open status */}
-            <span className={`pr-pill ${open ? 'pr-pill-open' : 'pr-pill-closed'}`}
-              style={{ border: 'none' }}>
-              <span className={`pr-dot-live${open ? ' pulse' : ''}`} />
+            <span className={`pr-open-badge ${open ? 'is-open' : 'is-closed'}`}>
+              <span className="pr-open-dot" />
               {open ? 'Open now' : 'Closed'}
             </span>
+          </div>
+
+          {/* Feature strip */}
+          <div className="pr-features">
+            <div className="pr-feature">
+              <div className="pr-feature-icon"><Utensils size={15} /></div>
+              <span className="pr-feature-title">{restaurant.cuisine_type ?? 'Multi Cuisine'}</span>
+              <span className="pr-feature-sub">Chef's specialties</span>
+            </div>
+            <div className="pr-feature">
+              <div className="pr-feature-icon"><Award size={15} /></div>
+              <span className="pr-feature-title">Premium Quality</span>
+              <span className="pr-feature-sub">Fresh every day</span>
+            </div>
+            <div className="pr-feature">
+              <div className="pr-feature-icon"><ShieldCheck size={15} /></div>
+              <span className="pr-feature-title">Hygienic Kitchen</span>
+              <span className="pr-feature-sub">Made with care</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Secondary actions: links & context, scrollable ── */}
+        <div className="pr-status-bar">
+          <div className="pr-status-inner">
+            {/* Google reviews */}
+            {hasGoogleReviews && (
+              <a
+                href={restaurant.google_reviews_url!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pr-pill pr-pill-google"
+                style={{ border: 'none' }}
+              >
+                <Star size={11} fill="#8ab4f8" color="#8ab4f8" />
+                <span style={{ fontWeight: 600 }}>{googleRating.toFixed(1)}</span>
+                <span style={{ opacity: 0.75 }}>({formatRatings(googleReviewCount)} Google)</span>
+              </a>
+            )}
+
+            {/* Directions */}
+            {directionsUrl && (
+              <>
+                {hasGoogleReviews && <div className="pr-pill-divider" />}
+                <a
+                  href={directionsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pr-pill pr-pill-directions"
+                  style={{ border: 'none' }}
+                >
+                  <Navigation size={11} />
+                  Directions
+                </a>
+              </>
+            )}
+
+            <div className="pr-pill-divider" />
 
             {/* Live menu */}
             <span className="pr-pill pr-pill-live" style={{ border: 'none' }}>

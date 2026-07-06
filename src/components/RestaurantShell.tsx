@@ -23,7 +23,6 @@ import { CustomerAuthProvider } from './CustomerAuthProvider'
 import { OffersCarousel } from './OffersCarousel'
 import { TableSessionHeartbeat } from './TableSessionHeartbeat'   // ← add
 import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
-import { BestsellerHeroSlider } from './BestsellerHeroSlider'
 
 
 

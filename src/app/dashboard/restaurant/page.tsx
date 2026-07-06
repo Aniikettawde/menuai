@@ -23,7 +23,9 @@ type RestaurantForm = {
   avg_prep_time: number
   total_tables: number
       instagram_url: string   // ← add this
-
+ google_reviews_url: string
+  google_rating: string        // kept as string in form state, parsed on save
+  google_review_count: string
   opening_hours: OpeningHours
     kot_mode: 'manual' | 'dinezy_print'
 orders_enabled: boolean
@@ -78,17 +80,18 @@ export default function RestaurantPage() {
   const logoRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
 
-  const [form, setForm] = useState<RestaurantForm>({
-    name: '', slug: '', description: '', cuisine_type: '',
-    restaurant_type: 'Pure Veg', address: '', phone: '',
-    avg_prep_time: 20, total_tables: 20,
-	    instagram_url: '',
-
-    opening_hours: createDefaultHours(),
-	  kot_mode: 'manual',
-orders_enabled: true,
-
-  })
+ const [form, setForm] = useState<RestaurantForm>({
+  name: '', slug: '', description: '', cuisine_type: '',
+  restaurant_type: 'Pure Veg', address: '', phone: '',
+  avg_prep_time: 20, total_tables: 20,
+  instagram_url: '',
+  google_reviews_url: '',
+  google_rating: '',
+  google_review_count: '',
+  opening_hours: createDefaultHours(),
+  kot_mode: 'manual',
+  orders_enabled: true,
+})
 
   const [logoUrl, setLogoUrl] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
@@ -117,8 +120,10 @@ orders_enabled: true,
             avg_prep_time: data.avg_prep_time ?? 20,
             opening_hours: (data.opening_hours as OpeningHours) ?? createDefaultHours(),
             total_tables: data.total_tables ?? 20,
-			            instagram_url: data.instagram_url ?? '',
-						
+			instagram_url: data.instagram_url ?? '',
+					google_reviews_url: data.google_reviews_url ?? '',
+google_rating: data.google_rating != null ? String(data.google_rating) : '',
+google_review_count: data.google_review_count != null ? String(data.google_review_count) : '',	
   kot_mode: (data.kot_mode as 'manual' | 'dinezy_print') ?? 'manual',
 orders_enabled: data.orders_enabled ?? true,
 
@@ -200,7 +205,15 @@ orders_enabled: data.orders_enabled ?? true,
     const { data: authData } = await supabase.auth.getUser()
     const user = authData.user
     if (!user?.email) throw new Error('Not authenticated')
-    const payload = { ...form, slug: slugify(form.slug || form.name), logo_url: logoUrl || null, cover_url: coverUrl || null }
+    const payload = {
+  ...form,
+  slug: slugify(form.slug || form.name),
+  logo_url: logoUrl || null,
+  cover_url: coverUrl || null,
+  google_rating: form.google_rating ? Number(form.google_rating) : null,
+  google_review_count: form.google_review_count ? Number(form.google_review_count) : null,
+  google_reviews_url: form.google_reviews_url.trim() || null,
+}
 
     let savedRestaurantId: string | null = null
 
@@ -616,6 +629,49 @@ orders_enabled: data.orders_enabled ?? true,
           </div>
         </Section>
 		
+<Section title="Google Reviews">
+  <p className="mb-3 text-[11px] text-zinc-600 leading-relaxed">
+    Since we don't pull this live, enter your current Google rating and review
+    count manually (check your Google Business Profile or search your restaurant
+    on Google Maps). This is shown to customers next to your Dinezy reviews,
+    with a link out to your Google listing.
+  </p>
+
+  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <Field label="Google rating" hint="e.g. 4.3">
+      <input
+        type="number" step="0.1" min={0} max={5}
+        value={form.google_rating}
+        onChange={(e) => setForm((f) => ({ ...f, google_rating: e.target.value }))}
+        placeholder="4.3"
+        className={INPUT}
+      />
+    </Field>
+
+    <Field label="Total Google reviews" hint="e.g. 1240">
+      <input
+        type="number" min={0}
+        value={form.google_review_count}
+        onChange={(e) => setForm((f) => ({ ...f, google_review_count: e.target.value }))}
+        placeholder="1240"
+        className={INPUT}
+      />
+    </Field>
+  </div>
+
+  <Field
+    label="Google Maps listing link"
+    hint="Search your restaurant on Google Maps → Share → Copy link, and paste it here"
+  >
+    <input
+      type="url"
+      value={form.google_reviews_url}
+      onChange={(e) => setForm((f) => ({ ...f, google_reviews_url: e.target.value }))}
+      placeholder="https://maps.app.goo.gl/xxxxxxx"
+      className={INPUT}
+    />
+  </Field>
+</Section>
 
         <button
           type="submit"

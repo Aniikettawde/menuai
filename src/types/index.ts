@@ -46,7 +46,9 @@ instagram_url?: string | null
   kot_mode: 'manual' | 'dinezy_print'  // ← NEW
   orders_enabled: boolean
 
-
+google_review_count?: number | null
+google_rating?: number | null
+google_reviews_url?: string | null
   
 }
 
