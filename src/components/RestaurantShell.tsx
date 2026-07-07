@@ -14,13 +14,10 @@ import { RatingModal } from './RatingModal'
 import { OfflineBanner } from './OfflineBanner'
 import { WaiterCalledToast } from './WaiterCalledToast'
 import { getPersistedOrder } from '@/lib/order-storage'
-import { ChatPanel } from './ChatPanel'
-import { RatingsFeed } from './RatingsFeed'
 import { RatingsListModal } from './RatingsListModal'
 import { CallWaiterBell } from './CallWaiterBell'
-import { AISuggestionCard } from './AISuggestionCard'
 import { CustomerAuthProvider } from './CustomerAuthProvider'
-import { OffersCarousel } from './OffersCarousel'
+import { RewardOffersBar } from './RewardOffersBar'
 import { TableSessionHeartbeat } from './TableSessionHeartbeat'   // ← add
 import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
 import { MenuTypeSelector } from './MenuTypeSelector'
@@ -112,6 +109,7 @@ const [sessionExpired, setSessionExpired] = useState(false)
   const tableToken = searchParams.get('t')
   const legacyTableParam = searchParams.get('table')
   const [loginOpen, setLoginOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
 
   useEffect(() => {
     setRestaurantData(initialData)
@@ -749,18 +747,27 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
         }
       `}</style>
 
-      <div className="pr-shell" data-menu={menuTheme}>
-        <OfflineBanner />
-<MenuTypeSelector />
-<DeliveryPreferenceModal />
-        <CustomerAuthProvider
-          restaurantId={restaurant?.id ?? null}
-          tableNumber={tableNumber}
-          loginOpen={loginOpen}
-          onLoginOpenChange={setLoginOpen}
-        />
+     <div className="pr-shell" data-menu={menuTheme}>
+  <OfflineBanner />
+  <MenuTypeSelector />
+  <DeliveryPreferenceModal />
 
-        <RestaurantHeader restaurant={restaurant} />
+  <RestaurantHeader restaurant={restaurant} />
+
+  {/*
+    CustomerAuthProvider only mounts the OTP modal + account drawer —
+    both overlays, so their position in the DOM doesn't affect layout.
+    Reward + offers now live in a single merged, collapsible bar inside
+    the menu feed below (see main), instead of two separate cards.
+  */}
+  <CustomerAuthProvider
+    restaurantId={restaurant?.id ?? null}
+    tableNumber={tableNumber}
+    loginOpen={loginOpen}
+    onLoginOpenChange={setLoginOpen}
+    accountOpen={accountOpen}
+    onAccountOpenChange={setAccountOpen}
+  />
 		
 		<TableSessionHeartbeat
   restaurantId={restaurant.id}
@@ -774,25 +781,21 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
             isWaiterLoading={waiterLoading}
            upsellCard={
     <>
-      {activeOffers.length > 0 && (
-        <OffersCarousel
-          offers={activeOffers}
-          restaurantId={initialData.restaurant.id}
-          restaurantName={initialData.restaurant.name}
-          onLoginClick={() => setLoginOpen(true)}
-        />
-      )}
+      <RewardOffersBar
+        restaurantId={restaurant?.id ?? null}
+        restaurantName={initialData.restaurant.name}
+        offers={activeOffers}
+        onLoginClick={() => setLoginOpen(true)}
+        onExploreRewards={() => setAccountOpen(true)}
+      />
       <TodaysSpecialCarousel
         restaurantId={initialData.restaurant.id}
         allItems={initialData.items}
       />
-      <AISuggestionCard />
     </>
   }
           />
         </main>
-
-        <ChatPanel />
 
         {showRating && <RatingModal />}
         {showRatingsList && <RatingsListModal restaurant={restaurant} />}

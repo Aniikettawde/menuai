@@ -1,46 +1,55 @@
 'use client'
-
 /**
  * CustomerAuthProvider
- * Drop inside RestaurantShell, just above <RestaurantHeader>.
- * Renders:
- *   - RewardsBanner    (slides in after 1.2s for guests; premium account bar for logged-in users)
- *   - OTPLoginModal    (shown on demand)
- *   - CustomerAccountDrawer (slide-in from right for logged-in users)
+ *
+ * Mounts the two global, overlay-style pieces of the customer-auth flow:
+ *   - OTPLoginModal          (shown on demand)
+ *   - CustomerAccountDrawer  (slide-in from right for logged-in users)
+ *
+ * It intentionally does NOT render RewardCard anymore. The reward card is
+ * now placed inside the menu content feed (see RewardCardSlot, used in the
+ * upsellCard slot passed to MenuGrid) so browsing the menu isn't gated
+ * behind a login prompt above the fold. This component just needs to stay
+ * mounted once, near the shell root, so the modal/drawer overlay correctly
+ * regardless of scroll position.
  */
-
 import { useState } from 'react'
-import { RewardsBanner }          from './RewardsBanner'
-import { OTPLoginModal }          from './OTPLoginModal'
-import { CustomerAccountDrawer }  from './CustomerAccountDrawer'
+import { OTPLoginModal } from './OTPLoginModal'
+import { CustomerAccountDrawer } from './CustomerAccountDrawer'
 
 interface Props {
   restaurantId?: string | null
-  tableNumber?:  number | null
+  tableNumber?: number | null
   loginOpen?: boolean
   onLoginOpenChange?: (open: boolean) => void
+  accountOpen?: boolean
+  onAccountOpenChange?: (open: boolean) => void
 }
 
-export function CustomerAuthProvider({ restaurantId, tableNumber, loginOpen: loginOpenProp, onLoginOpenChange }: Props) {
+export function CustomerAuthProvider({
+  restaurantId,
+  tableNumber,
+  loginOpen: loginOpenProp,
+  onLoginOpenChange,
+  accountOpen: accountOpenProp,
+  onAccountOpenChange,
+}: Props) {
   const [loginOpenInternal, setLoginOpenInternal] = useState(false)
   const loginOpen = loginOpenProp ?? loginOpenInternal
   const setLoginOpen = onLoginOpenChange ?? setLoginOpenInternal
-  const [accountOpen, setAccountOpen] = useState(false)  // ← add this back
+
+  const [accountOpenInternal, setAccountOpenInternal] = useState(false)
+  const accountOpen = accountOpenProp ?? accountOpenInternal
+  const setAccountOpen = onAccountOpenChange ?? setAccountOpenInternal
 
   return (
     <>
-      <RewardsBanner
-        onLoginClick={()   => setLoginOpen(true)}
-        onAccountClick={() => setAccountOpen(true)}
-      />
-
       <OTPLoginModal
         isOpen={loginOpen}
         onClose={() => setLoginOpen(false)}
         restaurantId={restaurantId}
         tableNumber={tableNumber}
       />
-
       <CustomerAccountDrawer
         isOpen={accountOpen}
         onClose={() => setAccountOpen(false)}

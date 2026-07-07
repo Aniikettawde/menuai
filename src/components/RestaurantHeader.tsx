@@ -265,38 +265,34 @@ export function RestaurantHeader({ restaurant }: Props) {
       <header className="w-full">
         <div className="rh-wrap">
           <div className="rh-card">
-            <div className="rh-media">
-              {hasBanner ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={restaurant.cover_url as string} alt={restaurant.name} />
-              ) : (
-                <div className="rh-media-placeholder">
-                  {restaurant.name?.[0]?.toUpperCase() ?? 'R'}
+             {hasBanner && (
+                <div className="rh-media">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={restaurant.cover_url as string} alt={restaurant.name} />
+                  <div className="rh-scrim-top" />
+
+                  <div className="rh-actions">
+                    <button
+                      type="button"
+                      className={`rh-icon-btn${liked ? ' is-liked' : ''}`}
+                      onClick={() => setLiked((v) => !v)}
+                      aria-label={liked ? 'Remove from favourites' : 'Add to favourites'}
+                      aria-pressed={liked}
+                    >
+                      <Heart size={15} fill={liked ? 'currentColor' : 'none'} />
+                    </button>
+                    <button
+                      type="button"
+                      className="rh-icon-btn"
+                      onClick={handleShare}
+                      aria-label="Share this menu"
+                    >
+                      <Share2 size={14} />
+                      {justCopied && <span className="rh-copy-toast">Link copied</span>}
+                    </button>
+                  </div>
                 </div>
               )}
-              <div className="rh-scrim-top" />
-
-              <div className="rh-actions">
-                <button
-                  type="button"
-                  className={`rh-icon-btn${liked ? ' is-liked' : ''}`}
-                  onClick={() => setLiked((v) => !v)}
-                  aria-label={liked ? 'Remove from favourites' : 'Add to favourites'}
-                  aria-pressed={liked}
-                >
-                  <Heart size={15} fill={liked ? 'currentColor' : 'none'} />
-                </button>
-                <button
-                  type="button"
-                  className="rh-icon-btn"
-                  onClick={handleShare}
-                  aria-label="Share this menu"
-                >
-                  <Share2 size={14} />
-                  {justCopied && <span className="rh-copy-toast">Link copied</span>}
-                </button>
-              </div>
-            </div>
 
             <div className="rh-body">
               <div className="rh-title-row">
