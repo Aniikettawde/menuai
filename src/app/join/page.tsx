@@ -24,11 +24,11 @@ interface Answers {
 
 const QUESTIONS: Record<'q1', { title: string; eyebrow?: string; options: string[] }> = {
   q1: {
-    title: 'If eating out could earn you Cashback,Top of restaurants offer, would you be interested?',
+    title: 'What is s more exciting to you?',
     options: [
-      'Yes, sign me up',
-      'No, not interested',
-      "I'm always eating out anyway",
+      '💸 Cashback',
+      '🎁 Gift Cards',
+      "🍽 Restaurant Offers",
     ],
   },
 }
@@ -554,7 +554,7 @@ export default function JoinPage() {
             return (
               <TicketCard
                 stubLabel="TODAY'S OFFER"
-                stubValue="50 PTS = ₹50 CASHBACK"
+                stubValue="₹50 FREE"
                 stubIcon={<Gift size={15} color="var(--chili)" />}
               >
                 <span className="eyebrow-tag">
@@ -562,7 +562,7 @@ export default function JoinPage() {
                 </span>
                 <h2 className="ticket-title">{q.title}</h2>
                 <p className="ticket-subtitle">
-                  Redeemable the moment you reach 150 points, as an Amazon Pay, Zomato or Swiggy gift card — much more coming soon.
+                  Join free today and get ₹50 instantly, Earn another ₹50 every restaurant visit.
                 </p>
                 <div className="option-list">
                   {q.options.map((opt, i) => (
