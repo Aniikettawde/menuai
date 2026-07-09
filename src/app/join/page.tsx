@@ -10,44 +10,32 @@ import {
 import { type ConfirmationResult } from 'firebase/auth'
 import { sendOTP, verifyOTP, clearRecaptcha, prepareRecaptcha } from '@/lib/firebase'
 import {
-  Sparkles, Utensils, MapPin, Gift, Wallet, ChevronRight,
-  Loader2, PartyPopper, Phone, Shield, ArrowRight, HelpCircle, X,
+  Sparkles, Utensils, MapPin, Gift, ChevronRight,
+  Loader2, Phone, Shield, ArrowRight, HelpCircle, X,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Note: 'hero' screen is gone on purpose. The person already clicked an ad to
 // get here — the quiz itself is the landing page, so we open straight on q1.
 
-type Screen = 'q1' | 'q2' | 'q3' | 'q4' | 'reveal' | 'phone' | 'otp' | 'name' | 'done'
+type Screen = 'q1' | 'phone' | 'otp' | 'name' | 'done'
 
 interface Answers {
-  freq: string | null
-  frustration: string | null
-  hypothetical: string | null
-  redemption: string | null
+  interested: string | null
 }
 
-const QUESTIONS: Record<'q1' | 'q2' | 'q3' | 'q4', { title: string; eyebrow?: string; options: string[] }> = {
+const QUESTIONS: Record<'q1', { title: string; eyebrow?: string; options: string[] }> = {
   q1: {
-    title: 'How often do you step out to eat?',
-    options: ['Almost daily', 'A few times a week', 'A few times a month', 'Only on special days'],
-  },
-  q2: {
-    title: "What's wrong with restaurant loyalty cards today?",
-    options: ['Points expire before I use them', 'Too much hassle for too little', "I don't bother collecting", "They're not real money anyway"],
-  },
-  q3: {
-    title: 'If your favourite restaurant quietly paid you back every time you visited — would you go more often?',
-    options: ['Yes, definitely', 'Maybe, depends how much', 'Probably not, I go anyway'],
-  },
-  q4: {
-    title: 'If you had reward points, what would you actually want them as?',
-    eyebrow: 'Last one — this decides your reward format',
-    options: ['Amazon Pay balance', 'Zomato / Swiggy credit', 'Straight discount on my bill', "Doesn't matter, just give me real value"],
+    title: 'If eating out could earn you Cashback,Top of restaurants offer, would you be interested?',
+    options: [
+      'Yes, sign me up',
+      'No, not interested',
+      "I'm always eating out anyway",
+    ],
   },
 }
 
-const QUIZ_ORDER: Screen[] = ['q1', 'q2', 'q3', 'q4']
+const QUIZ_ORDER: Screen[] = ['q1']
 
 // Matches the real in-app quest mechanics (QuestCard) so the preview here
 // is not just reassuring copy — it's the exact same numbers they'll see
@@ -59,19 +47,9 @@ const TARGET_POINTS = POINTS_PER_VISIT * TARGET_VISITS
 // Rough monthly visit cadence per quiz answer, used only to personalise the
 // reveal screen with real product mechanics — never shown as a claim about
 // other users, just the person's own likely math.
-const VISITS_PER_MONTH: Record<string, number> = {
-  'Almost daily': 26,
-  'A few times a week': 10,
-  'A few times a month': 4,
-  'Only on special days': 1,
-}
 
-function estimateMonthly(freq: string | null) {
-  const visits: number = freq !== null && freq in VISITS_PER_MONTH ? VISITS_PER_MONTH[freq] : 4
-  const points = visits * POINTS_PER_VISIT
-  const cards = Math.max(1, Math.floor(visits / TARGET_VISITS))
-  return { visits, points, cards }
-}
+
+
 
 // ─── Haptics ───────────────────────────────────────────────────────────────────
 
@@ -276,7 +254,8 @@ function RewardBanner() {
           <Gift size={14} color="#E8C547" />
         </div>
         <p style={{ margin: 0, fontSize: 12.5, color: 'rgba(250,250,247,0.75)', fontFamily: 'var(--font-body)', lineHeight: 1.4 }}>
-          <span style={{ color: '#E8C547', fontWeight: 700 }}>3 verified visits</span> = a real Amazon Pay, Zomato or Swiggy gift card.
+          <span style={{ color: '#E8C547', fontWeight: 700 }}>50 points = ₹50 cashback</span> — redeemable the moment you reach 150 points , reedem as gift card Amazon Pay , Zomato / Swiggy ..Much more.
+
         </p>
       </div>
       <div style={{ display: 'flex', gap: 14, paddingLeft: 2 }}>
@@ -421,7 +400,8 @@ function FAQDrawer({ open, onClose, onOpen }: { open: boolean; onClose: () => vo
 
 export default function JoinPage() {
   const [screen, setScreen] = useState<Screen>('q1')
-  const [answers, setAnswers] = useState<Answers>({ freq: null, frustration: null, hypothetical: null, redemption: null })
+  const [answers, setAnswers] = useState<Answers>({ interested: null })
+
   const [quizPoints, setQuizPoints] = useState(0)
   const [pointsBump, setPointsBump] = useState(false)
   const [faqOpen, setFaqOpen] = useState(false)
@@ -645,7 +625,6 @@ export default function JoinPage() {
 
   // ─── UI ───────────────────────────────────────────────────────────────────
 
-  const est = estimateMonthly(answers.freq)
 
   return (
     <div style={{ minHeight: '100vh', background: '#0E0E0E', position: 'relative', overflow: 'hidden' }}>
@@ -677,15 +656,11 @@ export default function JoinPage() {
 
         <div key={screen} className="screen-transition">
 
-          {(['q1', 'q2', 'q3', 'q4'] as const).includes(screen as any) && (() => {
-            const q = QUESTIONS[screen as 'q1' | 'q2' | 'q3' | 'q4']
-            const key = (
-              screen === 'q1' ? 'freq' : screen === 'q2' ? 'frustration' : screen === 'q3' ? 'hypothetical' : 'redemption'
-            ) as keyof Answers
-            const nextScreen: Screen = (
-              screen === 'q1' ? 'q2' : screen === 'q2' ? 'q3' : screen === 'q3' ? 'q4' : 'reveal'
-            )
-            return (
+          {screen === 'q1' && (() => {
+  const q = QUESTIONS.q1
+  const key: keyof Answers = 'interested'
+  const nextScreen: Screen = 'phone'
+  return (
               <div>
                 {/* First-question-only intro — this replaces the old hero screen.
                     No separate CTA: the first tap on an option below *is* the CTA. */}
@@ -699,9 +674,7 @@ export default function JoinPage() {
                     }}>
                       <MapPin size={12} /> EARLY ACCESS · BANER, PUNE
                     </div>
-                    <p style={{ margin: 0, fontSize: 15, color: 'rgba(250,250,247,0.55)', lineHeight: 1.5, fontFamily: 'var(--font-body)' }}>
-                      What if eating out <span style={{ color: '#E8C547', fontWeight: 700 }}>paid you back?</span> Answer 4 quick questions and see your number.
-                    </p>
+                    
                   </div>
                 )}
                 {q.eyebrow && (
@@ -726,61 +699,7 @@ export default function JoinPage() {
             )
           })()}
 
-          {screen === 'reveal' && (
-            <div>
-              <div style={{
-                width: 48, height: 48, borderRadius: 16, marginBottom: 16,
-                background: 'rgba(232,197,71,0.12)', border: '1px solid rgba(232,197,71,0.22)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <PartyPopper size={20} color="#E8C547" />
-              </div>
-              <h2 style={{ margin: '0 0 8px', fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, color: '#FAFAF7' }}>
-                Good news — this already exists.
-              </h2>
-              <p style={{ margin: '0 0 16px', fontSize: 14, color: 'rgba(250,250,247,0.5)', lineHeight: 1.6, fontFamily: 'var(--font-body)' }}>
-                Dinezy turns your regular visits into real, redeemable rewards. Here&apos;s exactly how it works:
-              </p>
-
-              {/* Personalised curiosity hook — built from their own Q1 answer and the
-                  real quest math (50 pts/visit, 150 pts = 1 card), not a marketing number. */}
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(232,197,71,0.14), rgba(255,92,53,0.08))',
-                border: '1px solid rgba(232,197,71,0.28)', borderRadius: 18, padding: '16px 18px', marginBottom: 20,
-              }}>
-                <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(250,250,247,0.45)', fontFamily: 'var(--font-body)' }}>
-                  Based on how you eat out
-                </p>
-                <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#FAFAF7', lineHeight: 1.45, fontFamily: 'var(--font-body)' }}>
-                  That's about <span style={{ color: '#E8C547' }}>{est.points} points a month</span> — roughly{' '}
-                  <span style={{ color: '#E8C547' }}>{est.cards} gift card{est.cards > 1 ? 's' : ''}</span>, just for eating where you already eat.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-                {[
-                  { icon: <Gift size={16} color="#E8C547" />, title: '50 points just for joining', desc: 'Credited the moment you verify your number.' },
-                  { icon: <Utensils size={16} color="#FF5C35" />, title: '50 points per verified visit', desc: 'Show your PIN to the waiter after your meal — 3 visits = 150 points.' },
-                  { icon: <Wallet size={16} color="#E8C547" />, title: 'Redeem for real money', desc: 'Amazon Pay, Zomato or Swiggy gift cards. No catch, no expiry games.' },
-                ].map((item) => (
-                  <div key={item.title} style={{
-                    display: 'flex', gap: 12, padding: '14px 16px',
-                    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14,
-                  }}>
-                    <div style={{ flexShrink: 0, marginTop: 1 }}>{item.icon}</div>
-                    <div>
-                      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>{item.title}</p>
-                      <p style={{ margin: '3px 0 0', fontSize: 12, color: 'rgba(250,250,247,0.45)', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <PrimaryButton onClick={() => setScreen('phone')}>
-                Claim my 50 points <ArrowRight size={16} />
-              </PrimaryButton>
-            </div>
-          )}
+         
 
           {screen === 'phone' && (
             <div>
@@ -792,11 +711,11 @@ export default function JoinPage() {
                 <Phone size={20} color="#E8C547" />
               </div>
               <h2 style={{ margin: '0 0 6px', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 600, color: '#FAFAF7' }}>
-                Enter your mobile
-              </h2>
-              <p style={{ margin: '0 0 24px', fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5, fontFamily: 'var(--font-body)' }}>
-                We&apos;ll text a one-time code — your 50 points land right after.
-              </p>
+  Get 50 points now
+</h2>
+<p style={{ margin: '0 0 24px', fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5, fontFamily: 'var(--font-body)' }}>
+  Join Dinezy — enter your mobile, we&apos;ll text a one-time code, and 50 points (₹50 cashback) land right after.
+</p>
 
               <div style={{
                 display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)',
@@ -834,8 +753,8 @@ export default function JoinPage() {
               {error && <p style={{ margin: '-8px 0 16px', fontSize: 12, color: '#f87171', fontFamily: 'var(--font-body)' }}>{error}</p>}
 
               <PrimaryButton onClick={handleSendOTP} disabled={phone.length < 10} loading={loading}>
-                {loading ? (<><Loader2 size={16} className="spin" /> Sending…</>) : (<>Get OTP <ChevronRight size={16} /></>)}
-              </PrimaryButton>
+  {loading ? (<><Loader2 size={16} className="spin" /> Sending…</>) : (<>Get 50 points & join Dinezy <ChevronRight size={16} /></>)}
+</PrimaryButton>
             </div>
           )}
 

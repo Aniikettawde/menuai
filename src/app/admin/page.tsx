@@ -455,6 +455,7 @@ export default function AdminPage() {
  const [waitlistData, setWaitlistData] = useState<{
   funnel: { screen: string; sessions: number }[]
   survey_breakdown: Record<string, Record<string, number>>
+  interested_counts: Record<string, number>
   faq_counts: Record<string, number>
   faq_reader_sessions: number
   total_sessions: number
@@ -716,6 +717,33 @@ export default function AdminPage() {
         color="bg-red-500/10 text-red-400"
       />
     </div>
+	
+	{waitlistData.interested_counts && (
+  <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+    <p className="mb-3 text-sm font-semibold text-white">Said yes to the cashback offer?</p>
+    <div className="space-y-2">
+      {Object.entries(waitlistData.interested_counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([answer, count]) => {
+          const total = Object.values(waitlistData.interested_counts).reduce((s, n) => s + n, 0)
+          const pct = total > 0 ? ((count / total) * 100).toFixed(0) : 0
+          return (
+            <div key={answer} className="flex items-center gap-3">
+              <span className="w-48 shrink-0 truncate text-xs text-zinc-400">{answer}</span>
+              <div className="flex-1">
+                <div className="h-3 w-full rounded-full bg-zinc-800">
+                  <div className="h-3 rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+              <span className="w-16 shrink-0 text-right text-xs font-bold text-zinc-300">{count} ({pct}%)</span>
+            </div>
+          )
+        })}
+    </div>
+  </div>
+)}
+
+
     {/* Funnel */}
     <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
       <p className="mb-4 text-sm font-semibold text-white">Signup funnel (30d) · {waitlistData.total_sessions} sessions</p>

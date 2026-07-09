@@ -7,8 +7,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-const SCREEN_ORDER = ['hero', 'q1', 'q2', 'q3', 'q4', 'reveal', 'phone', 'otp', 'name', 'done']
-const SURVEY_QUESTION_KEYS = ['freq', 'frustration', 'hypothetical', 'redemption']
+const SCREEN_ORDER = ['q1', 'phone', 'otp', 'name', 'done']
+const SURVEY_QUESTION_KEYS = ['interested']
+
+// human-readable label for the survey_breakdown key shown in the admin UI
+const QUESTION_LABELS: Record<string, string> = {
+  interested: 'Interested in ₹50 cashback offer?',
+}
 
 export async function GET() {
   try {
@@ -31,12 +36,19 @@ export async function GET() {
 
     // ── Survey answer breakdown, grouped by question ──
     const surveyBreakdown: Record<string, Record<string, number>> = {}
-    for (const e of events!) {
-      if (e.event_type !== 'answer_select' || !e.question_key || !e.answer) continue
-      surveyBreakdown[e.question_key] ??= {}
-      surveyBreakdown[e.question_key][e.answer] = (surveyBreakdown[e.question_key][e.answer] ?? 0) + 1
-    }
+   for (const e of events!) {
+  if (e.event_type !== 'answer_select' || !e.question_key || !e.answer) continue
+  const label = QUESTION_LABELS[e.question_key] ?? e.question_key
+  surveyBreakdown[label] ??= {}
+  surveyBreakdown[label][e.answer] = (surveyBreakdown[label][e.answer] ?? 0) + 1
+}
 
+
+const interestedCounts: Record<string, number> = {}
+for (const e of events!) {
+  if (e.event_type !== 'answer_select' || e.question_key !== 'interested' || !e.answer) continue
+  interestedCounts[e.answer] = (interestedCounts[e.answer] ?? 0) + 1
+}
     // ── FAQ engagement ──
     const faqCounts: Record<string, number> = {}
     const faqSessions = new Set<string>()
@@ -78,6 +90,8 @@ export async function GET() {
     return NextResponse.json({
       funnel,
       survey_breakdown: surveyBreakdown,
+	    interested_counts: interestedCounts,   // ← add this line
+
       faq_counts: faqCounts,
       faq_reader_sessions: faqSessions.size,
       total_sessions: totalSessions,
