@@ -5,18 +5,16 @@ import {
   useRef,
   useEffect,
   useCallback,
-  type ChangeEvent,
 } from 'react'
 import { type ConfirmationResult } from 'firebase/auth'
 import { sendOTP, verifyOTP, clearRecaptcha, prepareRecaptcha } from '@/lib/firebase'
 import {
   Sparkles, Utensils, MapPin, Gift, ChevronRight,
   Loader2, Phone, Shield, ArrowRight, HelpCircle, X,
+  Stamp, Check, Receipt,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-// Note: 'hero' screen is gone on purpose. The person already clicked an ad to
-// get here — the quiz itself is the landing page, so we open straight on q1.
 
 type Screen = 'q1' | 'phone' | 'otp' | 'name' | 'done'
 
@@ -37,19 +35,28 @@ const QUESTIONS: Record<'q1', { title: string; eyebrow?: string; options: string
 
 const QUIZ_ORDER: Screen[] = ['q1']
 
-// Matches the real in-app quest mechanics (QuestCard) so the preview here
-// is not just reassuring copy — it's the exact same numbers they'll see
-// in their account once Dinezy is live near them.
 const POINTS_PER_VISIT = 50
 const TARGET_VISITS = 3
 const TARGET_POINTS = POINTS_PER_VISIT * TARGET_VISITS
 
-// Rough monthly visit cadence per quiz answer, used only to personalise the
-// reveal screen with real product mechanics — never shown as a claim about
-// other users, just the person's own likely math.
+// ─── Theme tokens ─────────────────────────────────────────────────────────────
+// A single source of truth so every child can reference var(--token)
 
-
-
+const THEME_VARS = {
+  '--ink': '#170F09',
+  '--ink-2': '#241609',
+  '--paper': '#FBEEDA',
+  '--paper-2': '#F1DFB9',
+  '--ink-text': '#2C1810',
+  '--ink-text-soft': 'rgba(44,24,16,0.58)',
+  '--saffron': '#E9A23D',
+  '--saffron-deep': '#C97F22',
+  '--chili': '#C1442E',
+  '--chili-deep': '#98311F',
+  '--cardamom': '#5B8C5A',
+  '--font-display': "'Fraunces', Georgia, serif",
+  '--font-ui': "'Manrope', system-ui, sans-serif",
+} as React.CSSProperties
 
 // ─── Haptics ───────────────────────────────────────────────────────────────────
 
@@ -77,16 +84,71 @@ function track(payload: Record<string, unknown>) {
   }
 }
 
-// ─── Reusable pressable primitives (scale + haptic on every tap) ─────────────
+// ─── Ticket card — the page's signature surface ───────────────────────────────
+// A warm paper coupon floating on the dark stage, with punched notches on the
+// sides and a dashed tear-line under an optional stub header. Every screen's
+// content lives inside one of these instead of a generic glass panel.
+
+function TicketCard({
+  children, stubLabel, stubValue, stubIcon,
+}: {
+  children: React.ReactNode
+  stubLabel?: string
+  stubValue?: string
+  stubIcon?: React.ReactNode
+}) {
+  return (
+    <div className="ticket-card">
+      <span className="ticket-notch ticket-notch-left" />
+      <span className="ticket-notch ticket-notch-right" />
+      {stubLabel && (
+        <>
+          <div className="ticket-stub">
+            <span className="ticket-stub-icon">{stubIcon}</span>
+            <div>
+              <p className="ticket-stub-label">{stubLabel}</p>
+              <p className="ticket-stub-value">{stubValue}</p>
+            </div>
+          </div>
+          <div className="ticket-tear" />
+        </>
+      )}
+      <div className="ticket-body">{children}</div>
+    </div>
+  )
+}
+
+// ─── Top bar — wordmark + points chip + FAQ, replaces the old progress bar ───
+
+function TopBar({ points, showPoints, onFaqOpen }: { points: number; showPoints: boolean; onFaqOpen: () => void }) {
+  return (
+    <div className="topbar">
+      <div className="topbar-inner">
+        <span className="wordmark">Dinezy</span>
+        <div className="topbar-actions">
+          {showPoints && (
+            <span className={points > 0 ? 'points-chip points-bump' : 'points-chip'}>
+              <Sparkles size={11} /> {points} pts
+            </span>
+          )}
+          <button type="button" onClick={onFaqOpen} aria-label="Frequently asked questions" className="faq-mini-btn">
+            <HelpCircle size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Reusable pressable primitives ───────────────────────────────────────────
 
 function PrimaryButton({
-  onClick, disabled, loading, children, style,
+  onClick, disabled, loading, children,
 }: {
   onClick: () => void
   disabled?: boolean
   loading?: boolean
   children: React.ReactNode
-  style?: React.CSSProperties
 }) {
   const [pressed, setPressed] = useState(false)
   const isDisabled = Boolean(disabled || loading)
@@ -99,26 +161,14 @@ function PrimaryButton({
       onPointerLeave={() => setPressed(false)}
       onPointerCancel={() => setPressed(false)}
       onClick={() => { if (!isDisabled) { haptic(15); onClick() } }}
-      style={{
-        width: '100%', height: 54,
-        background: isDisabled ? 'rgba(232,197,71,0.15)' : 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)',
-        border: 'none', borderRadius: 14,
-        color: isDisabled ? 'rgba(232,197,71,0.4)' : '#111',
-        fontSize: 15.5, fontWeight: 700, fontFamily: 'var(--font-body)',
-        cursor: isDisabled ? 'not-allowed' : 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        touchAction: 'manipulation',
-        transform: pressed ? 'scale(0.97)' : 'scale(1)',
-        transition: 'transform 0.12s ease, background 0.2s ease',
-        ...style,
-      } as React.CSSProperties}
+      className={`primary-btn ${pressed ? 'primary-btn-pressed' : ''} ${isDisabled ? 'primary-btn-disabled' : ''}`}
     >
       {children}
     </button>
   )
 }
 
-function OptionButton({ label, onSelect }: { label: string; onSelect: () => void }) {
+function OptionButton({ label, onSelect, selected }: { label: string; onSelect: () => void; selected: boolean }) {
   const [pressed, setPressed] = useState(false)
   return (
     <button
@@ -128,23 +178,18 @@ function OptionButton({ label, onSelect }: { label: string; onSelect: () => void
       onPointerLeave={() => setPressed(false)}
       onPointerCancel={() => setPressed(false)}
       onClick={onSelect}
-      style={{
-        width: '100%', textAlign: 'left', padding: '16px 18px',
-        background: pressed ? 'rgba(232,197,71,0.08)' : 'rgba(255,255,255,0.04)',
-        border: `1.5px solid ${pressed ? 'rgba(232,197,71,0.35)' : 'rgba(255,255,255,0.09)'}`,
-        borderRadius: 14, color: '#FAFAF7', fontSize: 14.5, fontWeight: 500,
-        fontFamily: 'var(--font-body)', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        transform: pressed ? 'scale(0.98)' : 'scale(1)',
-        transition: 'all 0.15s ease', touchAction: 'manipulation',
-      } as React.CSSProperties}
+      className={`option-row ${pressed ? 'option-row-pressed' : ''} ${selected ? 'option-row-selected' : ''}`}
     >
-      {label} <ChevronRight size={15} color="rgba(250,250,247,0.3)" />
+      <span className={`option-bullet ${selected ? 'option-bullet-filled' : ''}`}>
+        {selected && <Check size={12} color="#FBEEDA" strokeWidth={3} />}
+      </span>
+      <span className="option-label">{label}</span>
+      <ChevronRight size={15} className="option-chevron" />
     </button>
   )
 }
 
-// ─── Single OTP input (matches OTPLoginModal) ─────────────────────────────────
+// ─── Single OTP input ─────────────────────────────────────────────────────────
 
 function SingleOTPInput({
   value, onChange, disabled, onSubmit,
@@ -172,103 +217,8 @@ function SingleOTPInput({
       }}
       onKeyDown={(e) => { if (e.key === 'Enter' && value.length === 6) onSubmit() }}
       onFocus={(e) => e.target.select()}
-      style={{
-        width: '100%', height: 60, textAlign: 'center', fontSize: 26, fontWeight: 700,
-        letterSpacing: '0.5em', textIndent: '0.5em', fontFamily: 'var(--font-body)',
-        background: value ? 'rgba(232,197,71,0.08)' : 'rgba(255,255,255,0.05)',
-        border: `1.5px solid ${value ? 'rgba(232,197,71,0.4)' : 'rgba(255,255,255,0.1)'}`,
-        borderRadius: 16, color: '#FAFAF7', outline: 'none', transition: 'all 0.15s',
-        opacity: disabled ? 0.5 : 1, WebkitAppearance: 'none', touchAction: 'manipulation', boxSizing: 'border-box',
-      } as React.CSSProperties}
+      className="otp-input"
     />
-  )
-}
-
-// ─── Progress / points ticker + trust strip (the page's signature element) ───
-
-function ProgressBar({ screen, quizPoints, pointsBump, onFaqOpen }: {
-  screen: Screen; quizPoints: number; pointsBump: boolean; onFaqOpen: () => void
-}) {
-  const idx = QUIZ_ORDER.indexOf(screen)
-  if (idx === -1) return null
-  const pct = ((idx + 1) / QUIZ_ORDER.length) * 100
-  return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(14,14,14,0.92)', backdropFilter: 'blur(10px)', padding: '14px 20px 10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, maxWidth: 480, margin: '0 auto 8px' }}>
-        <span style={{ fontSize: 11, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
-          Question {idx + 1} of {QUIZ_ORDER.length}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            className={pointsBump ? 'points-bump' : ''}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700,
-              color: '#E8C547', fontFamily: 'var(--font-body)',
-              background: 'rgba(232,197,71,0.1)', border: '1px solid rgba(232,197,71,0.2)',
-              borderRadius: 999, padding: '3px 10px', transition: 'all 0.3s',
-            }}
-          >
-            <Sparkles size={11} /> {quizPoints} pts
-          </span>
-          <button
-            type="button"
-            onClick={onFaqOpen}
-            aria-label="Frequently asked questions"
-            style={{
-              width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)',
-              color: 'rgba(250,250,247,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', padding: 0,
-            }}
-          >
-            <HelpCircle size={13} />
-          </button>
-        </div>
-      </div>
-      <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 999, overflow: 'hidden', maxWidth: 480, margin: '0 auto' }}>
-        <div style={{
-          height: '100%', width: `${pct}%`,
-          background: 'linear-gradient(90deg, #E8C547, #FF5C35)',
-          borderRadius: 999, transition: 'width 0.4s ease',
-        }} />
-      </div>
-    </div>
-  )
-}
-
-// ─── Reward + trust banner (shown on every quiz screen) ───────────────────────
-
-function RewardBanner() {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        background: 'rgba(232,197,71,0.08)', border: '1px solid rgba(232,197,71,0.2)',
-        borderRadius: 14, padding: '11px 14px', marginBottom: 10,
-      }}>
-        <div style={{
-          flexShrink: 0, width: 30, height: 30, borderRadius: 10,
-          background: 'rgba(232,197,71,0.14)', border: '1px solid rgba(232,197,71,0.24)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Gift size={14} color="#E8C547" />
-        </div>
-        <p style={{ margin: 0, fontSize: 12.5, color: 'rgba(250,250,247,0.75)', fontFamily: 'var(--font-body)', lineHeight: 1.4 }}>
-          <span style={{ color: '#E8C547', fontWeight: 700 }}>50 points = ₹50 cashback</span> — redeemable the moment you reach 150 points , reedem as gift card Amazon Pay , Zomato / Swiggy ..Much more.
-
-        </p>
-      </div>
-      <div style={{ display: 'flex', gap: 14, paddingLeft: 2 }}>
-        {[
-          { icon: <Shield size={11} />, label: 'Secure, spam-free' },
-          { icon: <MapPin size={11} />, label: 'Live in Baner' },
-        ].map((t) => (
-          <span key={t.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(250,250,247,0.35)', fontFamily: 'var(--font-body)' }}>
-            {t.icon} {t.label}
-          </span>
-        ))}
-      </div>
-    </div>
   )
 }
 
@@ -304,13 +254,11 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
 function FAQAccordion({ onOpen }: { onOpen: (question: string) => void }) {
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="faq-list">
       {FAQ_ITEMS.map((item, i) => {
         const isOpen = openIdx === i
         return (
-          <div key={item.q} style={{
-            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden',
-          }}>
+          <div key={item.q} className="faq-item">
             <button
               type="button"
               onClick={() => {
@@ -319,28 +267,12 @@ function FAQAccordion({ onOpen }: { onOpen: (question: string) => void }) {
                 haptic(8)
                 if (next !== null) onOpen(item.q)
               }}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
-              }}
+              className="faq-question"
             >
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>
-                {item.q}
-              </span>
-              <ChevronRight
-                size={15}
-                color="rgba(250,250,247,0.35)"
-                style={{ flexShrink: 0, transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
-              />
+              <span>{item.q}</span>
+              <ChevronRight size={15} className={`faq-chevron ${isOpen ? 'faq-chevron-open' : ''}`} />
             </button>
-            {isOpen && (
-              <p style={{
-                margin: 0, padding: '0 16px 16px', fontSize: 12.5, color: 'rgba(250,250,247,0.5)',
-                fontFamily: 'var(--font-body)', lineHeight: 1.6,
-              }}>
-                {item.a}
-              </p>
-            )}
+            {isOpen && <p className="faq-answer">{item.a}</p>}
           </div>
         )
       })}
@@ -348,45 +280,15 @@ function FAQAccordion({ onOpen }: { onOpen: (question: string) => void }) {
   )
 }
 
-// FAQ is reachable from every screen via a floating "?" button + bottom
-// sheet, instead of being buried at the end of a page nobody scrolls back to.
 function FAQDrawer({ open, onClose, onOpen }: { open: boolean; onClose: () => void; onOpen: (q: string) => void }) {
   if (!open) return null
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'flex-end',
-        background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 0.2s ease both',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 480, margin: '0 auto', maxHeight: '78vh', overflowY: 'auto',
-          background: '#161616', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none',
-          borderRadius: '22px 22px 0 0', padding: '14px 20px 32px',
-          animation: 'drawerUp 0.32s cubic-bezier(0.22,1,0.36,1) both',
-        }}
-      >
-        <div style={{ width: 36, height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.18)', margin: '0 auto 16px' }} />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <p style={{
-            margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '0.1em', color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)',
-          }}>
-            Frequently asked
-          </p>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(250,250,247,0.6)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
-            }}
-          >
+    <div onClick={onClose} className="faq-overlay">
+      <div onClick={(e) => e.stopPropagation()} className="faq-drawer">
+        <div className="faq-drawer-handle" />
+        <div className="faq-drawer-header">
+          <p className="faq-drawer-title"><Receipt size={13} /> Frequently asked</p>
+          <button type="button" onClick={onClose} aria-label="Close" className="faq-close-btn">
             <X size={13} />
           </button>
         </div>
@@ -396,14 +298,24 @@ function FAQDrawer({ open, onClose, onOpen }: { open: boolean; onClose: () => vo
   )
 }
 
+// ─── Stamp badge — the finale's signature moment ─────────────────────────────
+
+function StampSlot({ filled, label }: { filled: boolean; label: string }) {
+  return (
+    <div className={`stamp-slot ${filled ? 'stamp-slot-filled' : ''}`}>
+      {filled ? <Stamp size={20} color="#FBEEDA" /> : <span className="stamp-slot-plus">+50</span>}
+      <span className="stamp-slot-label">{label}</span>
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function JoinPage() {
   const [screen, setScreen] = useState<Screen>('q1')
   const [answers, setAnswers] = useState<Answers>({ interested: null })
-
+  const [justSelected, setJustSelected] = useState<string | null>(null)
   const [quizPoints, setQuizPoints] = useState(0)
-  const [pointsBump, setPointsBump] = useState(false)
   const [faqOpen, setFaqOpen] = useState(false)
 
   const [phone, setPhone] = useState('')
@@ -420,10 +332,8 @@ export default function JoinPage() {
   const confirmRef = useRef<ConfirmationResult | null>(null)
   const sessionRef = useRef<{ uid: string; phone: string; customerId: string } | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
   const sessionIdRef = useRef<string>(crypto.randomUUID())
 
-  // Track every screen the user reaches — this is what gives you the funnel/drop-off
   useEffect(() => {
     track({
       session_id: sessionIdRef.current,
@@ -435,7 +345,6 @@ export default function JoinPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen])
 
-  // Capture ad attribution once on load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tracked: Record<string, string> = {}
@@ -452,9 +361,6 @@ export default function JoinPage() {
     if (error) setLoading(false)
   }, [error])
 
-  // Animate the points counting up from 0 to the real awarded total, and
-  // show a toast — same visual language as the in-app QuestCard, so this
-  // reads as "your real account" rather than a marketing promise.
   useEffect(() => {
     if (screen !== 'done' || finalPoints === 0) return
     setDisplayedPoints(0)
@@ -491,17 +397,16 @@ export default function JoinPage() {
 
   const selectAnswer = (key: keyof Answers, value: string, next: Screen) => {
     setAnswers((a) => ({ ...a, [key]: value }))
+    setJustSelected(value)
     setQuizPoints((p) => p + 10)
-    setPointsBump(true)
     haptic(12)
-    window.setTimeout(() => setPointsBump(false), 480)
     track({
       session_id: sessionIdRef.current,
       event_type: 'answer_select',
       question_key: key,
       answer: value,
     })
-    setTimeout(() => setScreen(next), 220)
+    setTimeout(() => setScreen(next), 260)
   }
 
   const handleSendOTP = useCallback(async () => {
@@ -542,7 +447,6 @@ export default function JoinPage() {
       const { uid, phone: fbPhone } = await verifyOTP(confirmRef.current, code)
       const finalPhone = fbPhone ?? `+91${phone}`
 
-      // Upsert the customer profile (same endpoint the in-app login uses)
       const custRes = await fetch('/api/auth/customer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -625,109 +529,70 @@ export default function JoinPage() {
 
   // ─── UI ───────────────────────────────────────────────────────────────────
 
-
   return (
-    <div style={{ minHeight: '100vh', background: '#0E0E0E', position: 'relative', overflow: 'hidden' }}>
+    <div className="page-stage" style={THEME_VARS}>
       <div id="recaptcha-container" style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }} />
 
-      {/* Ambient glow — the only place we let motion run continuously */}
-      <div className="ambient-glow-top" style={{
-        position: 'absolute', top: -120, left: '50%',
-        width: 500, height: 500, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(232,197,71,0.14) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
-      <div className="ambient-glow-bottom" style={{
-        position: 'absolute', bottom: -160, right: -80,
-        width: 400, height: 400, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(255,92,53,0.1) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
+      {/* Rising steam — the only continuous motion, evokes a hot plate on a counter */}
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} className={`steam steam-${i}`} />
+      ))}
 
-      <ProgressBar screen={screen} quizPoints={quizPoints} pointsBump={pointsBump} onFaqOpen={() => setFaqOpen(true)} />
+      <TopBar
+        points={quizPoints}
+        showPoints={QUIZ_ORDER.includes(screen)}
+        onFaqOpen={() => setFaqOpen(true)}
+      />
 
-      <div style={{
-        position: 'relative', maxWidth: 480, margin: '0 auto',
-        padding: '24px 24px 48px',
-        minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center',
-      }}>
-
-        {QUIZ_ORDER.includes(screen) && <RewardBanner />}
-
-        <div key={screen} className="screen-transition">
+      <div className="page-content">
+        <div key={screen} className="ticket-enter">
 
           {screen === 'q1' && (() => {
-  const q = QUESTIONS.q1
-  const key: keyof Answers = 'interested'
-  const nextScreen: Screen = 'phone'
-  return (
-              <div>
-                {/* First-question-only intro — this replaces the old hero screen.
-                    No separate CTA: the first tap on an option below *is* the CTA. */}
-                {screen === 'q1' && (
-                  <div style={{ marginBottom: 22 }}>
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 12,
-                      background: 'rgba(232,197,71,0.1)', border: '1px solid rgba(232,197,71,0.22)',
-                      borderRadius: 999, padding: '6px 14px', fontSize: 11, fontWeight: 700,
-                      color: '#E8C547', fontFamily: 'var(--font-body)', letterSpacing: '0.04em',
-                    }}>
-                      <MapPin size={12} /> EARLY ACCESS · BANER, PUNE
-                    </div>
-                    
-                  </div>
-                )}
-                {q.eyebrow && (
-                  <p style={{ margin: '0 0 6px', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,92,53,0.85)', fontFamily: 'var(--font-body)', letterSpacing: '0.02em' }}>
-                    {q.eyebrow}
-                  </p>
-                )}
-                <h2 style={{
-                  margin: '0 0 24px', fontFamily: 'var(--font-display)', fontSize: 23, fontWeight: 600,
-                  color: '#FAFAF7', lineHeight: 1.35,
-                }}>
-                  {q.title}
-                </h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            const q = QUESTIONS.q1
+            const key: keyof Answers = 'interested'
+            const nextScreen: Screen = 'phone'
+            return (
+              <TicketCard
+                stubLabel="TODAY'S OFFER"
+                stubValue="50 PTS = ₹50 CASHBACK"
+                stubIcon={<Gift size={15} color="var(--chili)" />}
+              >
+                <span className="eyebrow-tag">
+                  <MapPin size={11} /> EARLY ACCESS · BANER, PUNE
+                </span>
+                <h2 className="ticket-title">{q.title}</h2>
+                <p className="ticket-subtitle">
+                  Redeemable the moment you reach 150 points, as an Amazon Pay, Zomato or Swiggy gift card — much more coming soon.
+                </p>
+                <div className="option-list">
                   {q.options.map((opt, i) => (
-                    <div key={opt} className="option-stagger" style={{ animationDelay: `${i * 60}ms` }}>
-                      <OptionButton label={opt} onSelect={() => selectAnswer(key, opt, nextScreen)} />
+                    <div key={opt} className="option-stagger" style={{ animationDelay: `${i * 70}ms` }}>
+                      <OptionButton
+                        label={opt}
+                        selected={justSelected === opt}
+                        onSelect={() => selectAnswer(key, opt, nextScreen)}
+                      />
                     </div>
                   ))}
                 </div>
-              </div>
+                <div className="trust-strip">
+                  <span><Shield size={11} /> Secure, spam-free</span>
+                  <span><MapPin size={11} /> Live in Baner</span>
+                </div>
+              </TicketCard>
             )
           })()}
 
-         
-
           {screen === 'phone' && (
-            <div>
-              <div style={{
-                width: 48, height: 48, borderRadius: 16, marginBottom: 16,
-                background: 'rgba(232,197,71,0.12)', border: '1px solid rgba(232,197,71,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Phone size={20} color="#E8C547" />
-              </div>
-              <h2 style={{ margin: '0 0 6px', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 600, color: '#FAFAF7' }}>
-  Get 50 points now
-</h2>
-<p style={{ margin: '0 0 24px', fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5, fontFamily: 'var(--font-body)' }}>
-  Join Dinezy — enter your mobile, we&apos;ll text a one-time code, and 50 points (₹50 cashback) land right after.
-</p>
+            <TicketCard stubLabel="STEP" stubValue="CLAIM YOUR POINTS" stubIcon={<Phone size={15} color="var(--saffron-deep)" />}>
+              <div className="icon-badge icon-badge-saffron"><Phone size={20} color="var(--saffron-deep)" /></div>
+              <h2 className="ticket-title ticket-title-sm">Get 50 points now</h2>
+              <p className="ticket-subtitle">
+                Join Dinezy — enter your mobile, we&apos;ll text a one-time code, and 50 points (₹50 cashback) land right after.
+              </p>
 
-              <div style={{
-                display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)',
-                border: `1.5px solid ${error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                borderRadius: 14, overflow: 'hidden', marginBottom: error ? 8 : 12,
-              }}>
-                <div style={{
-                  padding: '0 14px', fontSize: 14, fontWeight: 600, color: 'rgba(250,250,247,0.4)',
-                  borderRight: '1px solid rgba(255,255,255,0.08)', height: 52, display: 'flex', alignItems: 'center', flexShrink: 0,
-                }}>
-                  🇮🇳 +91
-                </div>
+              <div className={`phone-field ${error ? 'phone-field-error' : ''}`}>
+                <div className="phone-prefix">🇮🇳 +91</div>
                 <input
                   type="tel"
                   inputMode="numeric"
@@ -738,39 +603,25 @@ export default function JoinPage() {
                   onChange={(e) => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setError('') }}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
                   autoFocus
-                  style={{
-                    flex: 1, height: 52, background: 'transparent', border: 'none', outline: 'none',
-                    fontSize: 16, fontWeight: 500, letterSpacing: '0.04em', color: '#FAFAF7',
-                    fontFamily: 'var(--font-body)', padding: '0 16px', touchAction: 'manipulation',
-                  } as React.CSSProperties}
+                  className="phone-input"
                 />
               </div>
 
-              <p style={{ margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'rgba(250,250,247,0.35)', fontFamily: 'var(--font-body)' }}>
-                <Shield size={12} /> Used only to verify your visits — never shared or sold.
-              </p>
+              <p className="fine-print"><Shield size={12} /> Used only to verify your visits — never shared or sold.</p>
 
-              {error && <p style={{ margin: '-8px 0 16px', fontSize: 12, color: '#f87171', fontFamily: 'var(--font-body)' }}>{error}</p>}
+              {error && <p className="error-text">{error}</p>}
 
               <PrimaryButton onClick={handleSendOTP} disabled={phone.length < 10} loading={loading}>
-  {loading ? (<><Loader2 size={16} className="spin" /> Sending…</>) : (<>Get 50 points & join Dinezy <ChevronRight size={16} /></>)}
-</PrimaryButton>
-            </div>
+                {loading ? (<><Loader2 size={16} className="spin" /> Sending…</>) : (<>Get 50 points & join Dinezy <ChevronRight size={16} /></>)}
+              </PrimaryButton>
+            </TicketCard>
           )}
 
           {screen === 'otp' && (
-            <div>
-              <div style={{
-                width: 48, height: 48, borderRadius: 16, marginBottom: 16,
-                background: 'rgba(255,92,53,0.1)', border: '1px solid rgba(255,92,53,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Shield size={20} color="#FF5C35" />
-              </div>
-              <h2 style={{ margin: '0 0 6px', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 600, color: '#FAFAF7' }}>
-                Verify OTP
-              </h2>
-              <p style={{ margin: '0 0 28px', fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5, fontFamily: 'var(--font-body)' }}>
+            <TicketCard stubLabel="STEP" stubValue="VERIFY YOUR NUMBER" stubIcon={<Shield size={15} color="var(--chili)" />}>
+              <div className="icon-badge icon-badge-chili"><Shield size={20} color="var(--chili)" /></div>
+              <h2 className="ticket-title ticket-title-sm">Verify OTP</h2>
+              <p className="ticket-subtitle">
                 Sent to +91 {phone.replace(/(\d{5})(\d{5})/, '$1 $2')}
                 <button
                   type="button"
@@ -781,7 +632,7 @@ export default function JoinPage() {
                     setOtp('')
                     setError('')
                   }}
-                  style={{ marginLeft: 8, background: 'none', border: 'none', color: '#E8C547', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-body)' }}
+                  className="inline-link"
                 >
                   Edit
                 </button>
@@ -789,43 +640,29 @@ export default function JoinPage() {
 
               <SingleOTPInput value={otp} onChange={setOtp} disabled={loading} onSubmit={handleVerifyOTP} />
 
-              {error && <p style={{ margin: '12px 0 0', textAlign: 'center', fontSize: 12, color: '#f87171', fontFamily: 'var(--font-body)' }}>{error}</p>}
+              {error && <p className="error-text error-text-center">{error}</p>}
 
-              <div style={{ marginTop: 24 }}>
+              <div className="mt-24">
                 <PrimaryButton onClick={handleVerifyOTP} disabled={otp.replace(/\D/g, '').length < 6} loading={loading}>
                   {loading ? (<><Loader2 size={16} className="spin" /> Verifying…</>) : 'Verify & claim points'}
                 </PrimaryButton>
               </div>
 
-              <div style={{ marginTop: 16, textAlign: 'center', fontSize: 12, color: 'rgba(250,250,247,0.35)', fontFamily: 'var(--font-body)' }}>
+              <div className="resend-row">
                 {resendTimer > 0 ? `Resend in ${resendTimer}s` : (
-                  <button
-                    type="button"
-                    onClick={async () => { setOtp(''); await handleSendOTP() }}
-                    style={{ background: 'none', border: 'none', color: '#E8C547', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-body)' }}
-                  >
+                  <button type="button" onClick={async () => { setOtp(''); await handleSendOTP() }} className="inline-link">
                     Resend OTP
                   </button>
                 )}
               </div>
-            </div>
+            </TicketCard>
           )}
 
           {screen === 'name' && (
-            <div>
-              <div style={{
-                width: 48, height: 48, borderRadius: 16, marginBottom: 16, fontSize: 22,
-                background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                🎉
-              </div>
-              <h2 style={{ margin: '0 0 6px', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 600, color: '#FAFAF7' }}>
-                What should we call you?
-              </h2>
-              <p style={{ margin: '0 0 24px', fontSize: 13, color: 'rgba(250,250,247,0.45)', lineHeight: 1.5, fontFamily: 'var(--font-body)' }}>
-                Optional — helps us personalise your rewards.
-              </p>
+            <TicketCard stubLabel="STEP" stubValue="ALMOST DONE" stubIcon={<Gift size={15} color="var(--cardamom)" />}>
+              <div className="icon-badge icon-badge-cardamom" style={{ fontSize: 22 }}>🎉</div>
+              <h2 className="ticket-title ticket-title-sm">What should we call you?</h2>
+              <p className="ticket-subtitle">Optional — helps us personalise your rewards.</p>
 
               <input
                 type="text"
@@ -834,164 +671,83 @@ export default function JoinPage() {
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
                 autoFocus
-                style={{
-                  width: '100%', height: 52, background: 'rgba(255,255,255,0.05)',
-                  border: '1.5px solid rgba(255,255,255,0.1)', borderRadius: 14, outline: 'none',
-                  fontSize: 15, color: '#FAFAF7', fontFamily: 'var(--font-body)', padding: '0 16px',
-                  boxSizing: 'border-box', marginBottom: 20, touchAction: 'manipulation',
-                } as React.CSSProperties}
+                className="name-input"
               />
 
-              {error && <p style={{ margin: '0 0 16px', fontSize: 12, color: '#f87171', fontFamily: 'var(--font-body)' }}>{error}</p>}
+              {error && <p className="error-text">{error}</p>}
 
               <PrimaryButton onClick={handleSaveName} loading={loading}>
                 {loading ? (<><Loader2 size={16} className="spin" /> Setting up…</>) : (<><Gift size={16} /> Claim my rewards</>)}
               </PrimaryButton>
-            </div>
+            </TicketCard>
           )}
 
           {screen === 'done' && (() => {
             const progressPct = Math.min((finalPoints / TARGET_POINTS) * 100, 100)
             return (
-              <div>
-                <div style={{ textAlign: 'center', marginBottom: 18 }}>
-                  <div style={{ fontSize: 40, marginBottom: 8 }}>🎊</div>
-                  <h2 style={{ margin: '0 0 4px', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 600, color: '#FAFAF7' }}>
-                    {name ? `Welcome, ${name}!` : "You're in!"}
-                  </h2>
-                  <p style={{ margin: 0, fontSize: 13, color: 'rgba(250,250,247,0.45)', fontFamily: 'var(--font-body)' }}>
-                    This is your Dinezy account — for real.
-                  </p>
+              <TicketCard stubLabel="RECEIPT" stubValue={`#${sessionIdRef.current.slice(0, 8).toUpperCase()}`} stubIcon={<Receipt size={15} color="var(--saffron-deep)" />}>
+                <div className="done-header">
+                  <h2 className="ticket-title ticket-title-sm">{name ? `Welcome, ${name}!` : "You're in!"}</h2>
+                  <p className="ticket-subtitle" style={{ marginBottom: 0 }}>This is your Dinezy account — for real.</p>
                 </div>
 
-                {/* Award toast — identical animation language to the in-app QuestCard */}
                 {showAwardToast && (
-                  <div
-                    className="award-toast"
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      background: 'linear-gradient(135deg, rgba(232,197,71,0.16) 0%, rgba(255,92,53,0.1) 100%)',
-                      border: '1px solid rgba(232,197,71,0.3)', borderRadius: 14, padding: '12px 14px', marginBottom: 12,
-                    }}
-                  >
-                    <div style={{
-                      width: 32, height: 32, flexShrink: 0, borderRadius: 10,
-                      background: 'rgba(232,197,71,0.18)', border: '1px solid rgba(232,197,71,0.3)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Gift size={15} color="#E8C547" />
-                    </div>
+                  <div className="award-toast">
+                    <div className="award-toast-icon"><Gift size={15} color="var(--chili)" /></div>
                     <div>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>
-                        Signup bonus credited — +{finalPoints} points
-                      </p>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(250,250,247,0.45)', fontFamily: 'var(--font-body)' }}>
-                        Already in your balance below.
-                      </p>
+                      <p className="award-toast-title">Signup bonus credited — +{finalPoints} points</p>
+                      <p className="award-toast-sub">Already in your balance below.</p>
                     </div>
                   </div>
                 )}
 
-                {/* Points header — same card as the real account drawer */}
-                <div style={{
-                  background: 'linear-gradient(135deg, rgba(232,197,71,0.08) 0%, rgba(255,92,53,0.05) 100%)',
-                  border: '1px solid rgba(232,197,71,0.18)', borderRadius: 20, padding: '20px 20px 18px', marginBottom: 12,
-                }}>
-                  <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
-                    Reward Points
-                  </p>
-                  <p style={{ margin: '4px 0 14px', fontSize: 36, fontWeight: 700, color: '#FAFAF7', fontFamily: 'var(--font-body)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                    {displayedPoints.toLocaleString('en-IN')}
-                  </p>
+                <div className="points-panel">
+                  <p className="points-panel-label">Reward Points</p>
+                  <p className="points-panel-value">{displayedPoints.toLocaleString('en-IN')}</p>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <Utensils size={13} color="#E8C547" />
-                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>
-                      Quest: First Feast — {TARGET_VISITS} verified visits
-                    </p>
+                  <div className="stamp-row">
+                    {Array.from({ length: TARGET_VISITS }).map((_, i) => (
+                      <StampSlot key={i} filled={i === 0} label={i === 0 ? 'Signup' : `Visit ${i + 1}`} />
+                    ))}
                   </div>
-                  <div style={{ height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
-                    <div style={{
-                      height: '100%', width: `${progressPct}%`,
-                      background: 'linear-gradient(90deg, #E8C547, #FF5C35)', borderRadius: 999, transition: 'width 0.8s ease',
-                    }} />
+
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width: `${progressPct}%` }} />
                   </div>
-                  <p style={{ margin: 0, fontSize: 11, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+                  <p className="progress-caption">
                     {finalPoints}/{TARGET_POINTS} points · 0/{TARGET_VISITS} visits
                   </p>
                 </div>
 
-                {/* What happens next — a real sequence, so numbering earns its place */}
-                <div style={{
-                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-                  borderRadius: 14, padding: '14px 16px', marginBottom: 20,
-                }}>
-                  <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
-                    How to grow this
-                  </p>
+                <div className="steps-panel">
+                  <p className="steps-panel-title">How to grow this</p>
                   {[
                     'Walk into any Dinezy restaurant in Baner',
                     'After your meal, ask your waiter to verify your visit PIN',
                     `+${POINTS_PER_VISIT} points land instantly — redeem at ${TARGET_POINTS} for Amazon Pay, Zomato or Swiggy`,
                   ].map((step, i) => (
-                    <div key={step} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: i < 2 ? 8 : 0 }}>
-                      <span style={{
-                        flexShrink: 0, width: 18, height: 18, borderRadius: '50%', marginTop: 1,
-                        background: 'rgba(232,197,71,0.14)', border: '1px solid rgba(232,197,71,0.28)',
-                        color: '#E8C547', fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-body)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {i + 1}
-                      </span>
-                      <p style={{ margin: 0, fontSize: 12.5, color: 'rgba(250,250,247,0.55)', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>
-                        {step}
-                      </p>
+                    <div key={step} className="step-row">
+                      <span className="step-number">{i + 1}</span>
+                      <p className="step-text">{step}</p>
                     </div>
                   ))}
                 </div>
 
-                <a
-                  href="https://dinezy.in"
-                  style={{
-                    width: '100%', height: 52, boxSizing: 'border-box',
-                    background: 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)', borderRadius: 14,
-                    color: '#111', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-body)', textDecoration: 'none',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 32,
-                  }}
-                >
+                <a href="https://dinezy.in" className="explore-btn">
                   Explore Dinezy <ArrowRight size={15} />
                 </a>
 
-                {/* Full FAQ, visible inline now that there's room to breathe */}
-                <p style={{
-                  margin: '0 0 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-                  letterSpacing: '0.1em', color: 'rgba(250,250,247,0.35)', fontFamily: 'var(--font-body)',
-                }}>
-                  Frequently asked
-                </p>
+                <p className="faq-inline-title"><Receipt size={12} /> Frequently asked</p>
                 <FAQAccordion onOpen={handleFaqOpen} />
-              </div>
+              </TicketCard>
             )
           })()}
 
         </div>
       </div>
 
-      {/* Floating FAQ affordance — visible on every screen except the final one,
-          where the full list is already inline. */}
       {screen !== 'done' && (
-        <button
-          type="button"
-          onClick={() => { setFaqOpen(true); haptic(10) }}
-          aria-label="Frequently asked questions"
-          style={{
-            position: 'fixed', bottom: 20, right: 20, zIndex: 40,
-            width: 46, height: 46, borderRadius: '50%',
-            background: 'rgba(232,197,71,0.14)', border: '1px solid rgba(232,197,71,0.32)',
-            color: '#E8C547', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.4)', cursor: 'pointer', backdropFilter: 'blur(8px)',
-          }}
-        >
+        <button type="button" onClick={() => { setFaqOpen(true); haptic(10) }} aria-label="Frequently asked questions" className="faq-float-btn">
           <HelpCircle size={19} />
         </button>
       )}
@@ -999,60 +755,366 @@ export default function JoinPage() {
       <FAQDrawer open={faqOpen} onClose={() => setFaqOpen(false)} onOpen={handleFaqOpen} />
 
       <style jsx global>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .spin { animation: spin 1s linear infinite; }
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
 
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-        @keyframes drawerUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
+        .page-stage {
+          min-height: 100vh;
+          position: relative;
+          overflow: hidden;
+          background:
+            radial-gradient(circle at 50% -10%, rgba(233,162,61,0.14) 0%, transparent 55%),
+            linear-gradient(180deg, var(--ink) 0%, var(--ink-2) 100%);
+          font-family: var(--font-ui);
         }
 
-        @keyframes screenIn {
-          from { opacity: 0; transform: translateY(14px); }
-          to { opacity: 1; transform: translateY(0); }
+        /* ── Steam ── */
+        .steam {
+          position: absolute;
+          bottom: -40px;
+          width: 90px;
+          height: 220px;
+          border-radius: 50%;
+          background: radial-gradient(ellipse at center, rgba(251,238,218,0.10) 0%, transparent 70%);
+          filter: blur(6px);
+          animation: rise 11s ease-in infinite;
+          pointer-events: none;
         }
-        .screen-transition { animation: screenIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
-
-        @keyframes optionIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
+        .steam-0 { left: 8%;  animation-delay: 0s;   }
+        .steam-1 { left: 32%; animation-delay: 3.2s; width: 70px; }
+        .steam-2 { left: 62%; animation-delay: 6.1s; }
+        .steam-3 { left: 84%; animation-delay: 1.6s; width: 60px; }
+        @keyframes rise {
+          0%   { transform: translateY(0) scale(0.9);   opacity: 0; }
+          15%  { opacity: 0.9; }
+          100% { transform: translateY(-620px) scale(1.3); opacity: 0; }
         }
-        .option-stagger { animation: optionIn 0.32s ease both; }
 
-        @keyframes pointsBumpKf {
-          0% { transform: scale(1); }
-          40% { transform: scale(1.18); }
-          100% { transform: scale(1); }
+        /* ── Top bar ── */
+        .topbar {
+          position: sticky; top: 0; z-index: 20;
+          background: rgba(23,15,9,0.86);
+          backdrop-filter: blur(10px);
+          padding: 14px 20px;
+          border-bottom: 1px solid rgba(233,162,61,0.14);
         }
-        .points-bump { animation: pointsBumpKf 0.48s cubic-bezier(0.34,1.56,0.64,1); }
+        .topbar-inner {
+          max-width: 480px; margin: 0 auto;
+          display: flex; align-items: center; justify-content: space-between;
+        }
+        .wordmark {
+          font-family: var(--font-display);
+          font-weight: 600; font-size: 18px; letter-spacing: 0.01em;
+          color: var(--paper);
+        }
+        .topbar-actions { display: flex; align-items: center; gap: 8px; }
+        .points-chip {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-size: 11px; font-weight: 700; color: var(--ink);
+          background: var(--saffron); border-radius: 999px; padding: 4px 10px;
+        }
+        .points-bump { animation: bumpKf 0.48s cubic-bezier(0.34,1.56,0.64,1); }
+        @keyframes bumpKf { 0% { transform: scale(1); } 40% { transform: scale(1.16); } 100% { transform: scale(1); } }
+        .faq-mini-btn {
+          width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+          background: rgba(251,238,218,0.08); border: 1px solid rgba(251,238,218,0.18);
+          color: var(--paper); display: flex; align-items: center; justify-content: center;
+          cursor: pointer; padding: 0;
+        }
 
+        /* ── Page content ── */
+        .page-content {
+          position: relative; max-width: 480px; margin: 0 auto;
+          padding: 28px 20px 56px; min-height: calc(100vh - 60px);
+          display: flex; flex-direction: column; justify-content: center;
+        }
+
+        /* ── Ticket card ── */
+        .ticket-card {
+          position: relative;
+          background: linear-gradient(180deg, var(--paper) 0%, #F6E4C6 100%);
+          border-radius: 20px;
+          box-shadow: 0 18px 40px rgba(0,0,0,0.45), 0 2px 0 rgba(0,0,0,0.06) inset;
+        }
+        .ticket-notch {
+          position: absolute; top: 78px; width: 22px; height: 22px; border-radius: 50%;
+          background: var(--ink); z-index: 2;
+        }
+        .ticket-notch-left { left: -11px; }
+        .ticket-notch-right { right: -11px; }
+        .ticket-stub {
+          display: flex; align-items: center; gap: 10px;
+          padding: 16px 22px 14px;
+        }
+        .ticket-stub-icon {
+          flex-shrink: 0; width: 30px; height: 30px; border-radius: 10px;
+          background: rgba(44,24,16,0.06);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .ticket-stub-label {
+          margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+          color: var(--ink-text-soft); text-transform: uppercase;
+        }
+        .ticket-stub-value {
+          margin: 2px 0 0; font-size: 13px; font-weight: 700; color: var(--chili-deep);
+          font-family: var(--font-display);
+        }
+        .ticket-tear {
+          border-top: 2px dashed rgba(44,24,16,0.18);
+          margin: 0 22px;
+        }
+        .ticket-body { padding: 22px; }
+
+        /* ── Ticket entrance ── */
+        .ticket-enter { animation: ticketIn 0.5s cubic-bezier(0.16,1,0.3,1) both; }
+        @keyframes ticketIn {
+          from { opacity: 0; transform: translateY(28px) rotate(-1.2deg) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+        }
+
+        /* ── Typography ── */
+        .eyebrow-tag {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: var(--chili); color: var(--paper);
+          border-radius: 999px; padding: 5px 12px; font-size: 10.5px; font-weight: 700;
+          letter-spacing: 0.05em; margin-bottom: 16px; transform: rotate(-2deg);
+        }
+        .ticket-title {
+          margin: 0 0 12px; font-family: var(--font-display); font-weight: 600;
+          font-size: 24px; line-height: 1.32; color: var(--ink-text);
+        }
+        .ticket-title-sm { font-size: 21px; }
+        .ticket-subtitle {
+          margin: 0 0 22px; font-size: 13.5px; line-height: 1.55; color: var(--ink-text-soft);
+        }
+
+        /* ── Options (receipt line-items) ── */
+        .option-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 18px; }
+        .option-stagger { animation: optionIn 0.34s ease both; }
+        @keyframes optionIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .option-row {
+          width: 100%; display: flex; align-items: center; gap: 12px;
+          padding: 15px 6px; background: none; border: none; border-bottom: 1px dashed rgba(44,24,16,0.14);
+          cursor: pointer; text-align: left; transition: background 0.15s ease, transform 0.12s ease;
+        }
+        .option-row:last-child { border-bottom: none; }
+        .option-row-pressed { transform: scale(0.98); background: rgba(193,68,46,0.06); }
+        .option-row-selected { background: rgba(193,68,46,0.1); }
+        .option-bullet {
+          flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+          border: 1.5px solid rgba(44,24,16,0.25);
+          display: flex; align-items: center; justify-content: center;
+          transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        .option-bullet-filled {
+          background: var(--chili); border-color: var(--chili); transform: scale(1.1);
+        }
+        .option-label { flex: 1; font-size: 14.5px; font-weight: 600; color: var(--ink-text); }
+        .option-chevron { color: rgba(44,24,16,0.3); flex-shrink: 0; }
+        .trust-strip {
+          display: flex; gap: 16px; padding-top: 4px;
+        }
+        .trust-strip span {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-size: 11px; color: var(--ink-text-soft);
+        }
+
+        /* ── Icon badges ── */
+        .icon-badge {
+          width: 48px; height: 48px; border-radius: 14px; margin-bottom: 16px;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .icon-badge-saffron { background: rgba(233,162,61,0.18); }
+        .icon-badge-chili { background: rgba(193,68,46,0.14); }
+        .icon-badge-cardamom { background: rgba(91,140,90,0.16); }
+
+        /* ── Phone field ── */
+        .phone-field {
+          display: flex; align-items: center; background: var(--paper-2);
+          border: 1.5px solid rgba(44,24,16,0.14); border-radius: 14px; overflow: hidden;
+          margin-bottom: 12px; transition: border-color 0.15s ease;
+        }
+        .phone-field-error { border-color: var(--chili); margin-bottom: 8px; }
+        .phone-prefix {
+          padding: 0 14px; font-size: 14px; font-weight: 700; color: var(--ink-text-soft);
+          border-right: 1px solid rgba(44,24,16,0.1); height: 52px;
+          display: flex; align-items: center; flex-shrink: 0;
+        }
+        .phone-input {
+          flex: 1; height: 52px; background: transparent; border: none; outline: none;
+          font-size: 16px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-text);
+          font-family: var(--font-ui); padding: 0 16px;
+        }
+        .phone-input::placeholder { color: rgba(44,24,16,0.3); }
+        .fine-print {
+          margin: 0 0 20px; display: flex; align-items: center; gap: 6px;
+          font-size: 11.5px; color: var(--ink-text-soft);
+        }
+
+        /* ── Name input ── */
+        .name-input {
+          width: 100%; height: 52px; background: var(--paper-2);
+          border: 1.5px solid rgba(44,24,16,0.14); border-radius: 14px; outline: none;
+          font-size: 15px; color: var(--ink-text); font-family: var(--font-ui); padding: 0 16px;
+          box-sizing: border-box; margin-bottom: 20px;
+        }
+        .name-input::placeholder { color: rgba(44,24,16,0.3); }
+
+        /* ── OTP input ── */
+        .otp-input {
+          width: 100%; height: 60px; text-align: center; font-size: 26px; font-weight: 700;
+          letter-spacing: 0.5em; text-indent: 0.5em; font-family: var(--font-ui);
+          background: var(--paper-2); border: 1.5px solid rgba(44,24,16,0.14);
+          border-radius: 16px; color: var(--ink-text); outline: none;
+          box-sizing: border-box;
+        }
+        .otp-input:focus { border-color: var(--chili); }
+
+        .error-text { margin: -4px 0 16px; font-size: 12px; color: var(--chili-deep); font-weight: 600; }
+        .error-text-center { text-align: center; margin-top: 12px; margin-bottom: 0; }
+        .inline-link { margin-left: 8px; background: none; border: none; color: var(--chili-deep); cursor: pointer; font-size: 12px; font-weight: 700; }
+        .resend-row { margin-top: 16px; text-align: center; font-size: 12px; color: var(--ink-text-soft); }
+        .mt-24 { margin-top: 24px; }
+
+        /* ── Primary button ── */
+        .primary-btn {
+          width: 100%; height: 54px; background: linear-gradient(135deg, var(--saffron) 0%, var(--saffron-deep) 100%);
+          border: none; border-radius: 14px; color: var(--ink);
+          font-size: 15.5px; font-weight: 700; font-family: var(--font-ui);
+          cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+          transition: transform 0.12s ease, background 0.2s ease;
+        }
+        .primary-btn-pressed { transform: scale(0.97); }
+        .primary-btn-disabled { background: rgba(233,162,61,0.25); color: rgba(23,15,9,0.35); cursor: not-allowed; }
+
+        /* ── Done screen ── */
+        .done-header { text-align: center; margin-bottom: 18px; }
+        .award-toast {
+          display: flex; align-items: center; gap: 10px;
+          background: rgba(193,68,46,0.08); border: 1px solid rgba(193,68,46,0.25);
+          border-radius: 14px; padding: 12px 14px; margin-bottom: 14px;
+          animation: toastIn 0.4s cubic-bezier(0.34,1.12,0.64,1) both;
+        }
         @keyframes toastIn {
           0%   { transform: translateY(-16px) scale(0.92); opacity: 0; }
           60%  { transform: translateY(2px) scale(1.02); opacity: 1; }
           100% { transform: translateY(0) scale(1); opacity: 1; }
         }
-        @keyframes toastPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(232,197,71,0.35); }
-          50%      { box-shadow: 0 0 0 8px rgba(232,197,71,0); }
+        .award-toast-icon {
+          width: 32px; height: 32px; flex-shrink: 0; border-radius: 10px;
+          background: rgba(193,68,46,0.16); display: flex; align-items: center; justify-content: center;
         }
-        .award-toast { animation: toastIn 0.4s cubic-bezier(0.34,1.12,0.64,1) both, toastPulse 1.6s ease-out 0.4s; }
+        .award-toast-title { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink-text); }
+        .award-toast-sub { margin: 2px 0 0; font-size: 11px; color: var(--ink-text-soft); }
 
-        @keyframes breatheTop {
-          0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.75; }
-          50%      { transform: translateX(-50%) scale(1.06); opacity: 1; }
+        .points-panel {
+          background: var(--paper-2); border: 1px solid rgba(44,24,16,0.1);
+          border-radius: 18px; padding: 20px; margin-bottom: 14px;
         }
-        .ambient-glow-top { animation: breatheTop 7s ease-in-out infinite; }
-        @keyframes breatheBottom {
-          0%, 100% { transform: scale(1); opacity: 0.7; }
-          50%      { transform: scale(1.08); opacity: 0.95; }
+        .points-panel-label {
+          margin: 0; font-size: 11px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.12em; color: var(--ink-text-soft);
         }
-        .ambient-glow-bottom { animation: breatheBottom 9s ease-in-out infinite; }
+        .points-panel-value {
+          margin: 4px 0 16px; font-size: 38px; font-weight: 700; color: var(--ink-text);
+          font-family: var(--font-display); letter-spacing: -0.01em; line-height: 1;
+        }
+
+        .stamp-row { display: flex; gap: 10px; margin-bottom: 16px; }
+        .stamp-slot {
+          flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+          padding: 12px 6px; border-radius: 12px; border: 1.5px dashed rgba(44,24,16,0.2);
+        }
+        .stamp-slot-filled {
+          border-style: solid; border-color: var(--chili); background: rgba(193,68,46,0.06);
+          transform: rotate(-4deg);
+          animation: stampIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.4s both;
+        }
+        .stamp-slot-filled svg { background: var(--chili); border-radius: 50%; padding: 6px; }
+        @keyframes stampIn {
+          0%   { transform: rotate(-4deg) scale(1.8); opacity: 0; }
+          60%  { transform: rotate(-4deg) scale(0.94); opacity: 1; }
+          100% { transform: rotate(-4deg) scale(1); opacity: 1; }
+        }
+        .stamp-slot-plus { font-size: 11px; font-weight: 700; color: rgba(44,24,16,0.32); }
+        .stamp-slot-label { font-size: 9.5px; font-weight: 600; color: var(--ink-text-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+
+        .progress-track { height: 6px; background: rgba(44,24,16,0.1); border-radius: 999px; overflow: hidden; margin-bottom: 6px; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--saffron), var(--chili)); border-radius: 999px; transition: width 0.8s ease; }
+        .progress-caption { margin: 0; font-size: 11px; color: var(--ink-text-soft); }
+
+        .steps-panel { background: rgba(44,24,16,0.04); border-radius: 14px; padding: 14px 16px; margin-bottom: 20px; }
+        .steps-panel-title { margin: 0 0 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-text-soft); }
+        .step-row { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
+        .step-row:last-child { margin-bottom: 0; }
+        .step-number {
+          flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; margin-top: 1px;
+          background: var(--saffron); color: var(--ink); font-size: 10px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .step-text { margin: 0; font-size: 12.5px; color: var(--ink-text-soft); line-height: 1.5; }
+
+        .explore-btn {
+          width: 100%; height: 52px; box-sizing: border-box;
+          background: linear-gradient(135deg, var(--saffron), var(--saffron-deep));
+          border-radius: 14px; color: var(--ink); font-size: 15px; font-weight: 700;
+          font-family: var(--font-ui); text-decoration: none;
+          display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 28px;
+        }
+        .faq-inline-title {
+          margin: 0 0 14px; display: flex; align-items: center; gap: 6px;
+          font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-text-soft);
+        }
+
+        /* ── FAQ ── */
+        .faq-list { display: flex; flex-direction: column; gap: 8px; }
+        .faq-item { background: rgba(44,24,16,0.03); border: 1px solid rgba(44,24,16,0.08); border-radius: 14px; overflow: hidden; }
+        .faq-question {
+          width: 100%; display: flex; align-items: center; justify-content: space-between;
+          gap: 12px; padding: 14px 16px; background: none; border: none; cursor: pointer; text-align: left;
+          font-size: 13.5px; font-weight: 600; color: var(--ink-text); font-family: var(--font-ui);
+        }
+        .faq-chevron { color: rgba(44,24,16,0.3); flex-shrink: 0; transition: transform 0.2s; }
+        .faq-chevron-open { transform: rotate(90deg); }
+        .faq-answer { margin: 0; padding: 0 16px 16px; font-size: 12.5px; color: var(--ink-text-soft); line-height: 1.6; }
+
+        .faq-overlay {
+          position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end;
+          background: rgba(0,0,0,0.6); animation: fadeIn 0.2s ease both;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .faq-drawer {
+          width: 100%; max-width: 480px; margin: 0 auto; max-height: 78vh; overflow-y: auto;
+          background: var(--paper); border-radius: 22px 22px 0 0; padding: 14px 20px 32px;
+          animation: drawerUp 0.32s cubic-bezier(0.22,1,0.36,1) both;
+        }
+        @keyframes drawerUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .faq-drawer-handle { width: 36px; height: 4px; border-radius: 999px; background: rgba(44,24,16,0.2); margin: 0 auto 16px; }
+        .faq-drawer-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .faq-drawer-title {
+          margin: 0; display: flex; align-items: center; gap: 6px;
+          font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-text-soft);
+        }
+        .faq-close-btn {
+          width: 26px; height: 26px; border-radius: 50%; background: rgba(44,24,16,0.06);
+          border: 1px solid rgba(44,24,16,0.12); color: var(--ink-text-soft);
+          display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+        }
+
+        .faq-float-btn {
+          position: fixed; bottom: 20px; right: 20px; z-index: 40;
+          width: 48px; height: 48px; border-radius: 50%;
+          background: var(--paper); border: 2px dashed var(--chili);
+          color: var(--chili-deep); display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 6px 20px rgba(0,0,0,0.4); cursor: pointer;
+        }
+
+        /* ── Misc ── */
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spin { animation: spin 1s linear infinite; }
 
         @media (prefers-reduced-motion: reduce) {
-          .screen-transition, .option-stagger, .points-bump, .award-toast,
-          .ambient-glow-top, .ambient-glow-bottom, .spin {
+          .ticket-enter, .option-stagger, .points-bump, .award-toast,
+          .stamp-slot-filled, .steam, .spin {
             animation: none !important;
           }
         }
