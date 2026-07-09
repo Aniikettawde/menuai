@@ -558,7 +558,7 @@ export default function JoinPage() {
                 stubIcon={<Gift size={15} color="var(--chili)" />}
               >
                 <span className="eyebrow-tag">
-                  <MapPin size={11} /> EARLY ACCESS · BANER, PUNE
+                  <MapPin size={11} /> EARLY ACCESS · PUNE
                 </span>
                 <h2 className="ticket-title">{q.title}</h2>
                 <p className="ticket-subtitle">
