@@ -67,7 +67,7 @@ const VISITS_PER_MONTH: Record<string, number> = {
 }
 
 function estimateMonthly(freq: string | null) {
-  const visits = (freq && VISITS_PER_MONTH[freq]) ?? 4
+  const visits: number = freq !== null && freq in VISITS_PER_MONTH ? VISITS_PER_MONTH[freq] : 4
   const points = visits * POINTS_PER_VISIT
   const cards = Math.max(1, Math.floor(visits / TARGET_VISITS))
   return { visits, points, cards }
