@@ -9,14 +9,12 @@ const dmSans = DM_Sans({
   display: 'swap',
   preload: true,
 })
-
 const playfair = Playfair_Display({
   subsets: ['latin'],
   variable: '--font-display',
   display: 'swap',
   preload: false,
 })
-
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
@@ -27,33 +25,35 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL('https://dinezy.in'),
   title: {
-    default: 'Dinezy - AI Powered QR Menu for Restaurants',
+    default: 'Dinezy - Restaurant Growth Platform',
     template: '%s | Dinezy',
   },
   description:
-    'Dinezy helps restaurants create QR menus with AI recommendations, waiter calling, analytics and digital ordering.',
+    'Dinezy is a restaurant growth platform built around a shared reward network — plus QR menu, waiter calling, AI menu, restaurant websites and analytics that bring diners back.',
   keywords: [
+    'restaurant growth platform',
+    'restaurant reward network',
+    'restaurant loyalty program India',
     'QR menu',
     'digital menu',
-    'restaurant QR code',
+    'restaurant CRM India',
     'AI restaurant menu',
     'restaurant software India',
-    'digital menu India',
-    'restaurant ordering system',
     'waiter calling system',
+    'repeat customers restaurant',
   ],
   openGraph: {
-    title: 'Dinezy - AI Powered QR Menu',
+    title: 'Dinezy - Restaurant Growth Platform',
     description:
-      'Modern QR menus, AI recommendations, waiter calling and analytics for restaurants.',
+      'A shared reward network that brings diners back to your restaurant — plus QR menu, waiter calling, AI menu and analytics.',
     url: 'https://dinezy.in',
     siteName: 'Dinezy',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Dinezy',
-    description: 'AI powered digital menu platform for restaurants.',
+    title: 'Dinezy - Restaurant Growth Platform',
+    description: 'The restaurant growth platform built around a shared reward network.',
   },
   robots: {
     index: true,
@@ -81,7 +81,6 @@ export default function RootLayout({
     >
       <body className="bg-[#050816] text-white antialiased">
         {children}
-
         <Script
           id="google-adsense"
           async

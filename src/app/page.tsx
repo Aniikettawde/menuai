@@ -2,8 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
+import { getDiscoveryBrowser } from '@/lib/discovery'
 
-/* ─── Types ─────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────
+   TYPES
+   ──────────────────────────────────────────────────────────────────────── */
 interface LogoProps {
   size?: number
   dark?: boolean
@@ -11,27 +15,80 @@ interface LogoProps {
   onClick?: () => void
 }
 
-/* ─── Logo ───────────────────────────────────────────── */
+interface Restaurant {
+  slug: string
+  name: string
+  cuisine: string
+  area: string
+  rating: number
+  points: number
+  accent: string
+  emoji: string
+}
+
+interface FeaturedCard {
+  slug: string
+  name: string
+  cuisine: string
+  area: string
+  rating: number
+  imageUrl: string
+  emoji: string
+  loyaltyEnabled?: boolean
+  loyaltyDiscountPct?: number
+}
+
+type ModalVariant = 'demo' | 'founding'
+
+/* ────────────────────────────────────────────────────────────────────────
+   LOGO
+   ──────────────────────────────────────────────────────────────────────── */
 function DinezyLogo({ size = 36, dark = true, className = '', onClick }: LogoProps) {
   return (
-    <button type="button" onClick={onClick} className={`inline-flex items-center gap-3 focus:outline-none ${className}`} aria-label="Dinezy home">
+    <button type="button" onClick={onClick} className={`inline-flex items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 rounded-xl ${className}`} aria-label="Dinezy home">
       <div className={`relative shrink-0 flex items-center justify-center rounded-2xl transition-all duration-300 hover:scale-[1.04] ${dark ? 'bg-white/8 border border-white/12 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl' : 'bg-slate-950 border border-slate-800 shadow-[0_8px_20px_rgba(15,23,42,0.18)]'}`} style={{ width: size + 14, height: size + 14 }}>
         <Image src="/dinezy-logo.png" alt="Dinezy" width={size} height={size} className="object-contain" priority />
       </div>
       <div className="text-left">
         <p className={`font-black text-[15px] leading-none tracking-tight ${dark ? 'text-white' : 'text-slate-900'}`}>Dinezy</p>
-        <p className={`mt-0.5 text-[10px] font-semibold leading-none ${dark ? 'text-white/45' : 'text-slate-400'}`}>AI-powered QR menu</p>
+        <p className={`mt-0.5 text-[10px] font-semibold leading-none ${dark ? 'text-white/45' : 'text-slate-400'}`}>Restaurant Growth Platform</p>
       </div>
     </button>
   )
 }
 
-/* ─── Book Demo Modal ────────────────────────────────── */
-function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+const BUCKET = 'restaurant-assets' // match whatever bucket your discovery page uses
+
+function resolveUrl(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw.trim()) return ''
+  const v = raw.trim()
+  if (/^(https?:\/\/|data:|blob:)/i.test(v)) return v
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '')
+  return base ? `${base}/storage/v1/object/public/${BUCKET}/${v.replace(/^\/+/, '')}` : v
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   BOOK DEMO / FOUNDING RESTAURANT MODAL
+   ──────────────────────────────────────────────────────────────────────── */
+function BookDemoModal({ open, onClose, variant = 'demo' }: { open: boolean; onClose: () => void; variant?: ModalVariant }) {
   const [form, setForm] = useState({ name: '', brand: '', email: '', phone: '', city: '' })
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Partial<typeof form>>({})
+
+  const copy = variant === 'founding'
+    ? {
+        eyebrow: 'Founding restaurants',
+        title: 'Join as a founding restaurant',
+        sub: 'Limited spots per area. Rewards funded by Dinezy from day one — no cost to you.',
+        button: 'Claim founding spot →',
+      }
+    : {
+        eyebrow: 'Free demo',
+        title: 'Book your restaurant demo',
+        sub: "We'll set everything up for your venue, live.",
+        button: 'Book my demo →',
+      }
 
   const validate = () => {
     const e: Partial<typeof form> = {}
@@ -51,7 +108,7 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
       const res = await fetch('/api/book-demo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, source: variant }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Something went wrong.')
@@ -77,25 +134,33 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
     return () => { document.body.style.overflow = '' }
   }, [open])
 
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" onClick={handleClose}>
+    <div role="dialog" aria-modal="true" aria-labelledby="demo-modal-title" className="fixed inset-0 z-[300] flex items-center justify-center p-4" onClick={handleClose}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
       <div className="relative w-full max-w-md rounded-3xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="absolute inset-0 rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/60 via-fuchsia-500/30 to-cyan-500/40 pointer-events-none" />
+        <div className="absolute inset-0 rounded-3xl p-[1px] bg-gradient-to-br from-violet-500/60 via-fuchsia-500/30 to-amber-400/40 pointer-events-none" />
         <div className="relative bg-[#080f1e] rounded-3xl p-7">
           {!submitted ? (
             <>
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <span className="inline-flex items-center gap-1.5 bg-violet-500/12 border border-violet-400/20 rounded-full px-3 py-1 text-[11px] font-bold text-violet-300 uppercase tracking-wider mb-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" /> Free demo
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" /> {copy.eyebrow}
                   </span>
-                  <h2 className="text-2xl font-black text-white leading-tight">Book your restaurant demo</h2>
-                  <p className="text-white/50 text-sm mt-1">We'll set everything up for your venue, live.</p>
+                  <h2 id="demo-modal-title" className="text-2xl font-black text-white leading-tight">{copy.title}</h2>
+                  <p className="text-white/50 text-sm mt-1">{copy.sub}</p>
                 </div>
-                <button onClick={handleClose} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition text-sm">✕</button>
+                <button onClick={handleClose} aria-label="Close" className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition text-sm focus-visible:ring-2 focus-visible:ring-violet-400/60 outline-none">✕</button>
               </div>
               <div className="space-y-3.5">
                 {[
@@ -106,8 +171,9 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
                   { key: 'city', label: 'City', placeholder: 'Pune', type: 'text' },
                 ].map(f => (
                   <div key={f.key}>
-                    <label className="block text-xs font-bold text-white/60 mb-1.5 uppercase tracking-wider">{f.label}</label>
+                    <label htmlFor={`field-${f.key}`} className="block text-xs font-bold text-white/60 mb-1.5 uppercase tracking-wider">{f.label}</label>
                     <input
+                      id={`field-${f.key}`}
                       type={f.type}
                       placeholder={f.placeholder}
                       value={form[f.key as keyof typeof form]}
@@ -121,21 +187,21 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="mt-5 w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-black text-sm shadow-lg shadow-violet-600/30 hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                className="mt-5 w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-black text-sm shadow-lg shadow-violet-600/30 hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-violet-300 outline-none"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Booking your demo...
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Sending...
                   </span>
-                ) : 'Book my demo →'}
+                ) : copy.button}
               </button>
               <p className="text-center text-white/30 text-xs mt-3">We respond within 2 hours during business hours</p>
             </>
           ) : (
             <div className="text-center py-8">
               <div className="w-16 h-16 rounded-2xl bg-emerald-400/15 border border-emerald-400/25 flex items-center justify-center text-3xl mx-auto mb-4">🎉</div>
-              <h2 className="text-2xl font-black text-white mb-2">Demo booked!</h2>
-              <p className="text-white/55 text-sm leading-relaxed mb-6">We'll reach out to <span className="text-violet-300 font-semibold">{form.email}</span> within 2 hours to schedule your live walkthrough.</p>
+              <h2 className="text-2xl font-black text-white mb-2">{variant === 'founding' ? "You're on the list!" : 'Demo booked!'}</h2>
+              <p className="text-white/55 text-sm leading-relaxed mb-6">We'll reach out to <span className="text-violet-300 font-semibold">{form.email}</span> within 2 hours to {variant === 'founding' ? 'confirm your founding spot' : 'schedule your live walkthrough'}.</p>
               <button onClick={handleClose} className="px-6 py-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold rounded-xl text-sm hover:-translate-y-0.5 transition-all">Back to Dinezy →</button>
             </div>
           )}
@@ -145,7 +211,334 @@ function BookDemoModal({ open, onClose }: { open: boolean; onClose: () => void }
   )
 }
 
-/* ─── Restaurant Website Section ────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────
+   FEATURED RESTAURANTS (Explore Restaurants)
+   ──────────────────────────────────────────────────────────────────────── */
+const featuredRestaurants: Restaurant[] = [
+  { slug: 'spice-garden', name: 'Spice Garden', cuisine: 'North Indian · Mughlai', area: 'Baner, Pune', rating: 4.6, points: 120, accent: 'from-orange-500/25 to-amber-500/10', emoji: '🍛' },
+  { slug: 'tandoor-house', name: 'Tandoor House', cuisine: 'Punjabi · Tandoor', area: 'Baner, Pune', rating: 4.5, points: 100, accent: 'from-rose-500/25 to-orange-500/10', emoji: '🍢' },
+  { slug: 'curry-corner', name: 'Curry Corner', cuisine: 'South Indian', area: 'Aundh, Pune', rating: 4.7, points: 90, accent: 'from-emerald-500/25 to-cyan-500/10', emoji: '🥘' },
+  { slug: 'brew-and-bao', name: 'Brew & Bao', cuisine: 'Asian · Cafe', area: 'Baner, Pune', rating: 4.4, points: 110, accent: 'from-cyan-500/25 to-violet-500/10', emoji: '🥟' },
+]
+
+
+
+const ACCENTS = [
+  'from-orange-500/25 to-amber-500/10',
+  'from-rose-500/25 to-orange-500/10',
+  'from-emerald-500/25 to-cyan-500/10',
+  'from-cyan-500/25 to-violet-500/10',
+]
+
+function guessEmoji(cuisineTags: string[]): string {
+  const map: Record<string, string> = {
+    'north indian': '🍛', mughlai: '🍛', punjabi: '🍢', tandoor: '🍢',
+    'south indian': '🥘', asian: '🥟', cafe: '☕', chinese: '🥡',
+    italian: '🍝', dessert: '🍰',
+  }
+  for (const tag of cuisineTags) {
+    const hit = map[tag.toLowerCase()]
+    if (hit) return hit
+  }
+  return '🍽️'
+}
+
+function FeaturedRestaurantsSection() {
+  const [restaurants, setRestaurants] = useState<FeaturedCard[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const supabase = getDiscoveryBrowser()
+    const { data, error } = await supabase
+  .from('restaurants')
+  .select('slug, name, cuisine_tags, area, rating_avg, rating_count, cover_image_url, logo_url')
+  .eq('is_published', true)
+  .eq('show_in_discovery', true)
+  .ilike('city', 'Pune')
+  .order('rating_avg', { ascending: false, nullsFirst: false })
+  .limit(4)
+
+      if (cancelled) return
+      if (error) {
+        console.error('Failed to load featured restaurants:', error)
+        setLoading(false)
+        return
+      }
+
+    setRestaurants(
+  (data ?? []).map((r) => ({
+    slug: r.slug,
+    name: r.name,
+    cuisine: (r.cuisine_tags ?? []).slice(0, 2).join(' · ') || 'Multi-cuisine',
+    area: r.area ?? '',
+    rating: Number(r.rating_avg ?? 0),
+    imageUrl: resolveUrl(r.cover_image_url ?? r.logo_url),
+    emoji: guessEmoji(r.cuisine_tags ?? []),
+  })),
+)
+      setLoading(false)
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [])
+
+  return (
+    <section id="explore" className="py-20 px-4 sm:px-6 lg:px-8 bg-[#050816]">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
+          <div>
+            <span className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-cyan-300 uppercase tracking-wide mb-4">
+              Explore restaurants
+            </span>
+            <h2 className="text-3xl lg:text-4xl font-black leading-tight tracking-tighter">Restaurants on the network right now</h2>
+          </div>
+          <Link href="/discovery" className="text-sm font-bold text-white/70 hover:text-white transition-colors flex items-center gap-1.5 shrink-0">
+            View all restaurants <span aria-hidden>→</span>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+         {loading
+  ? Array.from({ length: 4 }).map((_, i) => (
+      <div key={i} className="h-64 rounded-3xl bg-white/5 border border-white/10 animate-pulse" />
+    ))
+  : restaurants.map((r, i) => (
+      <Link
+        key={r.slug}
+        href={`/explore/${r.slug}`}
+        className="group glass rounded-3xl overflow-hidden card-hover focus-visible:ring-2 focus-visible:ring-violet-400/60 outline-none"
+      >
+        <div className={`h-28 flex items-center justify-center text-5xl bg-gradient-to-br ${ACCENTS[i % ACCENTS.length]} relative overflow-hidden`}>
+  {r.imageUrl ? (
+    <img
+      src={r.imageUrl}
+      alt={r.name}
+      className="absolute inset-0 w-full h-full object-cover"
+      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+    />
+  ) : (
+    r.emoji
+  )}
+  <span className="absolute top-3 right-3 flex items-center gap-1 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full text-[11px] font-bold text-white border border-white/15">
+    ★ {r.rating.toFixed(1)}
+  </span>
+</div>
+        <div className="p-4">
+          <h3 className="font-black text-white text-base leading-tight">{r.name}</h3>
+          <p className="text-white/45 text-xs mt-0.5">{r.cuisine}</p>
+          <p className="text-white/30 text-[11px] mt-0.5">{r.area}</p>
+
+          {/* ← ADD IT HERE, right after the area line */}
+          {r.loyaltyEnabled && typeof r.loyaltyDiscountPct === 'number' && r.loyaltyDiscountPct > 0 && (
+            <div className="mt-3 flex items-center gap-1.5 bg-amber-400/10 border border-amber-400/20 rounded-full px-2.5 py-1 w-fit">
+              <span className="text-amber-300 text-xs">🪙</span>
+              <span className="text-amber-200 text-[11px] font-bold">{r.loyaltyDiscountPct}% loyalty reward</span>
+            </div>
+          )}
+        </div>
+      </Link>
+    ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   JOURNEY TIMELINES (shared visual, two content sets)
+   ──────────────────────────────────────────────────────────────────────── */
+interface JourneyStep { label: string; desc: string; icon: string }
+
+function JourneyTimeline({ steps, accent }: { steps: JourneyStep[]; accent: 'violet' | 'amber' }) {
+  const dot = accent === 'violet' ? 'bg-violet-500' : 'bg-amber-400'
+  const line = accent === 'violet' ? 'from-violet-500/60 to-fuchsia-500/10' : 'from-amber-400/60 to-orange-500/10'
+  const chip = accent === 'violet' ? 'bg-violet-500/10 border-violet-400/20 text-violet-200' : 'bg-amber-400/10 border-amber-400/20 text-amber-200'
+
+  return (
+    <ol className="relative">
+      <div className={`absolute left-[19px] top-2 bottom-2 w-px bg-gradient-to-b ${line} sm:left-[23px]`} aria-hidden />
+      {steps.map((s, i) => (
+        <li key={s.label} className="relative flex gap-4 sm:gap-5 pb-8 last:pb-0">
+          <div className={`relative z-10 shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-2xl ${chip} border flex items-center justify-center text-lg sm:text-xl`}>
+            {s.icon}
+            <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full ${dot} border-2 border-[#050816]`} />
+          </div>
+          <div className="pt-1.5">
+            <p className="font-black text-white text-[15px] sm:text-base">{s.label}</p>
+            <p className="text-white/50 text-sm mt-1 leading-relaxed max-w-md">{s.desc}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function DinerJourneySection() {
+  const steps: JourneyStep[] = [
+    { label: 'Discover a restaurant', desc: 'Browse the Dinezy network and find restaurants near you worth trying.', icon: '🔍' },
+    { label: 'Visit the restaurant', desc: 'Walk in, sit down, order as usual — nothing changes about the visit itself.', icon: '🚶' },
+    { label: 'Scan the QR', desc: 'Scan the table QR to open the menu and check yourself in for rewards.', icon: '📱' },
+    { label: 'Earn Dinezy points', desc: 'Every visit earns points, automatically, across every restaurant on the network.', icon: '🪙' },
+    { label: 'Redeem rewards', desc: 'Use your points for rewards at this restaurant or any other Dinezy restaurant.', icon: '🎁' },
+  ]
+  return (
+    <section id="for-diners" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
+      <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-14 items-start">
+        <div>
+          <span className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-cyan-300 uppercase tracking-wide mb-4">
+            For diners
+          </span>
+          <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4">How Dinezy works<br />for diners</h2>
+          <p className="text-white/55 text-lg max-w-md">One reward network across every restaurant that joins. Your points travel with you.</p>
+        </div>
+        <JourneyTimeline steps={steps} accent="violet" />
+      </div>
+    </section>
+  )
+}
+
+function RestaurantJourneySection() {
+  const steps: JourneyStep[] = [
+    { label: 'Book a demo', desc: 'A 30-minute call — we show you the dashboard and set up your menu live.', icon: '📞' },
+    { label: 'Setup in 30 minutes', desc: 'Menu, categories and QR codes are ready the same day. No technical work on your end.', icon: '⚡' },
+    { label: 'QR menu goes live', desc: 'Guests scan and order without an app. Your menu stays editable in real time.', icon: '🍽️' },
+    { label: 'Waiter calling', desc: 'Guests tap once to call staff. Your team sees the table number instantly.', icon: '🔔' },
+    { label: 'Analytics', desc: 'See scans, repeat visits, peak hours and top dishes in one dashboard.', icon: '📊' },
+    { label: 'Repeat customers', desc: 'Diners come back to earn and redeem points — building loyalty without you funding discounts.', icon: '🔁' },
+  ]
+  return (
+    <section id="for-restaurants" className="py-24 px-4 sm:px-6 lg:px-8 mesh-bg">
+      <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-14 items-start">
+        <div>
+          <span className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-violet-300 uppercase tracking-wide mb-4">
+            For restaurants
+          </span>
+          <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4">How Dinezy works<br />for restaurants</h2>
+          <p className="text-white/55 text-lg max-w-md mb-8">A growth platform, not just a menu. Built to bring guests back — not just serve them once.</p>
+          <button
+            onClick={() => document.getElementById('founding-cta')?.scrollIntoView({ behavior: 'smooth' })}
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-violet-600/20 hover:-translate-y-0.5 transition-all"
+          >
+            Become a founding restaurant →
+          </button>
+        </div>
+        <JourneyTimeline steps={steps} accent="violet" />
+      </div>
+    </section>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   REWARD NETWORK — signature section
+   ──────────────────────────────────────────────────────────────────────── */
+function RewardPassportCard() {
+  const [activeStamp, setActiveStamp] = useState(0)
+  const stamps = [
+    { name: 'Spice Garden', pts: '+40', emoji: '🍛' },
+    { name: 'Brew & Bao', pts: '+25', emoji: '🥟' },
+    { name: 'Curry Corner', pts: '+35', emoji: '🥘' },
+  ]
+
+  useEffect(() => {
+    const t = setInterval(() => setActiveStamp(p => (p + 1) % (stamps.length + 1)), 1300)
+    return () => clearInterval(t)
+  }, [stamps.length])
+
+  const total = stamps.slice(0, activeStamp).reduce((a, c) => a + parseInt(c.pts.replace('+', ''), 10), 0)
+
+  return (
+    <div className="glass rounded-[2rem] p-6 sm:p-7 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-400/8 to-violet-500/8 pointer-events-none" />
+      <div className="relative flex items-center justify-between mb-6">
+        <div>
+          <p className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-1">Dinezy points passport</p>
+          <p className="text-white font-black text-lg">Priya S.</p>
+        </div>
+        <div className="text-right">
+          <p className="text-3xl font-black text-white leading-none">{total}</p>
+          <p className="text-[11px] text-white/40 mt-1">total points</p>
+        </div>
+      </div>
+
+      <div className="relative space-y-2.5">
+        {stamps.map((s, i) => {
+          const stamped = i < activeStamp
+          return (
+            <div
+              key={s.name}
+              className={`flex items-center justify-between rounded-2xl border px-4 py-3 transition-all duration-500 ${
+                stamped ? 'border-amber-400/30 bg-amber-400/8 opacity-100' : 'border-white/8 bg-white/4 opacity-40'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{s.emoji}</span>
+                <span className="text-sm font-bold text-white/85">{s.name}</span>
+              </div>
+              <span className={`text-sm font-black transition-colors ${stamped ? 'text-amber-300' : 'text-white/25'}`}>{stamped ? s.pts : '—'}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="relative text-white/35 text-[11px] mt-5 leading-relaxed">
+        One points balance, earned and redeemed across every restaurant on the Dinezy network — not locked to a single venue.
+      </p>
+    </div>
+  )
+}
+
+function RewardNetworkSection() {
+  return (
+    <section id="rewards" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
+      <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
+        <div>
+          <span className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 rounded-full px-4 py-1.5 text-xs font-bold text-amber-300 uppercase tracking-wide mb-5">
+            Restaurant Reward Network
+          </span>
+          <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-5">
+            Loyalty, without
+            <span className="block text-transparent bg-gradient-to-r from-amber-300 to-orange-400 bg-clip-text">discounting your menu</span>
+          </h2>
+          <p className="text-white/60 text-lg leading-relaxed mb-8 max-w-xl">
+            Dinezy Points are funded by Dinezy, not by your margins. Your restaurant is never required to run a discount or offer to be part of the network — diners earn and redeem points, and you focus on food and service.
+          </p>
+
+          <div className="space-y-4 mb-8">
+            {[
+              { icon: '🪙', title: 'Rewards funded by Dinezy', desc: 'Points value is covered by Dinezy at launch — no cost or margin hit to your restaurant.' },
+              { icon: '🚫', title: 'No forced discounts', desc: "You're never required to discount your menu to join or stay on the network." },
+              { icon: '🎛️', title: 'Optional offers, your choice', desc: 'Once you see the traffic, you can layer on your own optional offers — entirely opt-in.' },
+              { icon: '🌐', title: 'One network, shared diners', desc: 'Diners collect points across every restaurant on Dinezy, bringing new guests to your door.' },
+            ].map(f => (
+              <div key={f.title} className="flex gap-3.5 items-start">
+                <div className="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-lg flex-shrink-0">{f.icon}</div>
+                <div>
+                  <p className="font-bold text-white text-sm mb-0.5">{f.title}</p>
+                  <p className="text-white/50 text-sm leading-relaxed">{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="glass rounded-2xl p-4 border border-white/10">
+            <p className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2">How this differs</p>
+            <p className="text-white/60 text-sm leading-relaxed">
+              Platforms like EazyDiner, Dineout and Zomato Gold work by discounting your bill. Dinezy Points are funded by Dinezy — your pricing and margins stay yours.
+            </p>
+          </div>
+        </div>
+
+        <RewardPassportCard />
+      </div>
+    </section>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   RESTAURANT WEBSITE SECTION (reused, unchanged)
+   ──────────────────────────────────────────────────────────────────────── */
 function RestaurantWebsiteSection() {
   const pages = [
     { name: 'Spice Garden', slug: 'spice-garden', city: 'Pune' },
@@ -182,7 +575,7 @@ function RestaurantWebsiteSection() {
       <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-10 items-center">
         <div>
           <span className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-400/20 rounded-full px-4 py-1.5 text-xs font-bold text-orange-300 uppercase tracking-wide mb-5">
-            New: own restaurant website
+            Restaurant website
           </span>
           <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-5">
             हर restaurant ko milega
@@ -267,9 +660,9 @@ function RestaurantWebsiteSection() {
   )
 }
 
-/* ─── Auto Waiter Call Demo ──────────────────────────── */
-// Fully automatic — loops through the full flow with no user interaction needed.
-// Phases: idle (brief pause) → selecting items one-by-one → confirm → calling → notified → arriving → reset
+/* ────────────────────────────────────────────────────────────────────────
+   WAITER CALL DEMO (reused, unchanged)
+   ──────────────────────────────────────────────────────────────────────── */
 function WaiterCallDemo() {
   type Phase = 'idle' | 'selecting' | 'calling' | 'notified' | 'arriving'
   const [phase, setPhase] = useState<Phase>('idle')
@@ -294,25 +687,21 @@ function WaiterCallDemo() {
     if (intervalRef.current) clearInterval(intervalRef.current)
   }
 
-  // Full auto-loop sequence
   useEffect(() => {
     clearAll()
 
     if (phase === 'idle') {
-      // After a short pause, start selecting items
       timerRef.current = setTimeout(() => {
         setPhase('selecting')
         setSelectedItems([])
       }, 1200)
 
     } else if (phase === 'selecting') {
-      // Select items one by one with a highlight animation
       const order = ['bc', 'pt', 'gn']
       let step = 0
 
       function selectNext() {
         if (step >= order.length) {
-          // All items selected, move to calling
           setHighlightedItem(null)
           timerRef.current = setTimeout(() => setPhase('calling'), 900)
           return
@@ -345,7 +734,6 @@ function WaiterCallDemo() {
       }, 55)
 
     } else if (phase === 'notified') {
-      // Count down eta, then show arriving
       let count = 8
       intervalRef.current = setInterval(() => {
         count -= 1
@@ -357,7 +745,6 @@ function WaiterCallDemo() {
       }, 1000)
 
     } else if (phase === 'arriving') {
-      // Hold arriving state briefly, then reset the whole loop
       timerRef.current = setTimeout(() => {
         setSelectedItems([])
         setProgress(0)
@@ -371,19 +758,15 @@ function WaiterCallDemo() {
 
   return (
     <div className="relative">
-      {/* Label above phone */}
       <div className="flex items-center justify-center gap-2 mb-4">
         <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
         <p className="text-sm font-semibold text-amber-300 tracking-wide">Live demo — watch how it works</p>
       </div>
 
       <div className="relative mx-auto w-full max-w-[320px]">
-        {/* Phone frame */}
         <div
-          className="rounded-[2.5rem] border-[3px] border-white/15 bg-[#07111f] shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden"
-          style={{ animation: 'floatCard 7s ease-in-out infinite' }}
+          className="rounded-[2.5rem] border-[3px] border-white/15 bg-[#07111f] shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden motion-safe:[animation:floatCard_7s_ease-in-out_infinite]"
         >
-          {/* Status bar */}
           <div className="flex items-center justify-between px-5 pt-3 pb-1">
             <span className="text-[10px] font-bold text-white/40">9:41</span>
             <div className="flex gap-1 items-center">
@@ -391,7 +774,6 @@ function WaiterCallDemo() {
             </div>
           </div>
 
-          {/* Header */}
           <div className="px-4 pb-3 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-1.5 mb-0.5">
@@ -408,7 +790,6 @@ function WaiterCallDemo() {
             </div>
           </div>
 
-          {/* Menu items */}
           <div className="px-3 space-y-2 pb-3">
             {menuItems.map(item => {
               const sel = selectedItems.includes(item.id)
@@ -443,9 +824,7 @@ function WaiterCallDemo() {
             })}
           </div>
 
-          {/* Bottom action area */}
           <div className="mx-3 mb-4">
-            {/* Idle / selecting — show order summary + button */}
             {(phase === 'idle' || phase === 'selecting') && (
               <>
                 {selectedItems.length > 0 && (
@@ -489,7 +868,7 @@ function WaiterCallDemo() {
 
             {phase === 'arriving' && (
               <div className="bg-cyan-400/10 border border-cyan-400/25 rounded-xl p-3 text-center">
-                <div className="text-2xl mb-1 animate-bounce">🧑‍🍳</div>
+                <div className="text-2xl mb-1 motion-safe:animate-bounce">🧑‍🍳</div>
                 <p className="text-xs font-black text-cyan-300">Waiter is here!</p>
                 <p className="text-[10px] text-white/30 mt-1">Restarting demo…</p>
               </div>
@@ -497,9 +876,8 @@ function WaiterCallDemo() {
           </div>
         </div>
 
-        {/* Staff notification bubble — slides in when notified */}
         {(phase === 'notified' || phase === 'arriving') && (
-          <div className="absolute -right-4 top-8 w-52 animate-slide-in">
+          <div className="absolute -right-4 top-8 w-52 motion-safe:animate-slide-in">
             <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/12 p-3 shadow-2xl">
               <div className="flex items-start gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-amber-400/15 flex items-center justify-center text-base flex-shrink-0">🔔</div>
@@ -517,7 +895,6 @@ function WaiterCallDemo() {
         )}
       </div>
 
-      {/* Step indicator dots below phone */}
       <div className="flex items-center justify-center gap-2 mt-5">
         {(['idle', 'selecting', 'calling', 'notified', 'arriving'] as Phase[]).map(p => (
           <div
@@ -532,8 +909,10 @@ function WaiterCallDemo() {
   )
 }
 
-/* ─── AI Upsell Demo ─────────────────────────────────── */
-function AIUpsellDemo() {
+/* ────────────────────────────────────────────────────────────────────────
+   AI MENU DEMO (reused, relabelled as AI Menu rather than "upsell engine")
+   ──────────────────────────────────────────────────────────────────────── */
+function AIMenuDemo() {
   const [step, setStep] = useState(0)
   const [visible, setVisible] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -541,21 +920,21 @@ function AIUpsellDemo() {
   const scenarios = [
     {
       guest: 'I ordered Butter Chicken',
-      suggestion: "Perfect choice! 🍛 Most guests pair it with **Garlic Naan** (₹60) and **Dal Makhani** (₹220). Together that's a complete meal — and saves you ₹40 vs ordering separately.",
+      suggestion: "Perfect choice! 🍛 Most guests pair it with **Garlic Naan** (₹60) and **Dal Makhani** (₹220) — a complete meal, and it saves ₹40 vs ordering separately.",
       upsell: 'Garlic Naan + Dal Makhani',
       extra: '+₹280',
       icon: '🤖',
     },
     {
       guest: 'What dessert goes with this?',
-      suggestion: "Great timing! 🍮 After Butter Chicken, **Gulab Jamun** (₹120) is our most ordered dessert — 68% of tables that had Butter Chicken tonight ordered it. It's going fast!",
+      suggestion: "Great timing! 🍮 After Butter Chicken, **Gulab Jamun** (₹120) is the most ordered dessert tonight — 68% of tables with Butter Chicken added it.",
       upsell: 'Gulab Jamun',
       extra: '+₹120',
       icon: '📊',
     },
     {
       guest: 'Any drink recommendations?',
-      suggestion: 'For your order, **Mango Lassi** (₹110) is a classic pairing — naturally cools the spice. Or our **Fresh Lime Soda** (₹80) if you prefer something lighter. Both are must-tries! 🥭',
+      suggestion: 'For your order, **Mango Lassi** (₹110) is a classic pairing that cools the spice. Or **Fresh Lime Soda** (₹80) if you want something lighter. 🥭',
       upsell: 'Mango Lassi',
       extra: '+₹110',
       icon: '💡',
@@ -572,7 +951,7 @@ function AIUpsellDemo() {
     if (!visible) return
     const t = setInterval(() => setStep(p => (p + 1) % scenarios.length), 4000)
     return () => clearInterval(t)
-  }, [visible])
+  }, [visible, scenarios.length])
 
   const cur = scenarios[step]
 
@@ -582,8 +961,8 @@ function AIUpsellDemo() {
       <div className="relative flex items-center gap-2 mb-5">
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-base">🤖</div>
         <div>
-          <p className="text-sm font-black text-white">Dinezy AI Upsell Engine</p>
-          <p className="text-[11px] text-white/45">Suggests at the right moment, every time</p>
+          <p className="text-sm font-black text-white">Dinezy AI Menu</p>
+          <p className="text-[11px] text-white/45">Answers questions, suggests at the right moment</p>
         </div>
         <div className="ml-auto flex items-center gap-1.5 bg-emerald-400/10 px-2.5 py-1 rounded-full border border-emerald-400/15">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -612,39 +991,18 @@ function AIUpsellDemo() {
         </div>
       </div>
 
-      <div className="relative flex gap-1.5 justify-center mb-5">
+      <div className="relative flex gap-1.5 justify-center">
         {scenarios.map((_, i) => (
-          <button key={i} onClick={() => setStep(i)} className={`rounded-full transition-all duration-300 ${i === step ? 'w-6 h-1.5 bg-violet-400' : 'w-1.5 h-1.5 bg-white/20'}`} />
+          <button key={i} aria-label={`Show scenario ${i + 1}`} onClick={() => setStep(i)} className={`rounded-full transition-all duration-300 ${i === step ? 'w-6 h-1.5 bg-violet-400' : 'w-1.5 h-1.5 bg-white/20'}`} />
         ))}
-      </div>
-
-      <div className="relative bg-white/5 border border-white/10 rounded-2xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-bold text-white/60 uppercase tracking-wider">Revenue impact tonight</p>
-          <span className="text-xs font-black text-emerald-300 bg-emerald-400/10 px-2 py-0.5 rounded-full border border-emerald-400/15">+₹4,840</span>
-        </div>
-        <div className="space-y-2">
-          {[
-            { label: 'Without AI upsell', val: 63, amount: '₹12,400', color: 'bg-white/20' },
-            { label: 'With Dinezy AI', val: 100, amount: '₹17,240', color: 'bg-gradient-to-r from-violet-500 to-fuchsia-500' },
-          ].map(r => (
-            <div key={r.label}>
-              <div className="flex justify-between text-[11px] mb-1">
-                <span className="text-white/50">{r.label}</span>
-                <span className="text-white font-bold">{r.amount}</span>
-              </div>
-              <div className="h-2 bg-white/8 rounded-full overflow-hidden">
-                <div className={`h-full ${r.color} rounded-full transition-all duration-700`} style={{ width: `${r.val}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   )
 }
 
-/* ─── Stats ──────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────
+   ANIMATED STAT
+   ──────────────────────────────────────────────────────────────────────── */
 function AnimatedStat({ value, label, sub, delay = 0 }: { value: string; label: string; sub: string; delay?: number }) {
   const [visible, setVisible] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -664,26 +1022,157 @@ function AnimatedStat({ value, label, sub, delay = 0 }: { value: string; label: 
   )
 }
 
-/* ─── Data ───────────────────────────────────────────── */
-const features = [
-  { icon: '🍽️', title: 'Beautiful QR Menu', desc: 'Guests scan once and see a polished digital menu that adapts to every device. No app download, no friction.', stat: '3s avg load' },
-  { icon: '🤖', title: 'AI Menu Assistant', desc: 'Answers ingredient questions, recommends dishes, and suggests upsells naturally — without feeling pushy.', stat: 'Smart upsells' },
-  { icon: '🔔', title: 'Smart Waiter Call', desc: 'Guests tap once after selecting items. Staff get a live notification with the table number instantly.', stat: '12s response' },
-  { icon: '📊', title: 'Live Analytics', desc: 'Track what people open, what they search, what gets ordered, and what raises average bill value.', stat: 'Real-time' },
-  { icon: '💡', title: 'AI Upsell Engine', desc: 'At checkout and during browsing, AI suggests high-margin combos in context. Restaurants see +28% avg bill.', stat: '↑28% avg bill' },
-  { icon: '⚡', title: 'Instant Updates', desc: 'Edit items, prices, and availability from the dashboard. Changes go live instantly — no reprinting.', stat: 'Zero reprint' },
-]
+/* ────────────────────────────────────────────────────────────────────────
+   RESTAURANT DASHBOARD PREVIEW (updated, realistic non-revenue metrics)
+   ──────────────────────────────────────────────────────────────────────── */
+function DashboardPreviewSection() {
+  const kpis = [
+    { l: 'QR scans today', v: '312', c: 'text-sky-300', g: '↑ vs yesterday' },
+    { l: 'Repeat customers', v: '41', c: 'text-violet-300', g: 'this week' },
+    { l: 'Dinezy referred visits', v: '87', c: 'text-amber-300', g: 'this week' },
+    { l: 'Waiter response time', v: '12s', c: 'text-emerald-300', g: 'average' },
+  ]
 
-const analytics = [
-  { label: 'Avg bill increase', value: '+28%', sub: 'via AI upsells' },
-  { label: 'Table turn time', value: '-18%', sub: 'faster ordering' },
-  { label: 'Menu open rate', value: '94%', sub: 'of scanned QRs' },
-  { label: 'Waiter response', value: '12s', sub: 'average notify time' },
-]
+  return (
+    <section id="dashboard" className="py-24 px-4 sm:px-6 lg:px-8 mesh-bg">
+      <div className="max-w-7xl mx-auto">
+        <div className="max-w-2xl mb-12">
+          <span className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-emerald-300 uppercase tracking-wide mb-4">
+            Restaurant dashboard
+          </span>
+          <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4">Your restaurant's control center</h2>
+          <p className="text-white/55 text-lg">See exactly who's coming back, when they visit, and where they're finding you.</p>
+        </div>
 
-/* ─── Main Page ──────────────────────────────────────── */
+        <div className="glass rounded-3xl p-6 mb-10 shadow-[0_24px_80px_rgba(0,0,0,0.28)] overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/8 to-cyan-500/8 pointer-events-none" />
+          <div className="relative flex items-center gap-2 mb-5">
+            <div className="flex gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-400" />
+              <div className="w-3 h-3 rounded-full bg-amber-400" />
+              <div className="w-3 h-3 rounded-full bg-emerald-400" />
+            </div>
+            <div className="flex-1 bg-white/5 rounded-lg px-3 py-1 text-white/30 text-xs text-center border border-white/10">app.dinezy.in/dashboard</div>
+          </div>
+
+          <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            {kpis.map(s => (
+              <div key={s.l} className="bg-white/5 rounded-2xl p-4 border border-white/10">
+                <p className="text-white/40 text-xs mb-2">{s.l}</p>
+                <p className={`text-2xl font-black ${s.c}`}>{s.v}</p>
+                <p className="text-xs text-white/35 mt-1">{s.g}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="relative grid lg:grid-cols-3 gap-3">
+            <div className="lg:col-span-2 bg-white/5 rounded-2xl p-4 border border-white/10">
+              <p className="text-white font-bold text-sm mb-3">Visits by hour (peak hours)</p>
+              <div className="flex items-end gap-1.5 h-24">
+                {[30, 45, 35, 60, 80, 95, 72, 88, 100, 85, 70, 55, 40].map((h, i) => (
+                  <div key={i} className="flex-1 rounded-t-lg" style={{ height: `${h}%`, background: 'linear-gradient(to top, rgba(124,58,237,0.95), rgba(37,99,235,0.75))', opacity: 0.65 + h / 220 }} />
+                ))}
+              </div>
+              <div className="flex justify-between text-xs text-white/30 mt-2">
+                <span>9am</span><span>12pm</span><span>3pm</span><span>6pm</span><span>9pm</span>
+              </div>
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/8">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-violet-400" />
+                  <span className="text-[11px] text-white/45">Walk-in visits: <span className="text-white/70 font-semibold">64%</span></span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="text-[11px] text-white/45">Dinezy-referred: <span className="text-white/70 font-semibold">36%</span></span>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+              <p className="text-white font-bold text-sm mb-3">Top dishes by menu searches</p>
+              <div className="space-y-2.5">
+                {[
+                  { name: 'Butter Chicken', pct: 84 },
+                  { name: 'Paneer Tikka', pct: 61 },
+                  { name: 'Garlic Naan', pct: 55 },
+                  { name: 'Dal Makhani', pct: 38 },
+                ].map(d => (
+                  <div key={d.name}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-white/60">{d.name}</span>
+                      <span className="text-white/35">{d.pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${d.pct}%`, background: 'linear-gradient(to right, rgba(124,58,237,0.95), rgba(6,182,212,0.9))' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { title: 'QR scans', desc: 'Track scans per table, per day, and spot which tables and hours drive the most traffic.', icon: '📱' },
+            { title: 'Repeat customers', desc: 'See who has come back, how often, and how recently — your real loyalty picture.', icon: '🔁' },
+            { title: 'Menu searches', desc: 'Know exactly what guests search for and open, even if they never order it.', icon: '🔎' },
+            { title: 'Referred vs walk-in', desc: 'Separate visits the Dinezy network brought you from your own walk-in traffic.', icon: '🌐' },
+          ].map(f => (
+            <div key={f.title} className="glass rounded-2xl p-5 card-hover">
+              <div className="text-3xl mb-3">{f.icon}</div>
+              <h3 className="font-black text-white mb-2">{f.title}</h3>
+              <p className="text-white/55 text-sm leading-relaxed">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   TESTIMONIALS (placeholder)
+   ──────────────────────────────────────────────────────────────────────── */
+function TestimonialsSection() {
+  const quotes = [
+    { name: 'Restaurant owner', place: 'Baner, Pune', quote: 'Placeholder — real founding-restaurant testimonials will go here.' },
+    { name: 'Restaurant owner', place: 'Aundh, Pune', quote: 'Placeholder — real founding-restaurant testimonials will go here.' },
+    { name: 'Restaurant owner', place: 'Baner, Pune', quote: 'Placeholder — real founding-restaurant testimonials will go here.' },
+  ]
+  return (
+    <section id="testimonials" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
+      <div className="max-w-7xl mx-auto">
+        <div className="max-w-2xl mb-12">
+          <span className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-violet-300 uppercase tracking-wide mb-4">
+            What restaurants say
+          </span>
+          <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter">From our founding restaurants</h2>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {quotes.map((q, i) => (
+            <div key={i} className="glass rounded-3xl p-6 card-hover">
+              <p className="text-white/70 text-sm leading-relaxed italic mb-5">&ldquo;{q.quote}&rdquo;</p>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-white/8 border border-white/10 flex items-center justify-center text-sm">👤</div>
+                <div>
+                  <p className="text-white font-bold text-sm leading-none">{q.name}</p>
+                  <p className="text-white/40 text-xs mt-0.5">{q.place}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   MAIN PAGE
+   ──────────────────────────────────────────────────────────────────────── */
 export default function DinezyLanding() {
   const [demoOpen, setDemoOpen] = useState(false)
+  const [modalVariant, setModalVariant] = useState<ModalVariant>('demo')
   const [navScrolled, setNavScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -698,11 +1187,16 @@ export default function DinezyLanding() {
     setMobileOpen(false)
   }
 
+  const openModal = (variant: ModalVariant) => {
+    setModalVariant(variant)
+    setDemoOpen(true)
+  }
+
   const navLinks = [
-    { label: 'Features', id: 'features' },
-    { label: 'How it works', id: 'how' },
-    { label: 'AI Upsells', id: 'upsell' },
-    { label: 'Analytics', id: 'analytics' },
+    { label: 'Home', action: () => scrollTo('top') },
+    { label: 'Explore Restaurants', action: () => scrollTo('explore') },
+    { label: 'For Restaurants', action: () => scrollTo('for-restaurants') },
+    { label: 'Rewards', action: () => scrollTo('rewards') },
   ]
 
   return (
@@ -732,6 +1226,10 @@ export default function DinezyLanding() {
         }
         .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
         .card-hover:hover { transform: translateY(-5px); box-shadow: 0 20px 50px rgba(0,0,0,0.22); }
+        @media (prefers-reduced-motion: reduce) {
+          .fade-up, .fade-up-2, .fade-up-3, .shimmer-btn, .animate-slide-in { animation: none !important; }
+          .card-hover:hover { transform: none; }
+        }
       `}</style>
 
       {/* ── NAVBAR ── */}
@@ -740,17 +1238,20 @@ export default function DinezyLanding() {
           <DinezyLogo size={30} dark onClick={() => scrollTo('top')} />
           <nav className="hidden lg:flex items-center gap-0.5 glass rounded-2xl px-2 py-1.5">
             {navLinks.map(l => (
-              <button key={l.id} onClick={() => scrollTo(l.id)} className="px-3.5 py-2 rounded-xl text-sm font-semibold text-white/65 hover:bg-white/10 hover:text-white transition-all duration-200">
+              <button key={l.label} onClick={l.action} className="px-3.5 py-2 rounded-xl text-sm font-semibold text-white/65 hover:bg-white/10 hover:text-white transition-all duration-200 focus-visible:ring-2 focus-visible:ring-violet-400/60 outline-none">
                 {l.label}
               </button>
             ))}
           </nav>
           <div className="hidden lg:flex items-center gap-3">
-            <button onClick={() => setDemoOpen(true)} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-violet-600/20 hover:-translate-y-0.5 transition-all">
-              Book a demo →
+            <Link href="/login" className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white/70 hover:text-white transition-colors">
+              Login
+            </Link>
+            <button onClick={() => openModal('demo')} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-violet-600/20 hover:-translate-y-0.5 transition-all">
+              Book Demo →
             </button>
           </div>
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="lg:hidden w-10 h-10 border border-white/10 rounded-xl glass flex items-center justify-center">
+          <button onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle menu" aria-expanded={mobileOpen} className="lg:hidden w-10 h-10 border border-white/10 rounded-xl glass flex items-center justify-center">
             <span className="text-lg">{mobileOpen ? '✕' : '☰'}</span>
           </button>
         </div>
@@ -758,12 +1259,15 @@ export default function DinezyLanding() {
         {mobileOpen && (
           <div className="lg:hidden bg-[#060a14]/96 backdrop-blur-xl border-b border-white/10 px-4 py-4 space-y-2">
             {navLinks.map(l => (
-              <button key={l.id} onClick={() => scrollTo(l.id)} className="w-full text-left px-4 py-3 rounded-2xl border border-white/10 bg-white/5 font-semibold text-white/80 hover:bg-white/10 transition">
+              <button key={l.label} onClick={l.action} className="w-full text-left px-4 py-3 rounded-2xl border border-white/10 bg-white/5 font-semibold text-white/80 hover:bg-white/10 transition">
                 {l.label}
               </button>
             ))}
-            <button onClick={() => { setDemoOpen(true); setMobileOpen(false) }} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3.5 rounded-2xl font-bold shadow-lg mt-2">
-              Book a demo →
+            <Link href="/login" className="block w-full text-left px-4 py-3 rounded-2xl border border-white/10 bg-white/5 font-semibold text-white/80 hover:bg-white/10 transition">
+              Login
+            </Link>
+            <button onClick={() => { openModal('demo'); setMobileOpen(false) }} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3.5 rounded-2xl font-bold shadow-lg mt-2">
+              Book Demo →
             </button>
           </div>
         )}
@@ -778,139 +1282,77 @@ export default function DinezyLanding() {
         </div>
 
         <div className="relative max-w-7xl mx-auto grid lg:grid-cols-2 gap-14 lg:gap-12 items-center">
-          {/* Copy */}
           <div>
             <div className="fade-up inline-flex items-center gap-2 glass rounded-full px-4 py-2 mb-6">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-sm font-semibold text-white/80">India's smartest QR menu platform</span>
+              <span className="text-sm font-semibold text-white/80">India's restaurant growth platform</span>
             </div>
             <h1 className="fade-up text-5xl sm:text-6xl lg:text-7xl font-black leading-[0.92] tracking-tighter mb-6">
-              Your menu,
-              <span className="block bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text text-transparent mt-1">upgraded.</span>
+              Turn first-time guests
+              <span className="block bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text text-transparent mt-1">into regulars.</span>
             </h1>
             <p className="fade-up-2 text-white/60 text-lg leading-relaxed max-w-lg mb-8">
-              Guests scan a QR, browse beautifully, get AI recommendations, and call the waiter — all without downloading anything. You see it all in your dashboard, live.
+              Dinezy is the reward network that brings diners back to your restaurant — plus the QR menu, waiter calling, AI menu and analytics that make every visit smoother. Rewards funded by Dinezy, not your margins.
             </p>
             <div className="fade-up-2 flex flex-wrap gap-3 mb-8">
               <button
-                onClick={() => setDemoOpen(true)}
+                onClick={() => openModal('founding')}
                 className="flex items-center gap-2 text-white px-7 py-4 rounded-2xl font-bold text-base shadow-xl hover:-translate-y-1 transition-all shimmer-btn"
-                style={{ backgroundImage: 'linear-gradient(135deg, #7c3aed, #d946ef, #2563eb, #7c3aed)', backgroundSize: '200% auto', animation: 'shimmer 3.5s linear infinite' }}
+                style={{ backgroundImage: 'linear-gradient(135deg, #7c3aed, #d946ef, #2563eb, #7c3aed)', backgroundSize: '200% auto' }}
               >
-                Book a free demo →
+                Become Founding Restaurant →
               </button>
-              <button onClick={() => scrollTo('features')} className="px-7 py-4 rounded-2xl border border-white/10 glass font-semibold text-white/80 hover:bg-white/10 transition-all">
-                See features
+              <button onClick={() => scrollTo('explore')} className="px-7 py-4 rounded-2xl border border-white/10 glass font-semibold text-white/80 hover:bg-white/10 transition-all">
+                Explore Restaurants
               </button>
             </div>
             <div className="fade-up-3 flex flex-wrap gap-2">
-              {['Live demo, no card needed', 'Setup in under 30 min', '7-day free after demo'].map(b => (
+              {['Rewards funded by Dinezy', 'Setup in under 30 min', 'No forced discounts'].map(b => (
                 <span key={b} className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-sm text-white/55 font-medium">✓ {b}</span>
               ))}
             </div>
           </div>
 
-          {/* Auto Waiter Demo */}
           <div className="flex justify-center lg:justify-end">
             <WaiterCallDemo />
           </div>
         </div>
 
-        {/* Stats strip */}
         <div className="relative max-w-7xl mx-auto mt-16 grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {analytics.map((s, i) => (
-            <AnimatedStat key={s.label} value={s.value} label={s.label} sub={s.sub} delay={i * 80} />
-          ))}
+          <AnimatedStat value="8+" label="Restaurants on network" sub="in Pune, growing weekly" delay={0} />
+          <AnimatedStat value="12s" label="Waiter response time" sub="average across restaurants" delay={80} />
+          <AnimatedStat value="94%" label="Menu open rate" sub="of scanned QRs" delay={160} />
+          <AnimatedStat value="₹0" label="Cost to join rewards" sub="funded by Dinezy" delay={240} />
         </div>
       </section>
 
+      <FeaturedRestaurantsSection />
+      <DinerJourneySection />
+      <RestaurantJourneySection />
+      <RewardNetworkSection />
+      <DashboardPreviewSection />
       <RestaurantWebsiteSection />
 
-      {/* ── FEATURES ── */}
-      <section id="features" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mb-12">
-            <span className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-violet-300 uppercase tracking-wide mb-4">
-              Platform features
-            </span>
-            <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4">Everything your restaurant needs</h2>
-            <p className="text-white/55 text-lg">One platform. Zero reprinting. More revenue per table.</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {features.map(f => (
-              <div key={f.title} className="glass rounded-3xl p-6 card-hover">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl">{f.icon}</div>
-                  <span className="text-xs font-bold text-white/65 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">{f.stat}</span>
-                </div>
-                <h3 className="font-black text-white text-lg mb-2">{f.title}</h3>
-                <p className="text-white/55 text-sm leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── HOW IT WORKS ── */}
-      <section id="how" className="py-24 px-4 sm:px-6 lg:px-8 mesh-bg">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mb-16">
-            <span className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-cyan-300 uppercase tracking-wide mb-4">
-              How it works
-            </span>
-            <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4">Simple for you. Magical for guests.</h2>
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-12 items-start">
-            <div className="space-y-3">
-              {[
-                { n: '01', t: 'Create your menu', d: 'Add dishes, categories, prices, and photos from your dashboard in minutes. No technical skills needed.' },
-                { n: '02', t: 'Print & place QR codes', d: 'Download QR codes for each table. Print them on standees or directly on your table. One scan opens everything.' },
-                { n: '03', t: 'Guest selects & calls waiter', d: 'Guests choose items, then tap "Call Waiter." Your staff sees the exact table number and items — instantly.' },
-                { n: '04', t: 'AI boosts every order', d: 'During browsing, AI nudges guests with smart combos, bestsellers, and high-margin pairings. Revenue goes up on its own.' },
-              ].map(s => (
-                <div key={s.n} className="flex gap-4 items-start glass rounded-2xl p-5 card-hover">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-white font-black text-sm flex-shrink-0 shadow-lg shadow-violet-600/20">{s.n}</div>
-                  <div>
-                    <h3 className="font-black text-white mb-1">{s.t}</h3>
-                    <p className="text-white/55 text-sm leading-relaxed">{s.d}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="glass rounded-3xl p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-sm font-semibold text-amber-300">Watch the full flow — automatically</span>
-              </div>
-              <p className="text-white/50 text-sm mb-5">This is exactly what your guests see on their phones when they scan the QR code at the table.</p>
-              <WaiterCallDemo />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── AI UPSELL ── */}
-      <section id="upsell" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
+      {/* ── AI MENU ── */}
+      <section id="ai-menu" className="py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div>
               <span className="inline-flex items-center gap-2 bg-fuchsia-500/10 border border-fuchsia-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-fuchsia-300 uppercase tracking-wide mb-5">
-                AI Upsell Engine
+                AI Menu
               </span>
               <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-5">
-                AI that sells for you,
+                A menu that answers,
                 <span className="block text-transparent bg-gradient-to-r from-fuchsia-400 to-violet-400 bg-clip-text">24/7</span>
               </h2>
               <p className="text-white/60 text-lg leading-relaxed mb-8">
-                While your guest browses the menu, Dinezy's AI watches what they pick and quietly suggests the perfect addition — a combo, a drink, a dessert — in a way that feels helpful, not pushy. Restaurants using it see a <span className="text-white font-bold">28% higher average bill</span> within the first week.
+                Guests ask questions about ingredients, spice level, or what to order — the AI Menu answers instantly and suggests the right pairing at the right moment, without feeling pushy.
               </p>
               <div className="space-y-4 mb-8">
                 {[
-                  { icon: '🧠', title: 'Learns your bestsellers', desc: 'AI trains on your own order data. It recommends what actually sells — not generic suggestions.' },
-                  { icon: '⏱️', title: 'Suggests at the right moment', desc: 'At checkout, during browsing, and when asked — the AI knows when to speak up and when to stay quiet.' },
-                  { icon: '📈', title: 'Measurable revenue lift', desc: 'See the exact rupee impact in your dashboard. Track upsell conversion by item, by table, by time of day.' },
+                  { icon: '🧠', title: 'Learns your bestsellers', desc: 'Trains on your own order data, so suggestions match what actually sells at your restaurant.' },
+                  { icon: '⏱️', title: 'Suggests at the right moment', desc: 'At checkout, during browsing, and when asked — it knows when to speak up and when to stay quiet.' },
+                  { icon: '📈', title: 'Visible in your dashboard', desc: 'See every suggestion and what guests accepted, by item, by table, by time of day.' },
                 ].map(f => (
                   <div key={f.title} className="flex gap-3.5 items-start">
                     <div className="w-10 h-10 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/20 flex items-center justify-center text-lg flex-shrink-0">{f.icon}</div>
@@ -921,127 +1363,72 @@ export default function DinezyLanding() {
                   </div>
                 ))}
               </div>
-              <button onClick={() => setDemoOpen(true)} className="inline-flex items-center gap-2 bg-gradient-to-r from-fuchsia-600 to-violet-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-fuchsia-600/20 hover:-translate-y-0.5 transition-all">
-                See AI upsells live in your demo →
+              <button onClick={() => openModal('demo')} className="inline-flex items-center gap-2 bg-gradient-to-r from-fuchsia-600 to-violet-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-fuchsia-600/20 hover:-translate-y-0.5 transition-all">
+                See the AI Menu live in your demo →
               </button>
             </div>
-            <AIUpsellDemo />
+            <AIMenuDemo />
           </div>
         </div>
       </section>
 
-      {/* ── ANALYTICS ── */}
-      <section id="analytics" className="py-24 px-4 sm:px-6 lg:px-8 mesh-bg">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mb-12">
-            <span className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-emerald-300 uppercase tracking-wide mb-4">
-              Restaurant dashboard
-            </span>
-            <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4">Your restaurant's control center</h2>
-            <p className="text-white/55 text-lg">Every insight you need to optimize performance, boost revenue, and serve guests faster.</p>
+      {/* ── CALL WAITER (dedicated section, reused animation) ── */}
+      <section id="call-waiter" className="py-24 px-4 sm:px-6 lg:px-8 mesh-bg">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
+          <div className="order-2 lg:order-1 flex justify-center">
+            <WaiterCallDemo />
           </div>
-
-          <div className="glass rounded-3xl p-6 mb-10 shadow-[0_24px_80px_rgba(0,0,0,0.28)] overflow-hidden relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/8 to-cyan-500/8 pointer-events-none" />
-            <div className="relative flex items-center gap-2 mb-5">
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-red-400" />
-                <div className="w-3 h-3 rounded-full bg-amber-400" />
-                <div className="w-3 h-3 rounded-full bg-emerald-400" />
-              </div>
-              <div className="flex-1 bg-white/5 rounded-lg px-3 py-1 text-white/30 text-xs text-center border border-white/10">app.dinezy.in/dashboard</div>
-            </div>
-            <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-              {[
-                { l: "Today's revenue", v: '₹18,420', c: 'text-emerald-300', g: '↑14%' },
-                { l: 'Active tables', v: '7 / 20', c: 'text-sky-300', g: 'Now' },
-                { l: 'Avg bill', v: '₹921', c: 'text-violet-300', g: '↑28%' },
-                { l: 'Waiter calls', v: '12', c: 'text-amber-300', g: 'Today' },
-              ].map(s => (
-                <div key={s.l} className="bg-white/5 rounded-2xl p-4 border border-white/10">
-                  <p className="text-white/40 text-xs mb-2">{s.l}</p>
-                  <p className={`text-2xl font-black ${s.c}`}>{s.v}</p>
-                  <p className="text-xs text-white/35 mt-1">{s.g}</p>
+          <div className="order-1 lg:order-2">
+            <span className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-amber-300 uppercase tracking-wide mb-5">
+              Call Waiter
+            </span>
+            <h2 className="text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-5">No more waving down staff</h2>
+            <p className="text-white/60 text-lg leading-relaxed mb-8 max-w-md">
+              Guests select what they need and tap once. Your team gets the exact table number, instantly — no app, no waiting to be noticed across a busy floor.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {['Instant table alerts', 'No guest app needed', 'Average 12s response', 'Works on any device'].map(item => (
+                <div key={item} className="glass rounded-2xl px-4 py-3 border border-white/10">
+                  <p className="text-sm font-semibold text-white/80">✓ {item}</p>
                 </div>
               ))}
             </div>
-            <div className="relative grid lg:grid-cols-3 gap-3">
-              <div className="lg:col-span-2 bg-white/5 rounded-2xl p-4 border border-white/10">
-                <p className="text-white font-bold text-sm mb-3">Revenue by hour</p>
-                <div className="flex items-end gap-1.5 h-24">
-                  {[30, 45, 35, 60, 80, 95, 72, 88, 100, 85, 70, 55, 40].map((h, i) => (
-                    <div key={i} className="flex-1 rounded-t-lg" style={{ height: `${h}%`, background: 'linear-gradient(to top, rgba(124,58,237,0.95), rgba(37,99,235,0.75))', opacity: 0.65 + h / 220 }} />
-                  ))}
-                </div>
-                <div className="flex justify-between text-xs text-white/30 mt-2">
-                  <span>9am</span><span>12pm</span><span>3pm</span><span>6pm</span><span>9pm</span>
-                </div>
-              </div>
-              <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-                <p className="text-white font-bold text-sm mb-3">Top dishes today</p>
-                <div className="space-y-2.5">
-                  {[
-                    { name: 'Butter Chicken', pct: 84 },
-                    { name: 'Paneer Tikka', pct: 61 },
-                    { name: 'Garlic Naan', pct: 55 },
-                    { name: 'Dal Makhani', pct: 38 },
-                  ].map(d => (
-                    <div key={d.name}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-white/60">{d.name}</span>
-                        <span className="text-white/35">{d.pct}%</span>
-                      </div>
-                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${d.pct}%`, background: 'linear-gradient(to right, rgba(124,58,237,0.95), rgba(6,182,212,0.9))' }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { title: 'Revenue heatmap', desc: 'See which hours and days drive the most orders. Optimize staffing and promotions.', icon: '🔥' },
-              { title: 'Item performance', desc: 'Know which dishes get opened most, which get skipped, and what the AI recommends.', icon: '📈' },
-              { title: 'Table behavior', desc: 'Average time-to-order, most-called tables, and peak demand windows per section.', icon: '🗂️' },
-              { title: 'AI upsell log', desc: 'See every upsell suggestion and its conversion. Understand what guests respond to.', icon: '💬' },
-            ].map(f => (
-              <div key={f.title} className="glass rounded-2xl p-5 card-hover">
-                <div className="text-3xl mb-3">{f.icon}</div>
-                <h3 className="font-black text-white mb-2">{f.title}</h3>
-                <p className="text-white/55 text-sm leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
           </div>
         </div>
       </section>
 
-      {/* ── CTA BANNER (replaces pricing) ── */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
+      <TestimonialsSection />
+
+      {/* ── FOUNDING RESTAURANT CTA ── */}
+      <section id="founding-cta" className="py-20 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
         <div className="max-w-4xl mx-auto text-center">
           <span className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-400/15 rounded-full px-4 py-1.5 text-xs font-bold text-violet-300 uppercase tracking-wide mb-6">
             Get started
           </span>
           <h2 className="text-4xl lg:text-6xl font-black leading-tight tracking-tighter mb-6">
-            Ready to upgrade
-            <span className="block text-transparent bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text">your restaurant?</span>
+            Ready to grow
+            <span className="block text-transparent bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text">repeat customers?</span>
           </h2>
           <p className="text-white/55 text-xl leading-relaxed mb-10 max-w-2xl mx-auto">
-            Book a free 30-minute demo. We'll set up your menu live, walk you through the dashboard, and show you exactly how much more revenue you can make. No card needed.
+            Join as a founding restaurant. We'll set up your menu live, walk you through the dashboard, and add you to the reward network — funded by Dinezy, at no cost to you.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <button
-              onClick={() => setDemoOpen(true)}
+              onClick={() => openModal('founding')}
               className="flex items-center gap-2 text-white px-10 py-5 rounded-2xl font-black text-lg shadow-2xl hover:-translate-y-1 transition-all shimmer-btn"
-              style={{ backgroundImage: 'linear-gradient(135deg, #7c3aed, #d946ef, #2563eb, #7c3aed)', backgroundSize: '200% auto', animation: 'shimmer 3.5s linear infinite' }}
+              style={{ backgroundImage: 'linear-gradient(135deg, #7c3aed, #d946ef, #2563eb, #7c3aed)', backgroundSize: '200% auto' }}
             >
-              Book my free demo →
+              Become Founding Restaurant →
+            </button>
+            <button
+              onClick={() => scrollTo('explore')}
+              className="px-10 py-5 rounded-2xl border border-white/10 glass font-bold text-lg text-white/80 hover:bg-white/10 transition-all"
+            >
+              Explore Restaurants
             </button>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 mt-8">
-            {['No credit card needed', '7-day free trial after demo', 'Setup in under 30 min', 'We respond within 2 hours'].map(b => (
+            {['No cost to join rewards', 'Setup in under 30 min', 'No forced discounts', 'We respond within 2 hours'].map(b => (
               <span key={b} className="text-sm text-white/45 flex items-center gap-1.5">
                 <span className="text-emerald-400">✓</span> {b}
               </span>
@@ -1056,7 +1443,7 @@ export default function DinezyLanding() {
           <div className="grid lg:grid-cols-3 gap-10 pb-10 border-b border-white/10">
             <div className="lg:col-span-1">
               <DinezyLogo size={40} dark className="mb-4" />
-              <p className="text-white/50 text-sm leading-relaxed mb-5">AI-powered QR menus that make every restaurant experience feel premium. Built for Indian restaurants.</p>
+              <p className="text-white/50 text-sm leading-relaxed mb-5">The restaurant growth platform built around a shared reward network. Built for Indian restaurants.</p>
               <div className="space-y-2 text-sm text-white/50 border-t border-white/10 pt-4">
                 <p className="text-white/65 font-semibold text-xs uppercase tracking-wide mb-3">Contact details</p>
                 <p><span className="text-white/35">Address: </span>Balewadi, Pune 411045, Maharashtra, India</p>
@@ -1065,16 +1452,16 @@ export default function DinezyLanding() {
               </div>
               <div className="flex items-center gap-2 bg-emerald-400/10 border border-emerald-400/15 rounded-xl px-3 py-2 w-fit mt-5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-emerald-300 text-xs font-semibold">Accepting new restaurants</span>
+                <span className="text-emerald-300 text-xs font-semibold">Accepting founding restaurants</span>
               </div>
             </div>
 
             <div>
               <p className="font-black text-sm text-white mb-4 uppercase tracking-wide">Company</p>
               <ul className="space-y-2.5">
-                {[{ label: 'About us', href: '/about' }, { label: 'Contact us', href: '/contact' }, { label: 'Book a demo', href: '#' }].map(l => (
+                {[{ label: 'About us', href: '/about' }, { label: 'Contact us', href: '/contact' }, { label: 'Explore restaurants', href: '/discovery' }, { label: 'Book a demo', href: '#' }].map(l => (
                   <li key={l.label}>
-                    <a href={l.href} onClick={l.href === '#' ? (e) => { e.preventDefault(); setDemoOpen(true) } : undefined} className="text-white/50 text-sm hover:text-white transition-colors">{l.label}</a>
+                    <a href={l.href} onClick={l.href === '#' ? (e) => { e.preventDefault(); openModal('demo') } : undefined} className="text-white/50 text-sm hover:text-white transition-colors">{l.label}</a>
                   </li>
                 ))}
               </ul>
@@ -1089,7 +1476,7 @@ export default function DinezyLanding() {
               </ul>
               <div className="mt-6 bg-cyan-500/8 border border-cyan-400/12 rounded-xl p-4">
                 <p className="text-cyan-300 text-xs font-semibold mb-1">Secure payments via Razorpay</p>
-                <p className="text-white/40 text-xs leading-relaxed">All transactions are processed securely. We do not store your payment details. Subscriptions can be cancelled anytime.</p>
+                <p className="text-white/40 text-xs leading-relaxed">All transactions are processed securely. We do not store your payment details.</p>
               </div>
             </div>
           </div>
@@ -1097,16 +1484,16 @@ export default function DinezyLanding() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8">
             <div className="text-center sm:text-left">
               <p className="text-white/40 text-sm">© 2025 Dinezy. All rights reserved. Made in India 🇮🇳</p>
-              <p className="text-white/22 text-xs mt-1">Prices are in INR. Subscriptions auto-renew unless cancelled before the next billing date.</p>
+              <p className="text-white/22 text-xs mt-1">Prices are in INR.</p>
             </div>
-            <button onClick={() => setDemoOpen(true)} className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-violet-600/20 hover:-translate-y-0.5 transition-all">
+            <button onClick={() => openModal('demo')} className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-violet-600/20 hover:-translate-y-0.5 transition-all">
               Book a demo →
             </button>
           </div>
         </div>
       </footer>
 
-      <BookDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+      <BookDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} variant={modalVariant} />
     </div>
   )
 }

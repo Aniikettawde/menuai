@@ -431,7 +431,8 @@ function RestaurantRow({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics'>('overview')
+  const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics' | 'waitlist'>('overview')
+
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [analytics, setAnalytics] = useState<{
@@ -450,30 +451,45 @@ export default function AdminPage() {
     total_payments: number
     total_failed: number
   } | null>(null)
+  
+ const [waitlistData, setWaitlistData] = useState<{
+  funnel: { screen: string; sessions: number }[]
+  survey_breakdown: Record<string, Record<string, number>>
+  faq_counts: Record<string, number>
+  faq_reader_sessions: number
+  total_sessions: number
+  total_survey_started: number
+  total_survey_completed: number
+  total_completed_signup: number
+  total_incomplete_signup: number
+} | null>(null)
 
-  const loadAll = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [rRes, pRes, aRes] = await Promise.all([
-        fetch('/api/admin/restaurants'),
-        fetch('/api/admin/payments'),
-        fetch('/api/admin/analytics'),
-      ])
+ const loadAll = useCallback(async () => {
+  setLoading(true)
+  try {
+    const [rRes, pRes, aRes, wRes] = await Promise.all([
+      fetch('/api/admin/restaurants'),
+      fetch('/api/admin/payments'),
+      fetch('/api/admin/analytics'),
+      fetch('/api/admin/waitlist-analytics'),
+    ])
 
-      const rData = await rRes.json()
-      const pData = await pRes.json()
-      const aData = await aRes.json()
+    const rData = await rRes.json()
+    const pData = await pRes.json()
+    const aData = await aRes.json()
+    const wData = await wRes.json()
 
-      setRestaurants(rData.restaurants ?? [])
-      setPayments(pData.payments ?? [])
-      setPaymentSummary(pData.summary ?? null)
-      setAnalytics(aData)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+    setRestaurants(rData.restaurants ?? [])
+    setPayments(pData.payments ?? [])
+    setPaymentSummary(pData.summary ?? null)
+    setAnalytics(aData)
+    setWaitlistData(wData)
+  } catch (err) {
+    console.error(err)
+  } finally {
+    setLoading(false)
+  }
+}, [])
 
   const toggleDiscovery = useCallback(
     async (restaurant: Restaurant) => {
@@ -539,7 +555,9 @@ export default function AdminPage() {
     { key: 'restaurants', label: `Restaurants (${totalRestaurants})`, icon: <Users size={13} /> },
     { key: 'payments', label: 'Payments', icon: <CreditCard size={13} /> },
     { key: 'analytics', label: 'Analytics', icon: <Activity size={13} /> },
-  ] as const
+
+  { key: 'waitlist', label: 'Waitlist Funnel', icon: <Sparkles size={13} /> },
+] as const
 
   return (
     <div className="space-y-5">
@@ -633,6 +651,8 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
+			  
+			  
 
               {/* Recent payments */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
@@ -659,6 +679,110 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+		  
+		  {tab === 'waitlist' && waitlistData && (
+  <div className="space-y-5">
+    {/* KPI summary */}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <KpiCard
+        label="Page visitors"
+        value={waitlistData.total_sessions}
+        icon={<Eye size={14} />}
+        color="bg-blue-500/10 text-blue-400"
+      />
+      <KpiCard
+        label="Took the survey"
+        value={waitlistData.total_survey_completed}
+        sub={`${waitlistData.total_survey_started} started`}
+        icon={<Sparkles size={14} />}
+        color="bg-purple-500/10 text-purple-400"
+      />
+      <KpiCard
+        label="Completed signup"
+        value={waitlistData.total_completed_signup}
+        sub="verified via OTP"
+        icon={<CheckCircle2 size={14} />}
+        color="bg-emerald-500/10 text-emerald-400"
+      />
+      <KpiCard
+        label="Dropped off"
+        value={waitlistData.total_incomplete_signup}
+        sub={
+          waitlistData.total_sessions > 0
+            ? `${((waitlistData.total_incomplete_signup / waitlistData.total_sessions) * 100).toFixed(0)}% of visitors`
+            : undefined
+        }
+        icon={<XCircle size={14} />}
+        color="bg-red-500/10 text-red-400"
+      />
+    </div>
+    {/* Funnel */}
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+      <p className="mb-4 text-sm font-semibold text-white">Signup funnel (30d) · {waitlistData.total_sessions} sessions</p>
+      <div className="space-y-2">
+        {waitlistData.funnel.map((f, i) => {
+          const prev = waitlistData.funnel[i - 1]?.sessions
+          const pct = prev ? Math.round((f.sessions / prev) * 100) : 100
+          const maxSessions = waitlistData.funnel[0]?.sessions || 1
+          return (
+            <div key={f.screen} className="flex items-center gap-3">
+              <span className="w-14 shrink-0 text-[10px] text-zinc-500">{f.screen}</span>
+              <div className="flex-1">
+                <div className="h-4 w-full rounded-md bg-zinc-800">
+                  <div
+                    className="h-4 rounded-md bg-purple-500"
+                    style={{ width: `${Math.max(2, (f.sessions / maxSessions) * 100)}%` }}
+                  />
+                </div>
+              </div>
+              <span className="w-10 shrink-0 text-right text-xs font-bold text-zinc-300">{f.sessions}</span>
+              {i > 0 && <span className="w-12 shrink-0 text-right text-[10px] text-zinc-600">{pct}%</span>}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+
+    {/* Survey answer breakdown */}
+    <div className="grid gap-4 lg:grid-cols-2">
+      {Object.entries(waitlistData.survey_breakdown).map(([question, answers]) => {
+        const max = Math.max(...Object.values(answers))
+        return (
+          <div key={question} className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+            <p className="mb-3 text-sm font-semibold text-white">{question}</p>
+            <div className="space-y-2">
+              {Object.entries(answers).sort((a, b) => b[1] - a[1]).map(([answer, count]) => (
+                <div key={answer} className="flex items-center gap-3">
+                  <span className="w-40 shrink-0 truncate text-[10px] text-zinc-500">{answer}</span>
+                  <div className="flex-1">
+                    <div className="h-1.5 w-full rounded-full bg-zinc-800">
+                      <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${(count / max) * 100}%` }} />
+                    </div>
+                  </div>
+                  <span className="w-8 shrink-0 text-right text-xs font-bold text-zinc-300">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+
+    {/* FAQ engagement */}
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+      <p className="mb-1 text-sm font-semibold text-white">FAQ engagement</p>
+      <p className="mb-4 text-xs text-zinc-600">{waitlistData.faq_reader_sessions} of {waitlistData.total_sessions} visitors opened at least one FAQ</p>
+      <div className="space-y-2">
+        {Object.entries(waitlistData.faq_counts).sort((a, b) => b[1] - a[1]).map(([q, count]) => (
+          <div key={q} className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+            <span className="text-xs text-zinc-300">{q}</span>
+            <span className="text-xs font-bold text-purple-400">{count} opens</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
 
           {/* ── RESTAURANTS TAB ── */}
           {tab === 'restaurants' && (

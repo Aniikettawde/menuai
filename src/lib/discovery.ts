@@ -23,6 +23,8 @@ export function getDiscoveryServer() {
 
 export type DiscoveryRole = 'owner' | 'manager' | 'waiter'
 
+
+
 export type DiscoveryRestaurant = {
   id: string
   owner_id: string
@@ -108,4 +110,53 @@ export type DiscoveryReview = {
   comment: string | null
   is_public: boolean
   created_at: string
+}
+
+// ─── Dish search ─────────────────────────────────────────────────────────
+
+export type DishMatch = {
+  restaurant_id: string
+  matched_item_id: string
+  matched_name: string
+  matched_price: number
+  rank: number
+}
+
+/**
+ * Searches menu_items via full-text search first; falls back to trigram
+ * fuzzy match only if the exact search returns nothing (handles typos like
+ * "biryni" -> "biryani" without paying the fuzzy-search cost on every query).
+ */
+export async function searchRestaurantsByDish(
+  supabase: ReturnType<typeof getDiscoveryBrowser>,
+  query: string,
+): Promise<DishMatch[]> {
+  const q = query.trim()
+  if (!q) return []
+
+  const { data, error } = await supabase.rpc('search_restaurants_by_dish', {
+    search_query: q,
+    result_limit: 50,
+  })
+
+  if (error) {
+    console.error('Dish search error:', error)
+    return []
+  }
+
+  if (data && data.length > 0) return data as DishMatch[]
+
+  // Fallback: fuzzy match, only when the exact search found nothing
+  const { data: fuzzyData, error: fuzzyError } = await supabase.rpc(
+    'search_restaurants_by_dish_fuzzy',
+    { search_query: q, result_limit: 50 },
+  )
+  if (fuzzyError) {
+    console.error('Fuzzy dish search error:', fuzzyError)
+    return []
+  }
+  return ((fuzzyData ?? []) as Array<Omit<DishMatch, 'rank'> & { similarity: number }>).map((d) => ({
+    ...d,
+    rank: d.similarity,
+  }))
 }
