@@ -79,16 +79,35 @@ export default function RootLayout({
       lang="en"
       className={`${dmSans.variable} ${playfair.variable} ${jetbrainsMono.variable} scroll-smooth`}
     >
-      <body className="bg-[#050816] text-white antialiased">
-        {children}
-        <Script
-          id="google-adsense"
-          async
-          strategy="afterInteractive"
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9875875084938019"
-          crossOrigin="anonymous"
-        />
-      </body>
+     <body className="bg-[#050816] text-white antialiased">
+  {children}
+
+  {/* Google Analytics */}
+  <Script
+    src="https://www.googletagmanager.com/gtag/js?id=G-LCD36NFH1B"
+    strategy="afterInteractive"
+  />
+
+  <Script id="google-analytics" strategy="afterInteractive">
+    {`
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = gtag;
+      gtag('js', new Date());
+
+      gtag('config', 'G-LCD36NFH1B');
+    `}
+  </Script>
+
+  {/* Google AdSense */}
+  <Script
+    id="google-adsense"
+    async
+    strategy="afterInteractive"
+    src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9875875084938019"
+    crossOrigin="anonymous"
+  />
+</body>
     </html>
   )
 }
