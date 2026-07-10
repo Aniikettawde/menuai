@@ -81,6 +81,8 @@ export default function RootLayout({
     >
      <body className="bg-[#050816] text-white antialiased">
   {children}
+  
+ 
 
   {/* Google Analytics */}
   <Script
