@@ -1519,7 +1519,7 @@ export default function DinezyLanding() {
             <div>
               <p className="font-black text-sm text-white mb-4 uppercase tracking-wide">Legal</p>
               <ul className="space-y-2.5">
-                {[{ label: 'Privacy Policy', href: '/privacy-policy' }, { label: 'Terms & Conditions', href: '/terms' }, { label: 'Refund & Cancellation Policy', href: '/refund-policy' }].map(l => (
+                {[{ label: 'Privacy Policy', href: '/privacy-policy' }, { label: 'Terms & Conditions', href: '/terms' }, { label: 'Refund & Cancellation Policy', href: '/refunds' }].map(l => (
                   <li key={l.label}><a href={l.href} className="text-white/50 text-sm hover:text-white transition-colors">{l.label}</a></li>
                 ))}
               </ul>
