@@ -11,12 +11,12 @@ import { sendOTP, verifyOTP, clearRecaptcha, prepareRecaptcha } from '@/lib/fire
 import {
   Sparkles, Utensils, MapPin, Gift, ChevronRight,
   Loader2, Phone, Shield, ArrowRight, HelpCircle, X,
-  Stamp, Check, Receipt,
+  Stamp, Check, Receipt, QrCode, PartyPopper, Clock,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Screen = 'q1' | 'phone' | 'otp' | 'name' | 'done'
+type Screen = 'intro' | 'q1' | 'phone' | 'otp' | 'name' | 'done'
 
 interface Answers {
   interested: string | null
@@ -309,14 +309,96 @@ function StampSlot({ filled, label }: { filled: boolean; label: string }) {
   )
 }
 
+// ─── How-it-works slider — sits on the intro screen before signup ───────────
+
+function HowItWorksSlider() {
+  const [active, setActive] = useState(0)
+  const steps = [
+    { icon: <QrCode size={20} color="var(--saffron-deep)" />, title: 'Scan the QR at any Dinezy restaurant', desc: 'Every table has one — no app to download.' },
+    { icon: <Utensils size={20} color="var(--chili)" />, title: 'Order & eat like you always do', desc: 'Nothing changes about your meal.' },
+    { icon: <Stamp size={20} color="var(--cardamom)" />, title: 'Show your PIN, claim your points', desc: 'Your waiter verifies it in 5 seconds — points land instantly.' },
+  ]
+
+  useEffect(() => {
+    const t = setInterval(() => setActive((a) => (a + 1) % steps.length), 2600)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="hiw-slider">
+      <div className="hiw-track" style={{ transform: `translateX(-${active * 100}%)` }}>
+        {steps.map((s, i) => (
+          <div key={i} className="hiw-slide">
+            <div className="hiw-icon">{s.icon}</div>
+            <p className="hiw-title">{s.title}</p>
+            <p className="hiw-desc">{s.desc}</p>
+          </div>
+        ))}
+      </div>
+      <div className="hiw-dots">
+        {steps.map((_, i) => (
+          <span
+            key={i}
+            className={`hiw-dot ${i === active ? 'hiw-dot-active' : ''}`}
+            onClick={() => setActive(i)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Claim popup — celebratory burst before moving to the phone screen ──────
+
+function ClaimPopup({ open, onDone }: { open: boolean; onDone: () => void }) {
+  useEffect(() => {
+    if (!open) return
+    haptic([10, 40, 10])
+    const t = setTimeout(onDone, 1300)
+    return () => clearTimeout(t)
+  }, [open, onDone])
+
+  if (!open) return null
+  return (
+    <div className="claim-popup-overlay">
+      <div className="claim-popup-card">
+        <PartyPopper size={34} color="var(--chili)" />
+        <p className="claim-popup-points">+50</p>
+        <p className="claim-popup-label">Points Claimed!</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Floating WhatsApp button ─────────────────────────────────────────────────
+
+function WhatsAppButton() {
+  return (
+    
+     <a href="https://wa.aisensy.com/+15559382831"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Chat with us on WhatsApp"
+      className="whatsapp-float-btn"
+      onClick={() => haptic(10)}
+    >
+      <svg viewBox="0 0 32 32" width="24" height="24" fill="currentColor">
+        <path d="M16.001 3C9.107 3 3.5 8.607 3.5 15.5c0 2.44.71 4.71 1.936 6.627L3 29l7.06-2.393A12.44 12.44 0 0 0 16.001 28C22.895 28 28.5 22.393 28.5 15.5S22.895 3 16.001 3Zm7.28 17.71c-.31.87-1.53 1.6-2.51 1.81-.67.14-1.55.25-4.5-.97-3.78-1.57-6.22-5.4-6.41-5.65-.19-.25-1.53-2.04-1.53-3.89s.97-2.76 1.32-3.14c.31-.34.67-.42.9-.42.22 0 .45 0 .65.01.21.01.48-.08.75.57.31.75 1.04 2.6 1.13 2.79.09.19.15.41.03.66-.12.25-.19.41-.37.63-.19.22-.4.49-.57.66-.19.19-.39.4-.17.78.22.38.97 1.6 2.09 2.6 1.44 1.28 2.65 1.68 3.03 1.87.38.19.6.16.83-.1.22-.25.94-1.09 1.19-1.47.25-.38.5-.31.84-.19.34.13 2.15 1.02 2.52 1.2.37.19.62.28.71.44.09.16.09.9-.22 1.77Z" />
+      </svg>
+    </a>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function JoinPage() {
-  const [screen, setScreen] = useState<Screen>('q1')
+ const [screen, setScreen] = useState<Screen>('intro')
   const [answers, setAnswers] = useState<Answers>({ interested: null })
   const [justSelected, setJustSelected] = useState<string | null>(null)
   const [quizPoints, setQuizPoints] = useState(0)
   const [faqOpen, setFaqOpen] = useState(false)
+  const [showClaimPopup, setShowClaimPopup] = useState(false)
 
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
@@ -394,6 +476,34 @@ export default function JoinPage() {
       })
     }, 1000)
   }, [])
+  
+  const handleClaimClick = useCallback(() => {
+    setShowClaimPopup(true)
+  }, [])
+
+  const handleClaimPopupDone = useCallback(() => {
+    setShowClaimPopup(false)
+    setScreen('phone')
+  }, [])
+
+  const handleQuizSelect = useCallback((value: string) => {
+    setAnswers((a) => ({ ...a, interested: value }))
+    setJustSelected(value)
+    setQuizPoints((p) => p + 10)
+    haptic(12)
+    track({
+      session_id: sessionIdRef.current,
+      event_type: 'answer_select',
+      question_key: 'interested',
+      answer: value,
+    })
+    setTimeout(() => {
+      if (sessionRef.current) {
+        void finishJoin(sessionRef.current.customerId)
+      }
+    }, 260)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const selectAnswer = (key: keyof Answers, value: string, next: Screen) => {
     setAnswers((a) => ({ ...a, [key]: value }))
@@ -457,8 +567,8 @@ export default function JoinPage() {
 
       sessionRef.current = { uid, phone: finalPhone, customerId: custData.customer.id }
 
-      if (custData.customer.display_name) {
-        await finishJoin(custData.customer.id)
+       if (custData.customer.display_name) {
+        setScreen('q1')
       } else {
         setScreen('name')
       }
@@ -513,9 +623,9 @@ export default function JoinPage() {
           display_name: name.trim() || null,
         }),
       })
-      const data = await res.json()
+        const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      await finishJoin(data.customer.id)
+      setScreen('q1')
     } catch (err: any) {
       setError(err?.message ?? 'Something went wrong')
     } finally {
@@ -547,41 +657,34 @@ export default function JoinPage() {
       <div className="page-content">
         <div key={screen} className="ticket-enter">
 
-          {screen === 'q1' && (() => {
-            const q = QUESTIONS.q1
-            const key: keyof Answers = 'interested'
-            const nextScreen: Screen = 'phone'
-            return (
-              <TicketCard
-                stubLabel="TODAY'S OFFER"
-                stubValue="₹50 FREE"
-                stubIcon={<Gift size={15} color="var(--chili)" />}
-              >
-                <span className="eyebrow-tag">
-                  <MapPin size={11} /> EARLY ACCESS · PUNE
-                </span>
-                <h2 className="ticket-title">{q.title}</h2>
-                <p className="ticket-subtitle">
-                  Join free today and get ₹50 instantly, Earn another ₹50 every restaurant visit.
-                </p>
-                <div className="option-list">
-                  {q.options.map((opt, i) => (
-                    <div key={opt} className="option-stagger" style={{ animationDelay: `${i * 70}ms` }}>
-                      <OptionButton
-                        label={opt}
-                        selected={justSelected === opt}
-                        onSelect={() => selectAnswer(key, opt, nextScreen)}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="trust-strip">
-                  <span><Shield size={11} /> Secure, spam-free</span>
-                  <span><MapPin size={11} /> Live in Baner</span>
-                </div>
-              </TicketCard>
-            )
-          })()}
+   {screen === 'intro' && (
+            <TicketCard
+              stubLabel="STATUS"
+              stubValue="LAUNCHING SOON"
+              stubIcon={<Clock size={15} color="var(--chili)" />}
+            >
+              <span className="eyebrow-tag">
+                <MapPin size={11} /> EARLY ACCESS · PUNE
+              </span>
+              <h2 className="ticket-title">Get paid to eat out</h2>
+              <p className="ticket-subtitle">
+                Dinezy is launching soon in Baner. Join now and start earning from your very first visit.
+              </p>
+
+              <HowItWorksSlider />
+
+              <div className="mt-24">
+                <PrimaryButton onClick={handleClaimClick}>
+                  <Gift size={16} /> Claim your 50 points
+                </PrimaryButton>
+              </div>
+
+              <div className="trust-strip" style={{ marginTop: 14 }}>
+                <span><Shield size={11} /> Secure, spam-free</span>
+                <span><MapPin size={11} /> Live in Baner</span>
+              </div>
+            </TicketCard>
+          )}
 
           {screen === 'phone' && (
             <TicketCard stubLabel="STEP" stubValue="CLAIM YOUR POINTS" stubIcon={<Phone size={15} color="var(--saffron-deep)" />}>
@@ -676,11 +779,39 @@ export default function JoinPage() {
 
               {error && <p className="error-text">{error}</p>}
 
-              <PrimaryButton onClick={handleSaveName} loading={loading}>
+             <PrimaryButton onClick={handleSaveName} loading={loading}>
                 {loading ? (<><Loader2 size={16} className="spin" /> Setting up…</>) : (<><Gift size={16} /> Claim my rewards</>)}
               </PrimaryButton>
             </TicketCard>
           )}
+
+          {screen === 'q1' && (() => {
+            const q = QUESTIONS.q1
+            return (
+              <TicketCard
+                stubLabel="LAST STEP"
+                stubValue="TAILOR YOUR REWARDS"
+                stubIcon={<Sparkles size={15} color="var(--chili)" />}
+              >
+                <div className="icon-badge icon-badge-saffron"><Sparkles size={20} color="var(--saffron-deep)" /></div>
+                <h2 className="ticket-title ticket-title-sm">{q.title}</h2>
+                <p className="ticket-subtitle">
+                  One quick question — this helps us pick the right rewards for you.
+                </p>
+                <div className="option-list">
+                  {q.options.map((opt, i) => (
+                    <div key={opt} className="option-stagger" style={{ animationDelay: `${i * 70}ms` }}>
+                      <OptionButton
+                        label={opt}
+                        selected={justSelected === opt}
+                        onSelect={() => handleQuizSelect(opt)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </TicketCard>
+            )
+          })()}
 
           {screen === 'done' && (() => {
             const progressPct = Math.min((finalPoints / TARGET_POINTS) * 100, 100)
@@ -753,6 +884,10 @@ export default function JoinPage() {
       )}
 
       <FAQDrawer open={faqOpen} onClose={() => setFaqOpen(false)} onOpen={handleFaqOpen} />
+
+      <ClaimPopup open={showClaimPopup} onDone={handleClaimPopupDone} />
+
+      <WhatsAppButton />
 
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
@@ -1111,6 +1246,57 @@ export default function JoinPage() {
         /* ── Misc ── */
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .spin { animation: spin 1s linear infinite; }
+
+        .hiw-slider { overflow: hidden; margin: 4px 0 18px; }
+        .hiw-track { display: flex; transition: transform 0.5s cubic-bezier(0.65,0,0.35,1); }
+        .hiw-slide { flex: 0 0 100%; text-align: center; padding: 6px 10px 4px; }
+        .hiw-icon {
+          width: 44px; height: 44px; border-radius: 12px; margin: 0 auto 10px;
+          background: rgba(233,162,61,0.14);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .hiw-title { margin: 0 0 4px; font-size: 14px; font-weight: 700; color: var(--ink-text); }
+        .hiw-desc { margin: 0; font-size: 12px; color: var(--ink-text-soft); line-height: 1.5; }
+        .hiw-dots { display: flex; justify-content: center; gap: 6px; margin-top: 12px; }
+        .hiw-dot {
+          width: 6px; height: 6px; border-radius: 50%; background: rgba(44,24,16,0.18);
+          cursor: pointer; transition: all 0.2s ease;
+        }
+        .hiw-dot-active { width: 18px; border-radius: 4px; background: var(--chili); }
+
+        /* ── Claim popup ── */
+        .claim-popup-overlay {
+          position: fixed; inset: 0; z-index: 80;
+          background: rgba(0,0,0,0.55);
+          display: flex; align-items: center; justify-content: center;
+          animation: fadeIn 0.2s ease both;
+        }
+        .claim-popup-card {
+          background: linear-gradient(180deg, var(--paper) 0%, #F6E4C6 100%);
+          border-radius: 20px; padding: 32px 40px; text-align: center;
+          box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+          animation: claimPopIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+        @keyframes claimPopIn {
+          0%   { transform: scale(0.6); opacity: 0; }
+          60%  { transform: scale(1.08); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .claim-popup-points {
+          margin: 10px 0 2px; font-size: 34px; font-weight: 700; color: var(--chili-deep);
+          font-family: var(--font-display);
+        }
+        .claim-popup-label { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-text-soft); }
+
+        /* ── WhatsApp float button ── */
+        .whatsapp-float-btn {
+          position: fixed; bottom: 20px; left: 20px; z-index: 40;
+          width: 48px; height: 48px; border-radius: 50%;
+          background: #25D366; color: #fff;
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 6px 20px rgba(0,0,0,0.4); cursor: pointer;
+          text-decoration: none;
+        }
 
         @media (prefers-reduced-motion: reduce) {
           .ticket-enter, .option-stagger, .points-bump, .award-toast,
