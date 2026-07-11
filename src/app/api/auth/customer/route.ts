@@ -26,6 +26,8 @@ export interface CustomerProfile {
   created_at:     string
 }
 
+const SIGNUP_BONUS_POINTS = 50
+
 // ─── GET: fetch account data (visits + offers) ────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -154,10 +156,7 @@ const claimedOffers = (claimedRows ?? []).map((row) => {
   }
 })
 
-// Then update the final return to include claimedOffers:
-return NextResponse.json({ visits, offers, claimedOffers })
-
-    return NextResponse.json({ visits, offers })
+    return NextResponse.json({ visits, offers, claimedOffers })
   } catch (err) {
     console.error('[customer GET]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -174,6 +173,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing firebase_uid or phone' }, { status: 400 })
     }
 
+    // Determine BEFORE writing whether this is a brand-new customer — the
+    // 50-point welcome bonus must only ever fire once, on true first signup,
+    // never on a later profile update (e.g. adding a display name) or on a
+    // repeat visit from an already-registered phone.
+    const { data: existing, error: lookupErr } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('firebase_uid', body.firebase_uid)
+      .maybeSingle()
+
+    if (lookupErr) {
+      console.error('[customer lookup]', lookupErr)
+      return NextResponse.json({ error: lookupErr.message }, { status: 500 })
+    }
+
+    const isNewCustomer = !existing
+
     // Upsert customer — create or return existing
    const { data: customer, error } = await supabase
   .from('customers')
@@ -183,6 +199,9 @@ export async function POST(req: NextRequest) {
       phone:        body.phone,
       // ✅ Only set display_name if one was actually provided
       ...(body.display_name != null && { display_name: body.display_name }),
+      // ✅ Welcome bonus — only included on the insert path, so an existing
+      // customer's balance is never touched or reset by this upsert.
+      ...(isNewCustomer && { loyalty_points: SIGNUP_BONUS_POINTS }),
       updated_at:   new Date().toISOString(),
     },
     { onConflict: 'firebase_uid', ignoreDuplicates: false },
@@ -198,7 +217,7 @@ export async function POST(req: NextRequest) {
     // Log the restaurant visit
    
 
-    return NextResponse.json({ customer })
+    return NextResponse.json({ customer, isNewCustomer, bonusAwarded: isNewCustomer ? SIGNUP_BONUS_POINTS : 0 })
   } catch (err) {
     console.error('[customer auth route]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

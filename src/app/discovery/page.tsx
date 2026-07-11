@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { ChefHat, ArrowUpRight, BarChart3, BadgePercent, Users } from 'lucide-react'
 import { getDiscoveryBrowser, type DiscoveryOffer, type DiscoveryRestaurant, type DishMatch } from '@/lib/discovery'
 import { DiscoveryHeader } from '@/components/discovery/DiscoveryHeader'
@@ -12,6 +12,10 @@ import { HorizontalSection } from '@/components/discovery/HorizontalSection'
 import { RestaurantCard, type RestaurantCardData } from '@/components/discovery/RestaurantCard'
 import { useSavedRestaurants, useRecentlyViewed } from '@/hooks/usePersonalization'
 import { useInfiniteRestaurants, useLoadMoreSentinel } from '@/hooks/useInfiniteRestaurants'
+import { SignupBonusPopup } from '@/components/SignupBonusPopup'
+import { OTPLoginModal } from '@/components/OTPLoginModal'
+import { CustomerAccountDrawer } from '@/components/CustomerAccountDrawer'
+import { useCustomerAuth } from '@/store/customer-auth-store'
 
 type ListingRow = DiscoveryRestaurant & {
   offers?: DiscoveryOffer[]
@@ -87,6 +91,19 @@ const discoveryTheme: React.CSSProperties = {
   '--green': '#15803d',
   '--font-display': "'Fraunces', Georgia, serif",
   '--font-body': "'Inter', system-ui, sans-serif",
+  '--pr-black': '#F8F4EC',
+  '--pr-card': '#FFFFFF',
+  '--pr-card-hover': '#F7F2E7',
+  '--pr-border': 'rgba(33,30,27,0.08)',
+  '--pr-border-hover': 'rgba(33,30,27,0.14)',
+  '--pr-gold': '#8A6D1F',
+  '--pr-gold-dim': '#F3E6D2',
+  '--pr-orange': '#7A1F2B',
+  '--pr-orange-dim': '#F5E6E8',
+  '--pr-cta-text': '#F8F4EC',
+  '--pr-text': '#211E1B',
+  '--pr-text-muted': '#6B6560',
+  '--pr-text-faint': '#A39C90',
 } as React.CSSProperties
 
 export default function DiscoveryPage() {
@@ -96,23 +113,25 @@ export default function DiscoveryPage() {
   const { savedIds, toggleSave } = useSavedRestaurants()
   const { recentIds } = useRecentlyViewed()
 
+  const { customer, isLoggedIn } = useCustomerAuth()
+
+  const [loginOpen, setLoginOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+
   const { rows, loading, loadingMore, hasMore, error, dishMatches, loadMore, retry } = useInfiniteRestaurants({
-  supabase,
-  city: CITY,
-   category: null,
-  offersOnly: false,
-  sortMode: 'rated',
-  searchQuery: explore.query,
-})
+    supabase,
+    city: CITY,
+    category: null,
+    offersOnly: false,
+    sortMode: 'rated',
+    searchQuery: explore.query,
+  })
   const sentinelRef = useLoadMoreSentinel(loadMore, hasMore)
 
   const cards = useMemo(() => rows.map((r) => mapRowToCard(r as ListingRow, dishMatches)), [rows, dishMatches])
 
   const hasActiveSearch = Boolean(explore.query)
 
-  // ── Curated rails, all derived from the same fetched page — no extra
-  //    round-trips. At larger scale these become their own indexed queries
-  //    (see roadmap note); fine to derive client-side at city scale today.
   const trending = useMemo(() => [...cards].sort((a, b) => b.ratingCount - a.ratingCount).slice(0, 10), [cards])
   const bestOffers = useMemo(() => cards.filter((c) => c.hasActiveOffer).slice(0, 10), [cards])
   const topRated = useMemo(() => [...cards].sort((a, b) => b.ratingAvg - a.ratingAvg).slice(0, 10), [cards])
@@ -125,6 +144,7 @@ export default function DiscoveryPage() {
     () => recentIds.map((id) => cards.find((c) => c.id === id)).filter((c): c is RestaurantCardData => !!c),
     [recentIds, cards],
   )
+
   // Lightweight, honest heuristic — NOT ML. See file header note on real personalization needing server-side history.
   const recommended = useMemo(() => {
     const cuisineCounts = new Map<string, number>()
@@ -139,6 +159,18 @@ export default function DiscoveryPage() {
     searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [explore])
 
+  const profileInitial = customer?.display_name
+    ? customer.display_name.charAt(0).toUpperCase()
+    : customer?.phone?.slice(-2) ?? null
+
+  const handleProfileClick = useCallback(() => {
+    if (isLoggedIn) {
+      setAccountOpen(true)
+    } else {
+      setLoginOpen(true)
+    }
+  }, [isLoggedIn])
+
   return (
     <main style={{ ...discoveryTheme, background: 'var(--bg)', color: 'var(--text)', minHeight: '100dvh' }}>
       <style jsx global>{`
@@ -148,20 +180,20 @@ export default function DiscoveryPage() {
       <DiscoveryHeader
         locationLabel={CITY}
         onSearchClick={() => searchInputRef.current?.focus()}
-        rewardsPoints={null}
-        isLoggedIn={false}
-        onProfileClick={() => { /* wire to owner/customer auth entry point */ }}
+        rewardsPoints={customer?.loyalty_points ?? null}
+        isLoggedIn={isLoggedIn}
+        profileInitial={profileInitial}
+        onProfileClick={handleProfileClick}
       />
 
       <ExploreBar
         ref={searchInputRef}
         query={explore.query}
         onQueryChange={explore.setQuery}
-        
         resultCount={hasActiveSearch ? cards.length : undefined}
       />
 
-{!hasActiveSearch && <RewardsSlider />}
+      {!hasActiveSearch && <RewardsSlider />}
       {!hasActiveSearch && (
         <>
           {continueExploring.length > 0 && (
@@ -175,10 +207,6 @@ export default function DiscoveryPage() {
 
           <CravingBox onFallbackSearch={handleFallbackSearch} />
 
-          {/* First real restaurant content — this rail is the thing that
-              must land in the first viewport. Rated by review count as a
-              "what's actually popular right now" proxy until real
-              view/order-velocity tracking exists to back "Trending". */}
           <HorizontalSection
             title="Trending Today"
             subtitle={`in ${CITY}`}
@@ -227,16 +255,15 @@ export default function DiscoveryPage() {
         </>
       )}
 
-      {/* Full result grid — infinite scroll via Supabase range() pagination */}
       <section className="px-3 py-4 sm:px-6">
         <div className="mb-3 flex items-baseline justify-between">
-         <h2 className="text-[1.05rem] font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-  {hasActiveSearch
-    ? (dishMatches?.size ?? 0) > 0
-      ? `${cards.length} restaurants serving "${explore.query}"`
-      : `Results${explore.query ? ` for "${explore.query}"` : ''}`
-    : `All restaurants in ${CITY}`}
-</h2>
+          <h2 className="text-[1.05rem] font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+            {hasActiveSearch
+              ? (dishMatches?.size ?? 0) > 0
+                ? `${cards.length} restaurants serving "${explore.query}"`
+                : `Results${explore.query ? ` for "${explore.query}"` : ''}`
+              : `All restaurants in ${CITY}`}
+          </h2>
         </div>
 
         {error ? (
@@ -252,8 +279,8 @@ export default function DiscoveryPage() {
             <p className="text-[1.1rem] font-bold" style={{ fontFamily: 'var(--font-display)' }}>No results found</p>
             <p className="max-w-xs text-[13px]" style={{ color: 'var(--text-2)' }}>Try a different keyword, cuisine, or clear your filters.</p>
             {hasActiveSearch && (
-             <button type="button" onClick={explore.reset} className="rounded-full border px-5 py-2 text-[13px] font-semibold" style={{ borderColor: 'var(--border-2)' }}>
-               Clear search
+              <button type="button" onClick={explore.reset} className="rounded-full border px-5 py-2 text-[13px] font-semibold" style={{ borderColor: 'var(--border-2)' }}>
+                Clear search
               </button>
             )}
           </div>
@@ -275,7 +302,6 @@ export default function DiscoveryPage() {
         )}
       </section>
 
-      {/* Owner acquisition — diner-irrelevant, kept below every diner result on purpose */}
       <section className="border-y px-3 py-10 sm:px-6" style={{ borderColor: 'var(--border)' }}>
         <div className="mx-auto flex max-w-3xl flex-col items-start gap-3">
           <span className="inline-flex rounded-full px-3 py-1 text-[10.5px] font-bold uppercase tracking-wide" style={{ background: 'rgba(122,31,43,0.08)', color: 'var(--accent)' }}>
@@ -301,6 +327,20 @@ export default function DiscoveryPage() {
         </div>
         <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>© {new Date().getFullYear()} Dinezy · {CITY}</span>
       </footer>
+
+      <SignupBonusPopup onClaim={() => setLoginOpen(true)} />
+      <OTPLoginModal
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        restaurantId={null}
+        tableNumber={null}
+      />
+
+      <CustomerAccountDrawer
+        isOpen={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        restaurantId={null}
+      />
     </main>
   )
 }

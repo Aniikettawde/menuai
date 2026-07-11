@@ -95,6 +95,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [resendTimer, setResendTimer] = useState(0)
+  const [bonusAwarded, setBonusAwarded] = useState(0)
 
   const confirmRef = useRef<ConfirmationResult | null>(null)
   const sessionRef = useRef<{ uid: string; phone: string | null } | null>(null)
@@ -108,6 +109,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
       setDisplayName('')
       setLoading(false)
       setError('')
+      setBonusAwarded(0)
       sessionRef.current = null
       confirmRef.current = null
 
@@ -199,6 +201,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
+      setBonusAwarded(Number(data.bonusAwarded ?? 0))
+
       if (data.customer.display_name) {
         setCustomer(data.customer)
         setScreen('done')
@@ -240,6 +244,12 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+
+      // The bonus was already awarded on the first /api/auth/customer call
+      // in handleVerifyOTP (that's the true first-signup moment). This second
+      // call only adds the display name, so it will report bonusAwarded: 0 —
+      // keep whatever value we already captured instead of overwriting it.
+      if (data.bonusAwarded) setBonusAwarded(Number(data.bonusAwarded))
 
       setCustomer(data.customer)
       setScreen('done')
@@ -706,6 +716,11 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   }}
                 >
                   Optional — we&apos;ll personalise your experience.
+                  {bonusAwarded > 0 && (
+                    <>
+                      {' '}Your <strong style={{ color: 'var(--pr-orange)' }}>+{bonusAwarded} points</strong> are already in your account.
+                    </>
+                  )}
                 </p>
 
                 <input
@@ -830,7 +845,9 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     lineHeight: 1.5,
                   }}
                 >
-                  Enjoy exclusive rewards and personalised recommendations.
+                  {bonusAwarded > 0
+                    ? `+${bonusAwarded} points credited — enjoy exclusive rewards and personalised recommendations.`
+                    : 'Enjoy exclusive rewards and personalised recommendations.'}
                 </p>
               </div>
             )}
