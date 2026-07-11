@@ -1,60 +1,12 @@
 'use client'
 
-/**
- * Discovery Page — rebuilt against one metric: time-to-first-menu-open.
- *
- * WHAT CHANGED FROM THE PREVIOUS VERSION AND WHY:
- *
- * - Removed: animated hero (orbs, gradient title, marketing subhead),
- *   which pushed the first restaurant result below the fold on every
- *   mobile viewport under ~780px tall. That's a direct violation of
- *   "restaurants should appear within the first viewport whenever
- *   possible" — it cost zero customer benefit and every pixel of scroll.
- * - Removed: separate sticky Hero-Search, then a second separate sticky
- *   filter bar. Replaced with one combined ExploreBar (see its own file
- *   for the taps/space tradeoff reasoning).
- * - Kept, moved to the bottom: RegisterCTA (owner acquisition). It's a
- *   real, valuable section — for restaurant owners, not diners — so it
- *   now runs *after* every diner-facing result, never between a diner and
- *   the restaurants they came to find.
- * - Added: Continue Exploring (recently viewed) above Trending, since a
- *   returning customer's own history is a stronger conversion signal than
- *   any global ranking.
- * - Added: CravingBox for undecided customers (see component for backend
- *   scope note — ships now, degrades gracefully, doesn't block on the
- *   semantic-search backend decision).
- * - Grid pagination: swapped "fetch everything, filter client-side" for
- *   real Supabase range() pagination via useInfiniteRestaurants — the old
- *   approach doesn't scale and contradicts the "millions of diners daily"
- *   design target.
- *
- * DEFERRED (explicitly, not silently dropped) — needs a product/schema
- * decision before it can be built honestly:
- * - Distance / ETA per restaurant: needs restaurant lat/lng columns +
- *   customer geolocation permission flow. RestaurantCard already has the
- *   optional fields wired; populate them once geolocation is approved.
- * - "Recommended For You" beyond the same-page cuisine-affinity heuristic
- *   below: real personalization needs order/view history in Supabase, not
- *   just localStorage, to work across devices and logged-out→logged-in.
- * - "Restaurants Where Rewards Can Be Earned": needs a cross-restaurant
- *   loyalty-enrollment query; RestaurantCard's `earnsRewards` flag is
- *   wired to a single field (see mapRowToCard) that should be verified
- *   against the actual `restaurants` schema.
- * - Restaurant Details page (gallery, directions, call, share, reviews,
- *   then menu): out of scope for this file — separate page, separate PR.
- * - True list virtualization: see comment in useInfiniteRestaurants.ts.
- * - Full WCAG AA audit: touch targets and aria-labels are in place
- *   throughout these components; a full audit (color contrast ratios,
- *   screen-reader flow testing, keyboard trap testing) still needs a pass
- *   with real assistive tech, not just code review.
- */
-
 import Link from 'next/link'
 import { useCallback, useMemo, useRef } from 'react'
 import { ChefHat, ArrowUpRight, BarChart3, BadgePercent, Users } from 'lucide-react'
 import { getDiscoveryBrowser, type DiscoveryOffer, type DiscoveryRestaurant, type DishMatch } from '@/lib/discovery'
 import { DiscoveryHeader } from '@/components/discovery/DiscoveryHeader'
 import { ExploreBar, useExploreState } from '@/components/discovery/ExploreBar'
+import { RewardsSlider } from '@/components/discovery/RewardsSlider'
 import { CravingBox } from '@/components/discovery/CravingBox'
 import { HorizontalSection } from '@/components/discovery/HorizontalSection'
 import { RestaurantCard, type RestaurantCardData } from '@/components/discovery/RestaurantCard'
@@ -116,20 +68,25 @@ function mapRowToCard(r: ListingRow, dishMatches?: Map<string, DishMatch>): Rest
   }
 }
 
+/**
+ * Theme — matched 1:1 to RestaurantShell's `--pr-*` palette (warm ivory bg,
+ * burgundy CTA, muted-amber gold, Fraunces/Inter) so the discovery feed and
+ * the restaurant menu don't feel like two different products.
+ */
 const discoveryTheme: React.CSSProperties = {
-  '--bg': '#0a0a0a',
-  '--card': '#141414',
-  '--surface': '#111111',
-  '--text': '#f2f2f2',
-  '--text-2': '#b0b0b0',
-  '--text-3': '#787878',
-  '--border': 'rgba(255,255,255,0.08)',
-  '--border-2': 'rgba(255,255,255,0.14)',
-  '--accent': '#ff7a00',
-  '--gold-light': '#f5c451',
-  '--green': '#22c55e',
-  '--font-display': "'Fraunces', serif", // or whatever your display font actually is
-  '--font-body': "'Inter', sans-serif",
+  '--bg': '#F8F4EC',
+  '--card': '#FFFFFF',
+  '--surface': '#FAF6EC',
+  '--text': '#211E1B',
+  '--text-2': '#6B6560',
+  '--text-3': '#A39C90',
+  '--border': 'rgba(33,30,27,0.08)',
+  '--border-2': 'rgba(33,30,27,0.14)',
+  '--accent': '#7A1F2B',
+  '--gold-light': '#8A6D1F',
+  '--green': '#15803d',
+  '--font-display': "'Fraunces', Georgia, serif",
+  '--font-body': "'Inter', system-ui, sans-serif",
 } as React.CSSProperties
 
 export default function DiscoveryPage() {
@@ -142,16 +99,16 @@ export default function DiscoveryPage() {
   const { rows, loading, loadingMore, hasMore, error, dishMatches, loadMore, retry } = useInfiniteRestaurants({
   supabase,
   city: CITY,
-  category: explore.activeCategory,
-  offersOnly: explore.activeFilters.has('offers'),
-  sortMode: explore.activeFilters.has('trending') ? 'rated' : 'rated',
+   category: null,
+  offersOnly: false,
+  sortMode: 'rated',
   searchQuery: explore.query,
 })
   const sentinelRef = useLoadMoreSentinel(loadMore, hasMore)
 
   const cards = useMemo(() => rows.map((r) => mapRowToCard(r as ListingRow, dishMatches)), [rows, dishMatches])
 
-  const hasActiveSearch = Boolean(explore.query || explore.activeCategory || explore.activeFilters.size)
+  const hasActiveSearch = Boolean(explore.query)
 
   // ── Curated rails, all derived from the same fetched page — no extra
   //    round-trips. At larger scale these become their own indexed queries
@@ -184,6 +141,10 @@ export default function DiscoveryPage() {
 
   return (
     <main style={{ ...discoveryTheme, background: 'var(--bg)', color: 'var(--text)', minHeight: '100dvh' }}>
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Inter:wght@300;400;500;600;700&display=swap');
+      `}</style>
+
       <DiscoveryHeader
         locationLabel={CITY}
         onSearchClick={() => searchInputRef.current?.focus()}
@@ -196,13 +157,11 @@ export default function DiscoveryPage() {
         ref={searchInputRef}
         query={explore.query}
         onQueryChange={explore.setQuery}
-        activeCategory={explore.activeCategory}
-        onCategoryChange={explore.setActiveCategory}
-        activeFilters={explore.activeFilters}
-        onToggleFilter={explore.toggleFilter}
+        
         resultCount={hasActiveSearch ? cards.length : undefined}
       />
 
+{!hasActiveSearch && <RewardsSlider />}
       {!hasActiveSearch && (
         <>
           {continueExploring.length > 0 && (
@@ -281,9 +240,9 @@ export default function DiscoveryPage() {
         </div>
 
         {error ? (
-          <div className="rounded-2xl border p-8 text-center" style={{ borderColor: 'rgba(239,68,68,0.2)' }}>
-            <p className="mb-3 text-[13.5px]" style={{ color: '#f87171' }}>Couldn&apos;t load restaurants. Check your connection.</p>
-            <button type="button" onClick={() => void retry()} className="rounded-full border px-5 py-2 text-[13px] font-semibold" style={{ borderColor: 'rgba(239,68,68,0.28)', color: '#f87171' }}>
+          <div className="rounded-2xl border p-8 text-center" style={{ borderColor: 'rgba(185,28,28,0.18)', background: 'rgba(185,28,28,0.03)' }}>
+            <p className="mb-3 text-[13.5px]" style={{ color: '#b91c1c' }}>Couldn&apos;t load restaurants. Check your connection.</p>
+            <button type="button" onClick={() => void retry()} className="rounded-full border px-5 py-2 text-[13px] font-semibold" style={{ borderColor: 'rgba(185,28,28,0.28)', color: '#b91c1c' }}>
               Retry
             </button>
           </div>
@@ -293,13 +252,13 @@ export default function DiscoveryPage() {
             <p className="text-[1.1rem] font-bold" style={{ fontFamily: 'var(--font-display)' }}>No results found</p>
             <p className="max-w-xs text-[13px]" style={{ color: 'var(--text-2)' }}>Try a different keyword, cuisine, or clear your filters.</p>
             {hasActiveSearch && (
-              <button type="button" onClick={explore.reset} className="rounded-full border px-5 py-2 text-[13px] font-semibold" style={{ borderColor: 'var(--border-2)' }}>
-                Clear filters
+             <button type="button" onClick={explore.reset} className="rounded-full border px-5 py-2 text-[13px] font-semibold" style={{ borderColor: 'var(--border-2)' }}>
+               Clear search
               </button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {loading && cards.length === 0
               ? Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="h-[228px] animate-pulse rounded-2xl border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }} />
@@ -319,7 +278,7 @@ export default function DiscoveryPage() {
       {/* Owner acquisition — diner-irrelevant, kept below every diner result on purpose */}
       <section className="border-y px-3 py-10 sm:px-6" style={{ borderColor: 'var(--border)' }}>
         <div className="mx-auto flex max-w-3xl flex-col items-start gap-3">
-          <span className="inline-flex rounded-full px-3 py-1 text-[10.5px] font-bold uppercase tracking-wide" style={{ background: 'rgba(255,122,0,0.09)', color: '#ff9a40' }}>
+          <span className="inline-flex rounded-full px-3 py-1 text-[10.5px] font-bold uppercase tracking-wide" style={{ background: 'rgba(122,31,43,0.08)', color: 'var(--accent)' }}>
             For restaurant owners
           </span>
           <h2 className="text-2xl font-black" style={{ fontFamily: 'var(--font-display)' }}>List your restaurant — free.</h2>
@@ -328,7 +287,7 @@ export default function DiscoveryPage() {
             <li className="flex items-center gap-2"><BadgePercent size={13} /> Post live offers to attract diners</li>
             <li className="flex items-center gap-2"><Users size={13} /> Get discovered by {CITY} diners daily</li>
           </ul>
-          <Link href="/discovery/onboarding" className="mt-2 inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[13.5px] font-bold text-white" style={{ background: 'var(--accent)' }}>
+          <Link href="/discovery/onboarding" className="mt-2 inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[13.5px] font-bold" style={{ background: 'var(--accent)', color: 'var(--card)' }}>
             Get listed free <ArrowUpRight size={14} />
           </Link>
         </div>

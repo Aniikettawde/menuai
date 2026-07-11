@@ -1,5 +1,4 @@
 'use client'
-
 /**
  * HorizontalSection
  * ─────────────────────────────────────────────────────────────────────────
@@ -16,10 +15,8 @@
  *    personal history) surface the highest-conversion-likelihood cards
  *    first, rather than relying on the customer to filter manually.
  */
-
 import type { ReactNode } from 'react'
 import { RestaurantCard, type RestaurantCardData } from './RestaurantCard'
-
 interface Props {
   title: string
   subtitle?: string
@@ -30,7 +27,6 @@ interface Props {
   emptyState?: ReactNode
   rankStartsAt1?: boolean // only "Top Rated" rails show #1/#2/#3 badges
 }
-
 function CardSkeleton() {
   return (
     <div
@@ -39,12 +35,10 @@ function CardSkeleton() {
     />
   )
 }
-
 export function HorizontalSection({
   title, subtitle, restaurants, loading, savedIds, onToggleSave, emptyState, rankStartsAt1,
 }: Props) {
   if (!loading && restaurants.length === 0 && !emptyState) return null
-
   return (
     <section className="py-3">
       <div className="mb-2 flex items-baseline justify-between gap-2 px-3 sm:px-6">
@@ -53,12 +47,11 @@ export function HorizontalSection({
         </h2>
         {subtitle && <span className="shrink-0 text-[11px]" style={{ color: 'var(--text-3)' }}>{subtitle}</span>}
       </div>
-
       {!loading && restaurants.length === 0 ? (
         <div className="px-3 sm:px-6">{emptyState}</div>
       ) : (
         <div
-          className="flex gap-2.5 overflow-x-auto px-3 pb-1 sm:px-6"
+          className="flex items-stretch gap-2.5 overflow-x-auto px-3 pb-1 sm:px-6"
           style={{ scrollbarWidth: 'none', scrollSnapType: 'x mandatory' }}
         >
           {loading

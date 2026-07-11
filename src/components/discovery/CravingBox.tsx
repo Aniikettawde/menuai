@@ -73,7 +73,7 @@ export function CravingBox({ onFallbackSearch, endpointReady = false }: Props) {
     <section className="px-3 py-3 sm:px-6">
       <div
         className="flex items-center gap-2.5 rounded-2xl px-3.5 py-3"
-        style={{ background: 'rgba(255,122,0,0.05)', border: '1px solid rgba(255,122,0,0.16)' }}
+        style={{ background: 'rgba(122,31,43,0.045)', border: '1px solid rgba(122,31,43,0.16)' }}
       >
         <Sparkles size={16} style={{ color: 'var(--accent)' }} className="shrink-0" />
         <input
@@ -93,7 +93,7 @@ export function CravingBox({ onFallbackSearch, endpointReady = false }: Props) {
           className="flex shrink-0 items-center justify-center rounded-full font-bold"
           style={{
             width: 40, height: 40,
-            background: 'var(--accent)', color: '#fff',
+            background: 'var(--accent)', color: 'var(--card)',
             opacity: loading || !text.trim() ? 0.5 : 1,
           }}
         >

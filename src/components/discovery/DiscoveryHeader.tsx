@@ -47,7 +47,7 @@ export function DiscoveryHeader({
     <header
       className="sticky top-0 z-[100] flex h-14 items-center gap-2 border-b px-3 sm:px-6"
       style={{
-        background: 'rgba(8,8,8,0.92)',
+        background: 'rgba(248,244,236,0.92)',
         backdropFilter: 'blur(20px)',
         borderColor: 'var(--border)',
       }}
@@ -80,7 +80,7 @@ export function DiscoveryHeader({
           style={{
             width: 40,
             height: 40,
-            background: 'rgba(255,255,255,0.05)',
+            background: 'rgba(33,30,27,0.04)',
             border: '1px solid var(--border-2)',
             color: 'var(--text)',
           }}
@@ -95,8 +95,8 @@ export function DiscoveryHeader({
             className="hidden items-center gap-1 rounded-full px-2.5 sm:flex"
             style={{
               height: 40,
-              background: 'rgba(245,158,11,0.1)',
-              border: '1px solid rgba(245,158,11,0.24)',
+              background: 'var(--surface)',
+              border: '1px solid rgba(138,109,31,0.24)',
               color: 'var(--gold-light)',
             }}
           >
@@ -115,8 +115,8 @@ export function DiscoveryHeader({
           style={{
             width: 40,
             height: 40,
-            background: isLoggedIn ? 'rgba(255,122,0,0.14)' : 'rgba(255,255,255,0.05)',
-            border: `1px solid ${isLoggedIn ? 'rgba(255,122,0,0.3)' : 'var(--border-2)'}`,
+            background: isLoggedIn ? 'rgba(122,31,43,0.12)' : 'rgba(33,30,27,0.04)',
+            border: `1px solid ${isLoggedIn ? 'rgba(122,31,43,0.28)' : 'var(--border-2)'}`,
             color: isLoggedIn ? 'var(--accent)' : 'var(--text-2)',
           }}
         >

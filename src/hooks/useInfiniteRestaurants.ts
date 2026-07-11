@@ -16,18 +16,18 @@ export interface RestaurantRow {
 interface Options<SchemaName extends string = 'public'> {
   supabase: SupabaseClient<any, SchemaName, any, any, any>
   city: string
-  category: string | null
-  offersOnly: boolean
-  sortMode: 'rated' | 'new'
+   category?: string | null
+  offersOnly?: boolean
+ sortMode?: 'rated' | 'new'
   searchQuery: string
 }
 
 export function useInfiniteRestaurants<SchemaName extends string = 'public'>({
   supabase,
   city,
-  category,
-  offersOnly,
-  sortMode,
+   category = null,
+ offersOnly = false,
+  sortMode = 'rated',
   searchQuery,
 }: Options<SchemaName>) {
   const [rows, setRows] = useState<RestaurantRow[]>([])

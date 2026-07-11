@@ -21,10 +21,16 @@
  *    self-select out of a closed restaurant *before* tapping in — fewer
  *    dead-end menu opens, which otherwise reads as a bounce and wastes the
  *    one tap we're trying to make count.
+ *
+ * Layout note: the card is a flex column stretched to fill its grid/rail
+ * cell (`h-full`), with the info block set to `flex-1` and its rows
+ * anchored to the bottom (`mt-auto` on the price/meta row). That's what
+ * keeps a 2-tag card and a 4-tag-plus-offer card the same visual height
+ * and bottom-aligned across a row, instead of the grid looking ragged.
  */
 
 import Link from 'next/link'
-import { Star, MapPin, Clock, Gift, BadgePercent, Navigation2, Heart, ChefHat } from 'lucide-react'
+import { Star, MapPin, Clock, Gift, BadgePercent, Navigation2, Heart, ChefHat, ArrowRight } from 'lucide-react'
 
 export interface RestaurantCardData {
   id: string
@@ -74,15 +80,15 @@ export function RestaurantCard({ restaurant: r, rank, isSaved, onToggleSave }: P
   const price = formatPriceForTwo(r.avgPriceForTwo)
 
   return (
-    <div className="group relative">
+    <div className="group relative h-full">
       <Link
         href={`/r/${r.slug}`}
         prefetch
-        className="block overflow-hidden rounded-2xl border transition-transform duration-200 group-active:scale-[0.98]"
-        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+        className="flex h-full flex-col overflow-hidden rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group-active:scale-[0.98] group-active:translate-y-0"
+        style={{ background: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(33,30,27,0.06)' }}
         aria-label={`${r.name}, ${r.ratingAvg.toFixed(1)} stars, ${r.isOpenNow === false ? 'closed' : 'open'}. View menu.`}
       >
-        <div className="relative h-40 overflow-hidden sm:h-44" style={{ background: '#111' }}>
+        <div className="relative h-40 shrink-0 overflow-hidden sm:h-44" style={{ background: 'var(--surface)' }}>
           {r.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -107,8 +113,8 @@ export function RestaurantCard({ restaurant: r, rank, isSaved, onToggleSave }: P
           <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5">
             {r.hasActiveOffer && (
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9.5px] font-bold uppercase tracking-wide text-white"
-                style={{ background: 'var(--accent)' }}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9.5px] font-bold uppercase tracking-wide"
+                style={{ background: 'var(--accent)', color: '#fff' }}
               >
                 <BadgePercent size={10} /> Offer
               </span>
@@ -116,7 +122,7 @@ export function RestaurantCard({ restaurant: r, rank, isSaved, onToggleSave }: P
             {!r.hasActiveOffer && rank && rank <= 3 && (
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9.5px] font-bold"
-                style={{ background: 'rgba(0,0,0,0.55)', color: 'var(--gold-light)', border: '1px solid rgba(245,158,11,0.2)' }}
+                style={{ background: 'rgba(0,0,0,0.55)', color: '#E8C547', border: '1px solid rgba(232,197,71,0.3)' }}
               >
                 #{rank} Top Rated
               </span>
@@ -132,38 +138,40 @@ export function RestaurantCard({ restaurant: r, rank, isSaved, onToggleSave }: P
             )}
           </div>
 
-          <div className="absolute right-2.5 top-2.5">
-            <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold"
-              style={{
-                background: r.isOpenNow === false ? 'rgba(239,68,68,0.16)' : 'rgba(34,197,94,0.16)',
-                color: r.isOpenNow === false ? '#f87171' : '#4ade80',
-                border: `1px solid ${r.isOpenNow === false ? 'rgba(239,68,68,0.28)' : 'rgba(34,197,94,0.28)'}`,
-              }}
-            >
-              {r.isOpenNow === null ? '' : r.isOpenNow ? 'Open' : 'Closed'}
-            </span>
-          </div>
+          {r.isOpenNow !== null && (
+            <div className="absolute right-2.5 top-2.5">
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold"
+                style={{
+                  background: 'rgba(255,255,255,0.92)',
+                  color: r.isOpenNow === false ? '#b91c1c' : '#15803d',
+                  border: `1px solid ${r.isOpenNow === false ? 'rgba(185,28,28,0.25)' : 'rgba(21,128,61,0.25)'}`,
+                }}
+              >
+                {r.isOpenNow ? 'Open' : 'Closed'}
+              </span>
+            </div>
+          )}
 
           <div className="absolute bottom-2.5 left-3 right-3">
-            <h3 className="text-[1.05rem] font-bold leading-tight text-white" style={{ fontFamily: 'var(--font-display)' }}>
+            <h3 className="line-clamp-1 text-[1.05rem] font-bold leading-tight text-white" style={{ fontFamily: 'var(--font-display)' }}>
               {r.name}
             </h3>
             {r.area && (
-              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-white/65">
+              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-white/70">
                 <MapPin size={9} /> {r.area}
               </p>
             )}
           </div>
         </div>
 
-        <div className="px-3 py-2.5">
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-1 flex-col px-3 py-2.5">
+          <div className="flex min-h-[20px] flex-wrap items-center gap-1.5">
             {r.cuisineTags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
                 className="rounded-full px-2 py-0.5 text-[10.5px] font-medium"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
               >
                 {tag}
               </span>
@@ -178,31 +186,44 @@ export function RestaurantCard({ restaurant: r, rank, isSaved, onToggleSave }: P
           </div>
 
           {r.hasActiveOffer && r.offerTitle && (
-            <p className="mt-1.5 truncate text-[11.5px] font-semibold" style={{ color: '#ff9a40' }}>
+            <p className="mt-1.5 truncate text-[11.5px] font-semibold" style={{ color: 'var(--accent)' }}>
               {r.offerTitle}
             </p>
           )}
-		  
-		  {/* Dish-match chip — only shown when the search matched a menu item, not the restaurant name */}
-{r.matchedDish && (
-  <p className="mt-1.5 flex items-center gap-1 truncate text-[11.5px] font-medium" style={{ color: 'var(--gold-light)' }}>
-    <UtensilsIcon />
-    Has: {r.matchedDish.name} · ₹{Math.round(r.matchedDish.price / 100)}
-  </p>
-)}
 
-          <div className="mt-1.5 flex items-center gap-2.5 text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {price && <span>{price}</span>}
-            {typeof r.distanceKm === 'number' && (
-              <span className="inline-flex items-center gap-1">
-                <Navigation2 size={9} /> {r.distanceKm.toFixed(1)} km
-              </span>
-            )}
-            {typeof r.etaMin === 'number' && (
-              <span className="inline-flex items-center gap-1">
-                <Clock size={9} /> ~{r.etaMin} min
-              </span>
-            )}
+          {/* Dish-match chip — only shown when the search matched a menu item, not the restaurant name */}
+          {r.matchedDish && (
+            <p className="mt-1.5 flex items-center gap-1 truncate text-[11.5px] font-medium" style={{ color: 'var(--gold-light)' }}>
+              <UtensilsIcon />
+              Has: {r.matchedDish.name} · ₹{Math.round(r.matchedDish.price / 100)}
+            </p>
+          )}
+
+          {/* Footer row anchored to the card's bottom edge (mt-auto) so every
+              card in a row ends at the same height. Unlike a plain price row,
+              this always has something on the right — a "View menu" affordance
+              — so a restaurant with no price/distance/ETA data doesn't leave a
+              blank strip at the bottom; it reads as a deliberate CTA instead. */}
+          <div className="mt-auto flex items-center justify-between gap-2 pt-1.5">
+            <div className="flex min-w-0 items-center gap-2.5 text-[11px]" style={{ color: 'var(--text-3)' }}>
+              {price && <span className="truncate">{price}</span>}
+              {typeof r.distanceKm === 'number' && (
+                <span className="inline-flex shrink-0 items-center gap-1">
+                  <Navigation2 size={9} /> {r.distanceKm.toFixed(1)} km
+                </span>
+              )}
+              {typeof r.etaMin === 'number' && (
+                <span className="inline-flex shrink-0 items-center gap-1">
+                  <Clock size={9} /> ~{r.etaMin} min
+                </span>
+              )}
+            </div>
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 text-[10.5px] font-bold"
+              style={{ color: 'var(--accent)' }}
+            >
+              View menu <ArrowRight size={10} />
+            </span>
           </div>
         </div>
       </Link>
