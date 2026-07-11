@@ -259,6 +259,22 @@ const [sessionExpired, setSessionExpired] = useState(false)
       if (items && items.length > 0) void fetchDishOptions(items.map((i: any) => i.id))
     } catch (err) { console.error('Failed to refresh menu:', err) }
   }, [initialData.restaurant.id, slug, setRestaurantData, fetchDishOptions])
+  
+  useEffect(() => {
+  const color = menuTheme === 'bar' ? '#F3ECDE' : '#F8F4EC'
+  let meta = document.querySelector('meta[name="theme-color"]')
+  if (!meta) {
+    meta = document.createElement('meta')
+    meta.setAttribute('name', 'theme-color')
+    document.head.appendChild(meta)
+  }
+  meta.setAttribute('content', color)
+
+  // Restore the app's default dark theme when leaving this page
+  return () => {
+    meta?.setAttribute('content', '#050816')
+  }
+}, [menuTheme])
 
   // ── Connectivity ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -503,12 +519,13 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   --font-body:        'Inter', system-ui, sans-serif;   /* unchanged */
 }
 
-        html, body {
-          background: var(--surface-bg) !important;
-          color: var(--pr-text);
-          font-family: var(--font-body);
-          -webkit-font-smoothing: antialiased;
-        }
+       html, body {
+  background: var(--surface-bg) !important;
+  overscroll-behavior-y: none;   /* add this line */
+  color: var(--pr-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
 
         .pr-shell {
           min-height: 100dvh;
