@@ -787,25 +787,25 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   </main>
 ) : (
   <main className="pr-main">
-    <MenuGrid
-      onCallWaiter={handleCallWaiter}
-      isWaiterLoading={waiterLoading}
-      upsellCard={
-        <>
-          <RewardOffersBar
-            restaurantId={restaurant?.id ?? null}
-            restaurantName={initialData.restaurant.name}
-            offers={activeOffers}
-            onLoginClick={() => setLoginOpen(true)}
-            onExploreRewards={() => setAccountOpen(true)}
-          />
-          <TodaysSpecialCarousel
-            restaurantId={initialData.restaurant.id}
-            allItems={initialData.items}
-          />
-        </>
-      }
+   <MenuGrid
+  onCallWaiter={handleCallWaiter}
+  isWaiterLoading={waiterLoading}
+  todaysSpecial={
+    <TodaysSpecialCarousel
+      restaurantId={initialData.restaurant.id}
+      allItems={initialData.items}
     />
+  }
+  upsellCard={
+    <RewardOffersBar
+      restaurantId={restaurant?.id ?? null}
+      restaurantName={initialData.restaurant.name}
+      offers={activeOffers}
+      onLoginClick={() => setLoginOpen(true)}
+      onExploreRewards={() => setAccountOpen(true)}
+    />
+  }
+/>
   </main>
 )}
 

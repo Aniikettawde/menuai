@@ -316,6 +316,12 @@ interface MenuGridProps {
   onOpenChat?: () => void
   onCallWaiter?: (payload: { items: WaiterCallItem[]; subtotal: number }) => void
   isWaiterLoading?: boolean
+  /**
+   * Rendered directly under the search bar, above the bestseller slider.
+   * Intended for TodaysSpecialCarousel — hidden while searching or on the
+   * bar menu, same as the bestseller slider.
+   */
+  todaysSpecial?: ReactNode
   upsellCard?: ReactNode
 }
 
@@ -324,6 +330,7 @@ export function MenuGrid({
   onOpenChat,
   onCallWaiter,
   isWaiterLoading = false,
+  todaysSpecial,
   upsellCard,
 }: MenuGridProps = {}) {
   const { categories, items, activeMenuType, hasBarMenu, switchMenuType } = useAppStore()
@@ -681,6 +688,8 @@ export function MenuGrid({
       </div>
 
       <div className="mg-stack">
+        {todaysSpecial && !isSearching && !isBarView && todaysSpecial}
+
         {!isSearching && (
           <BestsellerSlider
             items={bestSellerItems}
