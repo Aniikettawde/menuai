@@ -1,5 +1,4 @@
 'use client'
-
 import { useEffect, useState } from 'react'
 import { Clock } from 'lucide-react'
 
@@ -38,7 +37,7 @@ export function CountdownTimer({ expiresAt, onExpire, compact }: Props) {
           gap: 4,
           fontSize: 12,
           fontWeight: 600,
-          color: urgent ? '#f87171' : 'rgba(250,250,247,0.45)',
+          color: urgent ? '#dc2626' : 'var(--pr-text-muted)',
           fontFamily: 'var(--font-body)',
           fontVariantNumeric: 'tabular-nums',
         }}
@@ -57,7 +56,7 @@ export function CountdownTimer({ expiresAt, onExpire, compact }: Props) {
           fontWeight: 700,
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
-          color: 'rgba(250,250,247,0.35)',
+          color: 'var(--pr-text-faint)',
           fontFamily: 'var(--font-body)',
         }}
       >
@@ -68,7 +67,7 @@ export function CountdownTimer({ expiresAt, onExpire, compact }: Props) {
           margin: 0,
           fontSize: 22,
           fontWeight: 700,
-          color: urgent ? '#f87171' : '#FAFAF7',
+          color: urgent ? '#dc2626' : 'var(--pr-text)',
           fontFamily: 'var(--font-body)',
           letterSpacing: '0.04em',
           fontVariantNumeric: 'tabular-nums',

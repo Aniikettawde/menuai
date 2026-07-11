@@ -1,5 +1,4 @@
 'use client'
-
 export function PINDisplay({ pin }: { pin: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', gap: 10, padding: '20px 0' }}>
@@ -14,9 +13,9 @@ export function PINDisplay({ pin }: { pin: string }) {
             justifyContent: 'center',
             fontSize: 30,
             fontWeight: 800,
-            color: '#E8C547',
-            background: 'rgba(232,197,71,0.08)',
-            border: '1.5px solid rgba(232,197,71,0.25)',
+            color: 'var(--pr-gold)',
+            background: 'var(--pr-gold-dim)',
+            border: '1.5px solid var(--pr-border-hover)',
             borderRadius: 14,
             fontFamily: 'var(--font-body)',
             letterSpacing: '0.02em',

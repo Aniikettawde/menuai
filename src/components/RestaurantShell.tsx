@@ -23,6 +23,7 @@ import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
 import { MenuTypeSelector } from './MenuTypeSelector'
 import { DeliveryPreferenceModal } from './DeliveryPreferenceModal'
 import type { WaiterCallItem } from '@/types'
+import { BottomTabBar } from './BottomTabBar'
 
 
 type OfferRow = {
@@ -91,6 +92,8 @@ export function RestaurantShell({ initialData, tableSessionValid }: Props) {
     showRatingsList,
 	openRatingsList,        // ← add this
     activeMenuType,      // ← add this: drives the bar-vs-food theme
+	activeTab,
+setActiveTab,
   } = useAppStore()
 
   const menuTheme = activeMenuType ?? 'food'
@@ -479,26 +482,26 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   return (
     <>
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
-
-        :root {
-          --pr-black:        #0D0D0D;
-          --pr-black-soft:   #1A1A1A;
-          --pr-card:         #242424;
-          --pr-card-hover:   #2C2C2C;
-          --pr-border:       rgba(255,255,255,0.07);
-          --pr-border-hover: rgba(255,255,255,0.13);
-          --pr-gold:         #E8C547;
-          --pr-gold-dim:     rgba(232,197,71,0.12);
-          --pr-orange:       #FF5C35;
-          --pr-orange-dim:   rgba(255,92,53,0.10);
-          --pr-text:         #FAFAF7;
-          --pr-text-muted:   rgba(250,250,247,0.55);
-          --pr-text-faint:   rgba(250,250,247,0.28);
-          --surface-bg:      #111111;
-          --font-display:    'Playfair Display', Georgia, serif;
-          --font-body:       'Inter', system-ui, sans-serif;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Inter:wght@300;400;500;600;700&display=swap');
+:root {
+  --pr-black:        #F8F4EC;   /* was #121212 — page bg, now warm ivory */
+  --pr-black-soft:   #F0EADC;   /* was #1A1A1A — placeholder tile bg */
+  --pr-card:         #FFFFFF;   /* was #1E1E1C — card surface */
+  --pr-card-hover:   #F7F2E7;   /* was #262622 */
+  --pr-border:       rgba(33,30,27,0.08);   /* was rgba(245,245,243,0.08) */
+  --pr-border-hover: rgba(33,30,27,0.14);   /* was rgba(245,245,243,0.14) */
+  --pr-gold:         #8A6D1F;   /* was #D4AF37 — muted amber for badges/tags, not neon */
+  --pr-gold-dim:     #F3E6D2;   /* was rgba(212,175,55,0.12) — solid pale chip, reads better on white than translucent */
+  --pr-orange:       #7A1F2B;   /* was #D4AF37 — burgundy, drives Add button/price/active states */
+  --pr-orange-dim:   #F5E6E8;   /* was rgba(212,175,55,0.10) — pale wine tint for "in cart" card */
+  --pr-cta-text:     #F8F4EC;   /* was #121212 — text on solid burgundy buttons must be light now, not dark */
+  --pr-text:         #211E1B;   /* was #F5F5F3 */
+  --pr-text-muted:   #6B6560;   /* was #A0A0A0 */
+  --pr-text-faint:   #A39C90;   /* was rgba(245,245,243,0.32) */
+  --surface-bg:      #F8F4EC;   /* was #121212 */
+  --font-display:    'Fraunces', Georgia, serif;   /* was Playfair Display */
+  --font-body:        'Inter', system-ui, sans-serif;   /* unchanged */
+}
 
         html, body {
           background: var(--surface-bg) !important;
@@ -521,22 +524,23 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
            Same layout, warmer/moodier palette: charcoal-espresso instead of
            flat black, brass/copper instead of gold-orange, plus a soft
            lounge-lighting glow layer behind the content.                    */
-        .pr-shell[data-menu='bar'] {
-          --pr-black:        #0A0806;
-          --pr-black-soft:   #17120D;
-          --pr-card:         #1F1812;
-          --pr-card-hover:   #292017;
-          --pr-border:       rgba(214,158,89,0.14);
-          --pr-border-hover: rgba(214,158,89,0.26);
-          --pr-gold:         #D9A24B;
-          --pr-gold-dim:     rgba(217,162,75,0.14);
-          --pr-orange:       #E0873E;
-          --pr-orange-dim:   rgba(224,135,62,0.12);
-          --pr-text:         #F7F1E8;
-          --pr-text-muted:   rgba(247,241,232,0.55);
-          --pr-text-faint:   rgba(247,241,232,0.28);
-          --surface-bg:      #0A0806;
-        }
+       .pr-shell[data-menu='bar'] {
+  --pr-black:        #F3ECDE;   /* slightly deeper cream to differentiate from food menu */
+  --pr-black-soft:   #ECE3D0;
+  --pr-card:         #FAFAFA;
+  --pr-card-hover:   #F7F0DF;
+  --pr-border:       rgba(120,74,26,0.14);
+  --pr-border-hover: rgba(120,74,26,0.22);
+  --pr-gold:         #9C5A2E;   /* copper */
+  --pr-gold-dim:     #F0DFC8;
+  --pr-orange:       #7A1F2B;
+  --pr-orange-dim:   #F5E6E8;
+  --pr-cta-text:     #F8F4EC;
+  --pr-text:         #221A12;
+  --pr-text-muted:   #7A6E5C;
+  --pr-text-faint:   #B0A48F;
+  --surface-bg:      #F3ECDE;
+}
         .pr-shell[data-menu='bar']::before {
           content: '';
           position: fixed;
@@ -734,17 +738,17 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
         }
 
         .rating-modal-dark {
-          background: #242424 !important;
-          border: 1px solid rgba(255,255,255,0.08) !important;
-          color: #FAFAF7 !important;
-        }
-        .rating-modal-dark h2 { color: #FAFAF7 !important; }
-        .rating-modal-dark p { color: rgba(250,250,247,0.6) !important; }
-        .rating-modal-dark textarea {
-          background: rgba(255,255,255,0.05) !important;
-          border-color: rgba(255,255,255,0.1) !important;
-          color: #FAFAF7 !important;
-        }
+  background: #FAFAFA !important;
+  border: 1px solid rgba(33,30,27,0.1) !important;
+  color: #211E1B !important;
+}
+.rating-modal-dark h2 { color: #211E1B !important; }
+.rating-modal-dark p { color: rgba(33,30,27,0.6) !important; }
+.rating-modal-dark textarea {
+  background: rgba(33,30,27,0.03) !important;
+  border-color: rgba(33,30,27,0.12) !important;
+  color: #211E1B !important;
+}
       `}</style>
 
      <div className="pr-shell" data-menu={menuTheme}>
@@ -752,7 +756,6 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   <MenuTypeSelector />
   <DeliveryPreferenceModal />
 
-  <RestaurantHeader restaurant={restaurant} />
 
   {/*
     CustomerAuthProvider only mounts the OTP modal + account drawer —
@@ -761,13 +764,16 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
     the menu feed below (see main), instead of two separate cards.
   */}
   <CustomerAuthProvider
-    restaurantId={restaurant?.id ?? null}
-    tableNumber={tableNumber}
-    loginOpen={loginOpen}
-    onLoginOpenChange={setLoginOpen}
-    accountOpen={accountOpen}
-    onAccountOpenChange={setAccountOpen}
-  />
+  restaurantId={restaurant?.id ?? null}
+  tableNumber={tableNumber}
+  loginOpen={loginOpen}
+  onLoginOpenChange={setLoginOpen}
+  accountOpen={accountOpen}
+  onAccountOpenChange={(open) => {
+    setAccountOpen(open)
+    if (!open) setActiveTab('menu')
+  }}
+/>
 		
 		<TableSessionHeartbeat
   restaurantId={restaurant.id}
@@ -775,27 +781,33 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   onExpired={() => setSessionExpired(true)}
 />
 
-        <main className="pr-main">
-          <MenuGrid
-            onCallWaiter={handleCallWaiter}
-            isWaiterLoading={waiterLoading}
-           upsellCard={
-    <>
-      <RewardOffersBar
-        restaurantId={restaurant?.id ?? null}
-        restaurantName={initialData.restaurant.name}
-        offers={activeOffers}
-        onLoginClick={() => setLoginOpen(true)}
-        onExploreRewards={() => setAccountOpen(true)}
-      />
-      <TodaysSpecialCarousel
-        restaurantId={initialData.restaurant.id}
-        allItems={initialData.items}
-      />
-    </>
-  }
+      {activeTab === 'about' ? (
+  <main className="pr-main">
+    <RestaurantHeader restaurant={restaurant} />
+  </main>
+) : (
+  <main className="pr-main">
+    <MenuGrid
+      onCallWaiter={handleCallWaiter}
+      isWaiterLoading={waiterLoading}
+      upsellCard={
+        <>
+          <RewardOffersBar
+            restaurantId={restaurant?.id ?? null}
+            restaurantName={initialData.restaurant.name}
+            offers={activeOffers}
+            onLoginClick={() => setLoginOpen(true)}
+            onExploreRewards={() => setAccountOpen(true)}
           />
-        </main>
+          <TodaysSpecialCarousel
+            restaurantId={initialData.restaurant.id}
+            allItems={initialData.items}
+          />
+        </>
+      }
+    />
+  </main>
+)}
 
         {showRating && <RatingModal />}
         {showRatingsList && <RatingsListModal restaurant={restaurant} />}
@@ -824,6 +836,8 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
             onClose={() => handleCloseToast(activeOrder.orderId, activeOrder.tableNumber)}
           />
         )}
+		<BottomTabBar onAccountClick={() => setAccountOpen(true)} />
+
       </div>
     </>
   )

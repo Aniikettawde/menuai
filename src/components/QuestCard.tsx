@@ -73,11 +73,11 @@ const fetchStatus = useCallback(async () => {
 }, [customerId])
 
   useEffect(() => { void fetchStatus() }, [fetchStatus])
-  
- 
+
+
 
   const secondsLeft = useCountdown(status?.pending_pin?.expires_at ?? null)
-  
+
   const showPinForThisRestaurant =
     !!status?.pending_pin &&
     status.pending_pin.restaurant_id === restaurantId &&
@@ -127,7 +127,7 @@ const fetchStatus = useCallback(async () => {
       setRedeemLoading(null)
     }
   }, [customerId, fetchStatus])
-  
+
   const [resendLoading, setResendLoading] = useState(false)
   const [resendMsg, setResendMsg] = useState('')
 
@@ -153,7 +153,7 @@ const fetchStatus = useCallback(async () => {
   if (loading || !status) {
     return (
       <div style={{ padding: '20px 0', textAlign: 'center' }}>
-        <Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite', color: 'rgba(232,197,71,0.5)' }} />
+        <Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite', color: 'var(--pr-gold)', opacity: 0.6 }} />
       </div>
     )
   }
@@ -176,8 +176,8 @@ const { points, quest, pending_pin, redemptions } = status
     to   { transform: translateY(-16px); opacity: 0; }
   }
   @keyframes toastPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(232,197,71,0.35); }
-    50%      { box-shadow: 0 0 0 8px rgba(232,197,71,0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(138,109,31,0.25); }
+    50%      { box-shadow: 0 0 0 8px rgba(138,109,31,0); }
   }
   .quest-toast { animation: toastIn 0.4s cubic-bezier(0.34,1.12,0.64,1) both, toastPulse 1.6s ease-out 0.4s; }
   .quest-toast.leaving { animation: toastOut 0.3s ease both; }
@@ -188,23 +188,23 @@ const { points, quest, pending_pin, redemptions } = status
     className="quest-toast"
     style={{
       display: 'flex', alignItems: 'center', gap: 10,
-      background: 'linear-gradient(135deg, rgba(232,197,71,0.16) 0%, rgba(255,92,53,0.1) 100%)',
-      border: '1px solid rgba(232,197,71,0.3)',
+      background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-orange-dim) 100%)',
+      border: '1px solid var(--pr-border-hover)',
       borderRadius: 14, padding: '12px 14px', marginBottom: 12,
     }}
   >
     <div style={{
       width: 32, height: 32, flexShrink: 0, borderRadius: 10,
-      background: 'rgba(232,197,71,0.18)', border: '1px solid rgba(232,197,71,0.3)',
+      background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <Trophy size={15} color="#E8C547" />
+      <Trophy size={15} color="var(--pr-gold)" />
     </div>
     <div>
-      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>
+      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
         Visit verified! +{pointsGained} points
       </p>
-      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(250,250,247,0.45)', fontFamily: 'var(--font-body)' }}>
+      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
         Your waiter confirmed your PIN.
       </p>
     </div>
@@ -214,34 +214,34 @@ const { points, quest, pending_pin, redemptions } = status
 
       {/* Points header */}
       <div style={{
-        background: 'linear-gradient(135deg, rgba(232,197,71,0.08) 0%, rgba(255,92,53,0.05) 100%)',
-        border: '1px solid rgba(232,197,71,0.18)',
+        background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-orange-dim) 100%)',
+        border: '1px solid var(--pr-border-hover)',
         borderRadius: 20,
         padding: '20px 20px 18px',
         marginBottom: 12,
       }}>
-        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
           Reward Points
         </p>
-        <p style={{ margin: '4px 0 14px', fontSize: 36, fontWeight: 700, color: '#FAFAF7', fontFamily: 'var(--font-body)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+        <p style={{ margin: '4px 0 14px', fontSize: 36, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)', letterSpacing: '-0.02em', lineHeight: 1 }}>
           {points.toLocaleString('en-IN')}
         </p>
 
         {/* Quest progress */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <Trophy size={13} color="#E8C547" />
-          <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>
+          <Trophy size={13} color="var(--pr-gold)" />
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
             Quest: First Feast — {quest.target_visits} verified visits
           </p>
         </div>
-        <div style={{ height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
+        <div style={{ height: 6, background: 'var(--pr-border-hover)', borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
           <div style={{
             height: '100%', width: `${quest.progress_pct}%`,
-            background: 'linear-gradient(90deg, #E8C547, #FF5C35)',
+            background: 'linear-gradient(90deg, var(--pr-gold), var(--pr-orange))',
             borderRadius: 999, transition: 'width 0.6s ease',
           }} />
         </div>
-        <p style={{ margin: 0, fontSize: 11, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
           {quest.unlocked
             ? 'Quest complete! 🎉 Redeem your reward below.'
             : `${points}/${quest.target_points} points · ${status.verified_visits}/${quest.target_visits} visits`}
@@ -250,43 +250,43 @@ const { points, quest, pending_pin, redemptions } = status
 
       {/* Verify visit box */}
       <div style={{
-        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+        background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
         borderRadius: 14, padding: '14px 16px', marginBottom: 12,
       }}>
         {showPinForThisRestaurant ? (
           <>
-            <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+            <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
               Show this PIN to your waiter
             </p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 32, fontWeight: 800, letterSpacing: '0.15em', color: '#E8C547', fontFamily: 'var(--font-body)' }}>
+              <span style={{ fontSize: 32, fontWeight: 800, letterSpacing: '0.15em', color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
                 {pending_pin!.pin}
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
                 <Clock size={12} /> {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
               </span>
             </div>
-            <p style={{ margin: '8px 0 0', fontSize: 11, color: 'rgba(250,250,247,0.35)', fontFamily: 'var(--font-body)' }}>
+            <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
               Your waiter will verify this after your meal to add {status.points_per_visit} points.
             </p>
           </>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <KeyRound size={14} color="#E8C547" />
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>
+              <KeyRound size={14} color="var(--pr-gold)" />
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
                 Verify your visit
               </p>
             </div>
-            <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+            <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
               After your meal, get a PIN and show it to your waiter to earn {status.points_per_visit} points.
             </p>
             <button
               type="button" onClick={() => void handleGeneratePin()} disabled={genLoading}
               style={{
                 width: '100%', height: 40, borderRadius: 10,
-                background: 'rgba(232,197,71,0.14)', border: '1px solid rgba(232,197,71,0.28)',
-                color: '#E8C547', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-body)',
+                background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+                color: 'var(--pr-gold)', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-body)',
                 cursor: genLoading ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}
@@ -296,7 +296,7 @@ const { points, quest, pending_pin, redemptions } = status
             </button>
           </>
         )}
-        {error && <p style={{ margin: '8px 0 0', fontSize: 11, color: '#f87171', fontFamily: 'var(--font-body)' }}>{error}</p>}
+        {error && <p style={{ margin: '8px 0 0', fontSize: 11, color: '#dc2626', fontFamily: 'var(--font-body)' }}>{error}</p>}
       </div>
 
       {/* Redeem */}
@@ -305,8 +305,8 @@ const { points, quest, pending_pin, redemptions } = status
           type="button" onClick={() => setShowRedeem(true)}
           style={{
             width: '100%', height: 46, borderRadius: 12,
-            background: 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)',
-            border: 'none', color: '#111', fontSize: 14, fontWeight: 700,
+            background: 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
+            border: 'none', color: 'var(--pr-cta-text)', fontSize: 14, fontWeight: 700,
             fontFamily: 'var(--font-body)', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             marginBottom: 12,
@@ -321,10 +321,10 @@ const { points, quest, pending_pin, redemptions } = status
           background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.16)',
           borderRadius: 14, padding: '12px 14px', marginBottom: 12,
         }}>
-          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: '#4ade80', fontFamily: 'var(--font-body)' }}>
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: '#16a34a', fontFamily: 'var(--font-body)' }}>
             {REWARD_LABELS[pendingRedemption.reward_type]} requested
           </p>
-          <p style={{ margin: '4px 0 10px', fontSize: 11, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+          <p style={{ margin: '4px 0 10px', fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
             We'll send your gift card code here once it's issued.
           </p>
           <button
@@ -335,7 +335,7 @@ const { points, quest, pending_pin, redemptions } = status
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '6px 12px', borderRadius: 8,
               background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.22)',
-              color: '#4ade80', fontSize: 11.5, fontWeight: 700,
+              color: '#16a34a', fontSize: 11.5, fontWeight: 700,
               fontFamily: 'var(--font-body)', cursor: resendLoading ? 'not-allowed' : 'pointer',
               opacity: resendLoading ? 0.6 : 1,
             }}
@@ -344,7 +344,7 @@ const { points, quest, pending_pin, redemptions } = status
             {resendLoading ? 'Resending…' : 'Resend request'}
           </button>
           {resendMsg && (
-            <p style={{ margin: '8px 0 0', fontSize: 10.5, color: resendMsg.startsWith('Request resent') ? '#4ade80' : '#f87171', fontFamily: 'var(--font-body)' }}>
+            <p style={{ margin: '8px 0 0', fontSize: 10.5, color: resendMsg.startsWith('Request resent') ? '#16a34a' : '#dc2626', fontFamily: 'var(--font-body)' }}>
               {resendMsg}
             </p>
           )}
@@ -353,24 +353,24 @@ const { points, quest, pending_pin, redemptions } = status
 
       {redemptions.filter((r) => r.status === 'fulfilled').map((r) => (
         <div key={r.id} style={{
-          background: 'rgba(232,197,71,0.06)', border: '1px solid rgba(232,197,71,0.16)',
+          background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
           borderRadius: 14, padding: '12px 14px', marginBottom: 8,
         }}>
-          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: '#E8C547', fontFamily: 'var(--font-body)' }}>
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
             {REWARD_LABELS[r.reward_type]}
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
             <span style={{
-              background: 'rgba(255,255,255,0.06)', border: '1px dashed rgba(255,255,255,0.15)',
+              background: 'var(--pr-border)', border: '1px dashed var(--pr-border-hover)',
               borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 700,
-              color: 'rgba(250,250,247,0.8)', fontFamily: 'var(--font-mono, monospace)',
+              color: 'var(--pr-text-muted)', fontFamily: 'var(--font-mono, monospace)',
             }}>
               {r.gift_card_code}
             </span>
             <button
               type="button"
               onClick={() => { navigator.clipboard.writeText(r.gift_card_code ?? ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-              style={{ background: 'none', border: 'none', color: '#E8C547', cursor: 'pointer', display: 'flex' }}
+              style={{ background: 'none', border: 'none', color: 'var(--pr-gold)', cursor: 'pointer', display: 'flex' }}
             >
               {copied ? <Check size={13} /> : <Copy size={13} />}
             </button>
@@ -382,11 +382,11 @@ const { points, quest, pending_pin, redemptions } = status
       {showRedeem && (
         <div
           onClick={() => setShowRedeem(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(33,30,27,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} style={{ background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: 20, width: '100%', maxWidth: 340 }}>
-            <p style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#FAFAF7', fontFamily: 'var(--font-body)' }}>Choose your reward</p>
-            <p style={{ margin: '0 0 16px', fontSize: 11.5, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>150 points will be deducted.</p>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--pr-card)', border: '1px solid var(--pr-border-hover)', borderRadius: 20, padding: 20, width: '100%', maxWidth: 340 }}>
+            <p style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>Choose your reward</p>
+            <p style={{ margin: '0 0 16px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>150 points will be deducted.</p>
             {(['amazon_pay', 'zomato', 'swiggy'] as const).map((type) => (
               <button
                 key={type}
@@ -395,8 +395,8 @@ const { points, quest, pending_pin, redemptions } = status
                 disabled={redeemLoading !== null}
                 style={{
                   width: '100%', height: 46, marginBottom: 8, borderRadius: 12,
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#FAFAF7', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-body)',
+                  background: 'rgba(33,30,27,0.03)', border: '1px solid var(--pr-border-hover)',
+                  color: 'var(--pr-text)', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-body)',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}
               >
@@ -404,7 +404,7 @@ const { points, quest, pending_pin, redemptions } = status
                 {REWARD_LABELS[type]}
               </button>
             ))}
-            {error && <p style={{ margin: '4px 0 0', fontSize: 11, color: '#f87171', fontFamily: 'var(--font-body)' }}>{error}</p>}
+            {error && <p style={{ margin: '4px 0 0', fontSize: 11, color: '#dc2626', fontFamily: 'var(--font-body)' }}>{error}</p>}
           </div>
         </div>
       )}

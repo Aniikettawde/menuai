@@ -21,8 +21,6 @@ interface Props {
 
 type Screen = 'phone' | 'otp' | 'name' | 'done'
 
-// ─── Single OTP input (replaces the 6-box grid) ───────────────────────────────
-
 function SingleOTPInput({
   value,
   onChange,
@@ -69,14 +67,12 @@ function SingleOTPInput({
         fontSize: 26,
         fontWeight: 700,
         letterSpacing: '0.5em',
-        // Nudge the text left slightly so the visual center accounts for
-        // the extra letter-spacing trailing the last character.
         textIndent: '0.5em',
         fontFamily: 'var(--font-body)',
-        background: value ? 'rgba(232,197,71,0.08)' : 'rgba(255,255,255,0.05)',
-        border: `1.5px solid ${value ? 'rgba(232,197,71,0.4)' : 'rgba(255,255,255,0.1)'}`,
+        background: value ? 'var(--pr-gold-dim)' : 'rgba(33,30,27,0.03)',
+        border: `1.5px solid ${value ? 'var(--pr-border-hover)' : 'var(--pr-border)'}`,
         borderRadius: 16,
-        color: '#FAFAF7',
+        color: 'var(--pr-text)',
         outline: 'none',
         transition: 'all 0.15s',
         opacity: disabled ? 0.5 : 1,
@@ -270,7 +266,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
           position: 'fixed',
           inset: 0,
           zIndex: 1000,
-          background: 'rgba(0,0,0,0.7)',
+          background: 'rgba(33,30,27,0.55)',
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
           display: 'flex',
@@ -283,9 +279,9 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
           style={{
             width: '100%',
             maxWidth: 480,
-            background: '#1A1A1A',
+            background: 'var(--pr-card)',
             borderRadius: '28px 28px 0 0',
-            border: '1px solid rgba(255,255,255,0.08)',
+            border: '1px solid var(--pr-border-hover)',
             borderBottom: 'none',
             overflow: 'hidden',
             position: 'relative',
@@ -295,7 +291,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
             style={{
               height: 3,
               background:
-                'linear-gradient(90deg, transparent 0%, #E8C547 40%, #FF5C35 70%, transparent 100%)',
+                'linear-gradient(90deg, transparent 0%, var(--pr-gold) 40%, var(--pr-orange) 70%, transparent 100%)',
             }}
           />
 
@@ -308,11 +304,11 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                 position: 'absolute',
                 top: 20,
                 right: 20,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(33,30,27,0.04)',
+                border: '1px solid var(--pr-border)',
                 borderRadius: 10,
                 padding: 6,
-                color: 'rgba(250,250,247,0.5)',
+                color: 'var(--pr-text-faint)',
                 cursor: 'pointer',
                 display: 'flex',
                 transition: 'all 0.15s',
@@ -328,15 +324,15 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     width: 48,
                     height: 48,
                     borderRadius: 16,
-                    background: 'rgba(232,197,71,0.12)',
-                    border: '1px solid rgba(232,197,71,0.2)',
+                    background: 'var(--pr-gold-dim)',
+                    border: '1px solid var(--pr-border-hover)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     marginBottom: 16,
                   }}
                 >
-                  <Phone size={20} color="#E8C547" />
+                  <Phone size={20} color="var(--pr-gold)" />
                 </div>
 
                 <h2
@@ -345,7 +341,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     fontFamily: 'var(--font-display)',
                     fontSize: 22,
                     fontWeight: 600,
-                    color: '#FAFAF7',
+                    color: 'var(--pr-text)',
                     letterSpacing: '-0.01em',
                   }}
                 >
@@ -355,7 +351,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   style={{
                     margin: '0 0 24px',
                     fontSize: 13,
-                    color: 'rgba(250,250,247,0.45)',
+                    color: 'var(--pr-text-muted)',
                     lineHeight: 1.5,
                   }}
                 >
@@ -368,8 +364,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     gap: 8,
                     marginBottom: 24,
                     padding: '12px 14px',
-                    background: 'rgba(232,197,71,0.06)',
-                    border: '1px solid rgba(232,197,71,0.14)',
+                    background: 'var(--pr-gold-dim)',
+                    border: '1px solid var(--pr-border-hover)',
                     borderRadius: 14,
                   }}
                 >
@@ -384,7 +380,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                         flex: 1,
                         textAlign: 'center',
                         fontSize: 11,
-                        color: 'rgba(250,250,247,0.55)',
+                        color: 'var(--pr-text-muted)',
                         lineHeight: 1.4,
                       }}
                     >
@@ -398,8 +394,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: `1.5px solid ${error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                    background: 'rgba(33,30,27,0.03)',
+                    border: `1.5px solid ${error ? '#dc2626' : 'var(--pr-border-hover)'}`,
                     borderRadius: 14,
                     overflow: 'hidden',
                     marginBottom: error ? 8 : 20,
@@ -411,8 +407,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                       padding: '0 14px',
                       fontSize: 14,
                       fontWeight: 600,
-                      color: 'rgba(250,250,247,0.4)',
-                      borderRight: '1px solid rgba(255,255,255,0.08)',
+                      color: 'var(--pr-text-faint)',
+                      borderRight: '1px solid var(--pr-border)',
                       height: 52,
                       display: 'flex',
                       alignItems: 'center',
@@ -443,7 +439,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                       fontSize: 16,
                       fontWeight: 500,
                       letterSpacing: '0.04em',
-                      color: '#FAFAF7',
+                      color: 'var(--pr-text)',
                       fontFamily: 'var(--font-body)',
                       padding: '0 16px',
                       touchAction: 'manipulation',
@@ -452,7 +448,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                 </div>
 
                 {error && (
-                  <p style={{ margin: '0 0 16px', fontSize: 12, color: '#f87171' }}>{error}</p>
+                  <p style={{ margin: '0 0 16px', fontSize: 12, color: '#dc2626' }}>{error}</p>
                 )}
 
                 <button
@@ -464,11 +460,11 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     height: 52,
                     background:
                       loading || phone.length < 10
-                        ? 'rgba(232,197,71,0.15)'
-                        : 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)',
+                        ? 'var(--pr-gold-dim)'
+                        : 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
                     border: 'none',
                     borderRadius: 14,
-                    color: loading || phone.length < 10 ? 'rgba(232,197,71,0.4)' : '#111',
+                    color: loading || phone.length < 10 ? 'var(--pr-text-faint)' : 'var(--pr-cta-text)',
                     fontSize: 15,
                     fontWeight: 700,
                     fontFamily: 'var(--font-body)',
@@ -502,7 +498,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     height: 44,
                     background: 'none',
                     border: 'none',
-                    color: 'rgba(250,250,247,0.35)',
+                    color: 'var(--pr-text-faint)',
                     cursor: 'pointer',
                     fontSize: 13,
                     fontFamily: 'var(--font-body)',
@@ -521,15 +517,15 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     width: 48,
                     height: 48,
                     borderRadius: 16,
-                    background: 'rgba(255,92,53,0.1)',
-                    border: '1px solid rgba(255,92,53,0.2)',
+                    background: 'var(--pr-orange-dim)',
+                    border: '1px solid rgba(122,31,43,0.2)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     marginBottom: 16,
                   }}
                 >
-                  <Shield size={20} color="#FF5C35" />
+                  <Shield size={20} color="var(--pr-orange)" />
                 </div>
 
                 <h2
@@ -538,7 +534,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     fontFamily: 'var(--font-display)',
                     fontSize: 22,
                     fontWeight: 600,
-                    color: '#FAFAF7',
+                    color: 'var(--pr-text)',
                   }}
                 >
                   Verify OTP
@@ -548,7 +544,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   style={{
                     margin: '0 0 28px',
                     fontSize: 13,
-                    color: 'rgba(250,250,247,0.45)',
+                    color: 'var(--pr-text-muted)',
                     lineHeight: 1.5,
                   }}
                 >
@@ -565,7 +561,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                       marginLeft: 8,
                       background: 'none',
                       border: 'none',
-                      color: '#E8C547',
+                      color: 'var(--pr-gold)',
                       cursor: 'pointer',
                       fontSize: 12,
                       fontWeight: 600,
@@ -589,7 +585,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                       margin: '12px 0 0',
                       textAlign: 'center',
                       fontSize: 12,
-                      color: '#f87171',
+                      color: '#dc2626',
                     }}
                   >
                     {error}
@@ -606,14 +602,14 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     height: 52,
                     background:
                       loading || otp.replace(/\D/g, '').length < 6
-                        ? 'rgba(232,197,71,0.15)'
-                        : 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)',
+                        ? 'var(--pr-gold-dim)'
+                        : 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
                     border: 'none',
                     borderRadius: 14,
                     color:
                       loading || otp.replace(/\D/g, '').length < 6
-                        ? 'rgba(232,197,71,0.4)'
-                        : '#111',
+                        ? 'var(--pr-text-faint)'
+                        : 'var(--pr-cta-text)',
                     fontSize: 15,
                     fontWeight: 700,
                     fontFamily: 'var(--font-body)',
@@ -641,7 +637,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     marginTop: 16,
                     textAlign: 'center',
                     fontSize: 12,
-                    color: 'rgba(250,250,247,0.35)',
+                    color: 'var(--pr-text-faint)',
                   }}
                 >
                   {resendTimer > 0 ? (
@@ -656,7 +652,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: '#E8C547',
+                        color: 'var(--pr-gold)',
                         cursor: 'pointer',
                         fontSize: 12,
                         fontWeight: 600,
@@ -696,7 +692,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     fontFamily: 'var(--font-display)',
                     fontSize: 22,
                     fontWeight: 600,
-                    color: '#FAFAF7',
+                    color: 'var(--pr-text)',
                   }}
                 >
                   What should we call you?
@@ -705,7 +701,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   style={{
                     margin: '0 0 24px',
                     fontSize: 13,
-                    color: 'rgba(250,250,247,0.45)',
+                    color: 'var(--pr-text-muted)',
                     lineHeight: 1.5,
                   }}
                 >
@@ -722,12 +718,12 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   style={{
                     width: '100%',
                     height: 52,
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1.5px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(33,30,27,0.03)',
+                    border: '1.5px solid var(--pr-border-hover)',
                     borderRadius: 14,
                     outline: 'none',
                     fontSize: 15,
-                    color: '#FAFAF7',
+                    color: 'var(--pr-text)',
                     fontFamily: 'var(--font-body)',
                     padding: '0 16px',
                     boxSizing: 'border-box',
@@ -736,10 +732,10 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     touchAction: 'manipulation',
                   } as React.CSSProperties}
                   onFocus={(e) => {
-                    e.target.style.borderColor = 'rgba(232,197,71,0.4)'
+                    e.target.style.borderColor = 'var(--pr-gold)'
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = 'rgba(255,255,255,0.1)'
+                    e.target.style.borderColor = 'var(--pr-border-hover)'
                   }}
                 />
 
@@ -751,11 +747,11 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     width: '100%',
                     height: 52,
                     background: loading
-                      ? 'rgba(232,197,71,0.15)'
-                      : 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)',
+                      ? 'var(--pr-gold-dim)'
+                      : 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
                     border: 'none',
                     borderRadius: 14,
-                    color: loading ? 'rgba(232,197,71,0.4)' : '#111',
+                    color: loading ? 'var(--pr-text-faint)' : 'var(--pr-cta-text)',
                     fontSize: 15,
                     fontWeight: 700,
                     fontFamily: 'var(--font-body)',
@@ -792,7 +788,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     height: 40,
                     background: 'none',
                     border: 'none',
-                    color: 'rgba(250,250,247,0.3)',
+                    color: 'var(--pr-text-faint)',
                     cursor: 'pointer',
                     fontSize: 12,
                     fontFamily: 'var(--font-body)',
@@ -821,7 +817,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                     fontFamily: 'var(--font-display)',
                     fontSize: 24,
                     fontWeight: 600,
-                    color: '#FAFAF7',
+                    color: 'var(--pr-text)',
                   }}
                 >
                   {displayName ? `Welcome, ${displayName}!` : "You're in!"}
@@ -830,7 +826,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
                   style={{
                     margin: 0,
                     fontSize: 13,
-                    color: 'rgba(250,250,247,0.45)',
+                    color: 'var(--pr-text-muted)',
                     lineHeight: 1.5,
                   }}
                 >

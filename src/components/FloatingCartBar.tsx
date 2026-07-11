@@ -104,51 +104,66 @@ const subtotal = cartItems.reduce((sum, c) => {
       <CartSheet onCallWaiter={onCallWaiter} isWaiterLoading={isWaiterLoading} />
 
       {itemCount > 0 && ordersEnabled && (
-  <button
-    type="button"
-    onClick={handleOpenCart}
-    className={[
-            'fixed bottom-4 left-1/2 z-[60] w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2',
-            'rounded-[26px] border border-slate-200 bg-white/95 px-4 py-3.5',
-            'shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop-blur-xl',
-            'transition-all duration-300 active:scale-[0.99]',
-            bump ? 'scale-[1.02]' : 'scale-100',
-          ].join(' ')}
+        <button
+          type="button"
+          onClick={handleOpenCart}
+          style={{
+            position: 'fixed',
+            bottom: '88px', // sits above the BottomTabBar
+            left: '50%',
+            transform: `translateX(-50%) scale(${bump ? 1.02 : 1})`,
+            zIndex: 55,
+            width: 'calc(100% - 1.5rem)',
+            maxWidth: '600px',
+            borderRadius: 22,
+            border: '1px solid var(--pr-border-hover)',
+            background: 'var(--pr-card)',
+            padding: '14px 16px',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.10)',
+            backdropFilter: 'blur(14px)',
+            cursor: 'pointer',
+            transition: 'transform 0.2s ease',
+          }}
         >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
               <div
-                className={[
-                  'flex h-11 w-11 items-center justify-center rounded-2xl',
-                  'bg-slate-900 text-white',
-                  'shadow-lg shadow-slate-900/15 transition-transform',
-                  bump ? 'scale-105' : 'scale-100',
-                ].join(' ')}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 44, height: 44, borderRadius: 14,
+                  background: 'var(--pr-gold)',
+                  color: 'var(--pr-cta-text)',
+                  flexShrink: 0,
+                  transform: bump ? 'scale(1.05)' : 'scale(1)',
+                  transition: 'transform 0.2s ease',
+                }}
               >
-                {isWaiterLoading ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <ShoppingBag size={18} />
-                )}
+                {isWaiterLoading ? <Loader2 size={18} className="animate-spin" /> : <ShoppingBag size={18} />}
               </div>
 
-              <div className="min-w-0 text-left">
-                <p className="truncate text-sm font-semibold text-slate-900">
-                  {isWaiterLoading
-                    ? 'Notifying waiter…'
-                    : `Order summary · ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
+              <div style={{ minWidth: 0, textAlign: 'left' }}>
+                <p style={{
+                  margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--pr-text)',
+                  fontFamily: 'var(--font-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {isWaiterLoading ? 'Notifying waiter…' : `Order summary · ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
                 </p>
-                <p className="text-xs text-slate-500">
+                <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
                   {isWaiterLoading ? 'Please wait a moment' : 'Tap to review cart'}
                 </p>
               </div>
             </div>
 
-            <div className="shrink-0 text-right">
-              <p className="text-sm font-semibold text-slate-900">
+            <div style={{ flexShrink: 0, textAlign: 'right' }}>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
                 ₹{Math.round(subtotal / 100)}
               </p>
-              <p className="text-[10px] uppercase tracking-wider text-slate-400">Open cart</p>
+              <p style={{
+                margin: '2px 0 0', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.08em',
+                textTransform: 'uppercase', color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)',
+              }}>
+                Open cart
+              </p>
             </div>
           </div>
         </button>

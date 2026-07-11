@@ -95,21 +95,18 @@ function AddButton({
           style={{
             height: 32, width: 76,
             borderRadius: 10,
-            border: adding
-              ? '1.5px solid rgba(34,197,94,0.4)'
-              : '1.5px solid var(--pr-orange)',
-            background: adding
-              ? 'rgba(34,197,94,0.1)'
-              : 'var(--pr-orange-dim)',
-            color: adding ? '#22c55e' : 'var(--pr-orange)',
-            fontSize: 11, fontWeight: 700,
-            letterSpacing: '0.05em',
+            border: 'none',
+            background: adding ? '#22c55e' : 'var(--pr-orange)',
+            color: adding ? '#ffffff' : 'var(--pr-cta-text)',
+            fontSize: 11, fontWeight: 800,
+            letterSpacing: '0.06em',
             cursor: 'pointer',
             transition: 'all 0.15s',
             fontFamily: 'var(--font-body)',
+            textTransform: 'uppercase',
           }}
         >
-          {adding ? '✓ Added' : 'ADD'}
+          {adding ? '✓ Added' : 'Add'}
         </button>
         {hasOptions && !adding && (
           <span style={{
@@ -138,11 +135,11 @@ function AddButton({
             width: 28, height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'none', border: 'none', cursor: 'pointer',
-            color: 'white', fontSize: 16,
+            color: 'var(--pr-cta-text)',
           }}>
           <Minus size={12} strokeWidth={2.5} />
         </button>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'white', fontFamily: 'var(--font-body)' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--pr-cta-text)', fontFamily: 'var(--font-body)' }}>
           {qtyInCart}
         </span>
         <button type="button" onClick={onInc} aria-label="Increase"
@@ -150,7 +147,7 @@ function AddButton({
             width: 28, height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'none', border: 'none', cursor: 'pointer',
-            color: 'white',
+            color: 'var(--pr-cta-text)',
           }}>
           <Plus size={12} strokeWidth={2.5} />
         </button>
@@ -237,7 +234,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
           : 'var(--pr-card)',
         borderRadius: 16,
         border: isInCart
-          ? '1px solid rgba(255,92,53,0.2)'
+          ? '1px solid rgba(122,31,43,0.18)'
           : '1px solid var(--pr-border)',
         overflow: 'hidden',
         transition: 'all 0.2s',
@@ -276,7 +273,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
                 background: 'var(--pr-gold-dim)',
-                border: '1px solid rgba(232,197,71,0.2)',
+                border: '1px solid rgba(138,109,31,0.2)',
                 color: 'var(--pr-gold)',
                 borderRadius: 5, padding: '2px 7px',
                 fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
@@ -291,7 +288,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
       background: 'var(--pr-gold-dim)',
-      border: '1px solid rgba(212,168,75,0.18)',
+      border: '1px solid rgba(138,109,31,0.18)',
       color: 'var(--pr-gold)',
       borderRadius: 5, padding: '2px 7px',
       fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
@@ -328,10 +325,10 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
 
           {/* Name */}
           <p style={{
-            fontSize: 14, fontWeight: 600, lineHeight: 1.3,
-            color: 'var(--pr-text)',
-            fontFamily: 'var(--font-body)',
-          }}>
+  fontSize: 14, fontWeight: 600, lineHeight: 1.3,
+  color: 'var(--pr-text)',
+  fontFamily: 'var(--font-display)',   // was var(--font-body)
+}}>
             {item.name}
             {item.tags?.includes('spicy') && (
               <Flame size={11} style={{ marginLeft: 4, display: 'inline', color: '#f87171', verticalAlign: 'middle' }} />
@@ -424,7 +421,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
                   {item.tags?.filter((t) => t !== 'new' && t !== 'spicy').map((tag) => (
                     <span key={tag} style={{
                       background: 'var(--pr-orange-dim)',
-                      border: '1px solid rgba(255,92,53,0.15)',
+                      border: '1px solid rgba(122,31,43,0.15)',
                       borderRadius: 100, padding: '2px 8px',
                       fontSize: 10, color: 'var(--pr-orange)',
                       fontFamily: 'var(--font-body)',
@@ -497,7 +494,7 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
         }
         .pr-item-card:hover {
           transform: translateY(-1px);
-          box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.08);
         }
         .pr-item-card:active {
           transform: translateY(0);

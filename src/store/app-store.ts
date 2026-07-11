@@ -12,6 +12,8 @@ import type {
   DeliveryPreference,
 } from '@/types'
 
+export type ActiveTab = 'menu' | 'about' | 'account'
+
 export type RatingContext = {
   orderId: string
   orderCode: string
@@ -39,6 +41,8 @@ interface AppStore {
   cartPulse: number
   tableNumber: number | null
   hasTableToken: boolean
+  activeTab: ActiveTab
+setActiveTab: (tab: ActiveTab) => void
 
   customiseItemId: string | null
 
@@ -162,6 +166,7 @@ export const useAppStore = create<AppStore>()(
     showRatingsList: false,
     isOffline: false,
     showChat: false,
+activeTab: 'menu',
 
     setHasTableToken: (has) =>
       set((state) => {
@@ -307,6 +312,11 @@ export const useAppStore = create<AppStore>()(
       set((state) => {
         state.showChat = show
       }),
+	  
+	  setActiveTab: (tab) =>
+  set((state) => {
+    state.activeTab = tab
+  }),
 
     setTableNumber: (tableNumber) =>
       set((state) => {

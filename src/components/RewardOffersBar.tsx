@@ -32,8 +32,8 @@ const WRAP: React.CSSProperties = { width: '100%' }
 
 const CARD: React.CSSProperties = {
   borderRadius: 16,
-  background: 'linear-gradient(135deg, rgba(232,197,71,0.07) 0%, rgba(255,92,53,0.04) 100%)',
-  border: '1px solid rgba(232,197,71,0.16)',
+  background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-card) 100%)',
+  border: '1px solid var(--pr-border-hover)',
   overflow: 'hidden',
 }
 
@@ -55,25 +55,23 @@ const ICON_CIRCLE: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   fontSize: 18,
-  background: 'rgba(232,197,71,0.14)',
-  border: '1px solid rgba(232,197,71,0.22)',
+  background: 'var(--pr-gold-dim)',
+  border: '1px solid var(--pr-border-hover)',
 }
 
 const TITLE: React.CSSProperties = {
   margin: 0,
   fontSize: 13.5,
   fontWeight: 700,
-  color: '#FAFAF7',
+  color: 'var(--pr-text)',
   fontFamily: 'var(--font-body)',
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  // remove nowrap/ellipsis — let it size naturally since text is now short
 }
 
 const SUBTITLE: React.CSSProperties = {
   margin: '2px 0 0',
   fontSize: 11.5,
-  color: 'rgba(250,250,247,0.45)',
+  color: 'var(--pr-text-muted)',
   fontFamily: 'var(--font-body)',
   whiteSpace: 'nowrap',
   overflow: 'hidden',
@@ -85,9 +83,9 @@ const CTA: React.CSSProperties = {
   height: 34,
   padding: '0 13px',
   borderRadius: 10,
-  background: 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)',
+  background: 'var(--pr-gold)',
   border: 'none',
-  color: '#111',
+  color: 'var(--pr-cta-text)',
   fontSize: 12.5,
   fontWeight: 700,
   fontFamily: 'var(--font-body)',
@@ -106,9 +104,9 @@ const CHEVRON_BTN: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: 'rgba(255,255,255,0.05)',
-  border: '1px solid rgba(255,255,255,0.08)',
-  color: 'rgba(250,250,247,0.5)',
+  background: 'rgba(245,245,243,0.05)',
+  border: '1px solid var(--pr-border)',
+  color: 'var(--pr-text-muted)',
   cursor: 'pointer',
 }
 
@@ -132,14 +130,12 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
     pendingPin.restaurant_id === restaurantId &&
     new Date(pendingPin.expires_at).getTime() > Date.now()
 
-  // Poll while a PIN is outstanding so the row updates the moment staff verify it.
   useEffect(() => {
     if (!pinActiveHere) return
     const id = setInterval(() => { void refresh() }, 4000)
     return () => clearInterval(id)
   }, [pinActiveHere, refresh])
 
-  // Detect the pending -> verified transition and trigger the celebration.
   useEffect(() => {
     if (pointsJustGained > 0) {
       setCelebrating(true)
@@ -184,11 +180,11 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
         flexShrink: 0,
         padding: '2px 8px',
         borderRadius: 999,
-        background: 'rgba(232,197,71,0.14)',
-        border: '1px solid rgba(232,197,71,0.24)',
+        background: 'var(--pr-gold-dim)',
+        border: '1px solid var(--pr-border-hover)',
         fontSize: 10,
         fontWeight: 700,
-        color: '#E8C547',
+        color: 'var(--pr-gold)',
         fontFamily: 'var(--font-body)',
       }}
     >
@@ -204,10 +200,10 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
           <div style={ROW} onClick={() => setExpanded((v) => !v)}>
             <div style={ICON_CIRCLE}>🎁</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={TITLE}>Earn Rewards & Get Offers</p>
+              <p style={TITLE}>Earn Rewards</p>
               <p style={SUBTITLE}>
-                150 pts = ₹150 gift card{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''} waiting` : ''}
-              </p>
+  150 pts = ₹150 gift card{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
+</p>
             </div>
             {offerBadge}
             <button type="button" onClick={(e) => { e.stopPropagation(); onLoginClick() }} style={CTA}>
@@ -219,7 +215,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
               {offerCount > 0 ? (
                 <OffersCarousel offers={offers} restaurantId={restaurantId} restaurantName={restaurantName} onLoginClick={onLoginClick} />
               ) : (
-                <p style={{ margin: 0, fontSize: 12, color: 'rgba(250,250,247,0.4)', fontFamily: 'var(--font-body)' }}>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
                   Log in to start earning points on every verified visit.
                 </p>
               )}
@@ -235,7 +231,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
     return (
       <div style={WRAP}>
         <div style={{ ...CARD, display: 'flex', justifyContent: 'center', padding: '14px', cursor: 'default' }}>
-          <Loader2 size={16} style={{ animation: 'ro-spin 0.8s linear infinite', color: 'rgba(232,197,71,0.5)' }} />
+          <Loader2 size={16} style={{ animation: 'ro-spin 0.8s linear infinite', color: 'var(--pr-gold)', opacity: 0.6 }} />
           <style>{spinKeyframes}</style>
         </div>
       </div>
@@ -251,7 +247,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
         <div style={{ ...CARD, cursor: 'default' }}>
           <div style={{ ...ROW, cursor: 'default' }}>
             <ConfettiBurst />
-            <div style={{ ...ICON_CIRCLE, background: 'rgba(232,197,71,0.18)' }}>🎉</div>
+            <div style={{ ...ICON_CIRCLE, background: 'var(--pr-gold-dim)' }}>🎉</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={TITLE}>+{pointsJustGained} Points Added!</p>
               <p style={SUBTITLE}>Balance: {points.toLocaleString('en-IN')} pts</p>
@@ -280,7 +276,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
                 aria-label="Open your account"
                 style={{ ...ICON_CIRCLE, cursor: 'pointer' }}
               >
-                <Clock size={17} color="#E8C547" />
+                <Clock size={17} color="var(--pr-gold)" />
               </button>
               <div style={{ flex: 1, minWidth: 0 }}>
                <p style={TITLE}>Code {pendingPin.pin} · claiming your points</p>
@@ -329,7 +325,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
               aria-label="Open your account"
               style={{ ...ICON_CIRCLE, cursor: 'pointer' }}
             >
-              <KeyRound size={17} color="#E8C547" />
+              <KeyRound size={17} color="var(--pr-gold)" />
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={TITLE}>{customerName ? `Hi ${customerName}, claim your points` : 'Claim your visit points'}</p>
@@ -379,7 +375,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             aria-label="Open your account"
             style={{ ...ICON_CIRCLE, cursor: 'pointer' }}
           >
-            <Gift size={17} color="#E8C547" />
+            <Gift size={17} color="var(--pr-gold)" />
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={TITLE}>{customerName ? `Hi ${customerName}` : 'Your rewards'}</p>
@@ -393,9 +389,9 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             disabled={genLoading}
             style={{
               ...CTA,
-              background: 'rgba(232,197,71,0.14)',
-              border: '1px solid rgba(232,197,71,0.28)',
-              color: '#E8C547',
+              background: 'var(--pr-gold-dim)',
+              border: '1px solid var(--pr-border-hover)',
+              color: 'var(--pr-gold)',
               opacity: genLoading ? 0.7 : 1,
               cursor: genLoading ? 'not-allowed' : 'pointer',
             }}
@@ -424,9 +420,9 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
                   width: '100%',
                   height: 38,
                   borderRadius: 11,
-                  background: 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)',
+                  background: 'var(--pr-gold)',
                   border: 'none',
-                  color: '#111',
+                  color: 'var(--pr-cta-text)',
                   fontSize: 12.5,
                   fontWeight: 700,
                   fontFamily: 'var(--font-body)',

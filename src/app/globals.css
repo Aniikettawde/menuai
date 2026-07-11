@@ -33,43 +33,31 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    PREMIUM RESTAURANT MENU TOKENS — scoped to .pr-shell
-   Only activates on /r/[slug] paid pages. Zero bleed to marketing site.
+   ─────────────────────────────────────────────────────────────────────────
+   NOTE: The actual --pr-gold / --pr-orange / --pr-card / --font-display /
+   etc. token VALUES are defined once, in RestaurantShell.tsx's injected
+   <style jsx global> :root block (and overridden again for the bar-menu
+   variant via .pr-shell[data-menu='bar']). That is the single source of
+   truth for the palette — don't redefine token values here, or you'll
+   recreate the exact bug we just fixed (two competing definitions on the
+   same element, with this file silently winning because it targets
+   .pr-shell directly instead of :root).
+
+   Everything below in this scoped section only *consumes* var(--pr-*) /
+   var(--font-*) — it never hardcodes a hex value — so changing the
+   palette in RestaurantShell.tsx is guaranteed to propagate everywhere.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .pr-shell {
-  --pr-black:        #0D0D0D;
-  --pr-black-soft:   #1A1A1A;
-  --pr-card:         #242424;
-  --pr-card-hover:   #2C2C2C;
-  --pr-border:       rgba(255, 255, 255, 0.07);
-  --pr-border-hover: rgba(255, 255, 255, 0.13);
-
-  --pr-gold:         #E8C547;
-  --pr-gold-dim:     rgba(232, 197, 71, 0.12);
-  --pr-gold-glow:    rgba(232, 197, 71, 0.08);
-
-  --pr-orange:       #FF5C35;
-  --pr-orange-dim:   rgba(255, 92, 53, 0.10);
-  --pr-orange-glow:  rgba(255, 92, 53, 0.06);
-
-  --pr-text:         #FAFAF7;
-  --pr-text-muted:   rgba(250, 250, 247, 0.55);
-  --pr-text-faint:   rgba(250, 250, 247, 0.28);
-
-  --surface-bg:      #111111;
-
-  --font-display:    'Playfair Display', Georgia, serif;
-  --font-body:       'Inter', system-ui, -apple-system, sans-serif;
-
-  /* override surface for the whole shell */
-  background: #111111;
-  color: #FAFAF7;
-  font-family: 'Inter', system-ui, sans-serif;
+  /* layout/behavior only — no color/font tokens defined here on purpose */
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: var(--surface-bg, #111111);
+  color: var(--pr-text, #FAFAF7);
+  font-family: var(--font-body, 'Inter', system-ui, sans-serif);
 }
 
 /* ── Base resets ─────────────────────────────────────────────────────────── */
@@ -98,7 +86,7 @@ body {
 
 /* When the premium shell is present, override body bg so there's no flash */
 body:has(.pr-shell) {
-  background: #111111 !important;
+  background: var(--surface-bg, #111111) !important;
 }
 
 ::selection {
@@ -760,7 +748,10 @@ input {
 
 /* ═══════════════════════════════════════════════════════════════════════════
    PREMIUM RESTAURANT MENU — .pr-shell scoped styles
-   Applies only inside RestaurantShell on /r/[slug] paid pages
+   Applies only inside RestaurantShell on /r/[slug] paid pages.
+   Every color/font below reads from a var(--pr-*) / var(--font-*) token —
+   nothing here is hardcoded, so the palette lives entirely in
+   RestaurantShell.tsx's :root block (and its [data-menu='bar'] override).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Hero ── */
@@ -771,7 +762,7 @@ input {
   min-height: 260px;
   max-height: 520px;
   overflow: hidden;
-  background: #0D0D0D;
+  background: var(--pr-black);
 }
 @media (min-width: 640px) {
   .pr-shell .pr-hero { aspect-ratio: auto; height: 420px; max-height: none; }
@@ -789,8 +780,8 @@ input {
 .pr-shell .pr-hero-vignette {
   position: absolute; inset: 0;
   background:
-    linear-gradient(to top, rgba(13,13,13,0.97) 0%, rgba(13,13,13,0.6) 35%, rgba(13,13,13,0.15) 65%, rgba(13,13,13,0.4) 100%),
-    linear-gradient(to right, rgba(13,13,13,0.3) 0%, transparent 50%, rgba(13,13,13,0.3) 100%);
+    linear-gradient(to top, var(--pr-black) 0%, color-mix(in srgb, var(--pr-black) 60%, transparent) 35%, color-mix(in srgb, var(--pr-black) 15%, transparent) 65%, color-mix(in srgb, var(--pr-black) 40%, transparent) 100%),
+    linear-gradient(to right, color-mix(in srgb, var(--pr-black) 30%, transparent) 0%, transparent 50%, color-mix(in srgb, var(--pr-black) 30%, transparent) 100%);
 }
 
 .pr-shell .pr-hero-grain {
@@ -813,7 +804,7 @@ input {
   position: absolute; top: 1.25rem; right: 1.5rem;
   width: 56px; height: 56px;
   border-radius: 14px; overflow: hidden;
-  border: 1.5px solid rgba(255,255,255,0.15);
+  border: 1.5px solid var(--pr-border-hover);
   background: rgba(255,255,255,0.06);
   backdrop-filter: blur(12px);
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
@@ -828,68 +819,68 @@ input {
   font-family: var(--font-body);
   font-size: 10px; font-weight: 600;
   letter-spacing: 0.18em; text-transform: uppercase;
-  color: #E8C547; margin-bottom: 10px;
+  color: var(--pr-gold); margin-bottom: 10px;
 }
 .pr-shell .pr-eyebrow-dot {
   width: 4px; height: 4px; border-radius: 50%;
-  background: #E8C547;
+  background: var(--pr-gold);
   animation: pr-pulse-dot 2s ease-in-out infinite;
 }
 
 /* ── Restaurant name ── */
 .pr-shell .pr-restaurant-name {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: var(--font-display);
   font-size: clamp(2.2rem, 7vw, 4.5rem);
   font-weight: 700; line-height: 1.0;
   letter-spacing: -0.02em;
-  color: #FAFAF7; margin: 0 0 6px;
+  color: var(--pr-text); margin: 0 0 6px;
   text-shadow: 0 2px 30px rgba(0,0,0,0.5);
 }
 
 .pr-shell .pr-cuisine-line {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 13px; font-weight: 400;
-  color: rgba(250,250,247,0.55);
+  color: var(--pr-text-muted);
   letter-spacing: 0.01em; margin-bottom: 1.25rem;
 }
 
 /* ── Features strip ── */
 .pr-shell .pr-features {
   display: flex; gap: 1px;
-  border-top: 1px solid rgba(255,255,255,0.07);
+  border-top: 1px solid var(--pr-border);
 }
 
 .pr-shell .pr-feature {
   flex: 1; padding: 14px 8px;
   display: flex; flex-direction: column;
   align-items: center; gap: 5px; text-align: center;
-  border-right: 1px solid rgba(255,255,255,0.07);
+  border-right: 1px solid var(--pr-border);
 }
 .pr-shell .pr-feature:last-child { border-right: none; }
 
 .pr-shell .pr-feature-icon {
   width: 32px; height: 32px; border-radius: 10px;
-  background: rgba(232,197,71,0.12);
+  background: var(--pr-gold-dim);
   display: grid; place-items: center;
-  color: #E8C547;
+  color: var(--pr-gold);
 }
 
 .pr-shell .pr-feature-title {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 11px; font-weight: 600;
-  color: #FAFAF7; letter-spacing: 0.01em;
+  color: var(--pr-text); letter-spacing: 0.01em;
 }
 
 .pr-shell .pr-feature-sub {
-  font-family: 'Inter', system-ui, sans-serif;
-  font-size: 10px; color: rgba(250,250,247,0.28);
+  font-family: var(--font-body);
+  font-size: 10px; color: var(--pr-text-faint);
   line-height: 1.3;
 }
 
 /* ── No-banner fallback ── */
 .pr-shell .pr-no-banner {
-  background: #1A1A1A;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: var(--pr-black-soft);
+  border-bottom: 1px solid var(--pr-border);
   padding: 1.5rem 1.5rem 0;
 }
 @media (min-width: 640px) {
@@ -904,38 +895,38 @@ input {
 .pr-shell .pr-no-banner-logo {
   width: 64px; height: 64px;
   border-radius: 16px; overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid var(--pr-border);
   flex-shrink: 0;
 }
 
 .pr-shell .pr-no-banner-initial {
   width: 64px; height: 64px;
   border-radius: 16px; flex-shrink: 0;
-  background: rgba(232,197,71,0.12);
-  border: 1px solid rgba(232,197,71,0.2);
+  background: var(--pr-gold-dim);
+  border: 1px solid var(--pr-border-hover);
   display: grid; place-items: center;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 1.75rem; font-weight: 700;
-  color: #E8C547;
+  color: var(--pr-gold);
 }
 
 .pr-shell .pr-no-banner-name {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: var(--font-display);
   font-size: clamp(1.6rem, 4vw, 2.5rem);
-  font-weight: 700; color: #FAFAF7;
+  font-weight: 700; color: var(--pr-text);
   letter-spacing: -0.015em; line-height: 1.1;
 }
 
 .pr-shell .pr-no-banner-sub {
-  font-family: 'Inter', system-ui, sans-serif;
-  font-size: 13px; color: rgba(250,250,247,0.55);
+  font-family: var(--font-body);
+  font-size: 13px; color: var(--pr-text-muted);
   margin-top: 2px;
 }
 
 /* ── Status bar ── */
 .pr-shell .pr-status-bar {
-  background: #1A1A1A;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: var(--pr-black-soft);
+  border-bottom: 1px solid var(--pr-border);
   padding: 0 1.5rem;
 }
 @media (min-width: 640px) {
@@ -954,7 +945,7 @@ input {
 .pr-shell .pr-pill {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 14px; border-radius: 100px;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 12px; font-weight: 500;
   white-space: nowrap; flex-shrink: 0;
   transition: all 0.2s; cursor: pointer;
@@ -963,12 +954,12 @@ input {
 }
 
 .pr-shell .pr-pill-rating {
-  background: rgba(232,197,71,0.12);
-  border-color: rgba(232,197,71,0.25);
-  color: #E8C547;
+  background: var(--pr-gold-dim);
+  border-color: var(--pr-border-hover);
+  color: var(--pr-gold);
 }
 .pr-shell .pr-pill-rating:hover {
-  background: rgba(232,197,71,0.22);
+  background: var(--pr-gold-dim);
   transform: translateY(-1px);
 }
 
@@ -986,14 +977,14 @@ input {
 
 .pr-shell .pr-pill-meta {
   background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.07);
-  color: rgba(250,250,247,0.55);
+  border-color: var(--pr-border);
+  color: var(--pr-text-muted);
 }
 
 .pr-shell .pr-pill-live {
-  background: rgba(255,92,53,0.10);
-  border-color: rgba(255,92,53,0.2);
-  color: #FF5C35;
+  background: var(--pr-orange-dim);
+  border-color: var(--pr-border-hover);
+  color: var(--pr-orange);
   animation: pr-live-pulse 3s ease-in-out infinite;
 }
 
@@ -1006,7 +997,7 @@ input {
 
 .pr-shell .pr-pill-divider {
   width: 1px; height: 18px;
-  background: rgba(255,255,255,0.07);
+  background: var(--pr-border);
   flex-shrink: 0; margin: 0 4px;
 }
 
@@ -1032,10 +1023,10 @@ input {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 14px; border-radius: 100px;
   font-size: 12px; font-weight: 600;
-  background: rgba(232,197,71,0.12);
-  border: 1px solid rgba(232,197,71,0.2);
-  color: #E8C547;
-  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--pr-gold-dim);
+  border: 1px solid var(--pr-border-hover);
+  color: var(--pr-gold);
+  font-family: var(--font-body);
   margin-bottom: 1rem;
 }
 
@@ -1052,33 +1043,33 @@ input {
   padding: 8px 18px; border-radius: 100px;
   font-size: 13px; font-weight: 500;
   white-space: nowrap; flex-shrink: 0; cursor: pointer;
-  font-family: 'Inter', system-ui, sans-serif;
-  border: 1px solid rgba(255,255,255,0.07);
+  font-family: var(--font-body);
+  border: 1px solid var(--pr-border);
   background: rgba(255,255,255,0.04);
-  color: rgba(250,250,247,0.55);
+  color: var(--pr-text-muted);
   transition: all 0.18s ease;
 }
 .pr-shell .pr-cat-tab:hover {
-  border-color: rgba(232,197,71,0.3);
-  color: #E8C547;
-  background: rgba(232,197,71,0.12);
+  border-color: var(--pr-border-hover);
+  color: var(--pr-gold);
+  background: var(--pr-gold-dim);
 }
 .pr-shell .pr-cat-tab.active {
-  background: #E8C547; color: #111;
-  border-color: #E8C547; font-weight: 600;
+  background: var(--pr-gold); color: var(--pr-cta-text);
+  border-color: var(--pr-gold); font-weight: 600;
 }
 
 /* ── Section labels ── */
 .pr-shell .pr-section-label {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 1.4rem; font-weight: 600;
-  color: #FAFAF7; letter-spacing: -0.01em;
+  color: var(--pr-text); letter-spacing: -0.01em;
   padding: 1.5rem 0 0.75rem;
   display: flex; align-items: center; gap: 10px;
 }
 .pr-shell .pr-section-label::after {
   content: ''; flex: 1;
-  height: 1px; background: rgba(255,255,255,0.07);
+  height: 1px; background: var(--pr-border);
 }
 
 /* ── Search ── */
@@ -1086,34 +1077,34 @@ input {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 14px;
   background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid var(--pr-border);
   border-radius: 14px; margin-bottom: 1rem;
   transition: border-color 0.2s, background 0.2s;
 }
 .pr-shell .pr-search-wrap:focus-within {
-  border-color: rgba(232,197,71,0.35);
+  border-color: var(--pr-border-hover);
   background: rgba(255,255,255,0.07);
 }
 .pr-shell .pr-search-input {
   flex: 1; background: transparent; border: none; outline: none;
-  font-size: 14px; font-family: 'Inter', system-ui, sans-serif;
-  color: #FAFAF7;
+  font-size: 14px; font-family: var(--font-body);
+  color: var(--pr-text);
 }
-.pr-shell .pr-search-input::placeholder { color: rgba(250,250,247,0.28); }
+.pr-shell .pr-search-input::placeholder { color: var(--pr-text-faint); }
 .pr-shell .pr-search-clear {
   background: none; border: none; cursor: pointer;
-  color: rgba(250,250,247,0.28); padding: 0; line-height: 1;
+  color: var(--pr-text-faint); padding: 0; line-height: 1;
   transition: color 0.15s;
 }
-.pr-shell .pr-search-clear:hover { color: #FAFAF7; }
+.pr-shell .pr-search-clear:hover { color: var(--pr-text); }
 
 /* ── Bestseller rail ── */
 .pr-shell .pr-bestseller-eyebrow {
   display: flex; align-items: center; gap: 5px;
   font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.12em;
-  color: #FF5C35; margin-bottom: 10px;
-  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--pr-orange); margin-bottom: 10px;
+  font-family: var(--font-body);
 }
 
 .pr-shell .pr-bestseller-rail {
@@ -1125,8 +1116,8 @@ input {
 
 .pr-shell .pr-bestseller-card {
   width: 120px; flex-shrink: 0; border-radius: 14px;
-  overflow: hidden; background: #242424;
-  border: 1px solid rgba(255,255,255,0.07);
+  overflow: hidden; background: var(--pr-card);
+  border: 1px solid var(--pr-border);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 .pr-shell .pr-bestseller-card:hover {
@@ -1141,15 +1132,15 @@ input {
 }
 .pr-shell .pr-bestseller-info { padding: 8px 10px 10px; }
 .pr-shell .pr-bestseller-name {
-  font-size: 11.5px; font-weight: 600; color: #FAFAF7;
+  font-size: 11.5px; font-weight: 600; color: var(--pr-text);
   line-height: 1.3; margin-bottom: 3px;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-body);
   overflow: hidden; display: -webkit-box;
   -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 .pr-shell .pr-bestseller-price {
-  font-size: 12px; font-weight: 700; color: #FF5C35;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px; font-weight: 700; color: var(--pr-orange);
+  font-family: var(--font-body);
 }
 
 /* ── Veg toggle ── */
@@ -1157,10 +1148,10 @@ input {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 14px; border-radius: 100px;
   font-size: 12px; font-weight: 600;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid var(--pr-border);
   background: rgba(255,255,255,0.04);
-  color: rgba(250,250,247,0.55);
-  cursor: pointer; font-family: 'Inter', system-ui, sans-serif;
+  color: var(--pr-text-muted);
+  cursor: pointer; font-family: var(--font-body);
   transition: all 0.2s;
 }
 .pr-shell .pr-veg-toggle.active {
@@ -1178,9 +1169,9 @@ input {
 
 /* ── Item cards ── */
 .pr-shell .pr-item-card {
-  background: #242424;
+  background: var(--pr-card);
   border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--pr-border);
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
 }
@@ -1191,8 +1182,8 @@ input {
 
 /* ── Empty state ── */
 .pr-shell .pr-empty {
-  font-size: 14px; color: rgba(250,250,247,0.28);
-  font-family: 'Inter', system-ui, sans-serif; padding: 1rem 0;
+  font-size: 14px; color: var(--pr-text-faint);
+  font-family: var(--font-body); padding: 1rem 0;
 }
 
 /* ── Scrollbar ── */
@@ -1244,8 +1235,8 @@ input {
 }
 
 @keyframes pr-live-pulse {
-  0%, 100% { border-color: rgba(255,92,53,0.2); }
-  50%       { border-color: rgba(255,92,53,0.45); }
+  0%, 100% { border-color: var(--pr-border-hover); }
+  50%       { border-color: var(--pr-orange); }
 }
 
 @keyframes pr-dot-blink {

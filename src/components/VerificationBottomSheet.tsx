@@ -32,7 +32,7 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
         position: 'fixed',
         inset: 0,
         zIndex: 1300,
-        background: 'rgba(0,0,0,0.7)',
+        background: 'rgba(33,30,27,0.55)',
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
         display: 'flex',
@@ -54,9 +54,9 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
         style={{
           width: '100%',
           maxWidth: 480,
-          background: '#1A1A1A',
+          background: 'var(--pr-card)',
           borderRadius: '28px 28px 0 0',
-          border: '1px solid rgba(255,255,255,0.08)',
+          border: '1px solid var(--pr-border-hover)',
           borderBottom: 'none',
           overflow: 'hidden',
           position: 'relative',
@@ -65,7 +65,7 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
         <div
           style={{
             height: 3,
-            background: 'linear-gradient(90deg, transparent 0%, #E8C547 40%, #FF5C35 70%, transparent 100%)',
+            background: 'linear-gradient(90deg, transparent 0%, var(--pr-gold) 40%, var(--pr-orange) 70%, transparent 100%)',
           }}
         />
 
@@ -78,11 +78,11 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
               position: 'absolute',
               top: 20,
               right: 20,
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(33,30,27,0.04)',
+              border: '1px solid var(--pr-border)',
               borderRadius: 10,
               padding: 6,
-              color: 'rgba(250,250,247,0.5)',
+              color: 'var(--pr-text-faint)',
               cursor: 'pointer',
               display: 'flex',
             }}
@@ -96,8 +96,8 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
               height: 48,
               margin: '0 auto 16px',
               borderRadius: 16,
-              background: 'rgba(232,197,71,0.12)',
-              border: '1px solid rgba(232,197,71,0.2)',
+              background: 'var(--pr-gold-dim)',
+              border: '1px solid var(--pr-border-hover)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -113,7 +113,7 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
               fontFamily: 'var(--font-display)',
               fontSize: 21,
               fontWeight: 600,
-              color: '#FAFAF7',
+              color: 'var(--pr-text)',
             }}
           >
             Verify Your Visit
@@ -123,7 +123,7 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
               margin: '0 auto',
               maxWidth: 300,
               fontSize: 13,
-              color: 'rgba(250,250,247,0.45)',
+              color: 'var(--pr-text-muted)',
               lineHeight: 1.5,
               fontFamily: 'var(--font-body)',
             }}
@@ -139,8 +139,8 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
             style={{
               margin: '20px 0',
               padding: '12px 14px',
-              background: 'rgba(232,197,71,0.06)',
-              border: '1px solid rgba(232,197,71,0.16)',
+              background: 'var(--pr-gold-dim)',
+              border: '1px solid var(--pr-border-hover)',
               borderRadius: 14,
               display: 'flex',
               alignItems: 'center',
@@ -148,8 +148,8 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
               gap: 8,
             }}
           >
-            <Gift size={14} color="#E8C547" />
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#E8C547', fontFamily: 'var(--font-body)' }}>
+            <Gift size={14} color="var(--pr-gold)" />
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
               After verification you instantly earn +{pointsPerVisit} points
             </span>
           </div>
@@ -162,9 +162,9 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
                 flex: 1,
                 height: 48,
                 borderRadius: 14,
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: '#FAFAF7',
+                background: 'rgba(33,30,27,0.03)',
+                border: '1px solid var(--pr-border-hover)',
+                color: 'var(--pr-text)',
                 fontSize: 13.5,
                 fontWeight: 600,
                 fontFamily: 'var(--font-body)',
@@ -184,9 +184,9 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, point
                 flex: 1,
                 height: 48,
                 borderRadius: 14,
-                background: 'linear-gradient(135deg, #E8C547 0%, #d4a93c 100%)',
+                background: 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
                 border: 'none',
-                color: '#111',
+                color: 'var(--pr-cta-text)',
                 fontSize: 13.5,
                 fontWeight: 700,
                 fontFamily: 'var(--font-body)',

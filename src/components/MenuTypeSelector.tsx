@@ -20,19 +20,17 @@ export function MenuTypeSelector() {
           gap: 2.5rem;
           padding: 1.5rem;
           text-align: center;
-          background: #0B0B0B;
+          background: var(--surface-bg);
           overflow: hidden;
         }
 
-        /* Two soft ambient glows — warm orange (food side) and amber (bar side) —
-           hint at what's on offer before the cards even load. */
         .mts-glow {
           position: absolute;
           inset: 0;
           pointer-events: none;
           background:
-            radial-gradient(circle at 22% 30%, rgba(255,92,53,0.14), transparent 45%),
-            radial-gradient(circle at 78% 70%, rgba(217,162,75,0.14), transparent 45%);
+            radial-gradient(circle at 22% 30%, rgba(122,31,43,0.08), transparent 45%),
+            radial-gradient(circle at 78% 70%, rgba(138,109,31,0.10), transparent 45%);
           animation: mts-glow-shift 9s ease-in-out infinite alternate;
         }
         @keyframes mts-glow-shift {
@@ -51,19 +49,19 @@ export function MenuTypeSelector() {
           width: 4.25rem;
           border-radius: 1.25rem;
           object-fit: cover;
-          box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+          box-shadow: 0 8px 28px rgba(33,30,27,0.15);
         }
         .mts-name {
-          font-family: 'Playfair Display', Georgia, serif;
+          font-family: var(--font-display);
           font-size: 1.6rem;
           font-weight: 600;
-          color: #FAFAF7;
+          color: var(--pr-text);
           letter-spacing: -0.01em;
         }
         .mts-tagline {
           margin-top: 0.5rem;
           font-size: 0.875rem;
-          color: rgba(250,250,247,0.5);
+          color: var(--pr-text-muted);
         }
 
         .mts-grid {
@@ -83,24 +81,25 @@ export function MenuTypeSelector() {
           align-items: center;
           gap: 0.75rem;
           border-radius: 1.75rem;
-          border: 1px solid rgba(255,255,255,0.08);
-          background: rgba(255,255,255,0.03);
+          border: 1px solid var(--pr-border-hover);
+          background: var(--pr-card);
           padding: 1.75rem 1rem;
           cursor: pointer;
           overflow: hidden;
           transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
           animation: mts-fadeUp 550ms ease both;
+          box-shadow: 0 2px 10px rgba(33,30,27,0.05);
         }
         .mts-card:nth-child(2) { animation-delay: 80ms; }
         .mts-card:active { transform: scale(0.95); }
 
         .mts-card--food:hover {
-          border-color: rgba(255,92,53,0.45);
-          background: rgba(255,92,53,0.08);
+          border-color: rgba(122,31,43,0.35);
+          background: var(--pr-orange-dim);
         }
         .mts-card--bar:hover {
-          border-color: rgba(217,162,75,0.45);
-          background: rgba(217,162,75,0.08);
+          border-color: rgba(138,109,31,0.35);
+          background: var(--pr-gold-dim);
         }
 
         .mts-card-icon {
@@ -111,18 +110,18 @@ export function MenuTypeSelector() {
           width: 3.5rem;
           border-radius: 1.1rem;
         }
-        .mts-card--food .mts-card-icon { background: rgba(255,92,53,0.15); color: #FF7A54; }
-        .mts-card--bar .mts-card-icon  { background: rgba(217,162,75,0.18); color: #E0AF5E; }
+        .mts-card--food .mts-card-icon { background: var(--pr-orange-dim); color: var(--pr-orange); }
+        .mts-card--bar .mts-card-icon  { background: var(--pr-gold-dim); color: var(--pr-gold); }
 
         .mts-card-title {
           font-size: 1rem;
           font-weight: 700;
-          color: #FAFAF7;
-          font-family: 'Inter', system-ui, sans-serif;
+          color: var(--pr-text);
+          font-family: var(--font-body);
         }
         .mts-card-sub {
           font-size: 0.72rem;
-          color: rgba(250,250,247,0.42);
+          color: var(--pr-text-muted);
           line-height: 1.4;
         }
 
@@ -132,7 +131,7 @@ export function MenuTypeSelector() {
           left: -20%;
           width: 60%;
           height: 220%;
-          background: linear-gradient(115deg, transparent, rgba(255,255,255,0.06), transparent);
+          background: linear-gradient(115deg, transparent, rgba(255,255,255,0.5), transparent);
           transform: rotate(12deg);
           pointer-events: none;
         }
@@ -142,7 +141,7 @@ export function MenuTypeSelector() {
           z-index: 1;
           max-width: 18rem;
           font-size: 0.72rem;
-          color: rgba(250,250,247,0.28);
+          color: var(--pr-text-faint);
           display: flex;
           align-items: center;
           gap: 5px;
