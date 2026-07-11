@@ -23,8 +23,7 @@ interface FeaturedCard {
   rating: number
   imageUrl: string
   emoji: string
-  loyaltyEnabled?: boolean
-  loyaltyDiscountPct?: number
+ 
 }
 
 type ModalVariant = 'demo' | 'founding'
@@ -283,11 +282,7 @@ const CORE_FEATURES = [
     title: 'Simple dashboard',
     desc: 'Scans, repeat customers, top dishes and peak hours — all in one screen, built for a busy restaurant day.',
   },
-  {
-    icon: '🎁',
-    title: 'Rewards that bring guests back',
-    desc: 'Guests earn points funded by Dinezy — not your margin — and come back to redeem them at your restaurant.',
-  },
+ 
 ]
 
 function CoreFeaturesSection() {
@@ -866,109 +861,9 @@ function DashboardPreviewSection() {
 /* ────────────────────────────────────────────────────────────────────────
    REWARD NETWORK
    ──────────────────────────────────────────────────────────────────────── */
-function RewardPassportPreview() {
-  const [activeStamp, setActiveStamp] = useState(0)
-  const stamps = [
-    { name: 'Spice Garden', pts: '+40', emoji: '🍛' },
-    { name: 'Brew & Bao', pts: '+25', emoji: '🥟' },
-    { name: 'Curry Corner', pts: '+35', emoji: '🥘' },
-  ]
 
-  useEffect(() => {
-    const t = setInterval(() => setActiveStamp(p => (p + 1) % (stamps.length + 1)), 1300)
-    return () => clearInterval(t)
-  }, [stamps.length])
 
-  const total = stamps.slice(0, activeStamp).reduce((a, c) => a + parseInt(c.pts.replace('+', ''), 10), 0)
 
-  return (
-    <div className="glass rounded-[2rem] p-6 sm:p-7 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-amber-400/8 to-violet-500/8 pointer-events-none" />
-      <p className="relative text-xs font-bold text-amber-300 uppercase tracking-wider mb-4">What your guest sees</p>
-      <div className="relative flex items-center justify-between mb-6">
-        <div>
-          <p className="text-xs font-bold text-white/50 uppercase tracking-wider mb-1">Dinezy points</p>
-          <p className="text-white font-black text-lg">Priya S.</p>
-        </div>
-        <div className="text-right">
-          <p className="text-3xl font-black text-white leading-none">{total}</p>
-          <p className="text-[11px] text-white/40 mt-1">total points</p>
-        </div>
-      </div>
-
-      <div className="relative space-y-2.5">
-        {stamps.map((s, i) => {
-          const stamped = i < activeStamp
-          return (
-            <div
-              key={s.name}
-              className={`flex items-center justify-between rounded-2xl border px-4 py-3 transition-all duration-500 ${
-                stamped ? 'border-amber-400/30 bg-amber-400/8 opacity-100' : 'border-white/8 bg-white/4 opacity-40'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{s.emoji}</span>
-                <span className="text-sm font-bold text-white/85">{s.name}</span>
-              </div>
-              <span className={`text-sm font-black transition-colors ${stamped ? 'text-amber-300' : 'text-white/25'}`}>{stamped ? s.pts : '—'}</span>
-            </div>
-          )
-        })}
-      </div>
-
-      <p className="relative text-white/35 text-[11px] mt-5 leading-relaxed">
-        One points balance, earned and redeemed across every restaurant on the Dinezy network — not locked to a single venue.
-      </p>
-    </div>
-  )
-}
-
-function RewardNetworkSection() {
-  return (
-    <section id="rewards" className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8 bg-[#07111f]">
-      <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-        <div>
-          <span className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/20 rounded-full px-4 py-1.5 text-xs font-bold text-amber-300 uppercase tracking-wide mb-5">
-            Reward network
-          </span>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-5">
-            Loyalty, without
-            <span className="block text-transparent bg-gradient-to-r from-amber-300 to-orange-400 bg-clip-text">discounting your menu</span>
-          </h2>
-          <p className="text-white/60 text-lg leading-relaxed mb-8 max-w-xl">
-            Dinezy Points are funded by Dinezy, not by your margins. You are never required to run a discount or offer to be part of the network — guests earn and redeem points, and you focus on food and service.
-          </p>
-
-          <div className="space-y-4 mb-8">
-            {[
-              { icon: '🪙', title: 'Rewards funded by Dinezy', desc: 'Points value is covered by Dinezy at launch — no cost or margin hit to your restaurant.' },
-              { icon: '🚫', title: 'No forced discounts', desc: "You're never required to discount your menu to join or stay on the network." },
-              { icon: '🎛️', title: 'Optional offers, your choice', desc: 'Once you see the traffic, you can layer on your own optional offers — entirely opt-in.' },
-              { icon: '🌐', title: 'One network, shared guests', desc: 'Guests collect points across every restaurant on Dinezy, bringing new visitors to your door.' },
-            ].map(f => (
-              <div key={f.title} className="flex gap-3.5 items-start">
-                <div className="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-lg flex-shrink-0">{f.icon}</div>
-                <div>
-                  <p className="font-bold text-white text-sm mb-0.5">{f.title}</p>
-                  <p className="text-white/50 text-sm leading-relaxed">{f.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="glass rounded-2xl p-4 border border-white/10">
-            <p className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2">How this differs</p>
-            <p className="text-white/60 text-sm leading-relaxed">
-              Platforms like EazyDiner, Dineout and Zomato Gold work by discounting your bill. Dinezy Points are funded by Dinezy — your pricing and margins stay yours.
-            </p>
-          </div>
-        </div>
-
-        <RewardPassportPreview />
-      </div>
-    </section>
-  )
-}
 
 /* ────────────────────────────────────────────────────────────────────────
    RESTAURANT'S OWN SHAREABLE PAGE
@@ -1168,7 +1063,7 @@ function ProofSection() {
             : restaurants.map((r, i) => (
               <Link
                 key={r.slug}
-                href={`/explore/${r.slug}`}
+                href={`/r/${r.slug}`}
                 className="group glass rounded-3xl overflow-hidden card-hover focus-visible:ring-2 focus-visible:ring-violet-400/60 outline-none"
               >
                 <div className={`h-28 flex items-center justify-center text-5xl bg-gradient-to-br ${ACCENTS[i % ACCENTS.length]} relative overflow-hidden`}>
@@ -1190,12 +1085,7 @@ function ProofSection() {
                   <h3 className="font-black text-white text-base leading-tight">{r.name}</h3>
                   <p className="text-white/45 text-xs mt-0.5">{r.cuisine}</p>
                   <p className="text-white/30 text-[11px] mt-0.5">{r.area}</p>
-                  {r.loyaltyEnabled && typeof r.loyaltyDiscountPct === 'number' && r.loyaltyDiscountPct > 0 && (
-                    <div className="mt-3 flex items-center gap-1.5 bg-amber-400/10 border border-amber-400/20 rounded-full px-2.5 py-1 w-fit">
-                      <span className="text-amber-300 text-xs">🪙</span>
-                      <span className="text-amber-200 text-[11px] font-bold">{r.loyaltyDiscountPct}% loyalty reward</span>
-                    </div>
-                  )}
+                 
                 </div>
               </Link>
             ))}
@@ -1234,7 +1124,6 @@ export default function DinezyLanding() {
     { label: 'Home', action: () => scrollTo('top') },
     { label: 'Features', action: () => scrollTo('features') },
     { label: 'How it Works', action: () => scrollTo('how-it-works') },
-    { label: 'Rewards', action: () => scrollTo('rewards') },
     { label: 'Dashboard', action: () => scrollTo('dashboard') },
   ]
 
@@ -1337,7 +1226,7 @@ export default function DinezyLanding() {
               <span className="block bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text text-transparent mt-1">Your whole restaurant.</span>
             </h1>
             <p className="fade-up-2 text-white/60 text-lg leading-relaxed max-w-lg mb-8">
-              Dinezy gives your restaurant a QR menu you can update anytime, one-tap Call Waiter for your staff, and a reward network that brings guests back — funded by Dinezy, not your margins.
+              Dinezy gives your restaurant a QR menu you can update anytime, one-tap Call Waiter for your staff, and a live dashboard that shows you exactly who's coming back.
             </p>
             <div className="fade-up-2 flex flex-wrap gap-3 mb-8">
               <button
@@ -1352,7 +1241,7 @@ export default function DinezyLanding() {
               </button>
             </div>
             <div className="fade-up-3 flex flex-wrap gap-2">
-              {['Update menu in seconds', 'One-tap waiter calls', 'No cost to join rewards'].map(b => (
+               {['Update menu in seconds', 'One-tap waiter calls', 'Live in under 30 minutes'].map(b => (
                 <span key={b} className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-sm text-white/55 font-medium">✓ {b}</span>
               ))}
             </div>
@@ -1371,7 +1260,7 @@ export default function DinezyLanding() {
           <AnimatedStat value="8+" label="Restaurants on network" sub="in Pune, growing weekly" delay={0} />
           <AnimatedStat value="12s" label="Waiter response time" sub="average across restaurants" delay={80} />
           <AnimatedStat value="94%" label="Menu open rate" sub="of scanned QRs" delay={160} />
-          <AnimatedStat value="₹0" label="Cost to join rewards" sub="funded by Dinezy" delay={240} />
+          <AnimatedStat value="< 30 min" label="Setup time" sub="menu live same day" delay={240} />
         </div>
       </section>
 
@@ -1379,7 +1268,6 @@ export default function DinezyLanding() {
       <HowItWorksSection />
       <SmartMenuSection />
       <DashboardPreviewSection />
-      <RewardNetworkSection />
       <RestaurantWebsiteSection />
       <ProofSection />
 
@@ -1394,7 +1282,7 @@ export default function DinezyLanding() {
             <span className="block text-transparent bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text">repeat customers?</span>
           </h2>
           <p className="text-white/55 text-lg sm:text-xl leading-relaxed mb-10 max-w-2xl mx-auto">
-            Join as a founding restaurant. We'll set up your menu live, walk you through the dashboard, and add you to the reward network — funded by Dinezy, at no cost to you.
+            Join as a founding restaurant. We'll set up your menu live and walk you through the dashboard — free, with no long-term commitment.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <button
@@ -1412,7 +1300,7 @@ export default function DinezyLanding() {
             </button>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 mt-8">
-            {['No cost to join rewards', 'Setup in under 30 min', 'No forced discounts', 'We respond within 2 hours'].map(b => (
+            {['Free to get started', 'Setup in under 30 min', 'No long-term contract', 'We respond within 2 hours'].map(b => (
               <span key={b} className="text-sm text-white/45 flex items-center gap-1.5">
                 <span className="text-emerald-400">✓</span> {b}
               </span>
@@ -1427,7 +1315,7 @@ export default function DinezyLanding() {
           <div className="grid lg:grid-cols-3 gap-10 pb-10 border-b border-white/10">
             <div className="lg:col-span-1">
               <DinezyLogo size={40} dark className="mb-4" />
-              <p className="text-white/50 text-sm leading-relaxed mb-5">The restaurant growth platform built around a shared reward network. Built for Indian restaurants.</p>
+              <p className="text-white/50 text-sm leading-relaxed mb-5">The restaurant growth platform for Indian restaurants — QR menu, waiter calling and analytics in one place.</p>
               <div className="space-y-2 text-sm text-white/50 border-t border-white/10 pt-4">
                 <p className="text-white/65 font-semibold text-xs uppercase tracking-wide mb-3">Contact details</p>
                 <p><span className="text-white/35">Address: </span>Balewadi, Pune 411045, Maharashtra, India</p>

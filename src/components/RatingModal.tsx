@@ -7,7 +7,7 @@ import { track } from '@/lib/analytics'
 import { useAppStore } from '@/store/app-store'
 
 export function RatingModal() {
-  const { restaurant, sessionId, ratingContext, closeRating } = useAppStore()
+  const { restaurant, sessionId, tableNumber, ratingContext, closeRating } = useAppStore()
 
   const [selected, setSelected] = useState(0)
   const [hovered, setHovered] = useState(0)
@@ -24,8 +24,8 @@ export function RatingModal() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [closeRating])
 
-  const handleSubmit = async () => {
-    if (!restaurant || !ratingContext || selected === 0) return
+const handleSubmit = async () => {
+    if (!restaurant || selected === 0) return   // dropped the ratingContext check
 
     setLoading(true)
     const supabase = getSupabaseBrowser()
@@ -34,17 +34,17 @@ export function RatingModal() {
       const payload = {
         restaurant_id: restaurant.id,
         session_id: sessionId,
-        order_id: ratingContext.orderId,
-        order_code: ratingContext.orderCode,
-        table_number: ratingContext.tableNumber,
+        order_id: ratingContext?.orderId ?? null,
+        order_code: ratingContext?.orderCode ?? null,
+        table_number: ratingContext?.tableNumber ?? tableNumber ?? null,
         score: selected,
         comment: comment.trim() || null,
         is_public: true,
       }
 
       const { error } = await (supabase as any)
-  .from('ratings')
-  .insert([payload])
+        .from('ratings')
+        .insert([payload])
 
       if (error?.code === '23505') {
         alert('You have already rated this order.')
@@ -53,14 +53,14 @@ export function RatingModal() {
 
       if (error) throw error
 
-      await track(restaurant.id, 'rating_submitted', {
-        metadata: {
-          score: selected,
-          order_id: ratingContext.orderId,
-          order_code: ratingContext.orderCode,
-          table_number: ratingContext.tableNumber,
-        },
-      })
+     await track(restaurant.id, 'rating_submitted', {
+  metadata: {
+    score: selected,
+    order_id: ratingContext?.orderId ?? null,
+    order_code: ratingContext?.orderCode ?? null,
+    table_number: ratingContext?.tableNumber ?? tableNumber ?? null,
+  },
+})
 
       const { data: updated } = await supabase
         .from('restaurants')
@@ -91,7 +91,7 @@ export function RatingModal() {
     }
   }
 
-  if (!restaurant || !ratingContext) return null
+  if (!restaurant || (!ratingContext && !tableNumber)) return null
 
   return (
     <div
@@ -105,12 +105,7 @@ export function RatingModal() {
 
       <div className="relative z-[10001] w-full max-w-sm animate-[fadeUp_220ms_ease-out] rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.28)]">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
-          <div>
-            <h2 className="font-semibold text-slate-900">Rate your experience</h2>
-            <p className="text-xs text-slate-500">
-              Order #{ratingContext.orderCode} · Table {ratingContext.tableNumber}
-            </p>
-          </div>
+          <h2 className="font-semibold text-slate-900">Rate your experience</h2>
           <button
             onClick={closeRating}
             className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"

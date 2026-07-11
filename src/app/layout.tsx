@@ -29,11 +29,10 @@ export const metadata: Metadata = {
     template: '%s | Dinezy',
   },
   description:
-    'Dinezy is a restaurant growth platform built around a shared reward network — plus QR menu, waiter calling, AI menu, restaurant websites and analytics that bring diners back.',
+    'Dinezy is a restaurant growth platform with a QR menu you can update anytime, waiter calling, AI menu, restaurant websites and analytics that bring diners back.',
   keywords: [
     'restaurant growth platform',
-    'restaurant reward network',
-    'restaurant loyalty program India',
+    
     'QR menu',
     'digital menu',
     'restaurant CRM India',
@@ -45,7 +44,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Dinezy - Restaurant Growth Platform',
     description:
-      'A shared reward network that brings diners back to your restaurant — plus QR menu, waiter calling, AI menu and analytics.',
+      'QR menu, one-tap waiter calling, AI menu and analytics that bring diners back to your restaurant.',
     url: 'https://dinezy.in',
     siteName: 'Dinezy',
     type: 'website',
@@ -53,7 +52,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Dinezy - Restaurant Growth Platform',
-    description: 'The restaurant growth platform built around a shared reward network.',
+     description: 'The restaurant growth platform for Indian restaurants — QR menu, waiter calling and analytics.',
   },
   robots: {
     index: true,

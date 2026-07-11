@@ -48,9 +48,9 @@ const REQUEST_OPTIONS: {
     label: 'Call Waiter',
     sublabel: 'Get help from staff',
     icon: <ChefHat size={22} />,
-    color: '#FF5C35',
-    bgColor: 'rgba(255,92,53,0.12)',
-    borderColor: 'rgba(255,92,53,0.35)',
+    color: 'var(--pr-orange)',
+    bgColor: 'var(--pr-orange-dim)',
+    borderColor: 'rgba(122,31,43,0.25)',
     emoji: '🔔',
   },
   {
@@ -58,9 +58,9 @@ const REQUEST_OPTIONS: {
     label: 'Ask for Water',
     sublabel: "We’ll bring it right over",
     icon: <Droplets size={22} />,
-    color: '#38bdf8',
-    bgColor: 'rgba(56,189,248,0.12)',
-    borderColor: 'rgba(56,189,248,0.35)',
+    color: '#2B7FB8',
+    bgColor: 'rgba(43,127,184,0.10)',
+    borderColor: 'rgba(43,127,184,0.28)',
     emoji: '💧',
   },
   {
@@ -68,9 +68,9 @@ const REQUEST_OPTIONS: {
     label: 'Request Bill',
     sublabel: 'Ready to pay',
     icon: <Receipt size={22} />,
-    color: '#E8C547',
-    bgColor: 'rgba(232,197,71,0.12)',
-    borderColor: 'rgba(232,197,71,0.35)',
+    color: 'var(--pr-gold)',
+    bgColor: 'var(--pr-gold-dim)',
+    borderColor: 'rgba(138,109,31,0.28)',
     emoji: '🧾',
   },
 ]
@@ -285,30 +285,30 @@ const bellLabel = !activeRequest
         : 'Call waiter'
 
   const bellStyle =
-    activeRequest?.status === 'accepted'
+  activeRequest?.status === 'accepted'
+    ? {
+        background: 'linear-gradient(135deg,#3f9142,#2f7a33)',
+        color: '#F8F4EC',
+        boxShadow: '0 8px 24px rgba(47,122,51,0.35)',
+      }
+    : activeRequest?.status === 'sent'
       ? {
-          background: 'linear-gradient(135deg,#22c55e,#16a34a)',
-          color: '#fff',
-          boxShadow: '0 8px 24px rgba(34,197,94,0.45)',
+          background: 'linear-gradient(135deg,var(--pr-gold),#7a5518)',
+          color: 'var(--pr-cta-text)',
+          boxShadow: '0 8px 24px rgba(138,109,31,0.3)',
         }
-      : activeRequest?.status === 'sent'
+      : activeRequest?.status === 'cooldown'
         ? {
-            background: 'linear-gradient(135deg,#0f766e,#14b8a6)',
-            color: '#fff',
-            boxShadow: '0 8px 24px rgba(20,184,166,0.3)',
+            background: 'var(--pr-card)',
+            color: 'var(--pr-text-muted)',
+            border: '1px solid var(--pr-border)',
+            boxShadow: '0 4px 12px rgba(33,30,27,0.12)',
           }
-        : activeRequest?.status === 'cooldown'
-          ? {
-              background: '#1C1C1C',
-              color: 'rgba(250,250,247,0.4)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-            }
-          : {
-              background: 'linear-gradient(135deg,#FF6B47,#FF5C35)',
-              color: '#fff',
-              boxShadow: '0 8px 24px rgba(255,92,53,0.45), 0 2px 8px rgba(0,0,0,0.3)',
-            }
+        : {
+            background: 'linear-gradient(135deg,var(--pr-orange),#5c1721)',
+            color: 'var(--pr-cta-text)',
+            boxShadow: '0 8px 24px rgba(122,31,43,0.35), 0 2px 8px rgba(33,30,27,0.15)',
+          }
 
   const isBellDisabled = disabled || !!activeRequest
 
@@ -317,6 +317,10 @@ const bellLabel = !activeRequest
       <style>{`
         .cwb-hint {
           animation: cwb-fadein 0.3s ease both;
+          background: var(--pr-card);
+          color: var(--pr-text);
+          border: 1px solid var(--pr-border);
+          box-shadow: 0 4px 16px rgba(33,30,27,0.15);
         }
         @keyframes cwb-fadein {
           from { opacity: 0; transform: translateY(6px); }
@@ -345,7 +349,7 @@ const bellLabel = !activeRequest
           position: fixed;
           inset: 0;
           z-index: 48;
-          background: rgba(0,0,0,0.55);
+          background: rgba(33,30,27,0.45);
           backdrop-filter: blur(4px);
           animation: cwb-fade-backdrop 0.25s ease both;
         }
@@ -360,8 +364,8 @@ const bellLabel = !activeRequest
           left: 0;
           right: 0;
           z-index: 49;
-          background: #181818;
-          border-top: 1px solid rgba(255,255,255,0.08);
+          background: var(--pr-card);
+          border-top: 1px solid var(--pr-border);
           border-radius: 24px 24px 0 0;
           padding: 0 0 env(safe-area-inset-bottom, 16px);
           animation: cwb-slide-up 0.35s cubic-bezier(0.32,0.72,0,1) both;
@@ -375,7 +379,7 @@ const bellLabel = !activeRequest
           width: 36px;
           height: 4px;
           border-radius: 999px;
-          background: rgba(255,255,255,0.15);
+          background: var(--pr-border-hover);
           margin: 12px auto 4px;
         }
 
@@ -384,7 +388,7 @@ const bellLabel = !activeRequest
           font-weight: 700;
           letter-spacing: 0.12em;
           text-transform: uppercase;
-          color: rgba(250,250,247,0.35);
+          color: var(--pr-text-muted);
           text-align: center;
           padding: 8px 0 16px;
         }
@@ -433,7 +437,7 @@ const bellLabel = !activeRequest
         .cwb-option-sub {
           font-size: 12px;
           font-weight: 400;
-          color: rgba(250,250,247,0.45);
+          color: var(--pr-text-muted);
           margin: 0;
         }
 
@@ -470,7 +474,7 @@ const bellLabel = !activeRequest
           width: 20px;
           height: 20px;
           border-radius: 50%;
-          border: 2px solid rgba(255,255,255,0.2);
+          border: 2px solid var(--pr-border);
           border-top-color: currentColor;
           animation: cwb-spin 0.7s linear infinite;
           flex-shrink: 0;
@@ -484,17 +488,17 @@ const bellLabel = !activeRequest
           width: 32px;
           height: 32px;
           border-radius: 50%;
-          background: rgba(255,255,255,0.07);
+          background: rgba(33,30,27,0.06);
           border: none;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: rgba(250,250,247,0.5);
+          color: var(--pr-text-muted);
           transition: background 0.15s;
           -webkit-tap-highlight-color: transparent;
         }
-        .cwb-close-btn:hover { background: rgba(255,255,255,0.12); }
+        .cwb-close-btn:hover { background: rgba(33,30,27,0.1); }
 
         .cwb-bell-accepted {
           animation: cwb-accepted-pulse 0.6s cubic-bezier(0.22,1,0.36,1) both;
@@ -510,8 +514,8 @@ const bellLabel = !activeRequest
           padding: 8px 12px;
           font-size: 11px;
           font-weight: 700;
-          color: #fff;
-          box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+          color: var(--pr-cta-text);
+          box-shadow: 0 10px 24px rgba(33,30,27,0.2);
           margin-bottom: 2px;
           display: inline-flex;
           align-items: center;
@@ -519,18 +523,18 @@ const bellLabel = !activeRequest
         }
       `}</style>
 
-      <div
-        style={{
-          position: 'fixed',
-          right: 16,
-          bottom: 24,
-          zIndex: 50,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-          gap: 8,
-        }}
-      >
+     <div
+  style={{
+    position: 'fixed',
+    right: 16,
+    bottom: 'calc(78px + env(safe-area-inset-bottom, 0px))', // was: bottom: 24
+    zIndex: 50,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 8,
+  }}
+>
         {showHint && (
           <div
             className="cwb-hint"
@@ -570,11 +574,11 @@ const bellLabel = !activeRequest
             className="cwb-status-pill"
             style={{
               background:
-                activeRequest.type === 'assistance'
-                  ? 'linear-gradient(135deg,#22c55e,#16a34a)'
-                  : activeRequest.type === 'water'
-                    ? 'linear-gradient(135deg,#38bdf8,#0ea5e9)'
-                    : 'linear-gradient(135deg,#E8C547,#d4a72c)',
+  activeRequest.type === 'assistance'
+    ? 'linear-gradient(135deg,#3f9142,#2f7a33)'
+    : activeRequest.type === 'water'
+      ? 'linear-gradient(135deg,#2B7FB8,#1f6698)'
+      : 'linear-gradient(135deg,var(--pr-gold),#7a5518)',
             }}
           >
             <Check size={14} />

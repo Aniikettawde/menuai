@@ -25,6 +25,7 @@ export function RatingsListModal({ restaurant }: { restaurant: Restaurant }) {
   const closeRatingsList = useAppStore((s) => s.closeRatingsList)
   const ratingContext = useAppStore((s) => s.ratingContext)
   const setShowRating = useAppStore((s) => s.setShowRating)
+  const tableNumber = useAppStore((s) => s.tableNumber)   // ← add this line
 
   const [ratings, setRatings] = useState<Rating[]>([])
   const [loading, setLoading] = useState(true)
@@ -150,23 +151,23 @@ if (!error && data) {
         </div>
 
         {/* Footer — submit-rating CTA only if there's an order to rate, else a hint */}
-        <div className="border-t border-slate-200 p-4">
-          {ratingContext ? (
-            <button
-              onClick={() => {
-                closeRatingsList()
-                setShowRating(true)
-              }}
-              className="w-full rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5"
-            >
-              Rate your order
-            </button>
-          ) : (
-            <p className="text-center text-xs text-slate-400">
-              You'll be able to rate your experience once your order is served.
-            </p>
-          )}
-        </div>
+       <div className="border-t border-slate-200 p-4">
+  {ratingContext || tableNumber ? (
+    <button
+      onClick={() => {
+        closeRatingsList()
+        setShowRating(true)
+      }}
+      className="w-full rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5"
+    >
+      Rate your experience
+    </button>
+  ) : (
+    <p className="text-center text-xs text-slate-400">
+      Scan your table's QR code to leave a rating.
+    </p>
+  )}
+</div>
       </div>
     </div>
   )
