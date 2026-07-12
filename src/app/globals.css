@@ -1310,3 +1310,5 @@ input {
     align-items: flex-start;
   }
 }
+
+h1, h2 { font-family: var(--font-sora), sans-serif; }

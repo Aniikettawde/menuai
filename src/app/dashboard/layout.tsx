@@ -23,6 +23,9 @@ import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import { TrialBanner } from '@/components/billing/TrialBanner'
 import { useDashboardContext } from '@/hooks/useDashboardContext'
 import type { TeamRole } from '@/lib/dashboard-access'
+import { Sora } from 'next/font/google'
+
+const sora = Sora({ subsets: ['latin'], variable: '--font-sora', weight: ['700', '800'] })
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? ''
 
