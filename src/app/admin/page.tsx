@@ -17,6 +17,7 @@ import {
   MessageSquareMore,
   RefreshCw,
   Search,
+  Share2,
   ShieldOff,
   Sparkles,
   TrendingUp,
@@ -92,6 +93,48 @@ type RecentEvent = {
   item_name: string | null
   timestamp: string
   metadata: unknown
+}
+
+type QuizFunnelPoint = { screen: string; sessions: number }
+
+type QuizAnalytics = {
+  total_sessions: number
+  total_started: number
+  total_completed: number
+  funnel: QuizFunnelPoint[]
+  tier_distribution: Record<string, number>
+  avg_score: number
+  answer_breakdown: Record<string, Record<string, number>>
+  share_actions: Record<string, number>
+  restart_count: number
+  daily: { date: string; count: number }[]
+}
+
+// Short labels for the admin view only — keeps the quiz analytics readable
+// without reproducing the full question copy here.
+const QUIZ_QUESTION_LABELS: Record<string, string> = {
+  started: 'Started quiz',
+  q1: 'Q1 · Friend not hungry',
+  q2: 'Q2 · 2AM fridge mission',
+  q3: 'Q3 · Exciting notification',
+  q4: 'Q4 · Biggest fear',
+  q5: 'Q5 · No-calorie world',
+  q6: 'Q6 · ₹50 cashback reaction',
+  completed: 'Completed quiz',
+}
+
+const QUIZ_ANSWER_LABELS: Record<string, Record<string, string>> = {
+  q1: { A: 'Screenshot betrayal 🍟', B: 'Extra fries 🍔', C: 'Two meals 🌮' },
+  q2: { A: 'Water, back to sleep 🥛', B: 'Leftover pizza 🍕', C: 'Anything edible 🍰' },
+  q3: { A: 'Salary credited 📧', B: 'Order arrived 📦', C: 'Food out for delivery 🍽️' },
+  q4: { A: 'No money 😨', B: 'No internet 📶', C: 'Splitting one plate 🍟' },
+  q5: { A: 'Eat healthy anyway 🥗', B: 'Pizza/burgers/desserts 🍕', C: 'Snack every 30 min 🍩' },
+  q6: { A: 'Free money is free money 😎', B: 'Nearest restaurant NOW 🏃', C: 'Is this a dream? 🤣' },
+}
+
+const SHARE_ACTION_LABELS: Record<string, string> = {
+  native_share: 'Shared result (WhatsApp / native share)',
+  find_restaurant: 'Tapped "Find restaurants near me"',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -431,7 +474,7 @@ function RestaurantRow({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics' | 'waitlist'>('overview')
+  const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics' | 'quiz'>('overview')
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
@@ -451,46 +494,35 @@ export default function AdminPage() {
     total_payments: number
     total_failed: number
   } | null>(null)
-  
- const [waitlistData, setWaitlistData] = useState<{
-  funnel: { screen: string; sessions: number }[]
-  survey_breakdown: Record<string, Record<string, number>>
-  interested_counts: Record<string, number>
-  faq_counts: Record<string, number>
-  faq_reader_sessions: number
-  total_sessions: number
-  total_survey_started: number
-  total_survey_completed: number
-  total_completed_signup: number
-  total_incomplete_signup: number
-} | null>(null)
 
- const loadAll = useCallback(async () => {
-  setLoading(true)
-  try {
-    const [rRes, pRes, aRes, wRes] = await Promise.all([
-      fetch('/api/admin/restaurants'),
-      fetch('/api/admin/payments'),
-      fetch('/api/admin/analytics'),
-      fetch('/api/admin/waitlist-analytics'),
-    ])
+  const [quizData, setQuizData] = useState<QuizAnalytics | null>(null)
 
-    const rData = await rRes.json()
-    const pData = await pRes.json()
-    const aData = await aRes.json()
-    const wData = await wRes.json()
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [rRes, pRes, aRes, qRes] = await Promise.all([
+        fetch('/api/admin/restaurants'),
+        fetch('/api/admin/payments'),
+        fetch('/api/admin/analytics'),
+        fetch('/api/admin/quiz-analytics'),
+      ])
 
-    setRestaurants(rData.restaurants ?? [])
-    setPayments(pData.payments ?? [])
-    setPaymentSummary(pData.summary ?? null)
-    setAnalytics(aData)
-    setWaitlistData(wData)
-  } catch (err) {
-    console.error(err)
-  } finally {
-    setLoading(false)
-  }
-}, [])
+      const rData = await rRes.json()
+      const pData = await pRes.json()
+      const aData = await aRes.json()
+      const qData = await qRes.json()
+
+      setRestaurants(rData.restaurants ?? [])
+      setPayments(pData.payments ?? [])
+      setPaymentSummary(pData.summary ?? null)
+      setAnalytics(aData)
+      setQuizData(qData)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   const toggleDiscovery = useCallback(
     async (restaurant: Restaurant) => {
@@ -556,9 +588,8 @@ export default function AdminPage() {
     { key: 'restaurants', label: `Restaurants (${totalRestaurants})`, icon: <Users size={13} /> },
     { key: 'payments', label: 'Payments', icon: <CreditCard size={13} /> },
     { key: 'analytics', label: 'Analytics', icon: <Activity size={13} /> },
-
-  { key: 'waitlist', label: 'Waitlist Funnel', icon: <Sparkles size={13} /> },
-] as const
+    { key: 'quiz', label: 'Quiz Tracking', icon: <Sparkles size={13} /> },
+  ] as const
 
   return (
     <div className="space-y-5">
@@ -652,8 +683,6 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
-			  
-			  
 
               {/* Recent payments */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
@@ -680,137 +709,187 @@ export default function AdminPage() {
               </div>
             </div>
           )}
-		  
-		  {tab === 'waitlist' && waitlistData && (
-  <div className="space-y-5">
-    {/* KPI summary */}
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <KpiCard
-        label="Page visitors"
-        value={waitlistData.total_sessions}
-        icon={<Eye size={14} />}
-        color="bg-blue-500/10 text-blue-400"
-      />
-      <KpiCard
-        label="Took the survey"
-        value={waitlistData.total_survey_completed}
-        sub={`${waitlistData.total_survey_started} started`}
-        icon={<Sparkles size={14} />}
-        color="bg-purple-500/10 text-purple-400"
-      />
-      <KpiCard
-        label="Completed signup"
-        value={waitlistData.total_completed_signup}
-        sub="verified via OTP"
-        icon={<CheckCircle2 size={14} />}
-        color="bg-emerald-500/10 text-emerald-400"
-      />
-      <KpiCard
-        label="Dropped off"
-        value={waitlistData.total_incomplete_signup}
-        sub={
-          waitlistData.total_sessions > 0
-            ? `${((waitlistData.total_incomplete_signup / waitlistData.total_sessions) * 100).toFixed(0)}% of visitors`
-            : undefined
-        }
-        icon={<XCircle size={14} />}
-        color="bg-red-500/10 text-red-400"
-      />
-    </div>
-	
-	{waitlistData.interested_counts && (
-  <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
-    <p className="mb-3 text-sm font-semibold text-white">Said yes to the cashback offer?</p>
-    <div className="space-y-2">
-      {Object.entries(waitlistData.interested_counts)
-        .sort((a, b) => b[1] - a[1])
-        .map(([answer, count]) => {
-          const total = Object.values(waitlistData.interested_counts).reduce((s, n) => s + n, 0)
-          const pct = total > 0 ? ((count / total) * 100).toFixed(0) : 0
-          return (
-            <div key={answer} className="flex items-center gap-3">
-              <span className="w-48 shrink-0 truncate text-xs text-zinc-400">{answer}</span>
-              <div className="flex-1">
-                <div className="h-3 w-full rounded-full bg-zinc-800">
-                  <div className="h-3 rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
+
+          {/* ── QUIZ TRACKING TAB ── */}
+          {tab === 'quiz' && quizData && (
+            <div className="space-y-5">
+              {/* KPI summary */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <KpiCard
+                  label="Quiz sessions"
+                  value={quizData.total_sessions}
+                  icon={<Eye size={14} />}
+                  color="bg-blue-500/10 text-blue-400"
+                />
+                <KpiCard
+                  label="Started"
+                  value={quizData.total_started}
+                  icon={<Sparkles size={14} />}
+                  color="bg-purple-500/10 text-purple-400"
+                />
+                <KpiCard
+                  label="Completed"
+                  value={quizData.total_completed}
+                  sub={
+                    quizData.total_started > 0
+                      ? `${((quizData.total_completed / quizData.total_started) * 100).toFixed(0)}% completion rate`
+                      : undefined
+                  }
+                  icon={<CheckCircle2 size={14} />}
+                  color="bg-emerald-500/10 text-emerald-400"
+                />
+                <KpiCard
+                  label="Avg foodie score"
+                  value={`${quizData.avg_score}/18`}
+                  icon={<Flame size={14} />}
+                  color="bg-amber-500/10 text-amber-400"
+                />
+              </div>
+
+              {/* Funnel with drop-off */}
+              <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+                <p className="mb-4 text-sm font-semibold text-white">
+                  Quiz funnel (30d) · {quizData.total_sessions} sessions
+                </p>
+                <div className="space-y-2">
+                  {quizData.funnel.map((f, i) => {
+                    const prev = quizData.funnel[i - 1]?.sessions
+                    const pct = prev ? Math.round((f.sessions / prev) * 100) : 100
+                    const maxSessions = quizData.funnel[0]?.sessions || 1
+                    return (
+                      <div key={f.screen} className="flex items-center gap-3">
+                        <span className="w-40 shrink-0 truncate text-[10px] text-zinc-500">
+                          {QUIZ_QUESTION_LABELS[f.screen] ?? f.screen}
+                        </span>
+                        <div className="flex-1">
+                          <div className="h-4 w-full rounded-md bg-zinc-800">
+                            <div
+                              className="h-4 rounded-md bg-purple-500"
+                              style={{ width: `${Math.max(2, (f.sessions / maxSessions) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="w-10 shrink-0 text-right text-xs font-bold text-zinc-300">{f.sessions}</span>
+                        {i > 0 && <span className="w-12 shrink-0 text-right text-[10px] text-zinc-600">{pct}%</span>}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-              <span className="w-16 shrink-0 text-right text-xs font-bold text-zinc-300">{count} ({pct}%)</span>
-            </div>
-          )
-        })}
-    </div>
-  </div>
-)}
 
-
-    {/* Funnel */}
-    <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
-      <p className="mb-4 text-sm font-semibold text-white">Signup funnel (30d) · {waitlistData.total_sessions} sessions</p>
-      <div className="space-y-2">
-        {waitlistData.funnel.map((f, i) => {
-          const prev = waitlistData.funnel[i - 1]?.sessions
-          const pct = prev ? Math.round((f.sessions / prev) * 100) : 100
-          const maxSessions = waitlistData.funnel[0]?.sessions || 1
-          return (
-            <div key={f.screen} className="flex items-center gap-3">
-              <span className="w-14 shrink-0 text-[10px] text-zinc-500">{f.screen}</span>
-              <div className="flex-1">
-                <div className="h-4 w-full rounded-md bg-zinc-800">
-                  <div
-                    className="h-4 rounded-md bg-purple-500"
-                    style={{ width: `${Math.max(2, (f.sessions / maxSessions) * 100)}%` }}
-                  />
-                </div>
-              </div>
-              <span className="w-10 shrink-0 text-right text-xs font-bold text-zinc-300">{f.sessions}</span>
-              {i > 0 && <span className="w-12 shrink-0 text-right text-[10px] text-zinc-600">{pct}%</span>}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-
-    {/* Survey answer breakdown */}
-    <div className="grid gap-4 lg:grid-cols-2">
-      {Object.entries(waitlistData.survey_breakdown).map(([question, answers]) => {
-        const max = Math.max(...Object.values(answers))
-        return (
-          <div key={question} className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
-            <p className="mb-3 text-sm font-semibold text-white">{question}</p>
-            <div className="space-y-2">
-              {Object.entries(answers).sort((a, b) => b[1] - a[1]).map(([answer, count]) => (
-                <div key={answer} className="flex items-center gap-3">
-                  <span className="w-40 shrink-0 truncate text-[10px] text-zinc-500">{answer}</span>
-                  <div className="flex-1">
-                    <div className="h-1.5 w-full rounded-full bg-zinc-800">
-                      <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${(count / max) * 100}%` }} />
-                    </div>
+              {/* Tier / persona distribution */}
+              {Object.keys(quizData.tier_distribution).length > 0 && (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+                  <p className="mb-3 text-sm font-semibold text-white">Persona distribution</p>
+                  <div className="space-y-2">
+                    {Object.entries(quizData.tier_distribution)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([tier, count]) => {
+                        const total = Object.values(quizData.tier_distribution).reduce((s, n) => s + n, 0)
+                        const pct = total > 0 ? ((count / total) * 100).toFixed(0) : 0
+                        return (
+                          <div key={tier} className="flex items-center gap-3">
+                            <span className="w-48 shrink-0 truncate text-xs text-zinc-400">{tier}</span>
+                            <div className="flex-1">
+                              <div className="h-3 w-full rounded-full bg-zinc-800">
+                                <div className="h-3 rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                            <span className="w-16 shrink-0 text-right text-xs font-bold text-zinc-300">
+                              {count} ({pct}%)
+                            </span>
+                          </div>
+                        )
+                      })}
                   </div>
-                  <span className="w-8 shrink-0 text-right text-xs font-bold text-zinc-300">{count}</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-    </div>
+              )}
 
-    {/* FAQ engagement */}
-    <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
-      <p className="mb-1 text-sm font-semibold text-white">FAQ engagement</p>
-      <p className="mb-4 text-xs text-zinc-600">{waitlistData.faq_reader_sessions} of {waitlistData.total_sessions} visitors opened at least one FAQ</p>
-      <div className="space-y-2">
-        {Object.entries(waitlistData.faq_counts).sort((a, b) => b[1] - a[1]).map(([q, count]) => (
-          <div key={q} className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-            <span className="text-xs text-zinc-300">{q}</span>
-            <span className="text-xs font-bold text-purple-400">{count} opens</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-)}
+              {/* Per-question answer breakdown */}
+              <div className="grid gap-4 lg:grid-cols-2">
+                {Object.entries(quizData.answer_breakdown).map(([qKey, answers]) => {
+                  const max = Math.max(...Object.values(answers))
+                  return (
+                    <div key={qKey} className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+                      <p className="mb-3 text-sm font-semibold text-white">
+                        {QUIZ_QUESTION_LABELS[qKey] ?? qKey}
+                      </p>
+                      <div className="space-y-2">
+                        {Object.entries(answers)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([letter, count]) => (
+                            <div key={letter} className="flex items-center gap-3">
+                              <span className="w-44 shrink-0 truncate text-[10px] text-zinc-500">
+                                {QUIZ_ANSWER_LABELS[qKey]?.[letter] ?? letter}
+                              </span>
+                              <div className="flex-1">
+                                <div className="h-1.5 w-full rounded-full bg-zinc-800">
+                                  <div
+                                    className="h-1.5 rounded-full bg-blue-500"
+                                    style={{ width: `${(count / max) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <span className="w-8 shrink-0 text-right text-xs font-bold text-zinc-300">{count}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Share / CTA engagement */}
+              <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+                <div className="mb-4 flex items-center gap-2">
+                  <Share2 size={13} className="text-purple-400" />
+                  <p className="text-sm font-semibold text-white">Share & CTA engagement</p>
+                </div>
+                {Object.keys(quizData.share_actions).length === 0 ? (
+                  <p className="text-xs text-zinc-600">No share or CTA taps yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {Object.entries(quizData.share_actions).map(([action, count]) => (
+                      <div key={action} className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                        <span className="text-xs text-zinc-300">{SHARE_ACTION_LABELS[action] ?? action}</span>
+                        <span className="text-xs font-bold text-purple-400">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="mt-3 text-[10px] text-zinc-700">{quizData.restart_count} restart(s) across all sessions</p>
+              </div>
+
+              {/* Daily completions trend */}
+              {quizData.daily.length > 0 && (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
+                  <p className="mb-4 text-sm font-semibold text-white">Completions per day (30d)</p>
+                  <div className="flex h-28 items-end gap-1">
+                    {quizData.daily.map((d) => {
+                      const maxCount = Math.max(...quizData.daily.map((x) => x.count), 1)
+                      return (
+                        <div key={d.date} className="group relative flex-1">
+                          <div className="absolute -top-6 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-300 group-hover:block">
+                            {d.date} · {d.count}
+                          </div>
+                          <div
+                            className="w-full rounded-sm bg-purple-500 group-hover:bg-purple-400"
+                            style={{ height: `${Math.max(4, (d.count / maxCount) * 100)}%` }}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'quiz' && !quizData && (
+            <div className="rounded-2xl border border-white/[0.06] bg-[#111111] py-12 text-center text-sm text-zinc-600">
+              No quiz data yet.
+            </div>
+          )}
 
           {/* ── RESTAURANTS TAB ── */}
           {tab === 'restaurants' && (
