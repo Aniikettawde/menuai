@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { supabasePublic } from "@/lib/qr-public-client";
 import { qrAuthClient } from "@/lib/qr-auth-client";
 import DownloadTrackModal from "@/components/DownloadTrackModal";
+
+import { useRouter } from "next/navigation";
+
 // ---------- Types ----------
 type GenMode = "single" | "bulk";
 type BulkSubMode = "list" | "sequential";
@@ -164,6 +167,7 @@ export default function QrGeneratorClient() {
   const qrInstanceRef = useRef<any>(null);
 
   const [mode, setMode] = useState<GenMode>("single");
+const router = useRouter();
 
   // ----- Single mode state -----
   const [contentType, setContentType] = useState<QrContentType>("url");
@@ -435,41 +439,100 @@ const [pendingFormat, setPendingFormat] = useState<ExportFormat>("png");
     setBgColor(bg);
   }
   
-  async function createTrackedLinkAndDownload(format: ExportFormat) {
-  const { data: { user } } = await qrAuthClient.auth.getUser();
-  if (!user || !currentData.data) return handleDownload(format);
+ function generateShortCode(): string {
+  return (
+    Math.random().toString(36).slice(2, 8) +
+    Math.random().toString(36).slice(2, 5)
+  );
+}
 
-  const shortCode = Math.random().toString(36).slice(2, 8);
-  await qrAuthClient.from("tracked_qr_codes").insert({
-    short_code: shortCode,
-    user_id: user.id,
-    label: contentType,
-    qr_type: contentType,
-    destination: currentData.data,
-  });
+// Insert a tracked_qr_codes row, retrying on short_code collisions.
+async function insertTrackedRow(userId: string, label: string, qrType: string, destination: string) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const shortCode = generateShortCode();
+    const { error } = await qrAuthClient
+      .from("tracked_qr_codes")
+      .insert({ short_code: shortCode, user_id: userId, label, qr_type: qrType, destination });
+    if (!error) return shortCode;
+    if (error.code !== "23505") { console.error("tracked_qr_codes insert failed:", error.message); return null; }
+    // 23505 = unique violation on short_code, retry with a new one
+  }
+  return null;
+}
+
+// Builds the tracked QR from scratch and downloads it — works even right after
+// a full page reload (post OAuth redirect), where no live QR instance exists yet.
+async function buildAndDownloadTracked(
+  format: ExportFormat,
+  qrType: string,
+  label: string,
+  destination: string,
+  styleOptionsWithoutData: any,
+  userId: string
+) {
+  const shortCode = await insertTrackedRow(userId, label, qrType, destination);
+  if (!shortCode) return; // insert failed — nothing to download
 
   const trackedUrl = `https://dinezy.in/s/${shortCode}`;
   const QRCodeStyling = await getLib();
-  const options = buildStyleOptions(trackedUrl);
-  qrInstanceRef.current.update(options);
-  setTimeout(() => handleDownload(format), 150); // let the update settle before export
+  const instance = new QRCodeStyling({ ...styleOptionsWithoutData, data: trackedUrl });
+  instance.download({ name: `dinezy-qr-${Date.now()}`, extension: format });
+  return shortCode;
 }
 
+// Called when the person clicks "Sign in with Google & Track" in the modal.
+// Persists everything needed to finish the job after the OAuth round trip.
+async function handleSignInAndTrack() {
+  if (!currentData.data) return;
+  const payload = {
+    format: pendingFormat,
+    qrType: contentType,
+    label: contentType,
+    destination: currentData.data,
+    styleOptions: buildStyleOptions(currentData.data),
+  };
+  sessionStorage.setItem("qr_pending_track", JSON.stringify(payload));
+  setShowTrackModal(false);
+  await qrAuthClient.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: `${window.location.origin}/auth/callback?state=/qr-generator` },
+  });
+}
+
+// Already-signed-in user clicking Download directly — no redirect needed.
 async function handleDownloadClick(format: ExportFormat) {
   const { data: { user } } = await qrAuthClient.auth.getUser();
-  if (user) {
-    await createTrackedLinkAndDownload(format);
+  if (user && currentData.data) {
+    const styleOptions = buildStyleOptions(currentData.data);
+    await buildAndDownloadTracked(format, contentType, contentType, currentData.data, styleOptions, user.id);
   } else {
     setPendingFormat(format);
     setShowTrackModal(true);
   }
 }
 
+// On mount: resume a tracked download that was interrupted by the Google redirect.
 useEffect(() => {
-  if (sessionStorage.getItem("qr_pending_track")) {
+  async function resumePendingTrack() {
+    const raw = sessionStorage.getItem("qr_pending_track");
+    if (!raw) return;
+    const { data: { user } } = await qrAuthClient.auth.getUser();
+    if (!user) return; // session cookie not ready yet — leave payload, try again on next mount
     sessionStorage.removeItem("qr_pending_track");
-    createTrackedLinkAndDownload(pendingFormat);
+    const payload = JSON.parse(raw);
+    await buildAndDownloadTracked(
+      payload.format,
+      payload.qrType,
+      payload.label,
+      payload.destination,
+      payload.styleOptions,
+      user.id
+    );
+    // give the browser's download a beat to kick off, then take them to their dashboard
+    setTimeout(() => router.push("/qr-generator/dashboard"), 800);
+
   }
+  resumePendingTrack();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
@@ -853,10 +916,10 @@ useEffect(() => {
                 <div className="w-full mt-5 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => handleDownloadClick("png")} className="rounded-lg bg-[#2B4570] text-white py-2.5 text-sm font-medium hover:bg-[#23395C] transition">Download PNG</button>
-                    <button onClick={() => handleDownloadClick("svg")} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2.5 text-sm font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">Download SVG</button>
+<button onClick={() => handleDownloadClick("svg")} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2.5 text-sm font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">Download SVG</button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => handleDownloadClick("jpeg")} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition">JPEG</button>
+                   <button onClick={() => handleDownloadClick("jpeg")} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition">JPEG</button>
                     <button onClick={() => handleDownloadClick("webp")} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">WEBP</button>
                   </div>
                 </div>
@@ -932,11 +995,11 @@ useEffect(() => {
         }
       `}</style>
 	  
-	  <DownloadTrackModal
+	 <DownloadTrackModal
   open={showTrackModal}
   onClose={() => setShowTrackModal(false)}
   onSkip={() => { setShowTrackModal(false); handleDownload(pendingFormat); }}
-  onTrack={() => setShowTrackModal(false)}
+  onTrack={handleSignInAndTrack}
 />
 
     </main>
