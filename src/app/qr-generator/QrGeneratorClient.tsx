@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { supabasePublic } from "@/lib/qr-public-client";
 import { qrAuthClient } from "@/lib/qr-auth-client";
 import DownloadTrackModal from "@/components/DownloadTrackModal";
-
+import { haptic } from "@/lib/haptics";
 import { useRouter } from "next/navigation";
 
 // ---------- Types ----------
@@ -54,7 +54,7 @@ const CORNER_DOT_STYLES: { label: string; value: CornerDotType }[] = [
 ];
 const PRESET_PALETTES: { name: string; fg: string; bg: string }[] = [
   { name: "Classic", fg: "#000000", bg: "#ffffff" },
-  { name: "Dinezy Ivory", fg: "#211C16", bg: "#FAF6EE" },
+  { name: "Dinezy Ink", fg: "#1C1712", bg: "#ffffff" },
   { name: "Burgundy", fg: "#8b2635", bg: "#fdf6f2" },
   { name: "Midnight", fg: "#0f172a", bg: "#e2e8f0" },
   { name: "Forest", fg: "#14532d", bg: "#f0fdf4" },
@@ -165,16 +165,19 @@ interface BulkResult extends BulkItem {
 export default function QrGeneratorClient() {
   const previewRef = useRef<HTMLDivElement>(null);
   const qrInstanceRef = useRef<any>(null);
+  // Tracks which DOM node the live qrInstanceRef is actually appended to, so we
+  // can tell a "stale instance, fresh container" situation apart from a normal update.
+  const qrContainerElRef = useRef<HTMLElement | null>(null);
 
   const [mode, setMode] = useState<GenMode>("single");
-const router = useRouter();
+  const router = useRouter();
 
   // ----- Single mode state -----
   const [contentType, setContentType] = useState<QrContentType>("url");
   const [fields, setFields] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [showTrackModal, setShowTrackModal] = useState(false);
-const [pendingFormat, setPendingFormat] = useState<ExportFormat>("png");
+  const [pendingFormat, setPendingFormat] = useState<ExportFormat>("png");
 
   // ----- Bulk mode state -----
   const [bulkSubMode, setBulkSubMode] = useState<BulkSubMode>("list");
@@ -192,10 +195,10 @@ const [pendingFormat, setPendingFormat] = useState<ExportFormat>("png");
 
   // ----- Shared style state -----
   const [size, setSize] = useState(500);
-  const [fgColor, setFgColor] = useState("#211C16");
-  const [bgColor, setBgColor] = useState("#FAF6EE");
+  const [fgColor, setFgColor] = useState("#1C1712");
+  const [bgColor, setBgColor] = useState("#ffffff");
   const [useGradient, setUseGradient] = useState(false);
-  const [gradientColor2, setGradientColor2] = useState("#2B4570");
+  const [gradientColor2, setGradientColor2] = useState("#C1443A");
   const [dotStyle, setDotStyle] = useState<DotType>("rounded");
   const [cornerSquareStyle, setCornerSquareStyle] = useState<CornerSquareType>("extra-rounded");
   const [cornerDotStyle, setCornerDotStyle] = useState<CornerDotType>("dot");
@@ -252,14 +255,34 @@ const [pendingFormat, setPendingFormat] = useState<ExportFormat>("png");
   );
 
   // ----- Single mode live preview -----
+  // Fixed: previously, once qrInstanceRef.current existed, the code always called
+  // `.update()` on it — even if the preview <div> had been unmounted/remounted
+  // (e.g. after switching to Bulk mode and back, or because of a changing `key`
+  // prop). That left the QR instance updating a detached, invisible DOM node
+  // while the visible container stayed empty. We now track which container the
+  // instance is actually attached to and re-append whenever that changes.
   const renderQr = useCallback(async () => {
-    if (mode !== "single" || !currentData.data || !previewRef.current) return;
+    if (mode !== "single" || !previewRef.current) return;
+
+    if (!currentData.data) {
+      // Nothing to render — clear any stale QR left over from a previous value.
+      previewRef.current.innerHTML = "";
+      qrInstanceRef.current = null;
+      qrContainerElRef.current = null;
+      return;
+    }
+
     const QRCodeStyling = await getLib();
     const options = buildStyleOptions(currentData.data);
-    if (!qrInstanceRef.current) {
+
+    const needsFreshInstance =
+      !qrInstanceRef.current || qrContainerElRef.current !== previewRef.current;
+
+    if (needsFreshInstance) {
       qrInstanceRef.current = new QRCodeStyling(options);
       previewRef.current.innerHTML = "";
       qrInstanceRef.current.append(previewRef.current);
+      qrContainerElRef.current = previewRef.current;
     } else {
       qrInstanceRef.current.update(options);
     }
@@ -268,6 +291,16 @@ const [pendingFormat, setPendingFormat] = useState<ExportFormat>("png");
   useEffect(() => {
     void renderQr();
   }, [renderQr]);
+
+  // If we navigate away from single mode, the preview node unmounts — drop our
+  // refs so the next time we're back in single mode we build a fresh instance
+  // against the new node instead of trying to reuse the detached one.
+  useEffect(() => {
+    if (mode !== "single") {
+      qrInstanceRef.current = null;
+      qrContainerElRef.current = null;
+    }
+  }, [mode]);
 
   // ----- Bulk item parsing -----
   const bulkItems: BulkItem[] = useMemo(() => {
@@ -438,103 +471,102 @@ const [pendingFormat, setPendingFormat] = useState<ExportFormat>("png");
     setFgColor(fg);
     setBgColor(bg);
   }
-  
- function generateShortCode(): string {
-  return (
-    Math.random().toString(36).slice(2, 8) +
-    Math.random().toString(36).slice(2, 5)
-  );
-}
 
-// Insert a tracked_qr_codes row, retrying on short_code collisions.
-async function insertTrackedRow(userId: string, label: string, qrType: string, destination: string) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const shortCode = generateShortCode();
-    const { error } = await qrAuthClient
-      .from("tracked_qr_codes")
-      .insert({ short_code: shortCode, user_id: userId, label, qr_type: qrType, destination });
-    if (!error) return shortCode;
-    if (error.code !== "23505") { console.error("tracked_qr_codes insert failed:", error.message); return null; }
-    // 23505 = unique violation on short_code, retry with a new one
-  }
-  return null;
-}
-
-// Builds the tracked QR from scratch and downloads it — works even right after
-// a full page reload (post OAuth redirect), where no live QR instance exists yet.
-async function buildAndDownloadTracked(
-  format: ExportFormat,
-  qrType: string,
-  label: string,
-  destination: string,
-  styleOptionsWithoutData: any,
-  userId: string
-) {
-  const shortCode = await insertTrackedRow(userId, label, qrType, destination);
-  if (!shortCode) return; // insert failed — nothing to download
-
-  const trackedUrl = `https://dinezy.in/s/${shortCode}`;
-  const QRCodeStyling = await getLib();
-  const instance = new QRCodeStyling({ ...styleOptionsWithoutData, data: trackedUrl });
-  instance.download({ name: `dinezy-qr-${Date.now()}`, extension: format });
-  return shortCode;
-}
-
-// Called when the person clicks "Sign in with Google & Track" in the modal.
-// Persists everything needed to finish the job after the OAuth round trip.
-async function handleSignInAndTrack() {
-  if (!currentData.data) return;
-  const payload = {
-    format: pendingFormat,
-    qrType: contentType,
-    label: contentType,
-    destination: currentData.data,
-    styleOptions: buildStyleOptions(currentData.data),
-  };
-  sessionStorage.setItem("qr_pending_track", JSON.stringify(payload));
-  setShowTrackModal(false);
-  await qrAuthClient.auth.signInWithOAuth({
-    provider: "google",
-    options: { redirectTo: `${window.location.origin}/auth/callback?state=/qr-generator` },
-  });
-}
-
-// Already-signed-in user clicking Download directly — no redirect needed.
-async function handleDownloadClick(format: ExportFormat) {
-  const { data: { user } } = await qrAuthClient.auth.getUser();
-  if (user && currentData.data) {
-    const styleOptions = buildStyleOptions(currentData.data);
-    await buildAndDownloadTracked(format, contentType, contentType, currentData.data, styleOptions, user.id);
-  } else {
-    setPendingFormat(format);
-    setShowTrackModal(true);
-  }
-}
-
-// On mount: resume a tracked download that was interrupted by the Google redirect.
-useEffect(() => {
-  async function resumePendingTrack() {
-    const raw = sessionStorage.getItem("qr_pending_track");
-    if (!raw) return;
-    const { data: { user } } = await qrAuthClient.auth.getUser();
-    if (!user) return; // session cookie not ready yet — leave payload, try again on next mount
-    sessionStorage.removeItem("qr_pending_track");
-    const payload = JSON.parse(raw);
-    await buildAndDownloadTracked(
-      payload.format,
-      payload.qrType,
-      payload.label,
-      payload.destination,
-      payload.styleOptions,
-      user.id
+  function generateShortCode(): string {
+    return (
+      Math.random().toString(36).slice(2, 8) +
+      Math.random().toString(36).slice(2, 5)
     );
-    // give the browser's download a beat to kick off, then take them to their dashboard
-    setTimeout(() => router.push("/qr-generator/dashboard"), 800);
-
   }
-  resumePendingTrack();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+
+  // Insert a tracked_qr_codes row, retrying on short_code collisions.
+  async function insertTrackedRow(userId: string, label: string, qrType: string, destination: string) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const shortCode = generateShortCode();
+      const { error } = await qrAuthClient
+        .from("tracked_qr_codes")
+        .insert({ short_code: shortCode, user_id: userId, label, qr_type: qrType, destination });
+      if (!error) return shortCode;
+      if (error.code !== "23505") { console.error("tracked_qr_codes insert failed:", error.message); return null; }
+      // 23505 = unique violation on short_code, retry with a new one
+    }
+    return null;
+  }
+
+  // Builds the tracked QR from scratch and downloads it — works even right after
+  // a full page reload (post OAuth redirect), where no live QR instance exists yet.
+  async function buildAndDownloadTracked(
+    format: ExportFormat,
+    qrType: string,
+    label: string,
+    destination: string,
+    styleOptionsWithoutData: any,
+    userId: string
+  ) {
+    const shortCode = await insertTrackedRow(userId, label, qrType, destination);
+    if (!shortCode) return; // insert failed — nothing to download
+
+    const trackedUrl = `https://dinezy.in/s/${shortCode}`;
+    const QRCodeStyling = await getLib();
+    const instance = new QRCodeStyling({ ...styleOptionsWithoutData, data: trackedUrl });
+    instance.download({ name: `dinezy-qr-${Date.now()}`, extension: format });
+    return shortCode;
+  }
+
+  // Called when the person clicks "Sign in with Google & Track" in the modal.
+  // Persists everything needed to finish the job after the OAuth round trip.
+  async function handleSignInAndTrack() {
+    if (!currentData.data) return;
+    const payload = {
+      format: pendingFormat,
+      qrType: contentType,
+      label: contentType,
+      destination: currentData.data,
+      styleOptions: buildStyleOptions(currentData.data),
+    };
+    sessionStorage.setItem("qr_pending_track", JSON.stringify(payload));
+    setShowTrackModal(false);
+    await qrAuthClient.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback?state=/qr-generator` },
+    });
+  }
+
+  // Already-signed-in user clicking Download directly — no redirect needed.
+  async function handleDownloadClick(format: ExportFormat) {
+    const { data: { user } } = await qrAuthClient.auth.getUser();
+    if (user && currentData.data) {
+      const styleOptions = buildStyleOptions(currentData.data);
+      await buildAndDownloadTracked(format, contentType, contentType, currentData.data, styleOptions, user.id);
+    } else {
+      setPendingFormat(format);
+      setShowTrackModal(true);
+    }
+  }
+
+  // On mount: resume a tracked download that was interrupted by the Google redirect.
+  useEffect(() => {
+    async function resumePendingTrack() {
+      const raw = sessionStorage.getItem("qr_pending_track");
+      if (!raw) return;
+      const { data: { user } } = await qrAuthClient.auth.getUser();
+      if (!user) return; // session cookie not ready yet — leave payload, try again on next mount
+      sessionStorage.removeItem("qr_pending_track");
+      const payload = JSON.parse(raw);
+      await buildAndDownloadTracked(
+        payload.format,
+        payload.qrType,
+        payload.label,
+        payload.destination,
+        payload.styleOptions,
+        user.id
+      );
+      // give the browser's download a beat to kick off, then take them to their dashboard
+      setTimeout(() => router.push("/qr-generator/dashboard"), 800);
+    }
+    resumePendingTrack();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // clear stale bulk results if style changes after generation (avoid showing outdated batch as current)
   const styleKey = JSON.stringify({ size, fgColor, bgColor, useGradient, gradientColor2, dotStyle, cornerSquareStyle, cornerDotStyle, margin, transparentBg, logoDataUrl, logoSize });
@@ -549,36 +581,36 @@ useEffect(() => {
   }, [styleKey]);
 
   return (
-    <main className="min-h-[85vh] bg-[#FAF6EE] px-4 py-12 sm:py-16 print:bg-white print:py-0">
+    <section id="generator" className="bg-white px-3 sm:px-4 py-10 sm:py-16 print:py-0 pb-28 md:pb-16 scroll-mt-16">
       <div className="max-w-5xl mx-auto print:max-w-none">
-        <div className="text-center mb-6 print:hidden">
-          <p className="font-mono text-[11px] tracking-[0.2em] text-[#2B4570] uppercase mb-3">
-            Dinezy · Free Tools
+        <div className="text-center mb-5 sm:mb-6 print:hidden">
+          <p className="font-mono text-[10px] sm:text-[11px] tracking-[0.2em] text-[#C1443A] uppercase mb-2 sm:mb-3">
+            Free Tool
           </p>
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-[#211C16]">
-            Advanced QR Code Generator
-          </h1>
-          <p className="mt-3 text-[#6E6557] text-[15px] max-w-lg mx-auto">
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">
+            Build your QR code
+          </h2>
+          <p className="hidden sm:block mt-3 text-gray-500 text-[15px] max-w-lg mx-auto">
             Fully customizable QR codes — colors, shapes, logos, poster
             backgrounds, and bulk generation. Free, unlimited, no watermark.
           </p>
         </div>
 
-        {/* Mode toggle */}
-        <div className="flex justify-center mb-6 print:hidden">
-          <div className="inline-flex rounded-full border border-[#D9D2C0] bg-white p-1">
+        {/* Mode toggle — full width on mobile */}
+        <div className="flex justify-center mb-5 sm:mb-6 print:hidden">
+          <div className="grid grid-cols-2 w-full sm:inline-flex sm:w-auto rounded-2xl sm:rounded-full border border-gray-200 bg-white p-1">
             <button
-              onClick={() => setMode("single")}
-              className={`px-5 py-2 rounded-full text-sm font-medium transition ${
-                mode === "single" ? "bg-[#211C16] text-white" : "text-[#6E6557]"
+              onClick={() => { haptic(); setMode("single"); }}
+              className={`px-5 py-2.5 rounded-xl sm:rounded-full text-sm font-medium transition-all active:scale-95 ${
+                mode === "single" ? "bg-gray-900 text-white" : "text-gray-500"
               }`}
             >
               Single QR
             </button>
             <button
-              onClick={() => setMode("bulk")}
-              className={`px-5 py-2 rounded-full text-sm font-medium transition ${
-                mode === "bulk" ? "bg-[#211C16] text-white" : "text-[#6E6557]"
+              onClick={() => { haptic(); setMode("bulk"); }}
+              className={`px-5 py-2.5 rounded-xl sm:rounded-full text-sm font-medium transition-all active:scale-95 ${
+                mode === "bulk" ? "bg-gray-900 text-white" : "text-gray-500"
               }`}
             >
               Bulk QR
@@ -586,28 +618,148 @@ useEffect(() => {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-[1fr_380px] gap-6 print:block">
-          {/* LEFT: Controls */}
-          <div className="bg-white rounded-2xl border border-[#211C16]/10 overflow-hidden print:hidden">
-            <div className="flex border-b border-[#211C16]/10">
+        <div className="grid md:grid-cols-[1fr_380px] gap-5 sm:gap-6 print:block">
+          {/* RIGHT panel shown FIRST on mobile — see instant feedback before configuring */}
+          <div className="order-1 md:order-2 bg-white rounded-2xl sm:rounded-2xl border border-gray-200 p-4 sm:p-5 flex flex-col print:border-none print:p-0">
+            {mode === "single" ? (
+              <>
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 self-start">Live Preview</p>
+                <div
+  className="w-full rounded-xl flex items-center justify-center overflow-hidden relative border border-dashed border-gray-200 bg-gray-50"
+  style={{
+    height: 220,     // fixed, not minHeight — stops it growing to match `size`
+    ...(posterBg
+      ? { background: `url(${posterBg}) center/cover`, border: "none" }
+      : transparentBg
+      ? { background: "repeating-conic-gradient(#e5e5e5 0% 25%, #ffffff 0% 50%) 0 0/20px 20px", border: "none" }
+      : {}),
+  }}
+>
+  <div
+    ref={previewRef}
+    className={currentData.data ? "qr-pop" : ""}
+    style={{
+      position: "absolute",
+      top: "50%",
+      left: "50%",
+      transform: `translate(-50%, -50%) scale(${Math.min(1, 220 / size)})`,
+      transformOrigin: "center",
+    }}
+  />
+</div>
+                {!currentData.data && (
+                  <p className="text-xs text-gray-500 mt-3 text-center">Fill in the content fields to see a live preview</p>
+                )}
+
+                {/* Signature: ticket perforation tear-line */}
+                {currentData.data && (
+                  <div className="relative my-4 h-3 select-none" aria-hidden="true">
+                    <div
+                      className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px"
+                      style={{
+                        backgroundImage: "repeating-linear-gradient(90deg, #E4E4E7 0 6px, transparent 6px 12px)",
+                      }}
+                    />
+                    <div className="absolute -left-4 sm:-left-5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white border border-gray-100" />
+                    <div className="absolute -right-4 sm:-right-5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white border border-gray-100" />
+                  </div>
+                )}
+
+                {/* Desktop inline download buttons */}
+                <div className="hidden md:block w-full mt-2 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => { haptic(10); handleDownloadClick("png"); }} className="rounded-xl bg-[#C1443A] text-white py-2.5 text-sm font-medium hover:bg-[#A83A31] active:scale-[0.97] transition-all">Download PNG</button>
+                    <button onClick={() => { haptic(10); handleDownloadClick("svg"); }} disabled={!!posterBg} className="rounded-xl border border-gray-200 text-gray-900 py-2.5 text-sm font-medium hover:bg-gray-50 active:scale-[0.97] transition-all disabled:opacity-40">Download SVG</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => { haptic(10); handleDownloadClick("jpeg"); }} className="rounded-xl border border-gray-200 text-gray-900 py-2 text-xs font-medium hover:bg-gray-50 active:scale-[0.97] transition-all">JPEG</button>
+                    <button onClick={() => { haptic(10); handleDownloadClick("webp"); }} disabled={!!posterBg} className="rounded-xl border border-gray-200 text-gray-900 py-2 text-xs font-medium hover:bg-gray-50 active:scale-[0.97] transition-all disabled:opacity-40">WEBP</button>
+                  </div>
+                </div>
+                <p className="hidden md:block mt-4 text-center text-[12px] text-gray-500">No sign-up. No watermark. No limit.</p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3 print:hidden">
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    Batch Preview {bulkResults ? `(${bulkResults.length})` : ""}
+                  </p>
+                  {bulkResults && styleChangedSinceGenerate && (
+                    <span className="text-[11px] text-[#C1443A]">Style changed — regenerate</span>
+                  )}
+                </div>
+
+                {!bulkResults && !bulkGenerating && (
+                  <div className="flex-1 min-h-[220px] flex items-center justify-center text-center px-4">
+                    <p className="text-sm text-gray-500">
+                      Add your list or sequential range in the <strong>Content</strong> tab,
+                      then tap <strong>Generate All</strong>.
+                    </p>
+                  </div>
+                )}
+
+                {bulkGenerating && (
+                  <div className="flex-1 min-h-[220px] flex flex-col items-center justify-center gap-3">
+                    <div className="w-10 h-10 border-2 border-gray-200 border-t-[#C1443A] rounded-full animate-spin" />
+                    <p className="text-sm text-gray-500">
+                      Generating {bulkProgress.done} of {bulkProgress.total}…
+                    </p>
+                  </div>
+                )}
+
+                {bulkResults && !bulkGenerating && (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-h-[420px] overflow-y-auto pr-1 print:max-h-none print:overflow-visible print:grid-cols-4">
+                      {bulkResults.map((r, i) => (
+                        <div key={i} className="flex flex-col items-center gap-1 print:break-inside-avoid" style={{ animation: `qr-pop-in 220ms ease-out ${Math.min(i * 15, 300)}ms both` }}>
+                          <img src={r.blobUrl} alt={r.label} className="w-full aspect-square object-contain rounded-lg border border-gray-200" />
+                          <span className="text-[11px] text-gray-900 text-center truncate w-full" title={r.label}>{r.label}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 space-y-2 print:hidden">
+                      <button
+                        onClick={() => { haptic(10); handleDownloadZip(); }}
+                        disabled={zipping}
+                        className="w-full rounded-xl bg-[#C1443A] text-white py-3 text-sm font-medium hover:bg-[#A83A31] active:scale-[0.97] transition-all disabled:opacity-50 min-h-[48px]"
+                      >
+                        {zipping ? "Zipping…" : `Download All (ZIP)`}
+                      </button>
+                      <button
+                        onClick={() => { haptic(6); handlePrintSheet(); }}
+                        className="w-full rounded-xl border border-gray-200 text-gray-900 py-3 text-sm font-medium hover:bg-gray-50 active:scale-[0.97] transition-all min-h-[48px]"
+                      >
+                        Print Sheet
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* LEFT: Controls — shown SECOND on mobile */}
+          <div className="order-2 md:order-1 bg-white rounded-2xl border border-gray-200 overflow-hidden print:hidden">
+            <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide snap-x">
               {(["content", "style", "logo"] as const).map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-3 text-sm font-medium capitalize transition ${
-                    activeTab === tab ? "text-[#211C16] border-b-2 border-[#2B4570]" : "text-[#A8A08D]"
+                  onClick={() => { haptic(); setActiveTab(tab); }}
+                  className={`flex-1 min-w-[110px] snap-start py-3.5 text-sm font-medium capitalize transition-all ${
+                    activeTab === tab ? "text-gray-900 border-b-2 border-[#C1443A]" : "text-gray-600"
                   }`}
                 >
-                  {tab === "content" ? "1. Content" : tab === "style" ? "2. Style" : "3. Logo & Background"}
+                  {tab === "content" ? "1. Content" : tab === "style" ? "2. Style" : "3. Logo & BG"}
                 </button>
               ))}
             </div>
 
-            <div className="p-5">
+            <div key={activeTab} className="p-4 sm:p-5 tab-fade">
               {/* ===================== CONTENT TAB ===================== */}
               {activeTab === "content" && mode === "single" && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     {(
                       [
                         ["url", "🔗 Link"],
@@ -623,14 +775,15 @@ useEffect(() => {
                       <button
                         key={val}
                         onClick={() => {
+                          haptic();
                           setContentType(val);
                           setFields({});
                           setError("");
                         }}
-                        className={`text-xs font-medium py-2 px-1 rounded-lg border transition ${
+                        className={`text-xs font-medium py-2.5 px-1 rounded-xl border transition-all active:scale-95 min-h-[44px] ${
                           contentType === val
-                            ? "bg-[#211C16] text-white border-[#211C16]"
-                            : "border-[#D9D2C0] text-[#6E6557] hover:bg-[#FAF6EE]"
+                            ? "bg-gray-900 text-white border-gray-900"
+                            : "border-gray-200 text-gray-600 hover:bg-gray-50"
                         }`}
                       >
                         {label}
@@ -638,7 +791,7 @@ useEffect(() => {
                     ))}
                   </div>
 
-                  <form onSubmit={handleGenerate} className="space-y-3">
+                  <form onSubmit={(e) => { haptic(8); handleGenerate(e); }} className="space-y-3">
                     {contentType === "url" && (
                       <Input label="Website / Link URL" placeholder="https://your-link.com" value={fields.url || ""} onChange={(v) => updateField("url", v)} />
                     )}
@@ -694,9 +847,9 @@ useEffect(() => {
                       </>
                     )}
 
-                    {error && <p className="text-sm text-[#B3261E]" role="alert">{error}</p>}
+                    {error && <p className="text-sm text-[#C1443A]" role="alert">{error}</p>}
 
-                    <button type="submit" className="w-full rounded-lg bg-[#211C16] text-[#FAF6EE] py-3 font-medium hover:bg-[#352D23] transition">
+                    <button type="submit" className="w-full rounded-xl bg-gray-900 text-white py-3.5 font-medium hover:bg-gray-800 active:scale-[0.97] transition-all min-h-[48px]">
                       Generate QR Code
                     </button>
                   </form>
@@ -706,19 +859,19 @@ useEffect(() => {
               {/* ===================== BULK CONTENT TAB ===================== */}
               {activeTab === "content" && mode === "bulk" && (
                 <div className="space-y-4">
-                  <div className="inline-flex rounded-lg border border-[#D9D2C0] p-1 w-full">
+                  <div className="grid grid-cols-2 rounded-xl border border-gray-200 p-1 w-full">
                     <button
-                      onClick={() => setBulkSubMode("list")}
-                      className={`flex-1 text-xs font-medium py-2 rounded-md transition ${
-                        bulkSubMode === "list" ? "bg-[#211C16] text-white" : "text-[#6E6557]"
+                      onClick={() => { haptic(); setBulkSubMode("list"); }}
+                      className={`text-xs font-medium py-2.5 rounded-lg transition-all active:scale-95 ${
+                        bulkSubMode === "list" ? "bg-gray-900 text-white" : "text-gray-500"
                       }`}
                     >
                       Paste a List
                     </button>
                     <button
-                      onClick={() => setBulkSubMode("sequential")}
-                      className={`flex-1 text-xs font-medium py-2 rounded-md transition ${
-                        bulkSubMode === "sequential" ? "bg-[#211C16] text-white" : "text-[#6E6557]"
+                      onClick={() => { haptic(); setBulkSubMode("sequential"); }}
+                      className={`text-xs font-medium py-2.5 rounded-lg transition-all active:scale-95 ${
+                        bulkSubMode === "sequential" ? "bg-gray-900 text-white" : "text-gray-500"
                       }`}
                     >
                       Sequential Range
@@ -727,7 +880,7 @@ useEffect(() => {
 
                   {bulkSubMode === "list" ? (
                     <div>
-                      <label className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-1.5 block">
+                      <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5 block">
                         One item per line — <code>Label | content</code> or just the content
                       </label>
                       <textarea
@@ -735,15 +888,15 @@ useEffect(() => {
                         onChange={(e) => setBulkListText(e.target.value)}
                         placeholder={`Table 1 | https://dinezy.in/r/your-restaurant?table=1\nTable 2 | https://dinezy.in/r/your-restaurant?table=2\nhttps://instagram.com/dinezy.in`}
                         rows={8}
-                        className="w-full rounded-lg border border-[#D9D2C0] bg-white px-3.5 py-2.5 text-[13px] font-mono text-[#211C16] placeholder:text-[#A8A08D] outline-none focus:border-[#2B4570] focus:ring-1 focus:ring-[#2B4570] transition"
+                        className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-[13px] font-mono text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#C1443A] focus:ring-1 focus:ring-[#C1443A] transition"
                       />
-                      <p className="text-xs text-[#A8A08D] mt-1.5">
+                      <p className="text-xs text-gray-500 mt-1.5">
                         Works with links, plain text, or any pre-built QR string (WiFi/UPI etc).
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <p className="text-xs text-[#A8A08D]">
+                      <p className="text-xs text-gray-500">
                         Perfect for table QR codes — use <code>{"{n}"}</code> as a placeholder for
                         the number.
                       </p>
@@ -762,22 +915,21 @@ useEffect(() => {
                     </div>
                   )}
 
-                  {/* Live count + validation */}
-                  <div className="flex items-center justify-between rounded-lg bg-[#FAF6EE] px-3.5 py-2.5 text-sm">
-                    <span className="text-[#211C16] font-medium">
+                  <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3.5 py-2.5 text-sm">
+                    <span className="text-gray-900 font-medium">
                       {bulkItems.length} item{bulkItems.length === 1 ? "" : "s"} ready
                     </span>
                     {bulkItems.length > MAX_BULK_ITEMS && (
-                      <span className="text-[#B3261E] text-xs">Max {MAX_BULK_ITEMS} at a time</span>
+                      <span className="text-[#C1443A] text-xs">Max {MAX_BULK_ITEMS} at a time</span>
                     )}
                   </div>
 
-                  {bulkError && <p className="text-sm text-[#B3261E]" role="alert">{bulkError}</p>}
+                  {bulkError && <p className="text-sm text-[#C1443A]" role="alert">{bulkError}</p>}
 
                   <button
-                    onClick={handleGenerateBulk}
+                    onClick={() => { haptic(10); handleGenerateBulk(); }}
                     disabled={bulkGenerating || bulkItems.length === 0}
-                    className="w-full rounded-lg bg-[#211C16] text-[#FAF6EE] py-3 font-medium hover:bg-[#352D23] transition disabled:opacity-40"
+                    className="w-full rounded-xl bg-gray-900 text-white py-3.5 font-medium hover:bg-gray-800 active:scale-[0.97] transition-all disabled:opacity-40 min-h-[48px]"
                   >
                     {bulkGenerating
                       ? `Generating ${bulkProgress.done}/${bulkProgress.total}…`
@@ -785,17 +937,17 @@ useEffect(() => {
                   </button>
 
                   {bulkGenerating && (
-                    <div className="w-full h-1.5 rounded-full bg-[#FAF6EE] overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden relative">
                       <div
-                        className="h-full bg-[#2B4570] transition-all duration-150"
-                        style={{
-                          width: `${bulkProgress.total ? (bulkProgress.done / bulkProgress.total) * 100 : 0}%`,
-                        }}
-                      />
+                        className="h-full bg-[#C1443A] transition-all duration-150 relative overflow-hidden"
+                        style={{ width: `${bulkProgress.total ? (bulkProgress.done / bulkProgress.total) * 100 : 0}%` }}
+                      >
+                        <div className="absolute inset-0 shimmer" />
+                      </div>
                     </div>
                   )}
 
-                  <p className="text-xs text-[#A8A08D]">
+                  <p className="text-xs text-gray-500">
                     Tip: set your colors, shape, and logo in the <strong>Style</strong> and{" "}
                     <strong>Logo</strong> tabs first — they apply to the whole batch.
                   </p>
@@ -806,13 +958,13 @@ useEffect(() => {
               {activeTab === "style" && (
                 <div className="space-y-5">
                   <div>
-                    <p className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-2">Preset Palettes</p>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Preset Palettes</p>
                     <div className="flex flex-wrap gap-2">
                       {PRESET_PALETTES.map((p) => (
                         <button
                           key={p.name}
-                          onClick={() => applyPalette(p.fg, p.bg)}
-                          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-[#D9D2C0] hover:border-[#211C16] transition"
+                          onClick={() => { haptic(); applyPalette(p.fg, p.bg); }}
+                          className="flex items-center gap-1.5 text-xs px-2.5 py-2 rounded-xl border border-gray-200 hover:border-gray-900 active:scale-95 transition-all"
                           title={p.name}
                         >
                           <span className="w-3.5 h-3.5 rounded-full border border-black/10" style={{ background: p.fg }} />
@@ -843,8 +995,8 @@ useEffect(() => {
                   />
 
                   <div>
-                    <label className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-1.5 block">Margin: {margin}px</label>
-                    <input type="range" min={0} max={60} value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="w-full" />
+                    <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5 block">Margin: {margin}px</label>
+                    <input type="range" min={0} max={60} value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="w-full accent-[#C1443A]" />
                   </div>
                 </div>
               )}
@@ -853,156 +1005,110 @@ useEffect(() => {
               {activeTab === "logo" && (
                 <div className="space-y-6">
                   <div>
-                    <p className="text-sm font-medium text-[#211C16] mb-1">Center Logo</p>
-                    <p className="text-xs text-[#A8A08D] mb-2">
+                    <p className="text-sm font-medium text-gray-900 mb-1">Center Logo</p>
+                    <p className="text-xs text-gray-500 mb-2">
                       Embed your logo in the middle of every QR code. Error correction
                       auto-boosts so it still scans reliably.
                     </p>
                     {logoDataUrl && (
-                      <img src={logoDataUrl} alt="logo preview" className="w-16 h-16 object-contain rounded-lg border border-[#D9D2C0] mb-2" />
+                      <img src={logoDataUrl} alt="logo preview" className="w-16 h-16 object-contain rounded-xl border border-gray-200 mb-2" />
                     )}
-                    <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleLogoUpload(file); }} className="text-sm" />
+                    <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) { haptic(); handleLogoUpload(file); } }} className="text-sm" />
                     {logoDataUrl && (
                       <>
-                        <button onClick={() => setLogoDataUrl(null)} className="ml-3 text-xs text-[#B3261E] underline">Remove</button>
+                        <button onClick={() => { haptic(); setLogoDataUrl(null); }} className="ml-3 text-xs text-[#C1443A] underline">Remove</button>
                         <div className="mt-3">
-                          <label className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-1.5 block">
+                          <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5 block">
                             Logo size: {Math.round(logoSize * 100)}%
                           </label>
-                          <input type="range" min={15} max={45} value={logoSize * 100} onChange={(e) => setLogoSize(Number(e.target.value) / 100)} className="w-full" />
+                          <input type="range" min={15} max={45} value={logoSize * 100} onChange={(e) => setLogoSize(Number(e.target.value) / 100)} className="w-full accent-[#C1443A]" />
                         </div>
                       </>
                     )}
                   </div>
 
                   {mode === "single" && (
-                    <div className="pt-4 border-t border-[#211C16]/10">
-                      <p className="text-sm font-medium text-[#211C16] mb-1">Poster Background</p>
-                      <p className="text-xs text-[#A8A08D] mb-2">
+                    <div className="pt-4 border-t border-gray-200">
+                      <p className="text-sm font-medium text-gray-900 mb-1">Poster Background</p>
+                      <p className="text-xs text-gray-500 mb-2">
                         Add a full background image (flyer / table tent) — the QR sits
                         on top, composited on download. Single QR only.
                       </p>
-                      {posterBg && <img src={posterBg} alt="poster preview" className="w-full h-24 object-cover rounded-lg border border-[#D9D2C0] mb-2" />}
-                      <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) handlePosterUpload(file); }} className="text-sm" />
-                      {posterBg && <button onClick={() => setPosterBg(null)} className="ml-3 text-xs text-[#B3261E] underline">Remove</button>}
+                      {posterBg && <img src={posterBg} alt="poster preview" className="w-full h-24 object-cover rounded-xl border border-gray-200 mb-2" />}
+                      <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) { haptic(); handlePosterUpload(file); } }} className="text-sm" />
+                      {posterBg && <button onClick={() => { haptic(); setPosterBg(null); }} className="ml-3 text-xs text-[#C1443A] underline">Remove</button>}
                     </div>
                   )}
                 </div>
               )}
             </div>
           </div>
-
-          {/* RIGHT: Live preview / bulk grid */}
-          <div className="bg-white rounded-2xl border border-[#211C16]/10 p-5 flex flex-col print:border-none print:p-0">
-            {mode === "single" ? (
-              <>
-                <p className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-3 self-start">Live Preview</p>
-                <div
-                  className="w-full rounded-xl flex items-center justify-center overflow-hidden"
-                  style={{
-                    minHeight: 260,
-                    background: posterBg
-                      ? `url(${posterBg}) center/cover`
-                      : transparentBg
-                      ? "repeating-conic-gradient(#e5e5e5 0% 25%, #ffffff 0% 50%) 0 0/20px 20px"
-                      : "transparent",
-                  }}
-                >
-                  <div ref={previewRef} style={{ transform: `scale(${Math.min(1, 240 / size)})`, transformOrigin: "center" }} />
-                </div>
-                {!currentData.data && (
-                  <p className="text-xs text-[#A8A08D] mt-3 text-center">Fill in the content fields to see a live preview</p>
-                )}
-                <div className="w-full mt-5 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => handleDownloadClick("png")} className="rounded-lg bg-[#2B4570] text-white py-2.5 text-sm font-medium hover:bg-[#23395C] transition">Download PNG</button>
-<button onClick={() => handleDownloadClick("svg")} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2.5 text-sm font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">Download SVG</button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                   <button onClick={() => handleDownloadClick("jpeg")} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition">JPEG</button>
-                    <button onClick={() => handleDownloadClick("webp")} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">WEBP</button>
-                  </div>
-                </div>
-                <p className="mt-4 text-center text-[12px] text-[#A8A08D]">No sign-up. No watermark. No limit.</p>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between mb-3 print:hidden">
-                  <p className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide">
-                    Batch Preview {bulkResults ? `(${bulkResults.length})` : ""}
-                  </p>
-                  {bulkResults && styleChangedSinceGenerate && (
-                    <span className="text-[11px] text-[#B3261E]">Style changed — regenerate</span>
-                  )}
-                </div>
-
-                {!bulkResults && !bulkGenerating && (
-                  <div className="flex-1 min-h-[260px] flex items-center justify-center text-center px-4">
-                    <p className="text-sm text-[#A8A08D]">
-                      Add your list or sequential range in the <strong>Content</strong> tab,
-                      then click <strong>Generate All</strong>.
-                    </p>
-                  </div>
-                )}
-
-                {bulkGenerating && (
-                  <div className="flex-1 min-h-[260px] flex flex-col items-center justify-center gap-3">
-                    <div className="w-10 h-10 border-2 border-[#211C16]/20 border-t-[#211C16] rounded-full animate-spin" />
-                    <p className="text-sm text-[#6E6557]">
-                      Generating {bulkProgress.done} of {bulkProgress.total}…
-                    </p>
-                  </div>
-                )}
-
-                {bulkResults && !bulkGenerating && (
-                  <>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[420px] overflow-y-auto pr-1 print:max-h-none print:overflow-visible print:grid-cols-4">
-                      {bulkResults.map((r, i) => (
-                        <div key={i} className="flex flex-col items-center gap-1 print:break-inside-avoid">
-                          <img src={r.blobUrl} alt={r.label} className="w-full aspect-square object-contain rounded-lg border border-[#211C16]/10" />
-                          <span className="text-[11px] text-[#211C16] text-center truncate w-full" title={r.label}>{r.label}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 space-y-2 print:hidden">
-                      <button
-                        onClick={handleDownloadZip}
-                        disabled={zipping}
-                        className="w-full rounded-lg bg-[#2B4570] text-white py-2.5 text-sm font-medium hover:bg-[#23395C] transition disabled:opacity-50"
-                      >
-                        {zipping ? "Zipping…" : `Download All (ZIP)`}
-                      </button>
-                      <button
-                        onClick={handlePrintSheet}
-                        className="w-full rounded-lg border border-[#D9D2C0] text-[#211C16] py-2.5 text-sm font-medium hover:bg-[#FAF6EE] transition"
-                      >
-                        Print Sheet
-                      </button>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
         </div>
       </div>
+
+      {/* Sticky mobile download bar — single mode only */}
+      {mode === "single" && (
+        <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200 px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] print:hidden">
+          <div className="flex gap-2">
+            <button
+              onClick={() => { haptic(10); handleDownloadClick(pendingFormat); }}
+              disabled={!currentData.data}
+              className="flex-1 rounded-xl bg-[#C1443A] text-white py-3.5 text-sm font-semibold active:scale-[0.97] transition-all disabled:opacity-40 min-h-[48px]"
+            >
+              Download {pendingFormat.toUpperCase()}
+            </button>
+            <select
+              value={pendingFormat}
+              onChange={(e) => setPendingFormat(e.target.value as ExportFormat)}
+              className="rounded-xl border border-gray-200 px-3 text-sm font-medium text-gray-900 bg-white min-h-[48px]"
+            >
+              <option value="png">PNG</option>
+              <option value="jpeg">JPEG</option>
+              {!posterBg && <option value="svg">SVG</option>}
+              {!posterBg && <option value="webp">WEBP</option>}
+            </select>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         @media print {
           nav, header, footer { display: none !important; }
           body { background: white !important; }
         }
+        .qr-pop {
+          animation: qr-pop-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        @keyframes qr-pop-in {
+          from { opacity: 0; transform: scale(0.94); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .tab-fade {
+          animation: tab-fade-in 200ms ease-out;
+        }
+        @keyframes tab-fade-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .shimmer {
+          animation: shimmer 1.1s linear infinite;
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+        }
+        @keyframes shimmer {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(100%); }
+        }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
-	  
-	 <DownloadTrackModal
-  open={showTrackModal}
-  onClose={() => setShowTrackModal(false)}
-  onSkip={() => { setShowTrackModal(false); handleDownload(pendingFormat); }}
-  onTrack={handleSignInAndTrack}
-/>
 
-    </main>
+      <DownloadTrackModal
+        open={showTrackModal}
+        onClose={() => setShowTrackModal(false)}
+        onSkip={() => { setShowTrackModal(false); handleDownload(pendingFormat); }}
+        onTrack={handleSignInAndTrack}
+      />
+    </section>
   );
 }
 
@@ -1010,27 +1116,27 @@ useEffect(() => {
 function Input({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
   return (
     <div>
-      <label className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-1.5 block">{label}</label>
+      <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5 block">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full rounded-lg border border-[#D9D2C0] bg-white px-3.5 py-2.5 text-[14px] text-[#211C16] placeholder:text-[#A8A08D] outline-none focus:border-[#2B4570] focus:ring-1 focus:ring-[#2B4570] transition" />
+        className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-[14px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#C1443A] focus:ring-1 focus:ring-[#C1443A] transition" />
     </div>
   );
 }
 function TextArea({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
-      <label className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-1.5 block">{label}</label>
+      <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5 block">{label}</label>
       <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={2}
-        className="w-full rounded-lg border border-[#D9D2C0] bg-white px-3.5 py-2.5 text-[14px] text-[#211C16] placeholder:text-[#A8A08D] outline-none focus:border-[#2B4570] focus:ring-1 focus:ring-[#2B4570] transition resize-none" />
+        className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-[14px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#C1443A] focus:ring-1 focus:ring-[#C1443A] transition resize-none" />
     </div>
   );
 }
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { label: string; value: string }[] }) {
   return (
     <div>
-      <label className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-1.5 block">{label}</label>
+      <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5 block">{label}</label>
       <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-[#D9D2C0] bg-white px-3.5 py-2.5 text-[14px] text-[#211C16] outline-none focus:border-[#2B4570] focus:ring-1 focus:ring-[#2B4570] transition">
+        className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-[14px] text-gray-900 outline-none focus:border-[#C1443A] focus:ring-1 focus:ring-[#C1443A] transition">
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
@@ -1039,18 +1145,18 @@ function Select({ label, value, onChange, options }: { label: string; value: str
 function ColorInput({ label, value, onChange, disabled }: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean }) {
   return (
     <div>
-      <label className="text-xs font-semibold text-[#6E6557] uppercase tracking-wide mb-1.5 block">{label}</label>
-      <div className="flex items-center gap-2 rounded-lg border border-[#D9D2C0] px-2.5 py-1.5">
+      <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5 block">{label}</label>
+      <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5">
         <input type="color" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className="w-7 h-7 rounded cursor-pointer disabled:opacity-40" />
-        <input type="text" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className="flex-1 text-[13px] text-[#211C16] outline-none disabled:opacity-40" />
+        <input type="text" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className="flex-1 text-[13px] text-gray-900 outline-none disabled:opacity-40" />
       </div>
     </div>
   );
 }
 function Checkbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-[#211C16] cursor-pointer">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-[#211C16]" />
+    <label className="flex items-center gap-2 text-sm text-gray-900 cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-gray-900" />
       {label}
     </label>
   );
