@@ -455,6 +455,16 @@ const [pendingFormat, setPendingFormat] = useState<ExportFormat>("png");
   setTimeout(() => handleDownload(format), 150); // let the update settle before export
 }
 
+async function handleDownloadClick(format: ExportFormat) {
+  const { data: { user } } = await qrAuthClient.auth.getUser();
+  if (user) {
+    await createTrackedLinkAndDownload(format);
+  } else {
+    setPendingFormat(format);
+    setShowTrackModal(true);
+  }
+}
+
 useEffect(() => {
   if (sessionStorage.getItem("qr_pending_track")) {
     sessionStorage.removeItem("qr_pending_track");
@@ -842,12 +852,12 @@ useEffect(() => {
                 )}
                 <div className="w-full mt-5 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { setPendingFormat("png"); setShowTrackModal(true); }} className="rounded-lg bg-[#2B4570] text-white py-2.5 text-sm font-medium hover:bg-[#23395C] transition">Download PNG</button>
-                    <button onClick={() => { setPendingFormat("svg"); setShowTrackModal(true); }} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2.5 text-sm font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">Download SVG</button>
+                    <button onClick={() => handleDownloadClick("png")} className="rounded-lg bg-[#2B4570] text-white py-2.5 text-sm font-medium hover:bg-[#23395C] transition">Download PNG</button>
+                    <button onClick={() => handleDownloadClick("svg")} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2.5 text-sm font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">Download SVG</button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { setPendingFormat("jpeg"); setShowTrackModal(true); }} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition">JPEG</button>
-                    <button onClick={() => { setPendingFormat("webp"); setShowTrackModal(true); }} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">WEBP</button>
+                    <button onClick={() => handleDownloadClick("jpeg")} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition">JPEG</button>
+                    <button onClick={() => handleDownloadClick("webp")} disabled={!!posterBg} className="rounded-lg border border-[#D9D2C0] text-[#211C16] py-2 text-xs font-medium hover:bg-[#FAF6EE] transition disabled:opacity-40">WEBP</button>
                   </div>
                 </div>
                 <p className="mt-4 text-center text-[12px] text-[#A8A08D]">No sign-up. No watermark. No limit.</p>
