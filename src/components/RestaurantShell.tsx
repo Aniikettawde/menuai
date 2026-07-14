@@ -25,6 +25,7 @@ import { DeliveryPreferenceModal } from './DeliveryPreferenceModal'
 import type { WaiterCallItem } from '@/types'
 import { BottomTabBar } from './BottomTabBar'
 import { TranslationLoadingOverlay } from './TranslationLoadingOverlay'
+import { WelcomeSplash } from './WelcomeSplash'
 
 
 type OfferRow = {
@@ -114,6 +115,19 @@ const [sessionExpired, setSessionExpired] = useState(false)
   const legacyTableParam = searchParams.get('table')
   const [loginOpen, setLoginOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+
+  const [showWelcome, setShowWelcome] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const key = `dinezy_welcome_seen_${initialData.restaurant.id}`
+    return sessionStorage.getItem(key) !== '1'
+  })
+
+  const dismissWelcome = useCallback(() => {
+    setShowWelcome(false)
+    try {
+      sessionStorage.setItem(`dinezy_welcome_seen_${initialData.restaurant.id}`, '1')
+    } catch {}
+  }, [initialData.restaurant.id])
 
   useEffect(() => {
     setRestaurantData(initialData)
@@ -770,6 +784,13 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
       `}</style>
 
      <div className="pr-shell" data-menu={menuTheme}>
+	  {showWelcome && (
+    <WelcomeSplash
+      restaurant={restaurant}
+      heroItems={heroItems}
+      onDone={dismissWelcome}
+    />
+  )}
 	   <TranslationLoadingOverlay />   {/* ← add this line */}
 
   <OfflineBanner />
