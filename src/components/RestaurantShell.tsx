@@ -24,6 +24,7 @@ import { MenuTypeSelector } from './MenuTypeSelector'
 import { DeliveryPreferenceModal } from './DeliveryPreferenceModal'
 import type { WaiterCallItem } from '@/types'
 import { BottomTabBar } from './BottomTabBar'
+import { TranslationLoadingOverlay } from './TranslationLoadingOverlay'
 
 
 type OfferRow = {
@@ -769,6 +770,8 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
       `}</style>
 
      <div className="pr-shell" data-menu={menuTheme}>
+	   <TranslationLoadingOverlay />   {/* ← add this line */}
+
   <OfflineBanner />
   <MenuTypeSelector />
   <DeliveryPreferenceModal />

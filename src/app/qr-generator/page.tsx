@@ -153,33 +153,7 @@ export default function QrGeneratorPage() {
 
       <main className="bg-white">
         {/* ---------- Hero ---------- */}
-        <section className="px-4 sm:px-6 pt-14 pb-8 sm:pt-20 sm:pb-10 text-center">
-          <p className="font-mono text-[11px] tracking-[0.2em] text-[#C1443A] uppercase mb-3">
-            Dinezy · Free Tools
-          </p>
-          <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight text-gray-900 max-w-3xl mx-auto">
-            QR codes, styled your way
-          </h1>
-          <p className="mt-4 text-gray-500 text-[15px] sm:text-lg max-w-xl mx-auto">
-            Custom colors, shapes, logos, and bulk generation for restaurant
-            tables, links, WhatsApp, WiFi, and UPI. Free, unlimited, no
-            watermark.
-          </p>
-          <div className="mt-7 flex items-center justify-center gap-3">
-            <a
-              href="#generator"
-              className="inline-flex items-center justify-center rounded-xl bg-gray-900 text-white px-6 py-3 text-sm font-medium hover:bg-gray-800 active:scale-[0.97] transition-all"
-            >
-              Create a QR code
-            </a>
-            <a
-              href="#how-it-works"
-              className="inline-flex items-center justify-center rounded-xl border border-gray-200 text-gray-900 px-6 py-3 text-sm font-medium hover:bg-gray-50 active:scale-[0.97] transition-all"
-            >
-              See how it works
-            </a>
-          </div>
-        </section>
+       
 
         {/* ---------- Generator tool ---------- */}
         <QrGeneratorClient />

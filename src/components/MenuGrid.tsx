@@ -21,6 +21,10 @@ import { FloatingCartBar } from './FloatingCartBar'
 import type { MenuItem, MenuCategory } from '@/types'
 import type { ReactNode } from 'react'
 
+import { LanguageSwitcher } from './LanguageSwitcher'
+import { useTranslation } from '@/lib/i18n/useTranslation'
+import { useTranslatedMenu } from '@/lib/i18n/useTranslatedMenu'
+
 import type { WaiterCallItem } from '@/types'
 
 
@@ -176,18 +180,20 @@ function BestsellerSlider({
 }
 
 function SearchResults({ results, emptyLabel }: { results: MenuItem[]; emptyLabel: string }) {
+  const { t, plural } = useTranslation()
+
   if (results.length === 0) {
     return (
       <div className="mg-empty-state">
         <p className="mg-empty-title">{emptyLabel}</p>
-        <p className="mg-empty-sub">Try a different keyword</p>
+        <p className="mg-empty-sub">{t('try_different_keyword')}</p>
       </div>
     )
   }
   return (
     <section className="mg-section">
       <div className="mg-search-results-head">
-        <p>{results.length} result{results.length !== 1 ? 's' : ''}</p>
+        <p>{plural(results.length, 'result_singular', 'result_plural')}</p>
       </div>
       <div className="mg-divided-list">
         {results.map((item) => <MenuItemCard key={item.id} item={item} />)}
@@ -336,7 +342,7 @@ export function MenuGrid({
   const { categories, items, activeMenuType, hasBarMenu, switchMenuType } = useAppStore()
   const menuType = activeMenuType ?? 'food'
   const isBarView = menuType === 'bar'
-
+const { t, plural } = useTranslation()
   const [query, setQuery] = useState('')
   const [openCategoryIds, setOpenCategoryIds] = useState<Set<string>>(new Set())
 
@@ -360,41 +366,46 @@ export function MenuGrid({
 
   const categoryIdSet = useMemo(() => new Set(sortedCategories.map((c) => c.id)), [sortedCategories])
 
-  const itemsForType = useMemo(
+ const itemsForType = useMemo(
     () => items.filter((i) => categoryIdSet.has(i.category_id)),
     [items, categoryIdSet],
   )
+
+  const { translateItem, translateCategory } = useTranslatedMenu(itemsForType, sortedCategories)
 
   const sortedItems = useMemo(() => {
     return [...itemsForType].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
   }, [itemsForType])
 
-  const categoriesWithItems = useMemo(
-    () => sortedCategories.filter((cat) => sortedItems.some((i) => i.category_id === cat.id && i.is_available)),
-    [sortedCategories, sortedItems],
-  )
+  const translatedItems = useMemo(() => sortedItems.map(translateItem), [sortedItems, translateItem])
+  const translatedCategories = useMemo(() => sortedCategories.map(translateCategory), [sortedCategories, translateCategory])
 
-  const bestSellerItems = useMemo(
-    () =>
-      itemsForType
-        .filter((i) => i.is_available && i.is_bestseller)
-        .slice()
-        .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
-        .slice(0, 4),
-    [itemsForType],
-  )
+  const categoriesWithItems = useMemo(
+  () => translatedCategories.filter((cat) => translatedItems.some((i) => i.category_id === cat.id && i.is_available)),
+  [translatedCategories, translatedItems],
+)
+
+const bestSellerItems = useMemo(
+  () =>
+    translatedItems
+      .filter((i) => i.is_available && i.is_bestseller)
+      .slice()
+      .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+      .slice(0, 4),
+  [translatedItems],
+)
 
   const searchResults = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return []
-    return itemsForType.filter(
-      (i) =>
-        i.is_available &&
-        (i.name.toLowerCase().includes(q) ||
-          i.description?.toLowerCase().includes(q) ||
-          i.tags?.some((t) => t.toLowerCase().includes(q))),
-    )
-  }, [itemsForType, query])
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+  return translatedItems.filter(
+    (i) =>
+      i.is_available &&
+      (i.name.toLowerCase().includes(q) ||
+        i.description?.toLowerCase().includes(q) ||
+        i.tags?.some((t) => t.toLowerCase().includes(q))),
+  )
+}, [translatedItems, query])
 
   const isSearching = query.trim().length > 0
 
@@ -412,18 +423,19 @@ export function MenuGrid({
     setOpenCategoryIds(new Set())
   }, [])
 
-  const searchPlaceholder = isBarView ? 'Search drinks…' : 'Search dishes…'
-  const emptyLabel = isBarView ? 'No drinks found' : 'No dishes found'
-  const bestSellersLabel = isBarView ? 'Bar favourites' : 'Best sellers'
-  const bestSellersSub = isBarView ? 'Most ordered drinks' : 'Most ordered dishes'
-  const pickLabel = isBarView ? "Bartender's pick" : "Chef's pick"
+  const searchPlaceholder = t(isBarView ? 'search_placeholder_bar' : 'search_placeholder_food')
+const emptyLabel = t(isBarView ? 'no_drinks_found' : 'no_dishes_found')
+const bestSellersLabel = t(isBarView ? 'bar_favourites' : 'best_sellers')
+const bestSellersSub = t(isBarView ? 'most_ordered_drinks' : 'most_ordered_dishes')
+const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
 
   return (
     <div className="mg-root">
       <style jsx>{`
   .mg-root { position: relative; width: 100%; padding-bottom: 11rem; padding-top: 0.25rem; }
 
-  .mg-search-sticky { margin-bottom: 8px; position: static; top: auto; z-index: auto; }
+  .mg-search-sticky { margin-bottom: 8px; position: relative; top: auto; z-index: 50; }
+
   .mg-search-sticky-inner { border-radius: 16px; background: color-mix(in srgb, var(--surface-bg) 92%, transparent); backdrop-filter: blur(10px); padding: 6px 0; }
 
   :global(.mg-search-wrap) {
@@ -677,15 +689,18 @@ export function MenuGrid({
       )}
 
       <div className="mg-search-sticky">
-        <div className="mg-search-sticky-inner">
-          <SearchBar
-            value={query}
-            onChange={setQuery}
-            onClear={handleClearSearch}
-            placeholder={searchPlaceholder}
-          />
-        </div>
-      </div>
+  <div className="mg-search-sticky-inner" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <SearchBar
+        value={query}
+        onChange={setQuery}
+        onClear={handleClearSearch}
+        placeholder={searchPlaceholder}
+      />
+    </div>
+    <LanguageSwitcher />
+  </div>
+</div>
 
       <div className="mg-stack">
         {todaysSpecial && !isSearching && !isBarView && todaysSpecial}
@@ -708,8 +723,8 @@ export function MenuGrid({
         ) : (
           <>
             {categoriesWithItems.map((cat, catIndex) => {
-              const catItems = sortedItems.filter((i) => i.category_id === cat.id && i.is_available)
-              if (catItems.length === 0) return null
+  const catItems = translatedItems.filter((i) => i.category_id === cat.id && i.is_available)
+  if (catItems.length === 0) return null
 
               return (
                 <CategorySection

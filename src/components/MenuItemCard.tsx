@@ -5,6 +5,8 @@ import { Star, Flame, Plus, Minus, Sparkles, Clock, Settings2 } from 'lucide-rea
 import type { MenuItem } from '@/types'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
+import { useTranslation } from '@/lib/i18n/useTranslation'
+
 
 interface Props {
   item: MenuItem
@@ -183,6 +185,8 @@ export function MenuItemCard({ item, showMostOrdered }: Props) {
   const imageUrl = getImageUrl(item.image_url)
   const cleanDescription = item.description ? trimDescription(item.description) : null
   const ordersEnabled = useAppStore((s) => (s.restaurant?.orders_enabled ?? true) && s.hasTableToken)
+const { t } = useTranslation()
+
 
 
   const toggle = () => {

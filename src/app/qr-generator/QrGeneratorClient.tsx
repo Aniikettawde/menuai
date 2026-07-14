@@ -602,7 +602,7 @@ export default function QrGeneratorClient() {
             <button
               onClick={() => { haptic(); setMode("single"); }}
               className={`px-5 py-2.5 rounded-xl sm:rounded-full text-sm font-medium transition-all active:scale-95 ${
-                mode === "single" ? "bg-gray-900 text-white" : "text-gray-500"
+                mode === "single" ? "bg-[#C1443A] text-white" : "text-gray-500"
               }`}
             >
               Single QR
@@ -610,7 +610,7 @@ export default function QrGeneratorClient() {
             <button
               onClick={() => { haptic(); setMode("bulk"); }}
               className={`px-5 py-2.5 rounded-xl sm:rounded-full text-sm font-medium transition-all active:scale-95 ${
-                mode === "bulk" ? "bg-gray-900 text-white" : "text-gray-500"
+                mode === "bulk" ? "bg-[#C1443A] text-white" : "text-gray-500"
               }`}
             >
               Bulk QR
@@ -618,9 +618,13 @@ export default function QrGeneratorClient() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-[1fr_380px] gap-5 sm:gap-6 print:block">
+         <div className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden print:border-none print:shadow-none print:rounded-none">
+          {/* Burgundy header strip — the one signature accent, echoes the KOT ticket motif elsewhere on the site */}
+          <div className="h-1.5 w-full bg-[#C1443A] print:hidden" />
+
+          <div className="grid md:grid-cols-[1fr_380px] print:block">
           {/* RIGHT panel shown FIRST on mobile — see instant feedback before configuring */}
-          <div className="order-1 md:order-2 bg-white rounded-2xl sm:rounded-2xl border border-gray-200 p-4 sm:p-5 flex flex-col print:border-none print:p-0">
+          <div className="order-1 md:order-2 bg-white p-4 sm:p-6 flex flex-col print:p-0 md:border-l md:border-dashed md:border-gray-200">
             {mode === "single" ? (
               <>
                 <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 self-start">Live Preview</p>
@@ -740,8 +744,8 @@ export default function QrGeneratorClient() {
           </div>
 
           {/* LEFT: Controls — shown SECOND on mobile */}
-          <div className="order-2 md:order-1 bg-white rounded-2xl border border-gray-200 overflow-hidden print:hidden">
-            <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide snap-x">
+           <div className="order-2 md:order-1 bg-white overflow-hidden print:hidden border-t border-dashed border-gray-200 md:border-t-0">
+            <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide snap-x px-1">
               {(["content", "style", "logo"] as const).map((tab) => (
                 <button
                   key={tab}
@@ -755,7 +759,7 @@ export default function QrGeneratorClient() {
               ))}
             </div>
 
-            <div key={activeTab} className="p-4 sm:p-5 tab-fade">
+            <div key={activeTab} className="p-4 sm:p-6 tab-fade">
               {/* ===================== CONTENT TAB ===================== */}
               {activeTab === "content" && mode === "single" && (
                 <div className="space-y-4">
@@ -781,9 +785,9 @@ export default function QrGeneratorClient() {
                           setError("");
                         }}
                         className={`text-xs font-medium py-2.5 px-1 rounded-xl border transition-all active:scale-95 min-h-[44px] ${
-                          contentType === val
-                            ? "bg-gray-900 text-white border-gray-900"
-                            : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                         contentType === val
+  ? "bg-[#C1443A] text-white border-[#C1443A]"
+  : "border-gray-200 text-gray-600 hover:bg-gray-50"
                         }`}
                       >
                         {label}
@@ -849,7 +853,8 @@ export default function QrGeneratorClient() {
 
                     {error && <p className="text-sm text-[#C1443A]" role="alert">{error}</p>}
 
-                    <button type="submit" className="w-full rounded-xl bg-gray-900 text-white py-3.5 font-medium hover:bg-gray-800 active:scale-[0.97] transition-all min-h-[48px]">
+                    <button type="submit" className="w-full rounded-xl bg-[#C1443A] text-white py-3.5 font-medium hover:bg-[#A83A31] active:scale-[0.97] transition-all min-h-[48px]">
+
                       Generate QR Code
                     </button>
                   </form>
@@ -863,7 +868,7 @@ export default function QrGeneratorClient() {
                     <button
                       onClick={() => { haptic(); setBulkSubMode("list"); }}
                       className={`text-xs font-medium py-2.5 rounded-lg transition-all active:scale-95 ${
-                        bulkSubMode === "list" ? "bg-gray-900 text-white" : "text-gray-500"
+                        bulkSubMode === "list" ? "bg-[#C1443A] text-white" : "text-gray-500"
                       }`}
                     >
                       Paste a List
@@ -871,7 +876,7 @@ export default function QrGeneratorClient() {
                     <button
                       onClick={() => { haptic(); setBulkSubMode("sequential"); }}
                       className={`text-xs font-medium py-2.5 rounded-lg transition-all active:scale-95 ${
-                        bulkSubMode === "sequential" ? "bg-gray-900 text-white" : "text-gray-500"
+                       bulkSubMode === "sequential" ? "bg-[#C1443A] text-white" : "text-gray-500"
                       }`}
                     >
                       Sequential Range
@@ -929,7 +934,8 @@ export default function QrGeneratorClient() {
                   <button
                     onClick={() => { haptic(10); handleGenerateBulk(); }}
                     disabled={bulkGenerating || bulkItems.length === 0}
-                    className="w-full rounded-xl bg-gray-900 text-white py-3.5 font-medium hover:bg-gray-800 active:scale-[0.97] transition-all disabled:opacity-40 min-h-[48px]"
+                    className="w-full rounded-xl bg-[#C1443A] text-white py-3.5 font-medium hover:bg-[#A83A31] active:scale-[0.97] transition-all disabled:opacity-40 min-h-[48px]"
+
                   >
                     {bulkGenerating
                       ? `Generating ${bulkProgress.done}/${bulkProgress.total}…`
@@ -1045,7 +1051,7 @@ export default function QrGeneratorClient() {
           </div>
         </div>
       </div>
-
+   </div>
       {/* Sticky mobile download bar — single mode only */}
       {mode === "single" && (
         <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200 px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] print:hidden">
@@ -1156,7 +1162,7 @@ function ColorInput({ label, value, onChange, disabled }: { label: string; value
 function Checkbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center gap-2 text-sm text-gray-900 cursor-pointer">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-gray-900" />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-[#C1443A]"/>
       {label}
     </label>
   );

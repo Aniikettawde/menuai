@@ -12,6 +12,10 @@ import type {
   DeliveryPreference,
 } from '@/types'
 
+import type { LanguageCode } from '@/lib/i18n/config'
+import { DEFAULT_LANGUAGE, isSupportedLanguage } from '@/lib/i18n/config'
+
+
 export type ActiveTab = 'menu' | 'about' | 'account'
 
 export type RatingContext = {
@@ -43,7 +47,10 @@ interface AppStore {
   hasTableToken: boolean
   activeTab: ActiveTab
 setActiveTab: (tab: ActiveTab) => void
-
+ language: LanguageCode
+  setLanguage: (lang: LanguageCode) => void
+isTranslating: boolean
+setIsTranslating: (v: boolean) => void
   customiseItemId: string | null
 
   // ── Bar menu ──────────────────────────────────────────────
@@ -167,7 +174,10 @@ export const useAppStore = create<AppStore>()(
     isOffline: false,
     showChat: false,
 activeTab: 'menu',
-
+    isTranslating: false,
+    language: (typeof window !== 'undefined' && isSupportedLanguage(localStorage.getItem('dinezy_lang')))
+      ? (localStorage.getItem('dinezy_lang') as LanguageCode)
+      : DEFAULT_LANGUAGE,
     setHasTableToken: (has) =>
       set((state) => {
         state.hasTableToken = has
@@ -317,6 +327,17 @@ activeTab: 'menu',
   set((state) => {
     state.activeTab = tab
   }),
+  
+  setIsTranslating: (v) =>
+  set((state) => {
+    state.isTranslating = v
+  }),
+  
+  setLanguage: (lang) =>
+      set((state) => {
+        state.language = lang
+        try { localStorage.setItem('dinezy_lang', lang) } catch {}
+      }),
 
     setTableNumber: (tableNumber) =>
       set((state) => {
