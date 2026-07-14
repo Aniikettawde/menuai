@@ -7,6 +7,16 @@ import { createBrowserClient } from '@supabase/ssr'
 const COOLDOWN_SECONDS = 90
 const HINT_STORAGE_KEY = 'dinezy_call_waiter_hint_seen'
 
+// Vertical clearance above the bottom nav bar. The nav renders as a
+// floating rounded card with its own margin off the screen edge (not a
+// flush-to-edge bar), so the bell needs enough space to clear its top
+// edge with a visible gap rather than sitting flush against it.
+// NOTE: this is a best-effort constant — if the bottom nav's height/margin
+// ever changes, this value should move with it. Ideally the nav bar
+// exposes its own height (e.g. via a CSS variable like --bottom-nav-height)
+// so this can reference it directly instead of a hardcoded guess.
+const BELL_BOTTOM_OFFSET = 108
+
 type RequestType = 'assistance' | 'water' | 'bill'
 type RequestStatus = 'idle' | 'sent' | 'accepted' | 'cooldown'
 type TableRequestUpdatePayload = {
@@ -523,11 +533,12 @@ const bellLabel = !activeRequest
         }
       `}</style>
 
+     {sheet === 'closed' && (
      <div
   style={{
     position: 'fixed',
     right: 16,
-    bottom: 'calc(78px + env(safe-area-inset-bottom, 0px))', // was: bottom: 24
+    bottom: `calc(${BELL_BOTTOM_OFFSET}px + env(safe-area-inset-bottom, 0px))`,
     zIndex: 50,
     display: 'flex',
     flexDirection: 'column',
@@ -600,6 +611,7 @@ const bellLabel = !activeRequest
           </span>
         </button>
       </div>
+     )}
 
       {sheet === 'open' && (
         <>

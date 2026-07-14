@@ -41,8 +41,9 @@ function getChefsPick(items: MenuItem[]): MenuItem | null {
 }
 
 function getBadge(item: MenuItem, catItems: MenuItem[]): Badge {
-  if (item.is_bestseller) return { kind: 'social_proof', label: 'Most ordered' }
-  if (item.is_special) return { kind: 'scarcity', label: 'Limited special' }
+  // Bestseller and Special already show their own inline tag on the
+  // card itself (MenuItemCard) — don't duplicate them as an overlay here.
+  if (item.is_bestseller || item.is_special) return { kind: 'none', label: '' }
   const prices = catItems.map((i) => i.price).sort((a, b) => a - b)
   const median = prices[Math.floor(prices.length / 2)] ?? 0
   if (item.price > median * 1.3) return { kind: 'anchoring', label: "Chef's choice" }
@@ -179,7 +180,13 @@ function BestsellerSlider({
   )
 }
 
-function SearchResults({ results, emptyLabel }: { results: MenuItem[]; emptyLabel: string }) {
+function SearchResults({
+  results, emptyLabel, onAsk,
+}: {
+  results: MenuItem[]
+  emptyLabel: string
+  onAsk?: (t: string) => void
+}) {
   const { t, plural } = useTranslation()
 
   if (results.length === 0) {
@@ -196,19 +203,17 @@ function SearchResults({ results, emptyLabel }: { results: MenuItem[]; emptyLabe
         <p>{plural(results.length, 'result_singular', 'result_plural')}</p>
       </div>
       <div className="mg-divided-list">
-        {results.map((item) => <MenuItemCard key={item.id} item={item} />)}
+        {results.map((item) => <MenuItemCard key={item.id} item={item} onAsk={onAsk} />)}
       </div>
     </section>
   )
 }
 
 function CategorySection({
-  category, items, isOpen, onToggle, showChefsPick, onAsk, pickLabel,
+  category, items, showChefsPick, onAsk, pickLabel,
 }: {
   category: MenuCategory
   items: MenuItem[]
-  isOpen: boolean
-  onToggle: () => void
   showChefsPick: boolean
   onAsk?: (t: string) => void
   pickLabel: string
@@ -224,7 +229,7 @@ function CategorySection({
 
   return (
     <section id={`cat-${category.id}`} className="mg-section mg-cat-section">
-      <button type="button" onClick={onToggle} className="mg-cat-header" aria-expanded={isOpen}>
+      <div className="mg-cat-header">
         <div className="mg-cat-thumb">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -237,7 +242,7 @@ function CategorySection({
         <div className="mg-cat-info">
           <div className="mg-cat-name-row">
             <h2 className="mg-cat-name">{category.name}</h2>
-            {chefsPick && isOpen && <span className="mg-featured-pill">Featured</span>}
+            {chefsPick && <span className="mg-featured-pill">Featured</span>}
           </div>
           <p className="mg-cat-desc">
             {category.description
@@ -248,35 +253,64 @@ function CategorySection({
 
         <div className="mg-cat-right">
           <span className="mg-count-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
-          <ChevronRight size={16} className={`mg-chevron${isOpen ? ' mg-chevron--open' : ''}`} />
         </div>
-      </button>
+      </div>
 
-      {isOpen && (
-        <div className="mg-cat-body">
-          <div className="mg-divided-list">
-            {chefsPick && (
-              <div className="mg-chefspick-wrap">
-                <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
-              </div>
-            )}
-            {otherItems.map((item) => {
-              const badge = getBadge(item, items)
-              return (
-                <div key={item.id} className="mg-item-row">
-                  {badge.kind !== 'none' && (
-                    <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
-                  )}
-                  <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
-                    <MenuItemCard item={item} />
-                  </div>
+      <div className="mg-cat-body">
+        <div className="mg-divided-list">
+          {chefsPick && (
+            <div className="mg-chefspick-wrap">
+              <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
+            </div>
+          )}
+          {otherItems.map((item) => {
+            const badge = getBadge(item, items)
+            return (
+              <div key={item.id} className="mg-item-row">
+                {badge.kind !== 'none' && (
+                  <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
+                )}
+                <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
+                  <MenuItemCard item={item} onAsk={onAsk} />
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )
+          })}
         </div>
-      )}
+      </div>
     </section>
+  )
+}
+
+function CategoryPillBar({
+  categories, selectedId, onSelect, counts,
+}: {
+  categories: MenuCategory[]
+  selectedId: string | null
+  onSelect: (id: string) => void
+  counts: Map<string, number>
+}) {
+  return (
+    <div className="mg-pills-row">
+      <div className="mg-pills-scroll">
+        {categories.map((cat) => {
+          const isActive = cat.id === selectedId
+          const count = counts.get(cat.id) ?? 0
+          return (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => onSelect(cat.id)}
+              className={`mg-pill${isActive ? ' mg-pill--active' : ''}`}
+              aria-pressed={isActive}
+            >
+              {cat.name}
+              <span className="mg-pill-count">{count}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -344,16 +378,14 @@ export function MenuGrid({
   const isBarView = menuType === 'bar'
 const { t, plural } = useTranslation()
   const [query, setQuery] = useState('')
-  const [openCategoryIds, setOpenCategoryIds] = useState<Set<string>>(new Set())
+ const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
 
-  // Reset local UI state when menu type changes so stale open/query state
-  // from the food menu doesn't bleed into the bar menu view.
-  const [lastMenuType, setLastMenuType] = useState(menuType)
-  if (lastMenuType !== menuType) {
-    setLastMenuType(menuType)
-    setQuery('')
-    setOpenCategoryIds(new Set())
-  }
+const [lastMenuType, setLastMenuType] = useState(menuType)
+if (lastMenuType !== menuType) {
+  setLastMenuType(menuType)
+  setQuery('')
+  setSelectedCategoryId(null) // was: setOpenCategoryIds(new Set())
+}
 
   const categoriesForType = useMemo(
     () => categories.filter((c) => c.menu_type === menuType),
@@ -409,18 +441,27 @@ const bestSellerItems = useMemo(
 
   const isSearching = query.trim().length > 0
 
-  const toggleCategory = useCallback((id: string) => {
-    setOpenCategoryIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+ const categoryCounts = useMemo(() => {
+  const map = new Map<string, number>()
+  for (const item of translatedItems) {
+    if (!item.is_available) continue
+    map.set(item.category_id, (map.get(item.category_id) ?? 0) + 1)
+  }
+  return map
+}, [translatedItems])
+
+// Keep the selection valid; default to the first category whenever
+// nothing is selected, or the selected one disappears (e.g. menu switch).
+const firstCategoryId = categoriesWithItems[0]?.id ?? null
+if (
+  (selectedCategoryId === null || !categoriesWithItems.some((c) => c.id === selectedCategoryId)) &&
+  selectedCategoryId !== firstCategoryId
+) {
+  setSelectedCategoryId(firstCategoryId)
+}
 
   const handleClearSearch = useCallback(() => {
     setQuery('')
-    setOpenCategoryIds(new Set())
   }, [])
 
   const searchPlaceholder = t(isBarView ? 'search_placeholder_bar' : 'search_placeholder_food')
@@ -437,6 +478,39 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   .mg-search-sticky { margin-bottom: 8px; position: relative; top: auto; z-index: 50; }
 
   .mg-search-sticky-inner { border-radius: 16px; background: color-mix(in srgb, var(--surface-bg) 92%, transparent); backdrop-filter: blur(10px); padding: 6px 0; }
+
+
+:global(.mg-pills-row) { position: relative; margin: -2px 0 2px; }
+:global(.mg-pills-scroll) {
+  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
+  padding: 2px 2px 6px;
+}
+:global(.mg-pills-scroll::-webkit-scrollbar) { display: none; }
+:global(.mg-pill) {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px; border-radius: 999px;
+  border: 1px solid var(--pr-border-hover);
+  background: var(--pr-card);
+  color: var(--pr-text-muted);
+  font-size: 13px; font-weight: 600; font-family: var(--font-body);
+  cursor: pointer; white-space: nowrap; transition: all 0.15s ease;
+}
+:global(.mg-pill:hover:not(.mg-pill--active)) { border-color: rgba(122,31,43,0.25); color: var(--pr-orange); }
+:global(.mg-pill--active) {
+  background: var(--pr-orange); border-color: var(--pr-orange);
+  color: var(--pr-cta-text);
+}
+:global(.mg-pill--active:hover) {
+  background: var(--pr-orange); border-color: var(--pr-orange);
+  color: var(--pr-cta-text);
+}
+:global(.mg-pill-count) {
+  font-size: 10.5px; font-weight: 700; opacity: 0.75;
+  padding: 1px 6px; border-radius: 999px;
+  background: rgba(0,0,0,0.08);
+  color: inherit;
+}
+:global(.mg-pill--active .mg-pill-count) { background: rgba(255,255,255,0.22); }
 
   :global(.mg-search-wrap) {
     display: flex; align-items: center; gap: 10px;
@@ -717,30 +791,37 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
         {upsellCard && !isSearching && !isBarView && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{upsellCard}</div>
         )}
+{isSearching ? (
+  <SearchResults results={searchResults} emptyLabel={emptyLabel} onAsk={onAsk} />
+) : (
+  <>
+    {categoriesWithItems.length > 0 && (
+      <CategoryPillBar
+        categories={categoriesWithItems}
+        counts={categoryCounts}
+        selectedId={selectedCategoryId}
+        onSelect={setSelectedCategoryId}
+      />
+    )}
 
-        {isSearching ? (
-          <SearchResults results={searchResults} emptyLabel={emptyLabel} />
-        ) : (
-          <>
-            {categoriesWithItems.map((cat, catIndex) => {
-  const catItems = translatedItems.filter((i) => i.category_id === cat.id && i.is_available)
-  if (catItems.length === 0) return null
-
-              return (
-                <CategorySection
-                  key={cat.id}
-                  category={cat}
-                  items={catItems}
-                  isOpen={openCategoryIds.has(cat.id)}
-                  onToggle={() => toggleCategory(cat.id)}
-                  showChefsPick={catIndex === 0 || catItems.some((i) => i.is_special)}
-                  onAsk={onAsk}
-                  pickLabel={pickLabel}
-                />
-              )
-            })}
-          </>
-        )}
+    {selectedCategoryId && (() => {
+      const cat = categoriesWithItems.find((c) => c.id === selectedCategoryId)
+      if (!cat) return null
+      const catItems = translatedItems.filter((i) => i.category_id === cat.id && i.is_available)
+      if (catItems.length === 0) return null
+      return (
+        <CategorySection
+          key={cat.id}
+          category={cat}
+          items={catItems}
+          showChefsPick
+          onAsk={onAsk}
+          pickLabel={pickLabel}
+        />
+      )
+    })()}
+  </>
+)}
       </div>
 
       <FloatingCartBar onCallWaiter={onCallWaiter} isWaiterLoading={isWaiterLoading} />

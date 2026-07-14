@@ -8,7 +8,7 @@ import {
   ArrowLeft, Camera, ChevronRight, Clock, ImagePlus, Loader2,
   MoreVertical, Pencil, Plus, Sparkles, Trash2, UtensilsCrossed,
   X, ToggleLeft, ToggleRight, Flame, Leaf, Zap, Settings2, GripVertical,
-  CheckSquare, Circle, Link2,
+  CheckSquare, Circle, Link2, Search, Check,
 } from 'lucide-react'
 import { TodaysSpecialPicker } from '@/components/TodaysSpecialPicker'
 const BOTTOM_NAV_H = 72
@@ -132,6 +132,125 @@ function BottomSheet({
         </div>
         {children}
       </div>
+    </div>
+  )
+}
+
+// ─── PairingSelector ────────────────────────────────────────────────────────
+// Replaces free-text entry for "Best Paired With" with a searchable picker
+// constrained to the restaurant's own existing menu items. This guarantees
+// every pairing resolves to a real dish/drink the AI upsell engine can
+// actually recommend (no typos, no dead references to deleted items).
+
+function PairingSelector({
+  allItems,
+  currentItemId,
+  selectedNames,
+  onChange,
+  isBar,
+}: {
+  allItems: MenuItemRow[]
+  currentItemId?: string
+  selectedNames: string[]
+  onChange: (names: string[]) => void
+  isBar?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const options = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return allItems
+      .filter((i) => i.id !== currentItemId)
+      .filter((i) => !selectedNames.includes(i.name))
+      .filter((i) => !q || i.name.toLowerCase().includes(q))
+      .slice(0, 30)
+  }, [allItems, currentItemId, selectedNames, search])
+
+  function addPairing(name: string) {
+    onChange([...selectedNames, name])
+    setSearch('')
+  }
+  function removePairing(name: string) {
+    onChange(selectedNames.filter((n) => n !== name))
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      {/* Selected chips */}
+      {selectedNames.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {selectedNames.map((name) => (
+            <span
+              key={name}
+              className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400"
+            >
+              <Link2 size={9} />
+              {name}
+              <button
+                type="button"
+                onClick={() => removePairing(name)}
+                className="ml-0.5 text-amber-600 hover:text-amber-300"
+              >
+                <X size={9} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Search / trigger input */}
+      <div className="relative">
+        <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+        <input
+          value={search}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
+          placeholder={`Search your ${isBar ? 'drinks' : 'dishes'} to pair…`}
+          className="w-full rounded-2xl border border-zinc-700/60 bg-zinc-800/50 py-3 pl-9 pr-4 text-sm text-white placeholder-zinc-500 focus:border-orange-500/60 focus:outline-none focus:ring-1 focus:ring-orange-500/20 transition"
+        />
+      </div>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-20 mt-1.5 max-h-56 w-full overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 shadow-xl">
+          {options.length === 0 ? (
+            <div className="px-4 py-3 text-xs text-zinc-500">
+              {allItems.length <= 1
+                ? 'Add a few more items to your menu first.'
+                : search.trim()
+                  ? 'No matching items found.'
+                  : 'All items are already selected.'}
+            </div>
+          ) : (
+            options.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => addPairing(item.name)}
+                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-zinc-800"
+              >
+                {item.image_url
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={resolveMenuImageUrl(item.image_url)} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                  : <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-sm">{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
+                }
+                <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{item.name}</span>
+                <span className="shrink-0 text-xs text-zinc-600">₹{((Number(item.price) || 0) / 100).toFixed(0)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -866,7 +985,7 @@ export default function MenuPage() {
         is_available: Boolean(editingItem.is_available ?? true), is_bestseller: Boolean(editingItem.is_bestseller ?? false),
         is_veg: Boolean(editingItem.is_veg ?? true), is_special: Boolean(editingItem.is_special ?? false),
         tags: cleanStringArray(editingItem.tags), allergens: cleanStringArray(editingItem.allergens),
-        // ✅ NEW: save best_with array
+        // ✅ best_with now sourced only from existing menu items via PairingSelector
         best_with: cleanStringArray(editingItem.best_with),
         prep_time_minutes: toIntOrNull(editingItem.prep_time_minutes), calories: toIntOrNull(editingItem.calories),
         position: Number.isFinite(Number(editingItem.position)) ? Number(editingItem.position) : items.filter((x) => x.category_id === activeCat).length,
@@ -969,8 +1088,10 @@ export default function MenuPage() {
         is_bestseller: (item.tags ?? []).some((t) => t.toLowerCase().includes('best')),
         is_veg: item.is_veg ?? true, is_special: false, tags: item.tags ?? [],
         allergens: [], prep_time_minutes: null, calories: null, position: idx,
-        // ✅ NEW: save best_with from Gemini import
-        best_with: item.best_with ?? [],
+        // Note: Gemini-suggested pairings are dropped here since they may not
+        // match an item name exactly. Owners can add real pairings afterward
+        // via the PairingSelector, which only allows selecting existing items.
+        best_with: [],
       }))
       const { data: insertedItems, error: itemsError } = await supabase.from('menu_items').insert(itemPayloads).select()
       if (itemsError) throw itemsError
@@ -1418,44 +1539,18 @@ export default function MenuPage() {
                 </Field>
               </div>
 
-              {/* ✅ NEW: Best Paired With field */}
+              {/* ✅ Best Paired With — now a searchable picker over existing menu items only */}
               <Field label="Best Paired With 🔗">
-                <input
-                  value={(editingItem.best_with ?? []).join(', ')}
-                  onChange={(e) => setEditingItem((f) => f ? {
-                    ...f,
-                    best_with: e.target.value.split(',').map((t) => t.trim()).filter(Boolean)
-                  } : f)}
-                  placeholder={editingIsBar ? 'e.g. Peanut Masala, Chicken Wings, Nachos' : 'e.g. Cold Coffee, French Fries, Brownie'}
-                  className={INPUT}
+                <PairingSelector
+                  allItems={items}
+                  currentItemId={editingItem.id}
+                  selectedNames={editingItem.best_with ?? []}
+                  isBar={editingIsBar}
+                  onChange={(names) => setEditingItem((f) => (f ? { ...f, best_with: names } : f))}
                 />
                 <p className="mt-1.5 text-xs text-zinc-500">
-                  {editingIsBar ? 'Snacks or sides this drink pairs well with — AI uses this for smart upsell suggestions.' : 'Items this dish pairs well with — AI uses this for smart upsell suggestions.'} Separate with commas.
+                  Pick {editingIsBar ? 'snacks or sides' : 'items'} from your own menu that pair well with this {editingIsBar ? 'drink' : 'dish'} — the AI uses these for smart upsell suggestions.
                 </p>
-                {/* Show existing pairings as quick-remove chips */}
-                {(editingItem.best_with ?? []).length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(editingItem.best_with ?? []).map((pair) => (
-                      <span
-                        key={pair}
-                        className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400"
-                      >
-                        <Link2 size={9} />
-                        {pair}
-                        <button
-                          type="button"
-                          onClick={() => setEditingItem((f) => f ? {
-                            ...f,
-                            best_with: (f.best_with ?? []).filter((p) => p !== pair)
-                          } : f)}
-                          className="ml-0.5 text-amber-600 hover:text-amber-300"
-                        >
-                          <X size={9} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </Field>
 
               <Field label="Tags">
@@ -1607,7 +1702,6 @@ function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize, isBar 
               <Settings2 size={8} /> {optionCount} {isBar ? 'size' : 'opt'}{optionCount > 1 ? 's' : ''}
             </span>
           )}
-          {/* ✅ NEW: show pairing count badge */}
           {(item.best_with ?? []).length > 0 && (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400 ring-1 ring-amber-500/20">
               <Link2 size={8} /> {(item.best_with ?? []).length} pairs
@@ -1644,7 +1738,6 @@ function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCust
         )}
         {item.is_bestseller && <span className="rounded-full bg-orange-500/20 px-2.5 py-1 text-[10px] font-bold text-orange-400 ring-1 ring-orange-500/30">🔥 Best</span>}
         {optionCount > 0 && <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${isBar ? 'bg-amber-500/20 text-amber-400 ring-amber-500/30' : 'bg-purple-500/20 text-purple-400 ring-purple-500/30'}`}>⚙ {optionCount} {isBar ? 'sizes' : 'opts'}</span>}
-        {/* ✅ NEW: pairing badge on desktop card */}
         {(item.best_with ?? []).length > 0 && (
           <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold text-amber-400 ring-1 ring-amber-500/30">
             🔗 {(item.best_with ?? []).length} pairs
@@ -1660,7 +1753,6 @@ function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCust
           <p className="shrink-0 text-sm font-bold text-orange-400">₹{((Number(item.price) || 0) / 100).toFixed(0)}</p>
         </div>
         {item.description && <p className="mb-2 line-clamp-2 text-xs text-zinc-500">{item.description}</p>}
-        {/* ✅ NEW: show pairings inline on desktop card */}
         {(item.best_with ?? []).length > 0 && (
           <p className="mb-2 text-[10px] text-amber-400/70">
             🔗 {(item.best_with ?? []).slice(0, 2).join(', ')}{(item.best_with ?? []).length > 2 ? ` +${(item.best_with ?? []).length - 2}` : ''}
