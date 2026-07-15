@@ -34,7 +34,8 @@ type ModalVariant = 'demo' | 'founding'
 function DinezyLogo({ size = 36, dark = true, className = '', onClick }: LogoProps) {
   return (
     <button type="button" onClick={onClick} className={`inline-flex items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7A2333]/60 rounded-xl ${className}`} aria-label="Dinezy home">
-      <div className="relative shrink-0 flex items-center justify-center rounded-2xl transition-all duration-300 hover:scale-[1.04] bg-white border border-[#7A2333]/15 shadow-[0_8px_24px_rgba(122,35,51,0.12)]" style={{ width: size + 14, height: size + 14 }}>
+      <div className="relative shrink-0 flex items-center justify-center rounded-2xl transition-all duration-300 hover:scale-[1.04] bg-[#7A2333] border border-[#7A2333]/20 shadow-[0_8px_24px_rgba(122,35,51,0.25)]" style={{ width: size + 14, height: size + 14 }}>
+
         <Image src="/dinezy-logo.png" alt="Dinezy" width={size} height={size} className="object-contain" priority />
       </div>
       <div className="text-left">
