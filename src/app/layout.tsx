@@ -3,8 +3,6 @@ import { DM_Sans, Playfair_Display, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import Script from 'next/script'
 import { Sora } from 'next/font/google'
-
-
 const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-primary',
@@ -23,7 +21,6 @@ const jetbrainsMono = JetBrains_Mono({
   display: 'swap',
   preload: false,
 })
-
 export const metadata: Metadata = {
   metadataBase: new URL('https://dinezy.in'),
   title: {
@@ -61,15 +58,13 @@ export const metadata: Metadata = {
     follow: true,
   },
 }
-
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#050816',
+  themeColor: '#FBF6EC',
 }
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -81,28 +76,24 @@ export default function RootLayout({
       className={`${dmSans.variable} ${playfair.variable} ${jetbrainsMono.variable} scroll-smooth`}
     >
 	
-     <body className="bg-[#050816] text-white antialiased">
+     <body className="bg-[#FBF6EC] text-black antialiased">
   {children}
   
  
-
   {/* Google Analytics */}
   <Script
     src="https://www.googletagmanager.com/gtag/js?id=G-LCD36NFH1B"
     strategy="afterInteractive"
   />
-
   <Script id="google-analytics" strategy="afterInteractive">
     {`
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       window.gtag = gtag;
       gtag('js', new Date());
-
       gtag('config', 'G-LCD36NFH1B');
     `}
   </Script>
-
   {/* Google AdSense */}
   <Script
     id="google-adsense"
