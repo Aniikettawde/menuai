@@ -26,7 +26,8 @@ import type { WaiterCallItem } from '@/types'
 import { BottomTabBar } from './BottomTabBar'
 import { TranslationLoadingOverlay } from './TranslationLoadingOverlay'
 import { WelcomeSplash } from './WelcomeSplash'
-
+import { FloatingGameButton } from './games/FloatingGameButton'
+import { GamesModal } from './games/GamesModal'
 
 type OfferRow = {
   id: string; title: string
@@ -110,6 +111,7 @@ const heroItems = (items ?? [])
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeOffers, setActiveOffers] = useState<OfferRow[]>([])
 const [sessionExpired, setSessionExpired] = useState(false)
+const [gamesOpen, setGamesOpen] = useState(false)
 
   const tableToken = searchParams.get('t')
   const legacyTableParam = searchParams.get('table')
@@ -852,6 +854,19 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
 
         {showRating && <RatingModal />}
         {showRatingsList && <RatingsListModal restaurant={restaurant} />}
+		
+		{(tableNumber !== null || tableToken) && !sessionExpired && (
+  <>
+    <FloatingGameButton onClick={() => setGamesOpen(true)} bottomOffset={180} />
+    <CallWaiterBell
+      slug={slug}
+      tableNumber={tableNumber}
+      onCall={handleRequestAssistance}
+    />
+  </>
+)}
+
+<GamesModal open={gamesOpen} onClose={() => setGamesOpen(false)} />
 
         {(tableNumber !== null || tableToken) && !sessionExpired && (
   <CallWaiterBell

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { getDiscoveryBrowser } from '@/lib/discovery'
+import { FeaturesSection } from '@/components/FeaturesSection'
 
 /* ────────────────────────────────────────────────────────────────────────
    TYPES
@@ -286,31 +287,6 @@ const CORE_FEATURES = [
  
 ]
 
-function CoreFeaturesSection() {
-  return (
-    <section id="features" className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8 bg-[#FBF6EC]">
-      <div className="max-w-7xl mx-auto">
-        <div className="max-w-2xl mb-12">
-          <span className="inline-flex items-center gap-2 bg-[#7A2333]/10 border border-[#7A2333]/15 rounded-full px-4 py-1.5 text-xs font-bold text-[#7A2333] uppercase tracking-wide mb-4">
-            Everything in one QR
-          </span>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-4 text-black">What you get with Dinezy</h2>
-          <p className="text-black/55 text-lg">No apps for your guests. No technical setup for you. Just one QR code that does all of this.</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {CORE_FEATURES.map(f => (
-            <div key={f.title} className="glass rounded-3xl p-6 card-hover">
-              <div className="w-12 h-12 rounded-2xl bg-[#7A2333]/10 border border-[#7A2333]/20 flex items-center justify-center text-2xl mb-4">{f.icon}</div>
-              <h3 className="font-black text-black text-base mb-2">{f.title}</h3>
-              <p className="text-black/55 text-sm leading-relaxed">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
 
 /* ────────────────────────────────────────────────────────────────────────
    HOW IT WORKS — single, restaurant-only timeline
@@ -1258,7 +1234,7 @@ export default function DinezyLanding() {
         </div>
       </section>
 
-      <CoreFeaturesSection />
+<FeaturesSection />
       <HowItWorksSection />
       <SmartMenuSection />
       <DashboardPreviewSection />

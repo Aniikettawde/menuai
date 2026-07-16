@@ -32,6 +32,33 @@ import {
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 
+// ── Brand tokens (mirrors the ivory/burgundy system used on customer-facing pages) ──
+const BRAND = {
+  ivory: '#FBF6EC',
+  ivorySoft: '#F3ECDD',
+  ivoryDeep: '#F8F3E7',
+  card: '#FFFFFF',
+  line: '#E7DDC9',
+  ink: '#2B211F',
+  inkSoft: '#6E5F57',
+  inkFaint: '#9C8F86',
+  burgundy: '#7A2333',
+  burgundyDark: '#5C1A27',
+  burgundyLight: '#9B3049',
+  gold: '#C08A2E',
+  goldDeep: '#8A5E14',
+  sky: '#3E6FA6',
+  skyDeep: '#2E5883',
+  emerald: '#2F7A5C',
+  plum: '#6B4C7A',
+  rose: '#B23B4A',
+  magenta: '#A8446B',
+}
+
+const cardBase = 'rounded-2xl border shadow-[0_1px_2px_rgba(43,33,31,0.04)]'
+const cardStyle = { borderColor: BRAND.line, background: BRAND.card }
+const skeletonStyle = { borderColor: BRAND.line, background: BRAND.ivorySoft }
+
 interface Stats {
   visitorsToday: number
   itemViewsToday: number
@@ -102,22 +129,22 @@ function formatPercent(v: number) {
   return `${(v * 100).toFixed(v >= 1 ? 0 : 1)}%`
 }
 
-function Bar({ value, max, tone }: { value: number; max: number; tone: string }) {
+function Bar({ value, max, color }: { value: number; max: number; color: string }) {
   const h = max > 0 ? Math.max(3, (value / max) * 100) : 3
   return (
     <div
-      className={`w-full rounded-t ${tone} opacity-70 transition-all duration-500`}
-      style={{ height: `${h}%` }}
+      className="w-full rounded-t opacity-80 transition-all duration-500"
+      style={{ height: `${h}%`, background: color }}
       title={`${value}`}
     />
   )
 }
 
-function Legend({ tone, label }: { tone: string; label: string }) {
+function Legend({ color, label }: { color: string; label: string }) {
   return (
     <div className="flex items-center gap-1">
-      <span className={`h-1.5 w-1.5 rounded-full ${tone} opacity-70`} />
-      <span className="text-[9px] text-zinc-600">{label}</span>
+      <span className="h-1.5 w-1.5 rounded-full opacity-80" style={{ background: color }} />
+      <span className="text-[9px]" style={{ color: BRAND.inkFaint }}>{label}</span>
     </div>
   )
 }
@@ -150,8 +177,6 @@ function OrdersSection({ restaurantId }: { restaurantId: string }) {
       setLoading(false)
     }
   }
-  
-  
 
   useEffect(() => {
     let mounted = true
@@ -201,28 +226,35 @@ function OrdersSection({ restaurantId }: { restaurantId: string }) {
   return (
     <Link
       href="/dashboard/orders"
-      className="group block rounded-2xl border border-white/[0.06] bg-[#111111] p-5 sm:p-6 transition hover:border-white/[0.10] active:scale-[0.995]"
+      className={`group block ${cardBase} p-5 sm:p-6 transition hover:shadow-[0_4px_16px_rgba(43,33,31,0.08)] active:scale-[0.995]`}
+      style={cardStyle}
     >
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/10">
-            <ClipboardList size={13} className="text-orange-400" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: `${BRAND.burgundy}14` }}>
+            <ClipboardList size={13} style={{ color: BRAND.burgundy }} />
           </div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.inkSoft }}>
             Live orders
           </p>
 
           {hasPending && (
             <span className="relative flex h-5 items-center">
-              <span className="absolute inline-flex h-4 w-4 animate-ping rounded-full bg-red-400 opacity-30" />
-              <span className="relative inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+              <span className="absolute inline-flex h-4 w-4 animate-ping rounded-full opacity-30" style={{ background: BRAND.rose }} />
+              <span
+                className="relative inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white"
+                style={{ background: BRAND.rose }}
+              >
                 {pendingCount}
               </span>
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 text-[10px] text-zinc-600 transition-colors group-hover:text-orange-400">
+        <div
+          className="flex items-center gap-1.5 text-[10px] transition-colors"
+          style={{ color: BRAND.inkFaint }}
+        >
           View all
           <ChevronRight size={11} />
         </div>
@@ -231,18 +263,15 @@ function OrdersSection({ restaurantId }: { restaurantId: string }) {
       {loading && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {[...Array(3)].map((_, i) => (
-            <div
-              key={i}
-              className="h-20 animate-pulse rounded-xl border border-white/[0.04] bg-white/[0.02]"
-            />
+            <div key={i} className="h-20 animate-pulse rounded-xl border" style={skeletonStyle} />
           ))}
         </div>
       )}
 
       {!loading && orders.length === 0 && (
-        <div className="flex items-center gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] px-4 py-4">
-          <ClipboardList size={16} className="shrink-0 text-zinc-700" />
-          <p className="text-xs text-zinc-600">No active orders right now</p>
+        <div className="flex items-center gap-3 rounded-xl border px-4 py-4" style={{ borderColor: BRAND.line, background: BRAND.ivoryDeep }}>
+          <ClipboardList size={16} className="shrink-0" style={{ color: '#B0A69C' }} />
+          <p className="text-xs" style={{ color: BRAND.inkFaint }}>No active orders right now</p>
         </div>
       )}
 
@@ -253,40 +282,39 @@ function OrdersSection({ restaurantId }: { restaurantId: string }) {
             return (
               <div
                 key={order.id}
-                className={`relative overflow-hidden rounded-xl border p-3 transition ${
-                  isPending
-                    ? 'border-orange-500/20 bg-orange-500/5'
-                    : 'border-blue-500/15 bg-blue-500/5'
-                }`}
+                className="relative overflow-hidden rounded-xl border p-3 transition"
+                style={{
+                  borderColor: isPending ? `${BRAND.gold}3D` : `${BRAND.sky}33`,
+                  background: isPending ? `${BRAND.gold}0F` : `${BRAND.sky}0C`,
+                }}
               >
                 {isPending && (
                   <span className="absolute right-2.5 top-2.5 flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-60" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-500" />
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ background: BRAND.gold }} />
+                    <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: BRAND.gold }} />
                   </span>
                 )}
 
                 <div className="mb-2 flex items-center gap-1.5">
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      isPending
-                        ? 'bg-orange-500/15 text-orange-300'
-                        : 'bg-blue-500/15 text-blue-300'
-                    }`}
+                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      background: isPending ? `${BRAND.gold}26` : `${BRAND.sky}26`,
+                      color: isPending ? BRAND.goldDeep : BRAND.skyDeep,
+                    }}
                   >
                     Table {order.table_number}
                   </span>
                 </div>
 
-                <p className="text-sm font-bold text-white">{money(order.subtotal)}</p>
-                <p className="mt-0.5 truncate text-[10px] text-zinc-600">
+                <p className="text-sm font-bold" style={{ color: BRAND.ink }}>{money(order.subtotal)}</p>
+                <p className="mt-0.5 truncate text-[10px]" style={{ color: BRAND.inkFaint }}>
                   {order.items.length} item{order.items.length !== 1 ? 's' : ''} · {timeAgo(order.created_at)}
                 </p>
 
                 <div
-                  className={`mt-2 text-[9px] font-semibold uppercase tracking-wider ${
-                    isPending ? 'text-orange-400/70' : 'text-blue-400/70'
-                  }`}
+                  className="mt-2 text-[9px] font-semibold uppercase tracking-wider"
+                  style={{ color: isPending ? `${BRAND.goldDeep}CC` : `${BRAND.skyDeep}CC` }}
                 >
                   {order.status}
                 </div>
@@ -297,16 +325,16 @@ function OrdersSection({ restaurantId }: { restaurantId: string }) {
       )}
 
       {!loading && orders.length > 0 && (
-        <div className="mt-3 flex items-center gap-4 border-t border-white/[0.04] pt-3">
+        <div className="mt-3 flex items-center gap-4 border-t pt-3" style={{ borderColor: BRAND.line }}>
           <div className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-            <span className="text-[10px] text-zinc-600">{pendingCount} pending</span>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: BRAND.gold }} />
+            <span className="text-[10px]" style={{ color: BRAND.inkFaint }}>{pendingCount} pending</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-            <span className="text-[10px] text-zinc-600">{acceptedCount} accepted</span>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: BRAND.sky }} />
+            <span className="text-[10px]" style={{ color: BRAND.inkFaint }}>{acceptedCount} accepted</span>
           </div>
-          <p className="ml-auto text-[10px] text-zinc-700 transition-colors group-hover:text-orange-400">
+          <p className="ml-auto text-[10px] transition-colors" style={{ color: '#B0A69C' }}>
             Tap to manage →
           </p>
         </div>
@@ -327,14 +355,17 @@ function InsightRow({
   icon: ReactNode
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 transition hover:bg-white/[0.03]">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-orange-400">
+    <div
+      className="flex items-start gap-3 rounded-xl border p-3 transition hover:bg-black/[0.02]"
+      style={{ borderColor: BRAND.line, background: BRAND.ivory }}
+    >
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-medium text-zinc-600">{title}</p>
-        <p className="truncate text-xs font-bold text-white">{value}</p>
-        <p className="mt-0.5 text-[9px] leading-relaxed text-zinc-700">{desc}</p>
+        <p className="text-[10px] font-medium" style={{ color: BRAND.inkFaint }}>{title}</p>
+        <p className="truncate text-xs font-bold" style={{ color: BRAND.ink }}>{value}</p>
+        <p className="mt-0.5 text-[9px] leading-relaxed" style={{ color: '#B0A69C' }}>{desc}</p>
       </div>
     </div>
   )
@@ -354,13 +385,14 @@ function QuickLink({
   return (
     <Link
       href={href}
-      className="group flex flex-col gap-1.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-3.5 transition hover:border-orange-500/15 hover:bg-orange-500/4 active:scale-[0.98]"
+      className="group flex flex-col gap-1.5 rounded-xl border p-3.5 transition hover:shadow-[0_2px_10px_rgba(122,35,51,0.08)] active:scale-[0.98]"
+      style={{ borderColor: BRAND.line, background: BRAND.ivory }}
     >
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-orange-400/80 group-hover:text-orange-400">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: `${BRAND.burgundy}D9` }}>
         {icon}
         {title}
       </div>
-      <p className="text-[11px] leading-relaxed text-zinc-600">{desc}</p>
+      <p className="text-[11px] leading-relaxed" style={{ color: BRAND.inkFaint }}>{desc}</p>
     </Link>
   )
 }
@@ -377,24 +409,25 @@ function NextStep({
   return (
     <Link
       href={href}
-      className="group flex flex-col gap-0.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 transition hover:border-white/[0.1] hover:bg-white/[0.04] active:scale-[0.98]"
+      className="group flex flex-col gap-0.5 rounded-xl border p-3 transition hover:bg-black/[0.02] active:scale-[0.98]"
+      style={{ borderColor: BRAND.line, background: BRAND.ivory }}
     >
-      <p className="text-xs font-semibold text-white transition group-hover:text-orange-300">
+      <p className="text-xs font-semibold transition" style={{ color: BRAND.ink }}>
         {title}
       </p>
-      <p className="text-[10px] leading-relaxed text-zinc-600">{desc}</p>
+      <p className="text-[10px] leading-relaxed" style={{ color: BRAND.inkFaint }}>{desc}</p>
     </Link>
   )
 }
 
 function EmptyState() {
   return (
-    <div className="mx-auto max-w-lg rounded-2xl border border-white/[0.06] bg-[#111111] p-6 text-center sm:p-8">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400">
+    <div className={`mx-auto max-w-lg ${cardBase} p-6 text-center sm:p-8`} style={cardStyle}>
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>
         <LayoutGrid size={22} />
       </div>
-      <h1 className="mt-4 text-lg font-bold text-white sm:text-xl">Set up your workspace</h1>
-      <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+      <h1 className="mt-4 text-lg font-bold sm:text-xl" style={{ color: BRAND.ink }}>Set up your workspace</h1>
+      <p className="mt-2 text-sm leading-relaxed" style={{ color: BRAND.inkSoft }}>
         Add restaurant details, upload your menu, and generate a QR code. Analytics fill automatically once guests start scanning.
       </p>
       <div className="mt-6 grid grid-cols-3 gap-2">
@@ -406,32 +439,33 @@ function EmptyState() {
           <Link
             key={b.href}
             href={b.href}
-            className={`rounded-xl py-2.5 text-xs font-semibold transition active:scale-95 ${
+            className="rounded-xl py-2.5 text-xs font-semibold transition active:scale-95"
+            style={
               b.primary
-                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20 hover:bg-orange-400'
-                : 'border border-white/[0.07] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.07]'
-            }`}
+                ? { background: BRAND.burgundy, color: '#fff', boxShadow: `0 8px 20px ${BRAND.burgundy}26` }
+                : { border: `1px solid ${BRAND.line}`, background: BRAND.ivorySoft, color: BRAND.inkSoft }
+            }
           >
             {b.label}
           </Link>
         ))}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 text-left">
-        <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3.5">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-orange-400">
+        <div className="rounded-xl border p-3.5" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: BRAND.burgundy }}>
             <BadgeCheck size={10} />
             First step
           </div>
-          <p className="text-[11px] leading-relaxed text-zinc-500">
+          <p className="text-[11px] leading-relaxed" style={{ color: BRAND.inkSoft }}>
             Fill in restaurant name, hours, and cover image.
           </p>
         </div>
-        <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3.5">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-orange-400">
+        <div className="rounded-xl border p-3.5" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: BRAND.burgundy }}>
             <Settings2 size={10} />
             Then
           </div>
-          <p className="text-[11px] leading-relaxed text-zinc-500">
+          <p className="text-[11px] leading-relaxed" style={{ color: BRAND.inkSoft }}>
             Add categories and dishes so AI can start recommending.
           </p>
         </div>
@@ -443,20 +477,16 @@ function EmptyState() {
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
-      <div className="h-52 animate-pulse rounded-2xl border border-white/[0.04] bg-white/[0.02]" />
+      <div className="h-52 animate-pulse rounded-2xl border" style={skeletonStyle} />
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
         {[...Array(6)].map((_, i) => (
-          <div
-            key={i}
-            className="h-20 animate-pulse rounded-2xl border border-white/[0.04] bg-white/[0.02]"
-            style={{ animationDelay: `${i * 60}ms` }}
-          />
+          <div key={i} className="h-20 animate-pulse rounded-2xl border" style={{ ...skeletonStyle, animationDelay: `${i * 60}ms` }} />
         ))}
       </div>
-      <div className="h-24 animate-pulse rounded-2xl border border-white/[0.04] bg-white/[0.02]" />
+      <div className="h-24 animate-pulse rounded-2xl border" style={skeletonStyle} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px]">
-        <div className="h-[420px] animate-pulse rounded-2xl border border-white/[0.04] bg-white/[0.02]" />
-        <div className="h-[420px] animate-pulse rounded-2xl border border-white/[0.04] bg-white/[0.02]" />
+        <div className="h-[420px] animate-pulse rounded-2xl border" style={skeletonStyle} />
+        <div className="h-[420px] animate-pulse rounded-2xl border" style={skeletonStyle} />
       </div>
     </div>
   )
@@ -468,12 +498,12 @@ export default function DashboardPage() {
   const supabase = getSupabaseDashboardBrowser()
   const { context, loading: contextLoading } = useDashboardContext()
   const router = useRouter()
-  
+
   useEffect(() => {
-  if (context?.role === 'waiter') {
-    router.replace('/dashboard/orders')
-  }
-}, [context, router])
+    if (context?.role === 'waiter') {
+      router.replace('/dashboard/orders')
+    }
+  }, [context, router])
 
   useEffect(() => {
     let mounted = true
@@ -481,22 +511,22 @@ export default function DashboardPage() {
     async function load() {
       try {
         if (!context?.restaurantId) {
-  setLoading(false)
-  return
-}
+          setLoading(false)
+          return
+        }
 
-const { data: restaurant } = await supabase
-  .from('restaurants')
-  .select('id, name, slug, avg_rating, total_ratings')
-  .eq('id', context.restaurantId)
-  .single()
+        const { data: restaurant } = await supabase
+          .from('restaurants')
+          .select('id, name, slug, avg_rating, total_ratings')
+          .eq('id', context.restaurantId)
+          .single()
 
-if (!restaurant) {
-  if (mounted) {
-    setLoading(false)
-  }
-  return
-}
+        if (!restaurant) {
+          if (mounted) {
+            setLoading(false)
+          }
+          return
+        }
 
         const today = new Date()
         const todayKey = toDateKey(today)
@@ -624,59 +654,47 @@ if (!restaurant) {
         sub: 'Today',
         value: stats.visitorsToday,
         icon: <Users size={14} />,
-        color: 'text-blue-400',
-        ring: 'ring-blue-500/20',
-        bg: 'bg-blue-500/8',
+        color: BRAND.sky,
       },
       {
         title: 'Dish views',
         sub: 'Today',
         value: stats.itemViewsToday,
         icon: <Eye size={14} />,
-        color: 'text-orange-400',
-        ring: 'ring-orange-500/20',
-        bg: 'bg-orange-500/8',
+        color: BRAND.burgundy,
       },
       {
         title: 'AI chats',
         sub: 'Today',
         value: stats.aiChatsToday,
         icon: <MessageSquareMore size={14} />,
-        color: 'text-violet-400',
-        ring: 'ring-violet-500/20',
-        bg: 'bg-violet-500/8',
+        color: BRAND.plum,
       },
       {
         title: 'Rating',
         sub: `${stats.totalRatings} reviews`,
         value: stats.avgRating ? stats.avgRating.toFixed(1) : '—',
         icon: <Star size={14} />,
-        color: 'text-amber-400',
-        ring: 'ring-amber-500/20',
-        bg: 'bg-amber-500/8',
+        color: BRAND.gold,
       },
       {
         title: 'Engagement',
         sub: 'Views / visitor',
         value: formatPercent(stats.engagementRate),
         icon: <MousePointerClick size={14} />,
-        color: 'text-emerald-400',
-        ring: 'ring-emerald-500/20',
-        bg: 'bg-emerald-500/8',
+        color: BRAND.emerald,
       },
       {
         title: 'AI rate',
         sub: 'Chats / visitor',
         value: formatPercent(stats.aiAssistRate),
         icon: <Sparkles size={14} />,
-        color: 'text-fuchsia-400',
-        ring: 'ring-fuchsia-500/20',
-        bg: 'bg-fuchsia-500/8',
+        color: BRAND.magenta,
       },
     ]
   }, [stats])
 
-const [contextReady, setContextReady] = useState(false)
+  const [contextReady, setContextReady] = useState(false)
 
   useEffect(() => {
     if (!contextLoading) {
@@ -687,46 +705,52 @@ const [contextReady, setContextReady] = useState(false)
 
   if (contextLoading || !contextReady) return <LoadingSkeleton />
   if (!context) {
-  return (
-    <div className="space-y-4">
-      <EmptyState />
-    </div>
-  )
-}
+    return (
+      <div className="space-y-4">
+        <EmptyState />
+      </div>
+    )
+  }
   if (loading) return <LoadingSkeleton />
   if (!stats) {
-    return <div className="p-6 text-zinc-400">Failed to load dashboard data.</div>
+    return <div className="p-6" style={{ color: BRAND.inkSoft }}>Failed to load dashboard data.</div>
   }
 
   const maxDaily = Math.max(...stats.dailyTrend.map((d) => Math.max(d.visitors, d.views, d.chats, 1)))
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <section className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#111111]">
+      <section className={`relative overflow-hidden ${cardBase}`} style={cardStyle}>
         <div className="pointer-events-none absolute inset-0">
           <div
-            className="absolute inset-0 opacity-[0.025]"
+            className="absolute inset-0 opacity-[0.035]"
             style={{
               backgroundImage:
-                'linear-gradient(rgba(255,255,255,.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.6) 1px,transparent 1px)',
+                'linear-gradient(rgba(43,33,31,.6) 1px,transparent 1px),linear-gradient(90deg,rgba(43,33,31,.6) 1px,transparent 1px)',
               backgroundSize: '48px 48px',
             }}
           />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_0%_100%,rgba(249,115,22,0.1),transparent)]" />
-          <div className="absolute right-0 top-0 h-64 w-64 rounded-full bg-amber-500/5 blur-[80px]" />
+          <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 60% at 0% 100%, rgba(122,35,51,0.07), transparent)' }} />
+          <div className="absolute right-0 top-0 h-64 w-64 rounded-full blur-[80px]" style={{ background: `${BRAND.gold}14` }} />
         </div>
 
         <div className="relative p-5 sm:p-6 lg:p-7">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/20 bg-orange-500/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-orange-400">
+              <div
+                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest"
+                style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}
+              >
                 <Zap size={9} />
                 Command center
               </div>
-              <h1 className="mt-2.5 text-xl font-bold tracking-tight text-white sm:text-2xl lg:text-3xl">
+              <h1
+                className="mt-2.5 text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl"
+                style={{ color: BRAND.ink, fontFamily: 'var(--font-fraunces, Fraunces, Georgia, serif)' }}
+              >
                 {stats.restaurantName}
               </h1>
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500 sm:text-sm">
+              <p className="mt-1 text-xs leading-relaxed sm:text-sm" style={{ color: BRAND.inkSoft }}>
                 Your menu is live. Track visitors, dishes and AI usage below.
               </p>
             </div>
@@ -736,7 +760,8 @@ const [contextReady, setContextReady] = useState(false)
                 href={`/r/${stats.slug}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.07] bg-white/[0.04] px-3.5 py-2 text-xs font-medium text-zinc-300 transition hover:border-orange-500/20 hover:bg-orange-500/6 hover:text-orange-300"
+                className="inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-medium transition hover:shadow-[0_2px_10px_rgba(122,35,51,0.1)]"
+                style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
               >
                 Preview menu
                 <ArrowUpRight size={11} />
@@ -751,17 +776,14 @@ const [contextReady, setContextReady] = useState(false)
               { label: 'AI chats', value: stats.aiChatsToday, icon: <MessageSquareMore size={12} /> },
               { label: 'Avg rating', value: stats.avgRating ? stats.avgRating.toFixed(1) : '—', icon: <Star size={12} /> },
             ].map((kpi) => (
-              <div
-                key={kpi.label}
-                className="rounded-xl border border-white/[0.05] bg-black/20 px-3.5 py-3 backdrop-blur-sm"
-              >
+              <div key={kpi.label} className="rounded-xl border px-3.5 py-3" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
                 <div className="mb-1.5 flex items-center justify-between gap-1">
-                  <p className="truncate text-[10px] font-medium uppercase tracking-wider text-zinc-600">
+                  <p className="truncate text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
                     {kpi.label}
                   </p>
-                  <span className="shrink-0 text-orange-500/60">{kpi.icon}</span>
+                  <span className="shrink-0" style={{ color: `${BRAND.burgundy}99` }}>{kpi.icon}</span>
                 </div>
-                <p className="text-xl font-bold tracking-tight text-white sm:text-2xl">{kpi.value}</p>
+                <p className="text-xl font-bold tracking-tight sm:text-2xl" style={{ color: BRAND.ink }}>{kpi.value}</p>
               </div>
             ))}
           </div>
@@ -769,20 +791,23 @@ const [contextReady, setContextReady] = useState(false)
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/dashboard/menu"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-orange-500/20 transition hover:bg-orange-400 active:scale-95"
+              className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition active:scale-95"
+              style={{ background: BRAND.burgundy, boxShadow: `0 8px 20px ${BRAND.burgundy}26` }}
             >
               Manage Menu
               <ArrowUpRight size={12} />
             </Link>
             <Link
               href="/dashboard/analytics"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.07] bg-white/[0.04] px-4 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/[0.07] hover:text-white active:scale-95"
+              className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition active:scale-95"
+              style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
             >
               Analytics
             </Link>
             <Link
               href="/dashboard/orders"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.07] bg-white/[0.04] px-4 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/[0.07] hover:text-white active:scale-95"
+              className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition active:scale-95"
+              style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
             >
               <ClipboardList size={11} />
               Orders
@@ -791,7 +816,8 @@ const [contextReady, setContextReady] = useState(false)
               href={`/r/${stats.slug}`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.07] bg-white/[0.04] px-4 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/[0.07] hover:text-white active:scale-95 sm:hidden"
+              className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition active:scale-95 sm:hidden"
+              style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
             >
               Preview
               <ArrowUpRight size={11} />
@@ -804,37 +830,40 @@ const [contextReady, setContextReady] = useState(false)
         {statCards.map((card) => (
           <div
             key={card.title}
-            className={`relative overflow-hidden rounded-2xl ${card.bg} ring-1 ${card.ring} p-3.5 transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] sm:p-4`}
+            className="relative overflow-hidden rounded-2xl border p-3.5 transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] sm:p-4"
+            style={{ borderColor: `${card.color}33`, background: `${card.color}0D` }}
           >
-            <div className={`mb-2 flex h-7 w-7 items-center justify-center rounded-lg bg-black/20 ${card.color}`}>
+            <div
+              className="mb-2 flex h-7 w-7 items-center justify-center rounded-lg"
+              style={{ background: BRAND.card, color: card.color }}
+            >
               {card.icon}
             </div>
-            <p className={`text-xl font-bold tracking-tight sm:text-2xl ${card.color}`}>{card.value}</p>
-            <p className="mt-0.5 text-[10px] font-semibold text-white/70">{card.title}</p>
-            <p className="mt-0.5 text-[9px] leading-none text-white/30">{card.sub}</p>
+            <p className="text-xl font-bold tracking-tight sm:text-2xl" style={{ color: card.color }}>{card.value}</p>
+            <p className="mt-0.5 text-[10px] font-semibold" style={{ color: `${BRAND.ink}B3` }}>{card.title}</p>
+            <p className="mt-0.5 text-[9px] leading-none" style={{ color: `${BRAND.ink}59` }}>{card.sub}</p>
           </div>
         ))}
       </div>
 
-<OrdersSection
-  restaurantId={context.restaurantId}
-/>
+      <OrdersSection restaurantId={context.restaurantId} />
 
-<VerifyVisitCard restaurantId={context.restaurantId} />
+      <VerifyVisitCard restaurantId={context.restaurantId} />
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
-        <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5 sm:p-6">
+        <div className={`${cardBase} p-5 sm:p-6`} style={cardStyle}>
           <div className="mb-5 flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <TrendingUp size={13} className="text-orange-400" />
-                <p className="text-xs font-semibold uppercase tracking-wider text-orange-400">
+                <TrendingUp size={13} style={{ color: BRAND.burgundy }} />
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.burgundy }}>
                   7-day performance
                 </p>
               </div>
-              <p className="mt-0.5 text-[11px] text-zinc-600">Traffic · Engagement · AI usage</p>
+              <p className="mt-0.5 text-[11px]" style={{ color: BRAND.inkFaint }}>Traffic · Engagement · AI usage</p>
             </div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-[10px] text-zinc-500">
-              <Activity size={10} className="text-orange-400/70" />
+            <div className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px]" style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.inkSoft }}>
+              <Activity size={10} style={{ color: `${BRAND.burgundy}B3` }} />
               Peak: {stats.busiestDay ?? '—'}
             </div>
           </div>
@@ -846,28 +875,28 @@ const [contextReady, setContextReady] = useState(false)
               { label: 'AI chats', value: stats.aiChats7d, icon: <MessageSquareMore size={11} /> },
               { label: 'Top dish', value: stats.topItem7d ?? '—', icon: <Flame size={11} />, trunc: true },
             ].map((m) => (
-              <div key={m.label} className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3">
+              <div key={m.label} className="rounded-xl border p-3" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
                 <div className="mb-1.5 flex items-center justify-between gap-1">
-                  <span className="truncate text-[10px] text-zinc-600">{m.label}</span>
-                  <span className="shrink-0 text-orange-400/70">{m.icon}</span>
+                  <span className="truncate text-[10px]" style={{ color: BRAND.inkFaint }}>{m.label}</span>
+                  <span className="shrink-0" style={{ color: `${BRAND.burgundy}B3` }}>{m.icon}</span>
                 </div>
-                <p className={`font-bold text-white ${m.trunc ? 'truncate text-xs' : 'text-base sm:text-lg'}`}>
+                <p className={`font-bold ${m.trunc ? 'truncate text-xs' : 'text-base sm:text-lg'}`} style={{ color: BRAND.ink }}>
                   {m.value}
                 </p>
               </div>
             ))}
           </div>
 
-          <div className="rounded-xl border border-white/[0.05] bg-black/30 p-4">
+          <div className="rounded-xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivoryDeep }}>
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-zinc-300">Daily trend</p>
-                <p className="mt-0.5 text-[10px] text-zinc-700">Last 7 days</p>
+                <p className="text-xs font-semibold" style={{ color: BRAND.ink }}>Daily trend</p>
+                <p className="mt-0.5 text-[10px]" style={{ color: BRAND.inkFaint }}>Last 7 days</p>
               </div>
               <div className="flex items-center gap-3">
-                <Legend tone="bg-blue-500" label="Visitors" />
-                <Legend tone="bg-orange-500" label="Views" />
-                <Legend tone="bg-violet-500" label="AI" />
+                <Legend color={BRAND.sky} label="Visitors" />
+                <Legend color={BRAND.burgundy} label="Views" />
+                <Legend color={BRAND.plum} label="AI" />
               </div>
             </div>
 
@@ -875,11 +904,11 @@ const [contextReady, setContextReady] = useState(false)
               {stats.dailyTrend.map((day) => (
                 <div key={day.key} className="group flex flex-1 flex-col items-center gap-0">
                   <div className="flex w-full flex-1 items-end gap-px">
-                    <Bar value={day.visitors} max={maxDaily} tone="bg-blue-500" />
-                    <Bar value={day.views} max={maxDaily} tone="bg-orange-500" />
-                    <Bar value={day.chats} max={maxDaily} tone="bg-violet-500" />
+                    <Bar value={day.visitors} max={maxDaily} color={BRAND.sky} />
+                    <Bar value={day.views} max={maxDaily} color={BRAND.burgundy} />
+                    <Bar value={day.chats} max={maxDaily} color={BRAND.plum} />
                   </div>
-                  <p className="mt-1.5 whitespace-nowrap text-[8px] text-zinc-700 sm:text-[9px]">
+                  <p className="mt-1.5 whitespace-nowrap text-[8px] sm:text-[9px]" style={{ color: BRAND.inkFaint }}>
                     {day.label}
                   </p>
                 </div>
@@ -903,10 +932,10 @@ const [contextReady, setContextReady] = useState(false)
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5 sm:p-6">
+        <div className={`${cardBase} p-5 sm:p-6`} style={cardStyle}>
           <div className="mb-4 flex items-center gap-2">
-            <ChefHat size={13} className="text-orange-400" />
-            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+            <ChefHat size={13} style={{ color: BRAND.burgundy }} />
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.inkSoft }}>
               What matters now
             </p>
           </div>
@@ -944,8 +973,8 @@ const [contextReady, setContextReady] = useState(false)
             />
           </div>
 
-          <div className="mt-4 rounded-xl border border-orange-500/12 bg-gradient-to-br from-orange-500/6 to-amber-500/3 p-4">
-            <p className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-orange-500/70">
+          <div className="mt-4 rounded-xl border p-4" style={{ borderColor: `${BRAND.burgundy}26`, background: `linear-gradient(135deg, ${BRAND.burgundy}0F, ${BRAND.gold}08)` }}>
+            <p className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em]" style={{ color: `${BRAND.burgundy}BF` }}>
               Focus this week
             </p>
             <ul className="space-y-2">
@@ -954,8 +983,8 @@ const [contextReady, setContextReady] = useState(false)
                 'Rewrite high-view, low-conversion items.',
                 'Plan offers around your peak traffic day.',
               ].map((tip) => (
-                <li key={tip} className="flex items-start gap-2 text-[11px] leading-relaxed text-zinc-400">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500/70" />
+                <li key={tip} className="flex items-start gap-2 text-[11px] leading-relaxed" style={{ color: BRAND.inkSoft }}>
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: `${BRAND.burgundy}B3` }} />
                   {tip}
                 </li>
               ))}
@@ -972,18 +1001,19 @@ const [contextReady, setContextReady] = useState(false)
       {stats.topItemToday && (
         <Link
           href="/dashboard/menu"
-          className="group flex items-center gap-3.5 rounded-2xl border border-orange-500/15 bg-gradient-to-r from-orange-500/8 to-transparent px-5 py-4 transition hover:border-orange-500/25 hover:from-orange-500/12 active:scale-[0.99]"
+          className="group flex items-center gap-3.5 rounded-2xl border px-5 py-4 transition hover:shadow-[0_2px_12px_rgba(122,35,51,0.1)] active:scale-[0.99]"
+          style={{ borderColor: `${BRAND.burgundy}26`, background: `linear-gradient(90deg, ${BRAND.burgundy}14, transparent)` }}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/15">
-            <Flame size={15} className="text-orange-400" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ background: `${BRAND.burgundy}26` }}>
+            <Flame size={15} style={{ color: BRAND.burgundy }} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-orange-400/60">
+            <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: `${BRAND.burgundy}99` }}>
               Trending right now
             </p>
-            <p className="truncate text-sm font-bold text-white">{stats.topItemToday}</p>
+            <p className="truncate text-sm font-bold" style={{ color: BRAND.ink }}>{stats.topItemToday}</p>
           </div>
-          <ChevronRight size={14} className="shrink-0 text-orange-400/40 transition group-hover:text-orange-400" />
+          <ChevronRight size={14} className="shrink-0 transition" style={{ color: `${BRAND.burgundy}66` }} />
         </Link>
       )}
     </div>

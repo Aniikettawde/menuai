@@ -24,6 +24,32 @@ import {
   CheckCheck,
 } from 'lucide-react'
 
+// ── Brand tokens (mirrors the ivory/burgundy system used across the dashboard) ──
+const BRAND = {
+  ivory: '#FBF6EC',
+  ivorySoft: '#F3ECDD',
+  ivoryDeep: '#F8F3E7',
+  card: '#FFFFFF',
+  line: '#E7DDC9',
+  ink: '#2B211F',
+  inkSoft: '#6E5F57',
+  inkFaint: '#9C8F86',
+  burgundy: '#7A2333',
+  burgundyDark: '#5C1A27',
+  burgundyLight: '#9B3049',
+  gold: '#C08A2E',
+  sky: '#3E6FA6',
+  skyDeep: '#2E5883',
+  emerald: '#2F7A5C',
+  rose: '#B23B4A',
+}
+
+const cardBase = 'rounded-3xl border shadow-[0_1px_2px_rgba(43,33,31,0.04)]'
+const cardStyle = { borderColor: BRAND.line, background: BRAND.card }
+const inputStyle = { borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.ink }
+const inputClass =
+  'w-full rounded-2xl border px-4 py-3 text-sm outline-none transition focus:shadow-[0_0_0_3px_rgba(122,35,51,0.12)]'
+
 type OfferKind =
   | 'percent'
   | 'fixed'
@@ -493,10 +519,10 @@ export default function OffersPage() {
   if (contextLoading || loading) {
     return (
       <div className="space-y-4">
-        <div className="h-24 animate-pulse rounded-3xl border border-white/[0.06] bg-white/[0.03]" />
+        <div className="h-24 animate-pulse rounded-3xl border" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }} />
         <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
-          <div className="h-[620px] animate-pulse rounded-3xl border border-white/[0.06] bg-white/[0.03]" />
-          <div className="h-[620px] animate-pulse rounded-3xl border border-white/[0.06] bg-white/[0.03]" />
+          <div className="h-[620px] animate-pulse rounded-3xl border" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }} />
+          <div className="h-[620px] animate-pulse rounded-3xl border" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }} />
         </div>
       </div>
     )
@@ -504,71 +530,84 @@ export default function OffersPage() {
 
   if (!context?.restaurantId) {
     return (
-      <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-6 text-center">
-        <p className="text-lg font-semibold text-white">No restaurant found</p>
-        <p className="mt-2 text-sm text-zinc-500">Set up your restaurant first.</p>
+      <div className={`${cardBase} p-6 text-center`} style={cardStyle}>
+        <p className="text-lg font-semibold" style={{ color: BRAND.ink }}>No restaurant found</p>
+        <p className="mt-2 text-sm" style={{ color: BRAND.inkSoft }}>Set up your restaurant first.</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <section className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-[#111111] p-5 sm:p-6">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(249,115,22,0.14),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(251,191,36,0.10),transparent_30%)]" />
+      <section className={`relative overflow-hidden ${cardBase} p-5 sm:p-6`} style={cardStyle}>
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(circle at top right, rgba(122,35,51,0.08), transparent 35%), radial-gradient(circle at bottom left, rgba(192,138,46,0.08), transparent 30%)',
+          }}
+        />
         <div className="relative flex items-start justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-300">
+            <div
+              className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold"
+              style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}
+            >
               <Gift size={13} />
               Offers
             </div>
-            <h1 className="mt-3 text-2xl font-bold text-white sm:text-3xl">
+            <h1
+              className="mt-3 text-2xl font-bold sm:text-3xl"
+              style={{ color: BRAND.ink, fontFamily: 'var(--font-fraunces, Fraunces, Georgia, serif)' }}
+            >
               Create offers that restaurants understand fast
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-500">
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed" style={{ color: BRAND.inkSoft }}>
               Build simple, clear offers like combo deals, free items, happy hour discounts, and special dishes.
             </p>
           </div>
 
-          <div className="hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 text-right sm:block">
-            <p className="text-xs text-zinc-500">Total offers</p>
-            <p className="text-xl font-bold text-white">{offers.length}</p>
+          <div className="hidden rounded-2xl border p-3 text-right sm:block" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }}>
+            <p className="text-xs" style={{ color: BRAND.inkFaint }}>Total offers</p>
+            <p className="text-xl font-bold" style={{ color: BRAND.ink }}>{offers.length}</p>
           </div>
         </div>
       </section>
 
       {error && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}12`, color: BRAND.rose }}>
           {error}
         </div>
       )}
 
       {success && (
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}12`, color: BRAND.emerald }}>
           {success}
         </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1.08fr_.92fr]">
-        <section className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5 sm:p-6">
+        <section className={`${cardBase} p-5 sm:p-6`} style={cardStyle}>
           <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-orange-400" />
-            <h2 className="text-sm font-semibold text-white">Create new offer</h2>
+            <Sparkles size={16} style={{ color: BRAND.burgundy }} />
+            <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Create new offer</h2>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Offer title</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Offer title</label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Lunch Combo - Save ₹120"
-                className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                className={inputClass}
+                style={inputStyle}
               />
-              <p className="mt-1 text-[11px] text-zinc-500">Keep it short and customer-friendly.</p>
+              <p className="mt-1 text-[11px]" style={{ color: BRAND.inkFaint }}>Keep it short and customer-friendly.</p>
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Offer type</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Offer type</label>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {offerKinds.map((kind) => {
                   const active = offerKind === kind.value
@@ -577,17 +616,18 @@ export default function OffersPage() {
                       key={kind.value}
                       type="button"
                       onClick={() => setOfferKind(kind.value)}
-                      className={`rounded-2xl border px-4 py-4 text-left transition ${
-                        active
-                          ? 'border-orange-500/40 bg-orange-500/10 text-white'
-                          : 'border-white/[0.08] bg-black/20 text-zinc-300 hover:bg-white/[0.04]'
-                      }`}
+                      className="rounded-2xl border px-4 py-4 text-left transition"
+                      style={{
+                        borderColor: active ? `${BRAND.burgundy}59` : BRAND.line,
+                        background: active ? `${BRAND.burgundy}12` : BRAND.ivory,
+                        color: active ? BRAND.ink : BRAND.inkSoft,
+                      }}
                     >
-                      <div className="flex items-center gap-2 text-sm font-semibold">
+                      <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: active ? BRAND.burgundy : BRAND.ink }}>
                         {kind.icon}
                         {kind.label}
                       </div>
-                      <p className="mt-1 text-xs leading-relaxed text-zinc-500">{kind.helper}</p>
+                      <p className="mt-1 text-xs leading-relaxed" style={{ color: BRAND.inkFaint }}>{kind.helper}</p>
                     </button>
                   )
                 })}
@@ -595,101 +635,110 @@ export default function OffersPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Badge text</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Badge text</label>
               <input
                 value={badgeText}
                 onChange={(e) => setBadgeText(e.target.value)}
                 placeholder="Popular"
-                className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Subtitle</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Subtitle</label>
               <input
                 value={subtitle}
                 onChange={(e) => setSubtitle(e.target.value)}
                 placeholder="Available only for lunch"
-                className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Description</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Description</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 placeholder="Use this space to explain the offer in simple words for the restaurant owner and customer."
-                className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Coupon code</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Coupon code</label>
               <input
                 value={couponCode}
                 onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                 placeholder="LUNCH10"
-                className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Minimum order amount (₹)</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Minimum order amount (₹)</label>
               <input
                 type="number"
                 min={0}
                 value={minOrderAmount}
                 onChange={(e) => setMinOrderAmount(e.target.value)}
                 placeholder="0"
-                className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Starts at</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Starts at</label>
               <input
                 type="datetime-local"
                 value={startsAt}
                 onChange={(e) => setStartsAt(e.target.value)}
-                className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-xs font-medium text-zinc-500">Ends at</label>
+              <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Ends at</label>
               <input
                 type="datetime-local"
                 value={endsAt}
                 onChange={(e) => setEndsAt(e.target.value)}
-                className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
             {offerKind === 'percent' && (
               <div>
-                <label className="mb-2 block text-xs font-medium text-zinc-500">Discount %</label>
+                <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Discount %</label>
                 <input
                   type="number"
                   min={1}
                   max={100}
                   value={percent}
                   onChange={(e) => setPercent(Number(e.target.value))}
-                  className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                  className={inputClass}
+                  style={inputStyle}
                 />
               </div>
             )}
 
             {offerKind === 'fixed' && (
               <div>
-                <label className="mb-2 block text-xs font-medium text-zinc-500">Discount amount (₹)</label>
+                <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Discount amount (₹)</label>
                 <input
                   type="number"
                   min={1}
                   value={amount}
                   onChange={(e) => setAmount(Number(e.target.value))}
-                  className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                  className={inputClass}
+                  style={inputStyle}
                 />
               </div>
             )}
@@ -699,11 +748,12 @@ export default function OffersPage() {
               offerKind !== 'today_special' &&
               offerKind !== 'happy_hour' && (
                 <div>
-                  <label className="mb-2 block text-xs font-medium text-zinc-500">Applies to</label>
+                  <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Applies to</label>
                   <select
                     value={targetType}
                     onChange={(e) => setTargetType(e.target.value as TargetType)}
-                    className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none"
+                    className={inputClass}
+                    style={inputStyle}
                   >
                     <option value="any">Any order</option>
                     <option value="menu_item">Selected menu item</option>
@@ -714,21 +764,22 @@ export default function OffersPage() {
 
             {(offerKind === 'free_item' || offerKind === 'cart_value_free_item' || offerKind === 'today_special') && (
               <div className="md:col-span-2">
-                <label className="mb-2 block text-xs font-medium text-zinc-500">Select menu item</label>
+                <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Select menu item</label>
 
-                <div className="mb-3 flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3">
-                  <Search size={14} className="text-zinc-500" />
+                <div className="mb-3 flex items-center gap-2 rounded-2xl border px-4 py-3" style={inputStyle}>
+                  <Search size={14} style={{ color: BRAND.inkFaint }} />
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search menu item"
-                    className="w-full bg-transparent text-sm text-white outline-none"
+                    className="w-full bg-transparent text-sm outline-none"
+                    style={{ color: BRAND.ink }}
                   />
                 </div>
 
-                <div className="max-h-56 space-y-2 overflow-auto rounded-2xl border border-white/[0.06] bg-black/20 p-2">
+                <div className="max-h-56 space-y-2 overflow-auto rounded-2xl border p-2" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
                   {filteredMenuItems.length === 0 ? (
-                    <div className="p-4 text-sm text-zinc-500">No matching menu items found.</div>
+                    <div className="p-4 text-sm" style={{ color: BRAND.inkFaint }}>No matching menu items found.</div>
                   ) : (
                     filteredMenuItems.map((item) => {
                       const active = selectedItemId === item.id
@@ -737,19 +788,19 @@ export default function OffersPage() {
                           key={item.id}
                           type="button"
                           onClick={() => setSelectedItemId(item.id)}
-                          className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition ${
-                            active
-                              ? 'bg-orange-500/15 text-white'
-                              : 'bg-white/[0.02] text-zinc-300 hover:bg-white/[0.04]'
-                          }`}
+                          className="flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition"
+                          style={{
+                            background: active ? `${BRAND.burgundy}14` : BRAND.card,
+                            color: active ? BRAND.ink : BRAND.inkSoft,
+                          }}
                         >
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{item.name}</p>
-                            <p className="text-xs text-zinc-500">
+                            <p className="truncate text-sm font-medium" style={{ color: active ? BRAND.ink : BRAND.ink }}>{item.name}</p>
+                            <p className="text-xs" style={{ color: BRAND.inkFaint }}>
                               {item.is_available ? 'Available' : 'Unavailable'}
                             </p>
                           </div>
-                          <div className="shrink-0 text-sm text-zinc-400">{toMoney(item.price)}</div>
+                          <div className="shrink-0 text-sm" style={{ color: BRAND.inkFaint }}>{toMoney(item.price)}</div>
                         </button>
                       )
                     })
@@ -760,12 +811,12 @@ export default function OffersPage() {
 
             {offerKind === 'combo' && (
               <div className="md:col-span-2">
-                <label className="mb-2 block text-xs font-medium text-zinc-500">Choose combo items</label>
-                <p className="mb-3 text-[11px] text-zinc-500">
+                <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Choose combo items</label>
+                <p className="mb-3 text-[11px]" style={{ color: BRAND.inkFaint }}>
                   Example: Burger + Fries + Coke. Pick 2 or more items.
                 </p>
 
-                <div className="grid max-h-56 gap-2 overflow-auto rounded-2xl border border-white/[0.06] bg-black/20 p-2">
+                <div className="grid max-h-56 gap-2 overflow-auto rounded-2xl border p-2" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
                   {filteredMenuItems.map((item) => {
                     const active = comboItemIds.includes(item.id)
                     return (
@@ -779,61 +830,63 @@ export default function OffersPage() {
                               : [...prev, item.id]
                           )
                         }
-                        className={`flex items-center justify-between rounded-2xl px-4 py-3 text-left transition ${
-                          active
-                            ? 'bg-emerald-500/15 text-white'
-                            : 'bg-white/[0.02] text-zinc-300 hover:bg-white/[0.04]'
-                        }`}
+                        className="flex items-center justify-between rounded-2xl px-4 py-3 text-left transition"
+                        style={{
+                          background: active ? `${BRAND.emerald}14` : BRAND.card,
+                          color: active ? BRAND.ink : BRAND.inkSoft,
+                        }}
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{item.name}</p>
-                          <p className="text-xs text-zinc-500">
+                          <p className="truncate text-sm font-medium" style={{ color: BRAND.ink }}>{item.name}</p>
+                          <p className="text-xs" style={{ color: BRAND.inkFaint }}>
                             {item.is_available ? 'Available' : 'Unavailable'}
                           </p>
                         </div>
-                        <div className="shrink-0 text-sm text-zinc-400">{toMoney(item.price)}</div>
+                        <div className="shrink-0 text-sm" style={{ color: BRAND.inkFaint }}>{toMoney(item.price)}</div>
                       </button>
                     )
                   })}
                 </div>
 
                 <div className="mt-3">
-                  <label className="mb-2 block text-xs font-medium text-zinc-500">Combo price (₹)</label>
+                  <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Combo price (₹)</label>
                   <input
                     type="number"
                     min={1}
                     value={comboPrice}
                     onChange={(e) => setComboPrice(e.target.value)}
                     placeholder="499"
-                    className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-orange-500/40"
+                    className={inputClass}
+                    style={inputStyle}
                   />
                 </div>
 
-                <div className="mt-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 text-xs text-zinc-400">
+                <div className="mt-3 rounded-2xl border p-3 text-xs" style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.inkSoft }}>
                   Selected combo items: {selectedComboItems.length}
                 </div>
               </div>
             )}
 
             {offerKind === 'cart_value_free_item' && (
-              <div className="md:col-span-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-                <p className="mb-3 text-sm font-medium text-white">Free item above cart value</p>
-                <p className="mb-3 text-xs text-zinc-500">Example: Free dessert when cart goes above ₹799.</p>
+              <div className="md:col-span-2 rounded-2xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+                <p className="mb-3 text-sm font-medium" style={{ color: BRAND.ink }}>Free item above cart value</p>
+                <p className="mb-3 text-xs" style={{ color: BRAND.inkFaint }}>Example: Free dessert when cart goes above ₹799.</p>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-zinc-500">Threshold amount (₹)</label>
+                    <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Threshold amount (₹)</label>
                     <input
                       type="number"
                       min={1}
                       value={minOrderAmount}
                       onChange={(e) => setMinOrderAmount(e.target.value)}
-                      className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none"
+                      className={inputClass}
+                      style={inputStyle}
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-zinc-500">Free item</label>
-                    <div className="rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white">
+                    <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Free item</label>
+                    <div className="rounded-2xl border px-4 py-3 text-sm" style={inputStyle}>
                       {selectedItemId
                         ? menuItems.find((i) => i.id === selectedItemId)?.name ?? 'Selected'
                         : 'Select item above'}
@@ -844,38 +897,41 @@ export default function OffersPage() {
             )}
 
             {offerKind === 'buy_x_get_y' && (
-              <div className="md:col-span-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-                <p className="mb-3 text-sm font-medium text-white">Buy X get Y</p>
-                <p className="mb-3 text-xs text-zinc-500">Example: Buy 2 pizzas, get 1 garlic bread free.</p>
+              <div className="md:col-span-2 rounded-2xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+                <p className="mb-3 text-sm font-medium" style={{ color: BRAND.ink }}>Buy X get Y</p>
+                <p className="mb-3 text-xs" style={{ color: BRAND.inkFaint }}>Example: Buy 2 pizzas, get 1 garlic bread free.</p>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-zinc-500">Buy quantity</label>
+                    <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Buy quantity</label>
                     <input
                       type="number"
                       min={1}
                       value={buyQty}
                       onChange={(e) => setBuyQty(Number(e.target.value))}
-                      className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none"
+                      className={inputClass}
+                      style={inputStyle}
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-zinc-500">Get quantity</label>
+                    <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Get quantity</label>
                     <input
                       type="number"
                       min={1}
                       value={getQty}
                       onChange={(e) => setGetQty(Number(e.target.value))}
-                      className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none"
+                      className={inputClass}
+                      style={inputStyle}
                     />
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-zinc-500">Buy item (optional)</label>
+                    <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Buy item (optional)</label>
                     <select
                       value={buyItemId}
                       onChange={(e) => setBuyItemId(e.target.value)}
-                      className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none"
+                      className={inputClass}
+                      style={inputStyle}
                     >
                       <option value="">Any item</option>
                       {menuItems.map((item) => (
@@ -887,11 +943,12 @@ export default function OffersPage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-zinc-500">Free item (optional)</label>
+                    <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Free item (optional)</label>
                     <select
                       value={getItemId}
                       onChange={(e) => setGetItemId(e.target.value)}
-                      className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none"
+                      className={inputClass}
+                      style={inputStyle}
                     >
                       <option value="">Any free item</option>
                       {menuItems.map((item) => (
@@ -906,35 +963,37 @@ export default function OffersPage() {
             )}
 
             {offerKind === 'happy_hour' && (
-              <div className="md:col-span-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-                <p className="mb-3 text-sm font-medium text-white">Happy hour schedule</p>
-                <p className="mb-3 text-xs text-zinc-500">
+              <div className="md:col-span-2 rounded-2xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+                <p className="mb-3 text-sm font-medium" style={{ color: BRAND.ink }}>Happy hour schedule</p>
+                <p className="mb-3 text-xs" style={{ color: BRAND.inkFaint }}>
                   Example: 20% off mocktails from 3 PM to 6 PM on selected days.
                 </p>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-zinc-500">Start time</label>
+                    <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Start time</label>
                     <input
                       type="time"
                       value={happyHourStart}
                       onChange={(e) => setHappyHourStart(e.target.value)}
-                      className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none"
+                      className={inputClass}
+                      style={inputStyle}
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-zinc-500">End time</label>
+                    <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>End time</label>
                     <input
                       type="time"
                       value={happyHourEnd}
                       onChange={(e) => setHappyHourEnd(e.target.value)}
-                      className="w-full rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm text-white outline-none"
+                      className={inputClass}
+                      style={inputStyle}
                     />
                   </div>
                 </div>
 
                 <div className="mt-4">
-                  <label className="mb-2 block text-xs font-medium text-zinc-500">Days</label>
+                  <label className="mb-2 block text-xs font-medium" style={{ color: BRAND.inkFaint }}>Days</label>
                   <div className="flex flex-wrap gap-2">
                     {dayLabels.map((label, index) => {
                       const active = happyHourDays.includes(index)
@@ -943,11 +1002,12 @@ export default function OffersPage() {
                           key={label}
                           type="button"
                           onClick={() => toggleDay(index)}
-                          className={`rounded-full px-3 py-2 text-xs font-medium transition ${
+                          className="rounded-full px-3 py-2 text-xs font-medium transition"
+                          style={
                             active
-                              ? 'bg-orange-500 text-white'
-                              : 'border border-white/[0.08] bg-black/30 text-zinc-400 hover:bg-white/[0.04]'
-                          }`}
+                              ? { background: BRAND.burgundy, color: '#fff' }
+                              : { border: `1px solid ${BRAND.line}`, background: BRAND.ivorySoft, color: BRAND.inkSoft }
+                          }
                         >
                           {label}
                         </button>
@@ -959,9 +1019,9 @@ export default function OffersPage() {
             )}
 
             {offerKind === 'today_special' && (
-              <div className="md:col-span-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-                <p className="mb-3 text-sm font-medium text-white">Today’s special highlight</p>
-                <p className="mb-3 text-xs text-zinc-500">
+              <div className="md:col-span-2 rounded-2xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+                <p className="mb-3 text-sm font-medium" style={{ color: BRAND.ink }}>Today's special highlight</p>
+                <p className="mb-3 text-xs" style={{ color: BRAND.inkFaint }}>
                   This is best for chef recommendations and high-margin items.
                 </p>
               </div>
@@ -972,7 +1032,8 @@ export default function OffersPage() {
             <button
               onClick={() => void createOffer()}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ background: BRAND.burgundy, boxShadow: `0 8px 20px ${BRAND.burgundy}26` }}
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
               Create offer
@@ -981,22 +1042,23 @@ export default function OffersPage() {
             <button
               type="button"
               onClick={resetForm}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.06]"
+              className="inline-flex items-center gap-2 rounded-2xl border px-5 py-3 text-sm font-semibold transition hover:bg-black/[0.02]"
+              style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.ink }}
             >
               Reset
             </button>
           </div>
         </section>
 
-        <section className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5 sm:p-6">
+        <section className={`${cardBase} p-5 sm:p-6`} style={cardStyle}>
           <div className="flex items-center gap-2">
-            <Ticket size={16} className="text-orange-400" />
-            <h2 className="text-sm font-semibold text-white">Existing offers</h2>
+            <Ticket size={16} style={{ color: BRAND.burgundy }} />
+            <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Existing offers</h2>
           </div>
 
           <div className="mt-5 space-y-3">
             {offers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] p-6 text-sm text-zinc-500">
+              <div className="rounded-2xl border border-dashed p-6 text-sm" style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.inkFaint }}>
                 No offers yet. Create your first one on the left.
               </div>
             ) : (
@@ -1005,27 +1067,31 @@ export default function OffersPage() {
                 const summary = renderOfferSummary(offer)
 
                 return (
-                  <div key={offer.id} className="rounded-2xl border border-white/[0.06] bg-black/20 p-4">
+                  <div key={offer.id} className="rounded-2xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-white">{offer.title}</p>
+                          <p className="truncate text-sm font-semibold" style={{ color: BRAND.ink }}>{offer.title}</p>
                           {offer.badge_text && (
-                            <span className="rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-300">
+                            <span
+                              className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                              style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}
+                            >
                               {offer.badge_text}
                             </span>
                           )}
                         </div>
 
-                        <p className="mt-1 text-xs text-zinc-500">{summary}</p>
+                        <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>{summary}</p>
 
-                        {offer.subtitle && <p className="mt-1 text-xs text-zinc-400">{offer.subtitle}</p>}
+                        {offer.subtitle && <p className="mt-1 text-xs" style={{ color: BRAND.inkSoft }}>{offer.subtitle}</p>}
 
                         <div className="mt-2 flex flex-wrap gap-2">
                           {offer.coupon_code && (
                             <button
                               onClick={() => void copyOfferCode(offer.coupon_code, offer.id)}
-                              className="inline-flex items-center gap-1 rounded-full border border-orange-500/20 bg-orange-500/10 px-2.5 py-1 text-[10px] font-semibold text-orange-300 transition hover:bg-orange-500/15"
+                              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition hover:opacity-80"
+                              style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}
                             >
                               {copiedId === offer.id ? <CheckCheck size={11} /> : <Copy size={11} />}
                               {copiedId === offer.id ? 'COPIED' : `CODE: ${offer.coupon_code}`}
@@ -1033,31 +1099,37 @@ export default function OffersPage() {
                           )}
 
                           {offer.min_order_amount_paise !== null && (
-                            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] text-zinc-400">
+                            <span className="rounded-full border px-2.5 py-1 text-[10px]" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>
                               Min {toMoney(offer.min_order_amount_paise)}
                             </span>
                           )}
 
                           {offer.starts_at && (
-                            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] text-zinc-400">
+                            <span className="rounded-full border px-2.5 py-1 text-[10px]" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>
                               Start: {new Date(offer.starts_at).toLocaleString()}
                             </span>
                           )}
 
                           {offer.ends_at && (
-                            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] text-zinc-400">
+                            <span className="rounded-full border px-2.5 py-1 text-[10px]" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>
                               End: {new Date(offer.ends_at).toLocaleString()}
                             </span>
                           )}
 
                           {offer.offer_kind === 'combo' && Array.isArray(meta.combo_item_ids) && (
-                            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] text-emerald-300">
+                            <span
+                              className="rounded-full border px-2.5 py-1 text-[10px]"
+                              style={{ borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}14`, color: BRAND.emerald }}
+                            >
                               {meta.combo_item_ids.length} combo items
                             </span>
                           )}
 
                           {offer.offer_kind === 'happy_hour' && Array.isArray(meta.days_of_week) && (
-                            <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[10px] text-sky-300">
+                            <span
+                              className="rounded-full border px-2.5 py-1 text-[10px]"
+                              style={{ borderColor: `${BRAND.sky}33`, background: `${BRAND.sky}14`, color: BRAND.skyDeep }}
+                            >
                               Happy hour days set
                             </span>
                           )}
@@ -1066,29 +1138,27 @@ export default function OffersPage() {
 
                       <button
                         onClick={() => void toggleOffer(offer.id, offer.is_active)}
-                        className="text-zinc-500 transition hover:text-white"
+                        className="transition hover:opacity-70"
+                        style={{ color: BRAND.inkFaint }}
                         aria-label="Toggle offer active state"
                       >
                         {offer.is_active ? (
-                          <ToggleRight size={24} className="text-emerald-400" />
+                          <ToggleRight size={24} style={{ color: BRAND.emerald }} />
                         ) : (
                           <ToggleLeft size={24} />
                         )}
                       </button>
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-3">
-                      <span
-                        className={`text-xs font-medium ${
-                          offer.is_active ? 'text-emerald-400' : 'text-zinc-500'
-                        }`}
-                      >
+                    <div className="mt-4 flex items-center justify-between border-t pt-3" style={{ borderColor: BRAND.line }}>
+                      <span className="text-xs font-medium" style={{ color: offer.is_active ? BRAND.emerald : BRAND.inkFaint }}>
                         {offer.is_active ? 'Active' : 'Inactive'}
                       </span>
 
                       <button
                         onClick={() => void deleteOffer(offer.id)}
-                        className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs text-red-300 transition hover:bg-red-500/10"
+                        className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs transition hover:bg-black/[0.03]"
+                        style={{ color: BRAND.rose }}
                       >
                         <Trash2 size={14} />
                         Delete
@@ -1100,12 +1170,12 @@ export default function OffersPage() {
             )}
           </div>
 
-          <div className="mt-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold text-orange-400">
+          <div className="mt-5 rounded-2xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+            <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: BRAND.burgundy }}>
               <UtensilsCrossed size={14} />
               Tip
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: BRAND.inkFaint }}>
               Keep offer names simple: restaurant owners should instantly understand what the offer does.
             </p>
           </div>

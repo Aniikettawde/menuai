@@ -8,6 +8,28 @@ import {
   RefreshCw
 } from 'lucide-react'
 
+// ── Brand tokens (mirrors the ivory/burgundy system used across the dashboard) ──
+const BRAND = {
+  ivory: '#FBF6EC',
+  ivorySoft: '#F3ECDD',
+  card: '#FFFFFF',
+  line: '#E7DDC9',
+  ink: '#2B211F',
+  inkSoft: '#6E5F57',
+  inkFaint: '#9C8F86',
+  burgundy: '#7A2333',
+  plum: '#5B3A5C',
+  sky: '#3E6FA6',
+  emerald: '#2F7A5C',
+  rose: '#B23B4A',
+}
+
+const cardBase = 'rounded-3xl border shadow-[0_1px_2px_rgba(43,33,31,0.04)]'
+const cardStyle = { borderColor: BRAND.line, background: BRAND.card }
+const inputStyle = { borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.ink }
+const inputClass =
+  'rounded-2xl border px-4 py-3 text-sm outline-none transition focus:shadow-[0_0_0_3px_rgba(122,35,51,0.12)]'
+
 type TeamRole = 'manager' | 'waiter'
 
 type StaffRow = {
@@ -88,7 +110,8 @@ function TableRangeEditor({
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="group inline-flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400 transition hover:border-orange-500/30 hover:text-orange-300"
+        className="group inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs transition hover:opacity-90"
+        style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
       >
         {rangeLabel(row)}
         <Pencil size={10} className="opacity-0 transition group-hover:opacity-100" />
@@ -104,29 +127,33 @@ function TableRangeEditor({
         value={start}
         onChange={(e) => setStart(e.target.value === '' ? '' : Number(e.target.value))}
         placeholder="From"
-        className="w-16 rounded-xl border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white outline-none focus:border-orange-500"
+        className="w-16 rounded-xl border px-2 py-1.5 text-xs outline-none"
+        style={inputStyle}
       />
-      <span className="text-xs text-zinc-600">–</span>
+      <span className="text-xs" style={{ color: BRAND.inkFaint }}>–</span>
       <input
         type="number"
         min={1}
         value={end}
         onChange={(e) => setEnd(e.target.value === '' ? '' : Number(e.target.value))}
         placeholder="To"
-        className="w-16 rounded-xl border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white outline-none focus:border-orange-500"
+        className="w-16 rounded-xl border px-2 py-1.5 text-xs outline-none"
+        style={inputStyle}
       />
       <button
         type="button"
         onClick={() => void save()}
         disabled={saving}
-        className="rounded-xl bg-orange-500/20 p-1.5 text-orange-300 hover:bg-orange-500/30"
+        className="rounded-xl p-1.5 transition hover:opacity-80"
+        style={{ background: `${BRAND.burgundy}1F`, color: BRAND.burgundy }}
       >
         {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
       </button>
       <button
         type="button"
         onClick={cancel}
-        className="rounded-xl bg-white/[0.04] p-1.5 text-zinc-400 hover:text-white"
+        className="rounded-xl p-1.5 transition hover:opacity-80"
+        style={{ background: BRAND.ivorySoft, color: BRAND.inkFaint }}
       >
         <X size={12} />
       </button>
@@ -289,18 +316,18 @@ export default function StaffPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="h-24 animate-pulse rounded-3xl bg-white/[0.04]" />
-        <div className="h-64 animate-pulse rounded-3xl bg-white/[0.04]" />
+        <div className="h-24 animate-pulse rounded-3xl border" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }} />
+        <div className="h-64 animate-pulse rounded-3xl border" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }} />
       </div>
     )
   }
 
   if (!context || context.role === 'waiter') {
     return (
-      <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-6 text-center">
-        <Shield size={20} className="mx-auto text-zinc-500" />
-        <p className="mt-3 text-sm font-semibold text-white">Access restricted</p>
-        <p className="mt-1 text-xs text-zinc-500">Only owner and manager can manage staff.</p>
+      <div className={`${cardBase} p-6 text-center`} style={cardStyle}>
+        <Shield size={20} className="mx-auto" style={{ color: BRAND.inkFaint }} />
+        <p className="mt-3 text-sm font-semibold" style={{ color: BRAND.ink }}>Access restricted</p>
+        <p className="mt-1 text-xs" style={{ color: BRAND.inkSoft }}>Only owner and manager can manage staff.</p>
       </div>
     )
   }
@@ -312,22 +339,31 @@ export default function StaffPage() {
     <div className="space-y-4">
 
       {/* ── Header ── */}
-      <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
+      <div className={`${cardBase} p-5`} style={cardStyle}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-[11px] font-semibold text-orange-300">
+            <div
+              className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold"
+              style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}
+            >
               <Users size={12} />
               Staff management
             </div>
-            <h1 className="mt-3 text-2xl font-bold text-white">{context.restaurantName}</h1>
-            <p className="mt-1 text-sm text-zinc-500">
+            <h1
+              className="mt-3 text-2xl font-bold"
+              style={{ color: BRAND.ink, fontFamily: 'var(--font-fraunces, Fraunces, Georgia, serif)' }}
+            >
+              {context.restaurantName}
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: BRAND.inkSoft }}>
               Add staff, set table ranges, and monitor app status.
             </p>
           </div>
           <button
             type="button"
             onClick={() => void load()}
-            className="mt-1 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-2 text-zinc-400 hover:text-white"
+            className="mt-1 rounded-2xl border p-2 transition hover:opacity-80"
+            style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
           >
             <RefreshCw size={14} />
           </button>
@@ -340,27 +376,27 @@ export default function StaffPage() {
             { label: 'Active now', value: activeCount },
             { label: 'App installed', value: deviceCount },
           ].map((s) => (
-            <div key={s.label} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 text-center">
-              <p className="text-xl font-bold text-white">{s.value}</p>
-              <p className="mt-0.5 text-[11px] text-zinc-500">{s.label}</p>
+            <div key={s.label} className="rounded-2xl border p-3 text-center" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+              <p className="text-xl font-bold" style={{ color: BRAND.ink }}>{s.value}</p>
+              <p className="mt-0.5 text-[11px]" style={{ color: BRAND.inkFaint }}>{s.label}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* ── Download app banner ── */}
-      <div className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
+      <div className={`${cardBase} p-5`} style={cardStyle}>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {/* Android robot icon */}
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
-              <svg viewBox="0 0 24 24" className="h-6 w-6 fill-emerald-400" xmlns="http://www.w3.org/2000/svg">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl" style={{ background: `${BRAND.emerald}14` }}>
+              <svg viewBox="0 0 24 24" className="h-6 w-6" style={{ fill: BRAND.emerald }} xmlns="http://www.w3.org/2000/svg">
                 <path d="M17.523 15.341a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-11.046 0a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM2.4 8.4h19.2v8.4A2.4 2.4 0 0 1 19.2 19.2H4.8A2.4 2.4 0 0 1 2.4 16.8V8.4Zm1.08-1.2L5.04 3.96a.6.6 0 0 1 1.02.636L4.8 7.2h14.4l-1.26-2.604a.6.6 0 0 1 1.02-.636l1.56 3.24H21.6A1.2 1.2 0 0 1 22.8 8.4v.012H1.2V8.4A1.2 1.2 0 0 1 2.4 7.2h1.08Z" />
               </svg>
             </div>
             <div>
-              <p className="text-sm font-semibold text-white">DinezyDash — Staff App</p>
-              <p className="mt-0.5 text-xs text-zinc-500">
+              <p className="text-sm font-semibold" style={{ color: BRAND.ink }}>DinezyDash — Staff App</p>
+              <p className="mt-0.5 text-xs" style={{ color: BRAND.inkSoft }}>
                 Install on Android to receive order alerts &amp; manage tables
               </p>
             </div>
@@ -371,29 +407,30 @@ export default function StaffPage() {
             download="dinezy-dash.apk"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/20 px-4 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/30"
+            className="inline-flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-90"
+            style={{ borderColor: `${BRAND.emerald}4D`, background: `${BRAND.emerald}1F`, color: BRAND.emerald }}
           >
             <Download size={13} />
             Download APK
           </a>
         </div>
 
-        <p className="mt-3 rounded-xl bg-white/[0.03] px-3 py-2 text-[11px] text-zinc-500">
+        <p className="mt-3 rounded-xl px-3 py-2 text-[11px]" style={{ background: BRAND.ivorySoft, color: BRAND.inkFaint }}>
           Enable{' '}
-          <span className="text-zinc-300">Install from unknown sources</span>{' '}
+          <span style={{ color: BRAND.inkSoft }}>Install from unknown sources</span>{' '}
           on Android before installing · Settings → Security → Unknown apps
         </p>
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+        <div className="rounded-2xl border p-4 text-sm" style={{ borderColor: `${BRAND.rose}4D`, background: `${BRAND.rose}12`, color: BRAND.rose }}>
           {error}
         </div>
       )}
 
       {/* ── Add staff form ── */}
-      <form onSubmit={(e) => void addStaff(e)} className="rounded-3xl border border-white/[0.06] bg-[#111111] p-5">
-        <p className="mb-3 text-sm font-semibold text-white">Add staff member</p>
+      <form onSubmit={(e) => void addStaff(e)} className={`${cardBase} p-5`} style={cardStyle}>
+        <p className="mb-3 text-sm font-semibold" style={{ color: BRAND.ink }}>Add staff member</p>
 
         {/* Row 1: name + email + phone */}
         <div className="grid gap-3 md:grid-cols-3">
@@ -401,13 +438,15 @@ export default function StaffPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Full name (e.g. Suraj)"
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-orange-500"
+            className={inputClass}
+            style={inputStyle}
           />
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="staff@example.com"
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-orange-500"
+            className={inputClass}
+            style={inputStyle}
             required
             type="email"
           />
@@ -415,7 +454,8 @@ export default function StaffPage() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="Phone / WhatsApp (optional)"
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-orange-500"
+            className={inputClass}
+            style={inputStyle}
             type="tel"
           />
         </div>
@@ -425,7 +465,8 @@ export default function StaffPage() {
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as TeamRole)}
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-orange-500"
+            className={inputClass}
+            style={inputStyle}
           >
             <option value="waiter">Waiter</option>
             <option value="manager">Manager</option>
@@ -436,7 +477,8 @@ export default function StaffPage() {
             value={tableStart}
             onChange={(e) => setTableStart(e.target.value === '' ? '' : Number(e.target.value))}
             placeholder="Table from"
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-orange-500"
+            className={inputClass}
+            style={inputStyle}
           />
           <input
             type="number"
@@ -444,37 +486,40 @@ export default function StaffPage() {
             value={tableEnd}
             onChange={(e) => setTableEnd(e.target.value === '' ? '' : Number(e.target.value))}
             placeholder="Table to"
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-orange-500"
+            className={inputClass}
+            style={inputStyle}
           />
-          <p className="flex items-center text-xs text-zinc-600">
+          <p className="flex items-center text-xs" style={{ color: BRAND.inkFaint }}>
             e.g. Suraj handles tables 1–10, Anil 11–20
           </p>
         </div>
 
         {/* Row 3: login setup */}
-        <div className="mt-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-          <p className="mb-3 text-xs font-semibold text-zinc-400">App login setup</p>
+        <div className="mt-4 rounded-2xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+          <p className="mb-3 text-xs font-semibold" style={{ color: BRAND.inkSoft }}>App login setup</p>
 
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setInviteMode('password')}
-              className={`rounded-xl px-3 py-2 text-xs font-medium transition ${
+              className="rounded-xl px-3 py-2 text-xs font-medium transition"
+              style={
                 inviteMode === 'password'
-                  ? 'bg-orange-500/20 text-orange-300'
-                  : 'bg-white/[0.04] text-zinc-500 hover:text-white'
-              }`}
+                  ? { background: `${BRAND.burgundy}1F`, color: BRAND.burgundy }
+                  : { background: BRAND.ivorySoft, color: BRAND.inkFaint }
+              }
             >
               Set temporary password
             </button>
             <button
               type="button"
               onClick={() => setInviteMode('invite')}
-              className={`rounded-xl px-3 py-2 text-xs font-medium transition ${
+              className="rounded-xl px-3 py-2 text-xs font-medium transition"
+              style={
                 inviteMode === 'invite'
-                  ? 'bg-orange-500/20 text-orange-300'
-                  : 'bg-white/[0.04] text-zinc-500 hover:text-white'
-              }`}
+                  ? { background: `${BRAND.burgundy}1F`, color: BRAND.burgundy }
+                  : { background: BRAND.ivorySoft, color: BRAND.inkFaint }
+              }
             >
               Send invite email
             </button>
@@ -488,12 +533,14 @@ export default function StaffPage() {
                   onChange={(e) => setTempPass(e.target.value)}
                   placeholder="Temporary password (min 8 chars)"
                   type={showPass ? 'text' : 'password'}
-                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 pr-10 text-sm text-white outline-none focus:border-orange-500"
+                  className={`w-full pr-10 ${inputClass}`}
+                  style={inputStyle}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition hover:opacity-80"
+                  style={{ color: BRAND.inkFaint }}
                 >
                   {showPass ? <X size={14} /> : <KeyRound size={14} />}
                 </button>
@@ -505,7 +552,8 @@ export default function StaffPage() {
                   setTempPass(Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join(''))
                   setShowPass(true)
                 }}
-                className="rounded-2xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-xs text-zinc-400 hover:text-white"
+                className="rounded-2xl border px-3 py-3 text-xs transition hover:opacity-80"
+                style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
               >
                 Generate
               </button>
@@ -513,7 +561,7 @@ export default function StaffPage() {
           )}
 
           {inviteMode === 'invite' && (
-            <p className="mt-3 text-xs text-zinc-500">
+            <p className="mt-3 text-xs" style={{ color: BRAND.inkFaint }}>
               An invite email will be sent via Supabase. The staff member sets their own password.
             </p>
           )}
@@ -522,7 +570,8 @@ export default function StaffPage() {
         <button
           type="submit"
           disabled={saving || !email.trim()}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition disabled:opacity-50"
+          style={{ background: BRAND.burgundy, boxShadow: `0 8px 20px ${BRAND.burgundy}26` }}
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
           Add staff member
@@ -534,25 +583,30 @@ export default function StaffPage() {
         {staff.map((row) => (
           <div
             key={row.id}
-            className="rounded-3xl border border-white/[0.06] bg-[#111111] p-4"
+            className={`${cardBase} p-4`}
+            style={cardStyle}
           >
             {/* Top row: identity + actions */}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-500/10 text-sm font-bold text-orange-300">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-bold"
+                  style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}
+                >
                   {(row.name ?? row.email).charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white">
-                    {row.name ?? <span className="text-zinc-400">(no name)</span>}
+                  <p className="text-sm font-semibold" style={{ color: BRAND.ink }}>
+                    {row.name ?? <span style={{ color: BRAND.inkFaint }}>(no name)</span>}
                   </p>
-                  <p className="text-xs text-zinc-500">{row.email}</p>
+                  <p className="text-xs" style={{ color: BRAND.inkFaint }}>{row.email}</p>
                   {row.phone && (
                     <a
                       href={`https://wa.me/${row.phone.replace(/\D/g, '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-green-400 hover:underline"
+                      className="mt-0.5 inline-flex items-center gap-1 text-[11px] hover:underline"
+                      style={{ color: BRAND.emerald }}
                     >
                       <Phone size={10} />
                       {row.phone}
@@ -566,11 +620,12 @@ export default function StaffPage() {
                 <button
                   type="button"
                   onClick={() => void toggleActive(row)}
-                  className={`inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium transition ${
+                  className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium transition"
+                  style={
                     row.active
-                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                      : 'border-white/[0.08] bg-white/[0.03] text-zinc-500'
-                  }`}
+                      ? { borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}14`, color: BRAND.emerald }
+                      : { borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkFaint }
+                  }
                 >
                   {row.active ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                   {row.active ? 'Active' : 'Inactive'}
@@ -579,7 +634,8 @@ export default function StaffPage() {
                 <button
                   type="button"
                   onClick={() => void resetPassword(row)}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400 transition hover:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs transition hover:opacity-80"
+                  style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
                 >
                   <KeyRound size={12} />
                   Reset PIN
@@ -589,7 +645,8 @@ export default function StaffPage() {
                   type="button"
                   onClick={() => void deleteStaff(row.id)}
                   disabled={deletingId === row.id}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs transition disabled:opacity-50"
+                  style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}12`, color: BRAND.rose }}
                 >
                   <Trash2 size={12} />
                   Remove
@@ -599,23 +656,32 @@ export default function StaffPage() {
 
             {/* Bottom row: chips */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className={`rounded-xl border px-2.5 py-1 text-[11px] font-medium ${
-                row.role === 'manager'
-                  ? 'border-purple-500/20 bg-purple-500/10 text-purple-300'
-                  : 'border-blue-500/20 bg-blue-500/10 text-blue-300'
-              }`}>
+              <span
+                className="rounded-xl border px-2.5 py-1 text-[11px] font-medium"
+                style={
+                  row.role === 'manager'
+                    ? { borderColor: `${BRAND.plum}33`, background: `${BRAND.plum}14`, color: BRAND.plum }
+                    : { borderColor: `${BRAND.sky}33`, background: `${BRAND.sky}14`, color: BRAND.sky }
+                }
+              >
                 {row.role}
               </span>
 
               <TableRangeEditor row={row} onSave={updateTableRange} />
 
               {row.has_device ? (
-                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-medium"
+                  style={{ borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}14`, color: BRAND.emerald }}
+                >
                   <SmartphoneNfc size={11} />
                   Push enabled · {timeAgo(row.last_seen_at)}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700/50 bg-zinc-800/30 px-2.5 py-1 text-[11px] text-zinc-500">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px]"
+                  style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkFaint }}
+                >
                   <Smartphone size={11} />
                   App not installed
                 </span>
@@ -625,7 +691,10 @@ export default function StaffPage() {
         ))}
 
         {staff.length === 0 && (
-          <div className="rounded-3xl border border-dashed border-white/[0.08] bg-white/[0.02] p-10 text-center text-sm text-zinc-500">
+          <div
+            className="rounded-3xl border border-dashed p-10 text-center text-sm"
+            style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.inkFaint }}
+          >
             No staff added yet. Add your first waiter or manager above.
           </div>
         )}
