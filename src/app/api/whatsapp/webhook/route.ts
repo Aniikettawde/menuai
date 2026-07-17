@@ -1,4 +1,7 @@
 // src/app/api/whatsapp/webhook/route.ts
+
+export const dynamic = 'force-dynamic';
+
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function GET(req: Request) {
