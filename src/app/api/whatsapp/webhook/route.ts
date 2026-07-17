@@ -1,7 +1,4 @@
-// src/app/api/whatsapp/webhook/route.ts
-
 export const dynamic = 'force-dynamic';
-
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function GET(req: Request) {
@@ -17,18 +14,17 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = await req.json();
+  console.log('[webhook] --- incoming payload ---', JSON.stringify(body));
 
   try {
     const entry = body?.entry?.[0];
     const change = entry?.changes?.[0];
     const value = change?.value;
 
-    // --- Inbound message ---
     const message = value?.messages?.[0];
     if (message) {
       const wa_id = message.from as string;
       const name = value?.contacts?.[0]?.profile?.name ?? null;
-
       let text = '';
       if (message.type === 'text') {
         text = message.text?.body ?? '';
@@ -43,8 +39,9 @@ export async function POST(req: Request) {
         text = `[${message.type} message]`;
       }
 
-      // upsert contact
-      await supabaseAdmin
+      console.log('[webhook] parsed inbound message. wa_id:', wa_id, 'text:', text);
+
+      const contactUpsert = await supabaseAdmin
         .from('whatsapp_contacts')
         .upsert(
           {
@@ -55,9 +52,9 @@ export async function POST(req: Request) {
           },
           { onConflict: 'wa_id' }
         );
+      console.log('[webhook] contact upsert result:', JSON.stringify(contactUpsert.error), 'status:', contactUpsert.status);
 
-      // insert message
-      await supabaseAdmin.from('whatsapp_messages').insert({
+      const msgInsert = await supabaseAdmin.from('whatsapp_messages').insert({
         wa_id,
         wamid: message.id,
         direction: 'inbound',
@@ -65,20 +62,22 @@ export async function POST(req: Request) {
         body: text,
         status: 'sent',
       });
+      console.log('[webhook] message insert result:', JSON.stringify(msgInsert.error), 'status:', msgInsert.status);
+    } else {
+      console.log('[webhook] no inbound message in this payload (likely a status update)');
     }
 
-    // --- Delivery / read status updates for our outbound messages ---
     const status = value?.statuses?.[0];
     if (status) {
-      await supabaseAdmin
+      console.log('[webhook] status update for wamid:', status.id, 'new status:', status.status);
+      const statusUpdate = await supabaseAdmin
         .from('whatsapp_messages')
         .update({ status: status.status })
         .eq('wamid', status.id);
+      console.log('[webhook] status update result:', JSON.stringify(statusUpdate.error));
     }
   } catch (err) {
-    console.error('Webhook processing error:', err);
-    // Still return 200 so Meta doesn't retry-storm you
+    console.error('[webhook] Webhook processing error:', err);
   }
-
   return new Response('OK', { status: 200 });
 }
