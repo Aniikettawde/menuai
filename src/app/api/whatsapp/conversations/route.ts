@@ -9,12 +9,15 @@ export async function GET() {
   console.log('[conversations] SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
   console.log('[conversations] SERVICE_KEY present:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
   console.log('[conversations] SERVICE_KEY length:', process.env.SUPABASE_SERVICE_ROLE_KEY?.length);
+  
+  
 
   try {
-    const { data, error, status, statusText } = await supabaseAdmin
-      .from('whatsapp_contacts')
-      .select('*')
-      .order('last_message_at', { ascending: false });
+   const { data, error, status, statusText } = await supabaseAdmin
+  .from('whatsapp_contacts')
+  .select('*')
+  .is('restaurant_id', null)
+  .order('last_message_at', { ascending: false });
 
     console.log('[conversations] status:', status, statusText);
     console.log('[conversations] error:', JSON.stringify(error));

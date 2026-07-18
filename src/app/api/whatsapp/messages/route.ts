@@ -13,7 +13,8 @@ export async function GET(req: Request) {
     .from('whatsapp_messages')
     .select('*')
     .eq('wa_id', wa_id)
-    .order('created_at', { ascending: true });
+.is('restaurant_id', null)
+.order('created_at', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ messages: data });
