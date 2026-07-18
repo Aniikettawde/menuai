@@ -13,15 +13,6 @@ export async function GET(req: Request) {
   return new Response('Forbidden', { status: 403 });
 }
 
-/**
- * Every webhook event carries `metadata.phone_number_id` — the WhatsApp number
- * the event happened ON. With one Meta App shared across every restaurant's
- * Embedded-Signup connection, Meta sends ALL of their events to this single
- * webhook URL, so this lookup is the only thing that tells events for
- * different restaurants (or Dinezy's own test number) apart. Every write in
- * this file must go through it — skipping it is what caused messages from
- * every restaurant to land in one undifferentiated pile.
- */
 async function resolveRestaurant(phoneNumberId: string | undefined) {
   if (!phoneNumberId) return null;
   const { data, error } = await supabaseAdmin
@@ -33,7 +24,82 @@ async function resolveRestaurant(phoneNumberId: string | undefined) {
     console.error('Failed to resolve restaurant for phone_number_id', phoneNumberId, error);
     return null;
   }
-  return data; // null if this phone_number_id isn't a connected restaurant (e.g. Dinezy's own number)
+  return data;
+}
+
+function messageText(message: any): string {
+  if (message.type === 'text') return message.text?.body ?? '';
+  if (message.type === 'button') return message.button?.text ?? '[button reply]';
+  if (message.type === 'interactive') {
+    return (
+      message.interactive?.button_reply?.title ||
+      message.interactive?.list_reply?.title ||
+      '[interactive reply]'
+    );
+  }
+  if (message.type === 'image') return message.image?.caption || '[image]';
+  if (message.type === 'document') return message.document?.caption || '[document]';
+  return `[${message.type} message]`;
+}
+
+/**
+ * Handles an inbound message for a given restaurant_id (null = Dinezy's own
+ * number, matching the legacy /admin/whatsapp schema where these columns are
+ * simply unset rather than tied to a connected restaurant).
+ */
+async function handleInboundMessage(restaurantId: string | null, message: any, contactName: string | null) {
+  const wa_id = message.from as string;
+  const text = messageText(message);
+
+  let existingQuery = supabaseAdmin.from('whatsapp_contacts').select('unread_count').eq('wa_id', wa_id);
+  existingQuery = restaurantId ? existingQuery.eq('restaurant_id', restaurantId) : existingQuery.is('restaurant_id', null);
+  const { data: existing } = await existingQuery.maybeSingle();
+
+  await supabaseAdmin.from('whatsapp_contacts').upsert(
+    {
+      restaurant_id: restaurantId,
+      wa_id,
+      name: contactName,
+      last_message_at: new Date().toISOString(),
+      last_message_preview: text.slice(0, 120),
+      unread_count: (existing?.unread_count ?? 0) + 1,
+    },
+    { onConflict: 'restaurant_id,wa_id' }
+  );
+
+  await supabaseAdmin.from('whatsapp_messages').insert({
+    restaurant_id: restaurantId,
+    wa_id,
+    wamid: message.id,
+    direction: 'inbound',
+    message_type: message.type,
+    body: text,
+    status: 'sent',
+  });
+}
+
+/** Handles a status update (sent/delivered/read/failed) for a given restaurant_id (null = Dinezy's own number). */
+async function handleStatusUpdate(restaurantId: string | null, phoneNumberId: string | undefined, status: any) {
+  console.log(
+    'WhatsApp status event:',
+    JSON.stringify({ restaurantId, phoneNumberId, status }, null, 2)
+  );
+
+  let updateQuery = supabaseAdmin
+    .from('whatsapp_messages')
+    .update({ status: status.status }, { count: 'exact' })
+    .eq('wamid', status.id);
+  updateQuery = restaurantId ? updateQuery.eq('restaurant_id', restaurantId) : updateQuery.is('restaurant_id', null);
+
+  const { error: updateError, count } = await updateQuery;
+
+  if (updateError) {
+    console.error('Failed to update whatsapp_messages status:', updateError);
+  } else if (!count) {
+    console.log(
+      `No whatsapp_messages row found for wamid ${status.id} (restaurant_id: ${restaurantId ?? 'null'}, phone_number_id: ${phoneNumberId}) — likely an outbound send not yet tracked in this table.`
+    );
+  }
 }
 
 export async function POST(req: Request) {
@@ -43,111 +109,37 @@ export async function POST(req: Request) {
     const change = entry?.changes?.[0];
     const value = change?.value;
 
-    // Every webhook payload — regardless of which WABA/number it's about — carries this.
-    // Use it to tell Dinezy's own number apart from a connected restaurant's number.
     const phoneNumberId = value?.metadata?.phone_number_id as string | undefined;
 
-    const connection = await resolveRestaurant(phoneNumberId);
-    if (!connection) {
-      // Nothing we can attribute this to — most likely Dinezy's own onboarding/test
-      // number, or a restaurant whose connection row hasn't landed yet. Log and stop
-      // rather than guessing which restaurant it belongs to.
-      console.log(
-        `WhatsApp webhook event for unrecognized phone_number_id ${phoneNumberId ?? '(missing)'} — no matching restaurant connection, skipping.`
-      );
-      return new Response('OK', { status: 200 });
+    // Dinezy's own number is never in whatsapp_connections (it isn't a
+    // "connected restaurant") — treat it as restaurant_id: null instead of
+    // letting resolveRestaurant() reject it and silently drop the event.
+    const isDinezyOwnNumber =
+      !!phoneNumberId && phoneNumberId === process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+    let restaurantId: string | null = null;
+
+    if (!isDinezyOwnNumber) {
+      const connection = await resolveRestaurant(phoneNumberId);
+      if (!connection) {
+        console.log(
+          `WhatsApp webhook event for unrecognized phone_number_id ${phoneNumberId ?? '(missing)'} — no matching restaurant connection, skipping.`
+        );
+        return new Response('OK', { status: 200 });
+      }
+      restaurantId = connection.restaurant_id as string;
     }
-    const restaurantId = connection.restaurant_id as string;
+    // else restaurantId stays null — this is Dinezy's own inbox
 
     const message = value?.messages?.[0];
     if (message) {
-      const wa_id = message.from as string;
       const name = value?.contacts?.[0]?.profile?.name ?? null;
-      let text = '';
-      if (message.type === 'text') {
-        text = message.text?.body ?? '';
-      } else if (message.type === 'button') {
-        text = message.button?.text ?? '[button reply]';
-      } else if (message.type === 'interactive') {
-        text =
-          message.interactive?.button_reply?.title ||
-          message.interactive?.list_reply?.title ||
-          '[interactive reply]';
-      } else if (message.type === 'image') {
-        text = message.image?.caption || '[image]';
-      } else if (message.type === 'document') {
-        text = message.document?.caption || '[document]';
-      } else {
-        text = `[${message.type} message]`;
-      }
-
-      // fetch current unread_count first — scoped to this restaurant + this customer,
-      // since the same customer phone number can legitimately message more than one
-      // restaurant and each must get their own contact/thread.
-      const { data: existing } = await supabaseAdmin
-        .from('whatsapp_contacts')
-        .select('unread_count')
-        .eq('restaurant_id', restaurantId)
-        .eq('wa_id', wa_id)
-        .maybeSingle();
-
-      await supabaseAdmin.from('whatsapp_contacts').upsert(
-        {
-          restaurant_id: restaurantId,
-          wa_id,
-          name,
-          last_message_at: new Date().toISOString(),
-          last_message_preview: text.slice(0, 120),
-          unread_count: (existing?.unread_count ?? 0) + 1,
-        },
-        // NOTE: this requires a composite unique constraint on (restaurant_id, wa_id) —
-        // see migration note. A unique constraint on wa_id alone would let one
-        // restaurant's contact record silently absorb another restaurant's customer.
-        { onConflict: 'restaurant_id,wa_id' }
-      );
-
-      await supabaseAdmin.from('whatsapp_messages').insert({
-        restaurant_id: restaurantId,
-        wa_id,
-        wamid: message.id,
-        direction: 'inbound',
-        message_type: message.type,
-        body: text,
-        status: 'sent',
-      });
+      await handleInboundMessage(restaurantId, message, name);
     }
 
     const status = value?.statuses?.[0];
     if (status) {
-      // ALWAYS log the full status object first, before anything else. This is what tells you
-      // WHY a message never arrived — a 'failed' status carries an `errors` array with Meta's
-      // actual reason (e.g. recipient not on WhatsApp, template not approved yet, number not
-      // a test recipient in sandbox mode, etc).
-      console.log(
-        'WhatsApp status event:',
-        JSON.stringify({ restaurantId, phoneNumberId, status }, null, 2)
-      );
-
-      // wamid is globally unique (Meta assigns it), so matching on it alone is safe —
-      // but scope to restaurant_id too so one restaurant's webhook traffic can never
-      // update another restaurant's message row, even in a wamid-collision edge case.
-      const { error: updateError, count } = await supabaseAdmin
-        .from('whatsapp_messages')
-        .update({ status: status.status }, { count: 'exact' })
-        .eq('wamid', status.id)
-        .eq('restaurant_id', restaurantId);
-
-      if (updateError) {
-        console.error('Failed to update whatsapp_messages status:', updateError);
-      } else if (!count) {
-        // No row matched — most likely this status is for a message sent outside this
-        // table's tracking (e.g. a restaurant's test send via /api/restaurant/whatsapp/
-        // send-message, which doesn't currently insert an outbound row). Not an error,
-        // just means this particular event has nowhere to land yet.
-        console.log(
-          `No whatsapp_messages row found for wamid ${status.id} (restaurant_id: ${restaurantId}, phone_number_id: ${phoneNumberId}) — likely an outbound send not yet tracked in this table.`
-        );
-      }
+      await handleStatusUpdate(restaurantId, phoneNumberId, status);
     }
   } catch (err) {
     console.error('Webhook processing error:', err);
