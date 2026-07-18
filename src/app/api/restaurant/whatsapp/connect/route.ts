@@ -60,6 +60,24 @@ export async function POST(req: NextRequest) {
 
     const grantedToken: string = tokenData.access_token
 
+    // Step 1.5: exchange the short-lived token above for a LONG-LIVED token (~60 days).
+    // The code-exchange token is only good for a couple of hours — it's fine for the setup
+    // calls we make in this same request, but it's useless for sending messages tomorrow.
+    // This long-lived token is what we persist and use later for THIS restaurant specifically
+    // (as opposed to the shared WHATSAPP_ACCESS_TOKEN env var, which belongs to Dinezy's own
+    // WABA and has no permission on a restaurant's WABA/phone number).
+    let longLivedToken = grantedToken
+    const longLivedRes = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${encodeURIComponent(grantedToken)}`
+    )
+    const longLivedData = await longLivedRes.json()
+    if (longLivedRes.ok && longLivedData?.access_token) {
+      longLivedToken = longLivedData.access_token
+    }
+    // If this exchange fails we deliberately fall back to the short-lived token rather than
+    // aborting the whole connect flow — the restaurant still gets connected, it'll just need
+    // reconnecting sooner. Not ideal, but better than blocking signup on it.
+
     // Step 2: subscribe your app to this WABA's webhooks so you receive message/status events.
     const subscribeRes = await fetch(
       `https://graph.facebook.com/${GRAPH_VERSION}/${wabaId}/subscribed_apps`,
@@ -165,6 +183,7 @@ export async function POST(req: NextRequest) {
           verified_name: phoneData?.verified_name ?? null,
           business_name: wabaData?.name ?? null,
           quality_rating: phoneData?.quality_rating ?? null,
+          access_token: longLivedToken, // per-restaurant token, NEVER the shared Dinezy env token
           status: 'connected',
           connected_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),

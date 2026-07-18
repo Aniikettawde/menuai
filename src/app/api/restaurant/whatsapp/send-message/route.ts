@@ -1,30 +1,55 @@
-// src/app/api/whatsapp/send-message/route.ts
+// src/app/api/restaurant/whatsapp/send-message/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
 const GRAPH_VERSION = 'v21.0'
 
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+  }
+  return createClient(url, serviceKey, { auth: { persistSession: false } })
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { to, templateName, languageCode, variables, phoneNumberId: bodyPhoneNumberId } = await req.json()
+    const { to, templateName, languageCode, variables, restaurantId, phoneNumberId: bodyPhoneNumberId } =
+      await req.json()
 
-    if (!to || !templateName) {
+    if (!to || !templateName || !restaurantId) {
       return NextResponse.json(
-        { error: 'to and templateName are required' },
+        { error: 'to, templateName, and restaurantId are required' },
         { status: 400 }
       )
     }
 
-    // Prefer the connected restaurant's own phone number ID (passed from the page); fall back
-    // to the env var for standalone testing without going through the Connect flow.
-    const phoneNumberId = bodyPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID
-    const token = process.env.WHATSAPP_ACCESS_TOKEN
+    // IMPORTANT: each restaurant's messages must go out using THAT restaurant's own access
+    // token, obtained when they completed Embedded Signup — never the shared
+    // WHATSAPP_ACCESS_TOKEN env var, which belongs to Dinezy's own WABA and has zero
+    // permission on a restaurant's WABA/phone number. Using the wrong token is what produces
+    // Meta's "Object with ID ... does not exist, cannot be loaded due to missing permissions"
+    // error, since Meta is correctly refusing to let one business's token act on another's assets.
+    const supabase = getSupabaseAdmin()
+    const { data: connection, error: fetchError } = await supabase
+      .from('whatsapp_connections')
+      .select('phone_number_id, access_token')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
 
-    if (!phoneNumberId || !token) {
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message }, { status: 500 })
+    }
+    if (!connection?.access_token) {
       return NextResponse.json(
-        { error: 'Missing phoneNumberId (connect a WhatsApp account first) or WHATSAPP_ACCESS_TOKEN in server env' },
-        { status: 500 }
+        { error: 'No WhatsApp connection found for this restaurant. Connect WhatsApp first.' },
+        { status: 400 }
       )
     }
+
+    const phoneNumberId = bodyPhoneNumberId || connection.phone_number_id
+    const token = connection.access_token
 
     // Normalize recipient to digits only, Meta expects no + or spaces
     const cleanTo = String(to).replace(/[^\d]/g, '')

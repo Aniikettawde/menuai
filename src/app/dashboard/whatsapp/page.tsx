@@ -134,7 +134,7 @@ function ConnectCard({
   // this is where the new WABA ID and phone number ID actually come from.
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (!event.origin.endsWith('facebook.com')) return
+      if (!['https://www.facebook.com', 'https://web.facebook.com'].includes(event.origin)) return
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
         if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.event === 'FINISH') {
@@ -176,13 +176,22 @@ function ConnectCard({
           return
         }
 
-        // Give the WA_EMBEDDED_SIGNUP postMessage a brief moment to land, since it can
-        // arrive slightly before or after this login callback fires.
-        setTimeout(async () => {
+        // Poll briefly for the WA_EMBEDDED_SIGNUP postMessage to land, since it can arrive
+        // slightly before or after this login callback fires. Polling is more resilient than
+        // a single fixed setTimeout on slower connections.
+        const startedAt = Date.now()
+        const maxWaitMs = 5000
+        const pollIntervalMs = 250
+
+        const tryFinish = async () => {
           const captured = (window as unknown as { __waEmbeddedSignupData?: Record<string, string | null> })
             .__waEmbeddedSignupData
 
           if (!captured?.wabaId || !captured?.phoneNumberId) {
+            if (Date.now() - startedAt < maxWaitMs) {
+              setTimeout(tryFinish, pollIntervalMs)
+              return
+            }
             setResult({
               kind: 'error',
               message:
@@ -222,7 +231,9 @@ function ConnectCard({
           } catch (err) {
             setResult({ kind: 'error', message: err instanceof Error ? err.message : 'Network error' })
           }
-        }, 800)
+        }
+
+        tryFinish()
       },
       {
         config_id: configId,
@@ -326,7 +337,7 @@ function StatusPanel({ connection }: { connection: Connection }) {
 
 // ─────────────────────────────── Template + message tool ───────────────────────────────
 
-function CreateTemplateCard({ wabaId }: { wabaId: string }) {
+function CreateTemplateCard({ restaurantId, wabaId }: { restaurantId: string; wabaId: string }) {
   const [name, setName] = useState('festival_offer')
   const [category, setCategory] = useState('MARKETING')
   const [language, setLanguage] = useState('en_US')
@@ -342,7 +353,7 @@ function CreateTemplateCard({ wabaId }: { wabaId: string }) {
       const res = await fetch('/api/restaurant/whatsapp/create-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, category, language, bodyText, wabaId }),
+        body: JSON.stringify({ name, category, language, bodyText, restaurantId, wabaId }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -452,7 +463,7 @@ function CreateTemplateCard({ wabaId }: { wabaId: string }) {
   )
 }
 
-function SendMessageCard({ phoneNumberId }: { phoneNumberId: string }) {
+function SendMessageCard({ restaurantId, phoneNumberId }: { restaurantId: string; phoneNumberId: string }) {
   const [to, setTo] = useState('')
   const [templateName, setTemplateName] = useState('hello_world')
   const [languageCode, setLanguageCode] = useState('en_US')
@@ -465,7 +476,7 @@ function SendMessageCard({ phoneNumberId }: { phoneNumberId: string }) {
       const res = await fetch('/api/restaurant/whatsapp/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, templateName, languageCode, phoneNumberId }),
+        body: JSON.stringify({ to, templateName, languageCode, restaurantId, phoneNumberId }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -635,8 +646,8 @@ export default function WhatsAppPage() {
         <>
           <StatusPanel connection={connection} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <CreateTemplateCard wabaId={connection.waba_id} />
-            <SendMessageCard phoneNumberId={connection.phone_number_id} />
+            <CreateTemplateCard restaurantId={context.restaurantId} wabaId={connection.waba_id} />
+            <SendMessageCard restaurantId={context.restaurantId} phoneNumberId={connection.phone_number_id} />
           </div>
         </>
       )}
