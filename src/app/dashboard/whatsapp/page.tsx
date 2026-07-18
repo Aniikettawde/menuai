@@ -110,9 +110,11 @@ declare global {
 
 function ConnectCard({
   restaurantId,
+  previousConnection,
   onConnected,
 }: {
   restaurantId: string
+  previousConnection?: Pick<Connection, 'waba_id' | 'phone_number_id' | 'business_name' | 'display_phone_number'> | null
   onConnected: (connection: Connection) => void
 }) {
   const [sdkReady, setSdkReady] = useState(false)
@@ -214,6 +216,13 @@ function ConnectCard({
             })
             const data = await res.json()
             if (!res.ok) {
+              if (res.status === 409 && data?.mismatch) {
+                setResult({
+                  kind: 'error',
+                  message: data.error, // already phrased with the previous account's details
+                })
+                return
+              }
               setResult({ kind: 'error', message: data?.error || 'Failed to complete connection' })
               return
             }
@@ -261,11 +270,23 @@ function ConnectCard({
           <Link2 size={22} />
         </div>
         <h2 className="mt-4 text-lg font-bold" style={{ color: BRAND.ink }}>
-          Connect WhatsApp Business
+          {previousConnection ? 'Reconnect WhatsApp Business' : 'Connect WhatsApp Business'}
         </h2>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed" style={{ color: BRAND.inkSoft }}>
-          Link your WhatsApp Business Account through Meta to send offers and updates to your customers directly
-          from Dinezy.
+          {previousConnection ? (
+            <>
+              Reconnect to{' '}
+              <strong>{previousConnection.business_name || 'your previous account'}</strong>
+              {previousConnection.display_phone_number ? ` (${previousConnection.display_phone_number})` : ''}.
+              During Facebook login, make sure you select this same WhatsApp Business Account —
+              picking a different one will be blocked to avoid mixing up restaurants.
+            </>
+          ) : (
+            <>
+              Link your WhatsApp Business Account through Meta to send offers and updates to your customers
+              directly from Dinezy.
+            </>
+          )}
         </p>
 
         <button
@@ -296,7 +317,16 @@ function ConnectCard({
 
 // ─────────────────────────────── Status panel ───────────────────────────────
 
-function StatusPanel({ connection }: { connection: Connection }) {
+function StatusPanel({
+  connection,
+  onDisconnected,
+}: {
+  connection: Connection
+  onDisconnected: () => void
+}) {
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
   const rows: { label: string; value: string }[] = [
     { label: 'Business name', value: connection.business_name || connection.verified_name || '—' },
     { label: 'Phone number', value: connection.display_phone_number || '—' },
@@ -304,23 +334,68 @@ function StatusPanel({ connection }: { connection: Connection }) {
     { label: 'WABA ID', value: connection.waba_id },
   ]
 
+  async function handleDisconnect() {
+    setDisconnecting(true)
+    try {
+      await onDisconnected()
+    } finally {
+      setDisconnecting(false)
+      setConfirmOpen(false)
+    }
+  }
+
   return (
     <div className={`${cardBase} p-5 sm:p-6`} style={cardStyle}>
-      <div className="mb-4 flex items-center gap-2.5">
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-lg"
-          style={{ background: `${BRAND.emerald}14` }}
-        >
-          <CheckCircle2 size={14} style={{ color: BRAND.emerald }} />
+      <div className="mb-4 flex items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-lg"
+            style={{ background: `${BRAND.emerald}14` }}
+          >
+            <CheckCircle2 size={14} style={{ color: BRAND.emerald }} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.inkSoft }}>
+              WhatsApp Connected
+            </p>
+            <p className="text-[10px]" style={{ color: BRAND.inkFaint }}>
+              Since {new Date(connection.connected_at).toLocaleDateString()}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.inkSoft }}>
-            WhatsApp Connected
-          </p>
-          <p className="text-[10px]" style={{ color: BRAND.inkFaint }}>
-            Since {new Date(connection.connected_at).toLocaleDateString()}
-          </p>
-        </div>
+
+        {!confirmOpen ? (
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            className="rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold transition active:scale-95"
+            style={{ borderColor: BRAND.line, color: BRAND.rose, background: `${BRAND.rose}0A` }}
+          >
+            Disconnect
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px]" style={{ color: BRAND.inkSoft }}>Disconnect?</span>
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="rounded-lg px-2.5 py-1.5 text-[10px] font-semibold text-white transition active:scale-95 disabled:opacity-60"
+              style={{ background: BRAND.rose }}
+            >
+              {disconnecting ? 'Disconnecting…' : 'Yes, disconnect'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(false)}
+              disabled={disconnecting}
+              className="rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold transition active:scale-95"
+              style={{ borderColor: BRAND.line, color: BRAND.inkSoft }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -600,6 +675,19 @@ export default function WhatsAppPage() {
     }
   }, [context?.restaurantId])
 
+  async function handleDisconnect() {
+    if (!context?.restaurantId) return
+    const res = await fetch('/api/restaurant/whatsapp/disconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId: context.restaurantId }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setConnection(data?.connection ?? null)
+    }
+  }
+
   if (contextLoading || statusLoading) {
     return (
       <div className="space-y-4">
@@ -616,6 +704,8 @@ export default function WhatsAppPage() {
       </div>
     )
   }
+
+  const isActive = connection?.status === 'connected'
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -640,11 +730,15 @@ export default function WhatsAppPage() {
         </div>
       </section>
 
-      {!connection ? (
-        <ConnectCard restaurantId={context.restaurantId} onConnected={setConnection} />
+      {!isActive ? (
+        <ConnectCard
+          restaurantId={context.restaurantId}
+          previousConnection={connection}
+          onConnected={setConnection}
+        />
       ) : (
         <>
-          <StatusPanel connection={connection} />
+          <StatusPanel connection={connection} onDisconnected={handleDisconnect} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <CreateTemplateCard restaurantId={context.restaurantId} wabaId={connection.waba_id} />
             <SendMessageCard restaurantId={context.restaurantId} phoneNumberId={connection.phone_number_id} />

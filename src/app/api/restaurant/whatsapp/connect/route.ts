@@ -37,6 +37,41 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Look up any prior connection for this restaurant (connected OR disconnected) so we can
+    // tell whether this signup is reconnecting the SAME WhatsApp account or a different one.
+    // Meta's Embedded Signup UI has no way for us to force "must pick the previous WABA" —
+    // the person can always choose a different Facebook Business / WABA/phone number during
+    // login. The best we can do is detect the mismatch after the fact and surface it clearly,
+    // rather than silently overwriting a different restaurant's WhatsApp number.
+    const supabaseForLookup = getSupabaseAdmin()
+    const { data: priorConnection } = await supabaseForLookup
+      .from('whatsapp_connections')
+      .select('waba_id, phone_number_id, business_name, display_phone_number')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+
+    const isReconnect = !!priorConnection
+    const accountMatches =
+      isReconnect &&
+      priorConnection!.waba_id === wabaId &&
+      priorConnection!.phone_number_id === phoneNumberId
+
+    if (isReconnect && !accountMatches) {
+      return NextResponse.json(
+        {
+          error: `You previously connected "${priorConnection!.business_name ?? 'a different account'}" (${priorConnection!.display_phone_number ?? 'unknown number'}). The account you just selected during Facebook login is different. If this is intentional, disconnect the old account explicitly first; otherwise go back and select the same WhatsApp Business Account/phone number you used before.`,
+          mismatch: true,
+          previous: {
+            wabaId: priorConnection!.waba_id,
+            phoneNumberId: priorConnection!.phone_number_id,
+            businessName: priorConnection!.business_name,
+            displayPhoneNumber: priorConnection!.display_phone_number,
+          },
+        },
+        { status: 409 }
+      )
+    }
+
     // Step 1: exchange the Embedded Signup `code` for an access token that is actually
     // granted access to the WABA the user just created/selected during signup.
     //
@@ -170,8 +205,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 5: store the connection.
-    const supabase = getSupabaseAdmin()
-    const { error: dbError } = await supabase
+    const { error: dbError } = await supabaseForLookup
       .from('whatsapp_connections')
       .upsert(
         {
@@ -197,6 +231,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      reconnected: isReconnect,
       connection: {
         wabaId,
         phoneNumberId,
