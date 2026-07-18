@@ -82,7 +82,50 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Step 3: fetch phone number + business account details to show on the status panel.
+    // Step 3: register the phone number for the Cloud API.
+    //
+    // Numbers added via Embedded Signup are NOT automatically enabled for sending/receiving
+    // through the Cloud API — Meta requires an explicit one-time registration call with a
+    // 6-digit PIN (this is the "two-step verification" PIN for the number, not a code sent
+    // to the phone). Skipping this step is the most common reason `POST /{phone_number_id}/
+    // messages` fails right after connecting, with the same generic "does not exist, cannot
+    // be loaded due to missing permissions, or does not support this operation" error.
+    //
+    // If the number was already registered (e.g. reconnecting), Meta returns an error here
+    // that we deliberately ignore, since "already registered" is not a failure state for us.
+    const registerRes = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/register`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${grantedToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          pin: process.env.WHATSAPP_REGISTRATION_PIN || '123456',
+        }),
+      }
+    )
+    const registerData = await registerRes.json()
+    if (!registerRes.ok) {
+      const alreadyRegistered =
+        typeof registerData?.error?.message === 'string' &&
+        registerData.error.message.toLowerCase().includes('already')
+      if (!alreadyRegistered) {
+        return NextResponse.json(
+          {
+            error:
+              registerData?.error?.message ||
+              'Failed to register phone number for the Cloud API',
+            details: registerData,
+          },
+          { status: registerRes.status }
+        )
+      }
+    }
+
+    // Step 4: fetch phone number + business account details to show on the status panel.
     const [phoneRes, wabaRes] = await Promise.all([
       fetch(
         `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`,
@@ -108,7 +151,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Step 4: store the connection.
+    // Step 5: store the connection.
     const supabase = getSupabaseAdmin()
     const { error: dbError } = await supabase
       .from('whatsapp_connections')
