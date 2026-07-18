@@ -43,11 +43,13 @@ export function Testimonials() {
           variants={stagger(0.1)}
           className="mt-12 grid gap-5 sm:mt-16 lg:grid-cols-3"
         >
-          {QUOTES.map((q) => (
+          {QUOTES.map((q, i) => (
             <motion.figure
               key={q.name}
               variants={fadeUp}
-              className="flex flex-col justify-between rounded-3xl border border-line p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-elegant-md sm:p-8"
+              className={`flex flex-col justify-between rounded-3xl border border-line p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-elegant-md sm:p-8 ${
+                i === 1 ? 'lg:mt-8' : ''
+              }`}
             >
               <span className="mb-3 block font-display text-[2.75rem] leading-none text-accent/25" aria-hidden>
                 &ldquo;

@@ -58,6 +58,10 @@ module.exports = {
 
         // ── New — landing page trusted-by marquee ──
         marquee: 'marquee 28s linear infinite',
+
+        // ── New — "Signal Ping" signature motif: a repeating concentric ring,
+        // used behind the hero card, on button hover, and as tab indicators.
+        'signal-ping': 'signalPing 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite',
       },
       keyframes: {
         slideUp: {
@@ -87,6 +91,10 @@ module.exports = {
         marquee: {
           '0%': { transform: 'translateX(0)' },
           '100%': { transform: 'translateX(-50%)' },
+        },
+        signalPing: {
+          '0%': { transform: 'scale(0.85)', opacity: '0.35' },
+          '100%': { transform: 'scale(1.9)', opacity: '0' },
         },
       },
       backdropBlur: {

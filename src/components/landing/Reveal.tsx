@@ -1,6 +1,6 @@
 'use client'
 
-import { motion, type Variants } from 'framer-motion'
+import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { fadeUp, viewportOnce } from '@/lib/motion'
 
 export function Reveal({
@@ -17,6 +17,13 @@ export function Reveal({
   as?: 'div' | 'span'
 }) {
   const MotionTag = as === 'span' ? motion.span : motion.div
+  const reduceMotion = useReducedMotion()
+
+  if (reduceMotion) {
+    const Tag = as === 'span' ? 'span' : 'div'
+    return <Tag className={className}>{children}</Tag>
+  }
+
   return (
     <MotionTag
       className={className}

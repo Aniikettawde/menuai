@@ -25,7 +25,6 @@ export default function DinezyLanding() {
     <main className="min-h-screen overflow-x-hidden bg-white">
       <Navbar onBookDemo={openDemo} />
       <Hero onBookDemo={openDemo} />
-      <WhyDinezy />
       <ProductDemo />
       <Features />
       <HowItWorks />

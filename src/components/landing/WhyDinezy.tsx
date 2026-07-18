@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { useInView, motion } from 'framer-motion'
@@ -69,17 +69,29 @@ export function WhyDinezy() {
           whileInView="show"
           viewport={{ once: true, margin: '-80px' }}
           variants={stagger(0.12)}
-          className="mt-14 grid gap-4 sm:mt-16 sm:grid-cols-3 sm:gap-6"
+          className="mt-14 grid gap-4 sm:mt-16 sm:grid-cols-2 sm:gap-5"
         >
-          {OUTCOMES.map((o) => (
+          {OUTCOMES.map((o, i) => (
             <motion.div
               key={o.label}
               variants={fadeUp}
-              className="group rounded-3xl border border-line p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-elegant-md sm:p-8"
+              className={`group rounded-3xl p-7 transition-all duration-300 hover:-translate-y-1 sm:p-8 ${
+                i === 0
+                  ? 'bg-accent shadow-elegant-lg sm:col-span-2'
+                  : 'border border-line hover:shadow-elegant-md'
+              }`}
             >
-              <p className="text-[2.75rem] font-semibold leading-none tracking-tight text-ink">{o.stat}</p>
-              <p className="mt-2 text-[14px] font-semibold text-accent">{o.label}</p>
-              <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">{o.desc}</p>
+              <p
+                className={`font-semibold leading-none tracking-tight ${
+                  i === 0 ? 'text-[3.5rem] text-white sm:text-[4rem]' : 'text-[2.75rem] text-ink'
+                }`}
+              >
+                {o.stat}
+              </p>
+              <p className={`mt-2 text-[14px] font-semibold ${i === 0 ? 'text-white/80' : 'text-accent'}`}>{o.label}</p>
+              <p className={`mt-3 text-[14px] leading-relaxed ${i === 0 ? 'max-w-xs text-white/70' : 'text-ink-soft'}`}>
+                {o.desc}
+              </p>
             </motion.div>
           ))}
         </motion.div>

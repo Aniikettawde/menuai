@@ -48,7 +48,7 @@ export function Pricing() {
           whileInView="show"
           viewport={{ once: true, margin: '-80px' }}
           variants={stagger(0.1)}
-          className="mx-auto mt-12 grid max-w-3xl gap-5 sm:mt-16 sm:grid-cols-2"
+          className="mx-auto mt-12 grid max-w-4xl gap-5 sm:mt-16 sm:grid-cols-5"
         >
           {PLANS.map((p) => (
             <motion.div
@@ -56,8 +56,8 @@ export function Pricing() {
               variants={fadeUp}
               className={`relative rounded-3xl border p-7 transition-all duration-300 sm:p-8 ${
                 p.highlighted
-                  ? 'border-ink bg-white shadow-elegant-lg hover:-translate-y-1'
-                  : 'border-line bg-white hover:-translate-y-1 hover:shadow-elegant-md'
+                  ? 'border-ink bg-white shadow-elegant-lg hover:-translate-y-1 sm:col-span-3'
+                  : 'border-line bg-white hover:-translate-y-1 hover:shadow-elegant-md sm:col-span-2'
               }`}
             >
               {p.highlighted && (
@@ -67,14 +67,16 @@ export function Pricing() {
               )}
               <p className="text-[14px] font-semibold text-ink-soft">{p.name}</p>
               <div className="mt-3 flex items-baseline gap-1.5">
-                <span className="text-[2.25rem] font-semibold tracking-tight text-ink">{p.price}</span>
+                <span className={`font-semibold tracking-tight text-ink ${p.highlighted ? 'text-[2.75rem]' : 'text-[2.25rem]'}`}>
+                  {p.price}
+                </span>
                 {p.period && <span className="text-[14px] text-ink-faint">{p.period}</span>}
               </div>
               <p className="mt-1 text-[13px] text-ink-faint">{p.setup}</p>
               <p className="mt-4 text-[14px] leading-relaxed text-ink-soft">{p.desc}</p>
-              <ul className="mt-6 space-y-2.5">
+              <ul className={`mt-6 space-y-2.5 ${p.highlighted ? 'sm:columns-2 sm:gap-x-6' : ''}`}>
                 {p.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-[14px] text-ink">
+                  <li key={f} className="flex items-start gap-2.5 break-inside-avoid text-[14px] text-ink">
                     <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                     {f}
                   </li>

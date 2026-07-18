@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Reveal } from './Reveal'
-import { fadeUp, stagger } from '@/lib/motion'
+import { QrIcon, CoffeeIcon } from './Icons'
+import { fadeUp, heroReveal, stagger } from '@/lib/motion'
 
 type SceneKey = 'scan' | 'menu' | 'whatsapp' | 'reward' | 'loyalty' | 'analytics'
 
@@ -15,6 +16,24 @@ const SCENES: { key: SceneKey; label: string }[] = [
   { key: 'reward', label: 'Offer unlocked' },
   { key: 'analytics', label: 'You see it all' },
 ]
+
+/** Signal Ping — the page's one signature motif: concentric rings pulsing outward,
+ *  standing in for "a guest returns, and returns again." Purely decorative/aria-hidden. */
+function SignalPing({ className = '' }: { className?: string }) {
+  const reduceMotion = useReducedMotion()
+  if (reduceMotion) return null
+  return (
+    <div aria-hidden className={`pointer-events-none absolute inset-0 flex items-center justify-center ${className}`}>
+      {[0, 0.9, 1.8].map((delay) => (
+        <span
+          key={delay}
+          className="absolute h-full w-full rounded-[2.25rem] border border-accent/25"
+          style={{ animation: 'signalPing 2.6s cubic-bezier(0.16,1,0.3,1) infinite', animationDelay: `${delay}s` }}
+        />
+      ))}
+    </div>
+  )
+}
 
 export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
   const [active, setActive] = useState(0)
@@ -58,27 +77,27 @@ export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
           </motion.div>
 
           <motion.h1
-            variants={fadeUp}
-            className="text-balance text-[2.4rem] font-semibold leading-[1.08] tracking-tight text-ink sm:text-6xl sm:leading-[1.05]"
+            variants={heroReveal}
+            className="text-balance text-[2.4rem] font-black leading-[1.08] tracking-tight text-ink sm:text-6xl sm:leading-[1.05]"
           >
             Grow your restaurant.
             <br />
-            Keep every customer{' '}
+            Keep every customer coming{' '}
             <span className="relative inline-block">
-              coming back.
+              back.
               <motion.svg
                 aria-hidden
-                viewBox="0 0 220 12"
-                className="absolute -bottom-1.5 left-0 h-[0.35em] w-full text-accent sm:-bottom-2"
+                viewBox="0 0 90 14"
+                className="absolute -bottom-2 left-0 h-[0.3em] w-full text-accent sm:-bottom-2.5"
                 preserveAspectRatio="none"
                 initial={{ pathLength: 0, opacity: 0 }}
                 animate={{ pathLength: 1, opacity: 1 }}
-                transition={{ delay: 0.9, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ delay: 0.9, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
               >
                 <motion.path
-                  d="M2 8 C 40 2, 80 10, 110 6 S 180 2, 218 7"
+                  d="M2 9 C 20 4, 45 11, 62 6 S 82 3, 88 8"
                   stroke="currentColor"
-                  strokeWidth="3"
+                  strokeWidth="4"
                   strokeLinecap="round"
                   fill="none"
                 />
@@ -97,9 +116,14 @@ export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
           <motion.div variants={fadeUp} className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <button
               onClick={onBookDemo}
-              className="w-full rounded-full bg-accent px-7 py-4 text-[15px] font-semibold text-white shadow-elegant-md transition-transform hover:-translate-y-0.5 sm:w-auto"
+              className="group relative w-full overflow-hidden rounded-full bg-accent px-7 py-4 text-[15px] font-semibold text-white shadow-elegant-md transition-transform hover:-translate-y-0.5 sm:w-auto"
             >
-              Book Demo
+              <span
+                aria-hidden
+                className="absolute inset-0 scale-0 rounded-full bg-white/15 transition-transform duration-500 group-hover:scale-[2.4]"
+                style={{ transformOrigin: 'center' }}
+              />
+              <span className="relative">Book Demo</span>
             </button>
             <button
               onClick={() => document.querySelector('#product-demo')?.scrollIntoView({ behavior: 'smooth' })}
@@ -110,16 +134,12 @@ export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
           </motion.div>
         </motion.div>
 
-        {/* ── Animated product showcase (signature element) ───────────── */}
+        {/* ── Animated product showcase (signature element: Signal Ping) ──── */}
         <Reveal delay={0.15} className="mx-auto mt-16 max-w-sm sm:mt-20">
-          <div className="relative rounded-[2.25rem] border border-line bg-white p-2 shadow-elegant-lg">
-            <div className="overflow-hidden rounded-[1.85rem] bg-canvas">
-              <div className="flex items-center justify-between px-5 pt-4 text-[11px] text-ink-faint">
-                <span>9:41</span>
-                <span className="font-mono-num tracking-wider">●●●</span>
-              </div>
-
-              <div className="relative h-[360px] px-4 pb-4 pt-3">
+          <div className="relative">
+            <SignalPing />
+            <div className="relative overflow-hidden rounded-[1.85rem] border border-line bg-canvas shadow-elegant-lg">
+              <div className="relative h-[340px] p-5 sm:h-[360px] sm:p-6">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={SCENES[active].key}
@@ -165,14 +185,7 @@ function Scene({ name }: { name: SceneKey }) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
         <div className="relative flex h-32 w-32 items-center justify-center rounded-2xl border border-line bg-white shadow-elegant-sm">
-          <div className="grid grid-cols-5 gap-1 p-3">
-            {Array.from({ length: 25 }).map((_, i) => (
-              <span
-                key={i}
-                className={`h-2 w-2 rounded-[2px] ${[0, 4, 6, 8, 12, 16, 18, 20, 24, 2, 10, 14, 22].includes(i) ? 'bg-ink' : 'bg-line'}`}
-              />
-            ))}
-          </div>
+          <QrIcon className="h-16 w-16 text-ink" strokeWidth={1.2} />
           <motion.span
             className="absolute inset-x-2 h-0.5 rounded-full bg-accent"
             animate={{ top: ['8%', '92%', '8%'] }}
@@ -214,7 +227,7 @@ function Scene({ name }: { name: SceneKey }) {
   if (name === 'whatsapp') {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-        <span className="rounded-full bg-canvas px-3 py-1 text-[11px] font-medium text-ink-faint">3 weeks later</span>
+        <span className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-ink-faint">3 weeks later</span>
         <div className="mr-auto max-w-[82%] rounded-2xl rounded-bl-sm border border-line bg-white px-3.5 py-2.5 text-left text-[13px] leading-relaxed text-ink shadow-elegant-sm">
           Hey! It&apos;s been a while 👋 Here&apos;s 20% off your next visit at Spice Garden
         </div>
@@ -230,9 +243,9 @@ function Scene({ name }: { name: SceneKey }) {
           initial={{ scale: 0.7, opacity: 0, rotate: -6 }}
           animate={{ scale: 1, opacity: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 160, damping: 14 }}
-          className="flex h-24 w-24 items-center justify-center rounded-2xl border border-accent/25 bg-accent-50 text-3xl"
+          className="flex h-24 w-24 items-center justify-center rounded-2xl border border-accent/25 bg-accent-50"
         >
-          ☕
+          <CoffeeIcon className="h-11 w-11 text-accent" />
         </motion.div>
         <div>
           <p className="text-[13px] font-semibold text-ink">Free coffee unlocked</p>
