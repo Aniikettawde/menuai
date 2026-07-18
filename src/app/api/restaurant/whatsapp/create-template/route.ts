@@ -1,6 +1,14 @@
 // src/app/api/restaurant/whatsapp/create-template/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import {
+  buildMetaComponents,
+  validateTemplateDraft,
+  type TemplateButton,
+  type TemplateCategory,
+  type HeaderFormat,
+  type TemplateDraft,
+} from '@/lib/whatsapp/templateValidation'
 
 const GRAPH_VERSION = 'v21.0'
 
@@ -13,14 +21,75 @@ function getSupabaseAdmin() {
   return createClient(url, serviceKey, { auth: { persistSession: false } })
 }
 
+function normalizeName(raw: string) {
+  return String(raw)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_]/g, '_')
+    .slice(0, 512)
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { name, category, language, bodyText, restaurantId, wabaId: bodyWabaId } = await req.json()
+    const body = await req.json()
+    const {
+      name,
+      category,
+      language,
+      headerFormat,
+      headerText,
+      bodyText,
+      bodySamples,
+      footerText,
+      buttons,
+      restaurantId,
+      wabaId: bodyWabaId,
+    } = body as {
+      name: string
+      category: TemplateCategory
+      language: string
+      headerFormat?: HeaderFormat
+      headerText?: string
+      bodyText: string
+      bodySamples?: string[]
+      footerText?: string
+      buttons?: TemplateButton[]
+      restaurantId: string
+      wabaId?: string
+    }
 
     if (!name || !category || !bodyText || !restaurantId) {
       return NextResponse.json(
         { error: 'name, category, bodyText, and restaurantId are required' },
         { status: 400 }
+      )
+    }
+
+    // Normalize the name the same way the validator expects it, so what we
+    // validate is exactly what we submit.
+    const safeName = normalizeName(name)
+
+    const draft: TemplateDraft = {
+      name: safeName,
+      category,
+      language: language || 'en_US',
+      headerFormat: headerFormat || 'NONE',
+      headerText,
+      bodyText,
+      bodySamples,
+      footerText,
+      buttons,
+    }
+
+    const validation = validateTemplateDraft(draft)
+    if (!validation.valid) {
+      return NextResponse.json(
+        {
+          error: 'Template failed validation before it was sent to Meta.',
+          fieldErrors: validation.errors,
+          warnings: validation.warnings,
+        },
+        { status: 422 }
       )
     }
 
@@ -46,23 +115,11 @@ export async function POST(req: NextRequest) {
     const wabaId = bodyWabaId || connection.waba_id
     const token = connection.access_token
 
-    // Template names must be lowercase, alphanumeric + underscores only
-    const safeName = String(name)
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9_]/g, '_')
-      .slice(0, 512)
-
     const payload = {
       name: safeName,
-      category, // MARKETING | UTILITY | AUTHENTICATION
-      language: language || 'en_US',
-      components: [
-        {
-          type: 'BODY',
-          text: bodyText,
-        },
-      ],
+      category,
+      language: draft.language,
+      components: buildMetaComponents(draft),
     }
 
     const res = await fetch(
@@ -80,14 +137,19 @@ export async function POST(req: NextRequest) {
     const data = await res.json()
 
     if (!res.ok) {
+      // Surface Meta's own rejection reason (e.g. content policy issues our
+      // local validation can't catch) rather than a generic message.
       return NextResponse.json(
-        { error: data?.error?.message || 'Meta API error', details: data },
+        {
+          error: data?.error?.error_user_msg || data?.error?.message || 'Meta API error',
+          details: data,
+        },
         { status: res.status }
       )
     }
 
     // data typically: { id: "...", status: "PENDING", category: "..." }
-    return NextResponse.json({ success: true, template: data })
+    return NextResponse.json({ success: true, template: data, warnings: validation.warnings })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -120,7 +182,7 @@ export async function GET(req: NextRequest) {
     }
 
     const res = await fetch(
-      `https://graph.facebook.com/${GRAPH_VERSION}/${connection.waba_id}/message_templates?fields=name,status,category,language&limit=25`,
+      `https://graph.facebook.com/${GRAPH_VERSION}/${connection.waba_id}/message_templates?fields=name,status,category,language,rejected_reason&limit=25`,
       {
         headers: { Authorization: `Bearer ${connection.access_token}` },
         cache: 'no-store',

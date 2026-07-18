@@ -1,7 +1,7 @@
 // src/app/dashboard/whatsapp/page.tsx
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Script from 'next/script'
 import {
   MessageCircle,
@@ -12,8 +12,20 @@ import {
   Loader2,
   Link2,
   ShieldCheck,
+  Plus,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react'
 import { useDashboardContext } from '@/hooks/useDashboardContext'
+import {
+  validateTemplateDraft,
+  type TemplateCategory,
+  type HeaderFormat,
+  type ButtonType,
+  type TemplateButton,
+  type TemplateDraft,
+  type FieldError,
+} from '@/lib/whatsapp/templateValidation'
 
 const GRAPH_VERSION = 'v21.0'
 
@@ -53,7 +65,7 @@ type ResultState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'success'; message: string }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; fieldErrors?: FieldError[] }
 
 function ResultBanner({ state }: { state: ResultState }) {
   if (state.kind === 'idle') return null
@@ -85,7 +97,18 @@ function ResultBanner({ state }: { state: ResultState }) {
       style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}0F`, color: BRAND.ink }}
     >
       <XCircle size={14} className="mt-0.5 shrink-0" style={{ color: BRAND.rose }} />
-      <span className="whitespace-pre-wrap break-words">{state.message}</span>
+      <div className="space-y-1">
+        <span className="whitespace-pre-wrap break-words">{state.message}</span>
+        {state.fieldErrors && state.fieldErrors.length > 0 && (
+          <ul className="list-disc pl-4">
+            {state.fieldErrors.map((fe, i) => (
+              <li key={i}>
+                <span className="font-semibold">{fe.field}:</span> {fe.message}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
@@ -410,29 +433,130 @@ function StatusPanel({
   )
 }
 
-// ─────────────────────────────── Template + message tool ───────────────────────────────
+// ─────────────────────────────── Template builder ───────────────────────────────
+
+function extractVariableCount(text: string): number {
+  const set = new Set<string>()
+  const re = /\{\{\s*(\d+)\s*\}\}/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) set.add(m[1])
+  return set.size
+}
+
+function fieldErrorsFor(errors: FieldError[], field: string): FieldError[] {
+  return errors.filter((e) => e.field === field || e.field.startsWith(`${field}[`) || e.field.startsWith(`${field}.`))
+}
+
+function InlineErrors({ errors }: { errors: FieldError[] }) {
+  if (errors.length === 0) return null
+  return (
+    <ul className="mt-1 space-y-0.5">
+      {errors.map((e, i) => (
+        <li key={i} className="flex items-start gap-1 text-[10px]" style={{ color: BRAND.rose }}>
+          <AlertTriangle size={10} className="mt-0.5 shrink-0" />
+          {e.message}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function CharCount({ value, max }: { value: string; max: number }) {
+  const over = value.length > max
+  return (
+    <span className="text-[10px]" style={{ color: over ? BRAND.rose : BRAND.inkFaint }}>
+      {value.length}/{max}
+    </span>
+  )
+}
+
+const inputClass = 'w-full rounded-lg border px-3 py-2 text-xs'
+const labelClass = 'mb-1 block text-[10px] font-medium uppercase tracking-wider'
+
+let buttonIdSeq = 0
+function newButton(type: ButtonType): TemplateButton & { _id: number } {
+  buttonIdSeq += 1
+  return { _id: buttonIdSeq, type, text: '', url: '', phoneNumber: '' }
+}
 
 function CreateTemplateCard({ restaurantId, wabaId }: { restaurantId: string; wabaId: string }) {
   const [name, setName] = useState('festival_offer')
-  const [category, setCategory] = useState('MARKETING')
+  const [category, setCategory] = useState<TemplateCategory>('MARKETING')
   const [language, setLanguage] = useState('en_US')
+  const [headerFormat, setHeaderFormat] = useState<HeaderFormat>('NONE')
+  const [headerText, setHeaderText] = useState('')
   const [bodyText, setBodyText] = useState(
     'Hi {{1}}, celebrate with us! Enjoy 20% off your next visit at {{2}}. Valid this week only.'
   )
+  const [bodySamples, setBodySamples] = useState<string[]>(['Aarav', 'Spice Route'])
+  const [footerText, setFooterText] = useState('Reply STOP to opt out.')
+  const [buttons, setButtons] = useState<(TemplateButton & { _id: number })[]>([])
   const [result, setResult] = useState<ResultState>({ kind: 'idle' })
+
+  const bodyVarCount = useMemo(() => extractVariableCount(bodyText), [bodyText])
+
+  // Keep the samples array in sync with however many variables are currently in the body.
+  useEffect(() => {
+    setBodySamples((prev) => {
+      const next = [...prev]
+      next.length = bodyVarCount
+      return next.map((v) => v || '')
+    })
+  }, [bodyVarCount])
+
+  const draft: TemplateDraft = useMemo(
+    () => ({
+      name,
+      category,
+      language,
+      headerFormat,
+      headerText,
+      bodyText,
+      bodySamples,
+      footerText,
+      buttons: buttons.map(({ _id, ...b }) => b),
+    }),
+    [name, category, language, headerFormat, headerText, bodyText, bodySamples, footerText, buttons]
+  )
+
+  const validation = useMemo(() => validateTemplateDraft(draft), [draft])
+
+  function addButton(type: ButtonType) {
+    setButtons((prev) => [...prev, newButton(type)])
+  }
+  function updateButton(id: number, patch: Partial<TemplateButton>) {
+    setButtons((prev) => prev.map((b) => (b._id === id ? { ...b, ...patch } : b)))
+  }
+  function removeButton(id: number) {
+    setButtons((prev) => prev.filter((b) => b._id !== id))
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    if (!validation.valid) {
+      setResult({
+        kind: 'error',
+        message: 'Fix the highlighted fields before submitting — this template would be rejected by Meta as malformed.',
+        fieldErrors: validation.errors,
+      })
+      return
+    }
+
     setResult({ kind: 'loading' })
     try {
       const res = await fetch('/api/restaurant/whatsapp/create-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, category, language, bodyText, restaurantId, wabaId }),
+        body: JSON.stringify({ ...draft, restaurantId, wabaId }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setResult({ kind: 'error', message: data?.error || 'Failed to create template' })
+        setResult({
+          kind: 'error',
+          message: data?.error || 'Failed to create template',
+          fieldErrors: data?.fieldErrors,
+        })
         return
       }
       setResult({
@@ -460,98 +584,350 @@ function CreateTemplateCard({ restaurantId, wabaId }: { restaurantId: string; wa
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Name / Category / Language */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
-            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
-              Template name
-            </label>
+            <label className={labelClass} style={{ color: BRAND.inkFaint }}>Template name</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-xs"
+              className={inputClass}
               style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
               placeholder="festival_offer"
             />
+            <InlineErrors errors={fieldErrorsFor(validation.errors, 'name')} />
           </div>
           <div>
-            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
-              Category
-            </label>
+            <label className={labelClass} style={{ color: BRAND.inkFaint }}>Category</label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-xs"
+              onChange={(e) => setCategory(e.target.value as TemplateCategory)}
+              className={inputClass}
               style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
             >
               <option value="MARKETING">MARKETING</option>
               <option value="UTILITY">UTILITY</option>
               <option value="AUTHENTICATION">AUTHENTICATION</option>
             </select>
+            <InlineErrors errors={fieldErrorsFor(validation.errors, 'category')} />
+          </div>
+          <div>
+            <label className={labelClass} style={{ color: BRAND.inkFaint }}>Language code</label>
+            <input
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className={inputClass}
+              style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
+              placeholder="en_US"
+            />
+            <InlineErrors errors={fieldErrorsFor(validation.errors, 'language')} />
           </div>
         </div>
 
+        {category === 'AUTHENTICATION' && (
+          <div
+            className="flex items-start gap-2 rounded-lg border p-3 text-[11px]"
+            style={{ borderColor: `${BRAND.gold}55`, background: `${BRAND.gold}0F`, color: BRAND.ink }}
+          >
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" style={{ color: BRAND.gold }} />
+            AUTHENTICATION templates use Meta&apos;s fixed OTP body — your body/header/footer text below is ignored;
+            only OTP-type buttons are sent.
+          </div>
+        )}
+
+        {/* Header */}
         <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
-            Language code
-          </label>
-          <input
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2 text-xs"
+          <label className={labelClass} style={{ color: BRAND.inkFaint }}>Header (optional)</label>
+          <select
+            value={headerFormat}
+            onChange={(e) => setHeaderFormat(e.target.value as HeaderFormat)}
+            className={inputClass}
             style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
-            placeholder="en_US"
-          />
+          >
+            <option value="NONE">None</option>
+            <option value="TEXT">Text</option>
+            <option value="IMAGE">Image</option>
+            <option value="VIDEO">Video</option>
+            <option value="DOCUMENT">Document</option>
+          </select>
+          {headerFormat === 'TEXT' && (
+            <div className="mt-2">
+              <input
+                value={headerText}
+                onChange={(e) => setHeaderText(e.target.value)}
+                className={inputClass}
+                style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
+                placeholder="Diwali Special 🎉 (or a {{1}} variable)"
+              />
+              <div className="mt-1 flex justify-end"><CharCount value={headerText} max={60} /></div>
+            </div>
+          )}
+          {(headerFormat === 'IMAGE' || headerFormat === 'VIDEO' || headerFormat === 'DOCUMENT') && (
+            <p className="mt-1 text-[10px]" style={{ color: BRAND.inkFaint }}>
+              You&apos;ll attach a sample {headerFormat.toLowerCase()} file in WhatsApp Manager after this template
+              is created — Meta only needs the format here.
+            </p>
+          )}
+          <InlineErrors errors={fieldErrorsFor(validation.errors, 'header')} />
         </div>
 
+        {/* Body */}
         <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
+          <label className={labelClass} style={{ color: BRAND.inkFaint }}>
             Body text (use {'{{1}}'}, {'{{2}}'} for variables)
           </label>
           <textarea
             value={bodyText}
             onChange={(e) => setBodyText(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border px-3 py-2 text-xs"
+            className={inputClass}
             style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
+            disabled={category === 'AUTHENTICATION'}
           />
+          <div className="mt-1 flex justify-end"><CharCount value={bodyText} max={1024} /></div>
+          <InlineErrors errors={fieldErrorsFor(validation.errors, 'body')} />
+
+          {category !== 'AUTHENTICATION' && bodyVarCount > 0 && (
+            <div className="mt-2 space-y-2 rounded-lg border p-3" style={{ borderColor: BRAND.line, background: BRAND.ivoryDeep }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
+                Sample values (required by Meta for review)
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {Array.from({ length: bodyVarCount }).map((_, i) => (
+                  <input
+                    key={i}
+                    value={bodySamples[i] || ''}
+                    onChange={(e) =>
+                      setBodySamples((prev) => {
+                        const next = [...prev]
+                        next[i] = e.target.value
+                        return next
+                      })
+                    }
+                    className={inputClass}
+                    style={{ borderColor: BRAND.line, background: BRAND.card, color: BRAND.ink }}
+                    placeholder={`Example for {{${i + 1}}}`}
+                  />
+                ))}
+              </div>
+              <InlineErrors errors={fieldErrorsFor(validation.errors, 'bodySamples')} />
+            </div>
+          )}
         </div>
+
+        {/* Footer */}
+        <div>
+          <label className={labelClass} style={{ color: BRAND.inkFaint }}>Footer (optional, no variables)</label>
+          <input
+            value={footerText}
+            onChange={(e) => setFooterText(e.target.value)}
+            className={inputClass}
+            style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
+            placeholder="Reply STOP to opt out."
+          />
+          <div className="mt-1 flex justify-end"><CharCount value={footerText} max={60} /></div>
+          <InlineErrors errors={fieldErrorsFor(validation.errors, 'footer')} />
+        </div>
+
+        {/* Buttons */}
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className={labelClass} style={{ color: BRAND.inkFaint, marginBottom: 0 }}>
+              Buttons (optional)
+            </label>
+            <div className="flex gap-1.5">
+              <button type="button" onClick={() => addButton('QUICK_REPLY')} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold" style={{ borderColor: BRAND.line, color: BRAND.inkSoft }}>
+                <Plus size={10} /> Quick reply
+              </button>
+              <button type="button" onClick={() => addButton('URL')} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold" style={{ borderColor: BRAND.line, color: BRAND.inkSoft }}>
+                <Plus size={10} /> URL
+              </button>
+              <button type="button" onClick={() => addButton('PHONE_NUMBER')} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold" style={{ borderColor: BRAND.line, color: BRAND.inkSoft }}>
+                <Plus size={10} /> Phone
+              </button>
+            </div>
+          </div>
+
+          {buttons.length === 0 ? (
+            <p className="text-[10px]" style={{ color: BRAND.inkFaint }}>No buttons added.</p>
+          ) : (
+            <div className="space-y-2">
+              {buttons.map((b, i) => (
+                <div key={b._id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2.5" style={{ borderColor: BRAND.line, background: BRAND.ivoryDeep }}>
+                  <span className="rounded-md px-2 py-1 text-[10px] font-bold" style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>
+                    {b.type.replace('_', ' ')}
+                  </span>
+                  <input
+                    value={b.text}
+                    onChange={(e) => updateButton(b._id, { text: e.target.value })}
+                    placeholder="Button label"
+                    className="min-w-[120px] flex-1 rounded-lg border px-2.5 py-1.5 text-xs"
+                    style={{ borderColor: BRAND.line, background: BRAND.card, color: BRAND.ink }}
+                  />
+                  {b.type === 'URL' && (
+                    <input
+                      value={b.url || ''}
+                      onChange={(e) => updateButton(b._id, { url: e.target.value })}
+                      placeholder="https://example.com/order"
+                      className="min-w-[160px] flex-1 rounded-lg border px-2.5 py-1.5 text-xs"
+                      style={{ borderColor: BRAND.line, background: BRAND.card, color: BRAND.ink }}
+                    />
+                  )}
+                  {b.type === 'PHONE_NUMBER' && (
+                    <input
+                      value={b.phoneNumber || ''}
+                      onChange={(e) => updateButton(b._id, { phoneNumber: e.target.value })}
+                      placeholder="+14155552671"
+                      className="min-w-[140px] flex-1 rounded-lg border px-2.5 py-1.5 text-xs"
+                      style={{ borderColor: BRAND.line, background: BRAND.card, color: BRAND.ink }}
+                    />
+                  )}
+                  <button type="button" onClick={() => removeButton(b._id)} className="ml-auto rounded-lg p-1.5" style={{ color: BRAND.rose }}>
+                    <Trash2 size={13} />
+                  </button>
+                  <InlineErrors errors={fieldErrorsFor(validation.errors, `buttons[${i}]`)} />
+                </div>
+              ))}
+            </div>
+          )}
+          <InlineErrors errors={fieldErrorsFor(validation.errors, 'buttons').filter((e) => e.field === 'buttons')} />
+        </div>
+
+        {validation.warnings.length > 0 && (
+          <div className="space-y-1 rounded-lg border p-3" style={{ borderColor: `${BRAND.gold}55`, background: `${BRAND.gold}0F` }}>
+            {validation.warnings.map((w, i) => (
+              <p key={i} className="flex items-start gap-1.5 text-[10px]" style={{ color: BRAND.ink }}>
+                <AlertTriangle size={11} className="mt-0.5 shrink-0" style={{ color: BRAND.gold }} />
+                {w.message}
+              </p>
+            ))}
+          </div>
+        )}
 
         <button
           type="submit"
-          disabled={result.kind === 'loading'}
+          disabled={result.kind === 'loading' || !validation.valid}
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition active:scale-95 disabled:opacity-60"
           style={{ background: BRAND.burgundy, boxShadow: `0 8px 20px ${BRAND.burgundy}26` }}
         >
           <FileText size={12} />
-          Create Template
+          {validation.valid ? 'Create Template' : `Fix ${validation.errors.length} issue${validation.errors.length === 1 ? '' : 's'} to continue`}
         </button>
       </form>
 
       <ResultBanner state={result} />
 
       <p className="mt-3 text-[10px] leading-relaxed" style={{ color: BRAND.inkFaint }}>
-        New templates go into PENDING review with Meta and can take minutes to hours to approve. That&apos;s fine for
-        this video — Meta only needs to see the API call succeed and the template appear in WhatsApp Manager.
+        New templates go into PENDING review with Meta and can take minutes to hours to approve. Local validation
+        only catches malformed templates — Meta&apos;s content policy review happens after submission.
       </p>
     </div>
   )
 }
 
+type TemplateOption = {
+  name: string
+  status: string
+  category: string
+  language: string
+  rejectedReason: string | null
+  headerFormat: HeaderFormat
+  headerVariableCount: number
+  bodyVariableCount: number
+}
+
+function statusColor(status: string) {
+  if (status === 'APPROVED') return BRAND.emerald
+  if (status === 'REJECTED') return BRAND.rose
+  return BRAND.gold // PENDING and anything else
+}
+
 function SendMessageCard({ restaurantId, phoneNumberId }: { restaurantId: string; phoneNumberId: string }) {
   const [to, setTo] = useState('')
-  const [templateName, setTemplateName] = useState('hello_world')
-  const [languageCode, setLanguageCode] = useState('en_US')
+  const [templates, setTemplates] = useState<TemplateOption[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(true)
+  const [templatesError, setTemplatesError] = useState<string | null>(null)
+  const [selectedKey, setSelectedKey] = useState<string>('') // `${name}::${language}`
+  const [headerVariable, setHeaderVariable] = useState('')
+  const [bodyVariables, setBodyVariables] = useState<string[]>([])
   const [result, setResult] = useState<ResultState>({ kind: 'idle' })
+
+  const fetchTemplates = useCallback(() => {
+    setTemplatesLoading(true)
+    setTemplatesError(null)
+    fetch(`/api/restaurant/whatsapp/templates?restaurantId=${restaurantId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.error) {
+          setTemplatesError(data.error)
+          setTemplates([])
+          return
+        }
+        const list: TemplateOption[] = data?.templates ?? []
+        setTemplates(list)
+        setSelectedKey((prev) => {
+          if (prev && list.some((t) => `${t.name}::${t.language}` === prev)) return prev
+          const firstApproved = list.find((t) => t.status === 'APPROVED')
+          return firstApproved ? `${firstApproved.name}::${firstApproved.language}` : ''
+        })
+      })
+      .catch((err) => setTemplatesError(err instanceof Error ? err.message : 'Failed to load templates'))
+      .finally(() => setTemplatesLoading(false))
+  }, [restaurantId])
+
+  useEffect(() => {
+    fetchTemplates()
+  }, [fetchTemplates])
+
+  const selected = useMemo(
+    () => templates.find((t) => `${t.name}::${t.language}` === selectedKey) || null,
+    [templates, selectedKey]
+  )
+
+  // Reset the variable inputs whenever the selected template changes shape.
+  useEffect(() => {
+    setBodyVariables((prev) => {
+      const next = [...prev]
+      next.length = selected?.bodyVariableCount || 0
+      return next.map((v) => v || '')
+    })
+    if (!selected || selected.headerVariableCount === 0) setHeaderVariable('')
+  }, [selected])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!selected) {
+      setResult({ kind: 'error', message: 'Choose a template first.' })
+      return
+    }
+    if (selected.status !== 'APPROVED') {
+      setResult({ kind: 'error', message: `"${selected.name}" is ${selected.status} — Meta won't deliver it yet.` })
+      return
+    }
+    if (bodyVariables.length !== selected.bodyVariableCount || bodyVariables.some((v) => !v.trim())) {
+      setResult({ kind: 'error', message: 'Fill in every body variable before sending.' })
+      return
+    }
+    if (selected.headerVariableCount > 0 && !headerVariable.trim()) {
+      setResult({ kind: 'error', message: 'This template has a header variable — fill it in before sending.' })
+      return
+    }
+
     setResult({ kind: 'loading' })
     try {
       const res = await fetch('/api/restaurant/whatsapp/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, templateName, languageCode, restaurantId, phoneNumberId }),
+        body: JSON.stringify({
+          to,
+          templateName: selected.name,
+          languageCode: selected.language,
+          variables: bodyVariables,
+          headerVariable: selected.headerVariableCount > 0 ? headerVariable : undefined,
+          restaurantId,
+          phoneNumberId,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -599,34 +975,102 @@ function SendMessageCard({ restaurantId, phoneNumberId }: { restaurantId: string
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
-              Template name
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
+              Template
             </label>
-            <input
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
+            <button
+              type="button"
+              onClick={fetchTemplates}
+              className="text-[10px] font-semibold underline"
+              style={{ color: BRAND.inkSoft }}
+            >
+              Refresh
+            </button>
+          </div>
+
+          {templatesLoading ? (
+            <div className="flex items-center gap-2 text-[11px]" style={{ color: BRAND.inkFaint }}>
+              <Loader2 size={12} className="animate-spin" /> Fetching templates from Meta…
+            </div>
+          ) : templatesError ? (
+            <div className="flex items-start gap-1.5 text-[11px]" style={{ color: BRAND.rose }}>
+              <XCircle size={12} className="mt-0.5 shrink-0" />
+              {templatesError}
+            </div>
+          ) : templates.length === 0 ? (
+            <p className="text-[11px]" style={{ color: BRAND.inkFaint }}>
+              No templates found yet — create one first.
+            </p>
+          ) : (
+            <select
+              value={selectedKey}
+              onChange={(e) => setSelectedKey(e.target.value)}
               className="w-full rounded-lg border px-3 py-2 text-xs"
               style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
-              Language code
-            </label>
-            <input
-              value={languageCode}
-              onChange={(e) => setLanguageCode(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-xs"
-              style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
-            />
-          </div>
+            >
+              {templates.map((t) => (
+                <option key={`${t.name}::${t.language}`} value={`${t.name}::${t.language}`}>
+                  {t.name} ({t.language}) — {t.status}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {selected && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-[10px]" style={{ color: statusColor(selected.status) }}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: statusColor(selected.status) }} />
+              {selected.status}
+              {selected.status === 'REJECTED' && selected.rejectedReason ? ` — ${selected.rejectedReason}` : ''}
+            </div>
+          )}
         </div>
+
+        {selected && selected.headerVariableCount > 0 && (
+          <div>
+            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
+              Header value
+            </label>
+            <input
+              value={headerVariable}
+              onChange={(e) => setHeaderVariable(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-xs"
+              style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
+              placeholder="Value for the header's variable"
+            />
+          </div>
+        )}
+
+        {selected && selected.bodyVariableCount > 0 && (
+          <div>
+            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
+              Body variables ({selected.bodyVariableCount})
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {Array.from({ length: selected.bodyVariableCount }).map((_, i) => (
+                <input
+                  key={i}
+                  value={bodyVariables[i] || ''}
+                  onChange={(e) =>
+                    setBodyVariables((prev) => {
+                      const next = [...prev]
+                      next[i] = e.target.value
+                      return next
+                    })
+                  }
+                  className="rounded-lg border px-3 py-2 text-xs"
+                  style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }}
+                  placeholder={`Value for {{${i + 1}}}`}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         <button
           type="submit"
-          disabled={result.kind === 'loading'}
+          disabled={result.kind === 'loading' || !selected || selected.status !== 'APPROVED'}
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition active:scale-95 disabled:opacity-60"
           style={{ background: BRAND.burgundy, boxShadow: `0 8px 20px ${BRAND.burgundy}26` }}
         >
@@ -638,8 +1082,8 @@ function SendMessageCard({ restaurantId, phoneNumberId }: { restaurantId: string
       <ResultBanner state={result} />
 
       <p className="mt-3 text-[10px] leading-relaxed" style={{ color: BRAND.inkFaint }}>
-        Left at &quot;hello_world&quot; this sends Meta&apos;s default pre-approved template — no waiting on template
-        review, so you can record this video right away.
+        Templates are fetched live from Meta on every load, so status (PENDING/APPROVED/REJECTED) and the required
+        variable count are always current. &quot;hello_world&quot; needs no variables and no waiting on review.
       </p>
     </div>
   )
