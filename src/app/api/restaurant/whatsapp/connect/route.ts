@@ -29,30 +29,36 @@ export async function POST(req: NextRequest) {
 
     const appId = process.env.NEXT_PUBLIC_META_APP_ID
     const appSecret = process.env.META_APP_SECRET
-    const systemUserToken = process.env.WHATSAPP_ACCESS_TOKEN
 
-    if (!appId || !appSecret || !systemUserToken) {
+    if (!appId || !appSecret) {
       return NextResponse.json(
-        {
-          error:
-            'Missing NEXT_PUBLIC_META_APP_ID, META_APP_SECRET, or WHATSAPP_ACCESS_TOKEN in server env',
-        },
+        { error: 'Missing NEXT_PUBLIC_META_APP_ID or META_APP_SECRET in server env' },
         { status: 500 }
       )
     }
 
-    // Step 1: exchange the Embedded Signup `code` for a business token.
-    // This mainly finalizes the grant; ongoing calls use your own System User token below.
+    // Step 1: exchange the Embedded Signup `code` for an access token that is actually
+    // granted access to the WABA the user just created/selected during signup.
+    //
+    // IMPORTANT: this token — not the static system-user WHATSAPP_ACCESS_TOKEN — is what
+    // has permission to touch the brand-new WABA in steps 2 and 3 below. The system user
+    // token only works once your Business has been added as a Tech Provider / partner on
+    // that WABA (either via this same signup flow sharing it with your Business Manager,
+    // or a manual partner-add in Business Settings). Using the wrong token here is what
+    // produces Meta's generic "does not exist, cannot be loaded due to missing
+    // permissions, or does not support this operation" error.
     const tokenRes = await fetch(
       `https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${encodeURIComponent(code)}`
     )
     const tokenData = await tokenRes.json()
-    if (!tokenRes.ok) {
+    if (!tokenRes.ok || !tokenData?.access_token) {
       return NextResponse.json(
         { error: tokenData?.error?.message || 'Failed to exchange code', details: tokenData },
-        { status: tokenRes.status }
+        { status: tokenRes.ok ? 500 : tokenRes.status }
       )
     }
+
+    const grantedToken: string = tokenData.access_token
 
     // Step 2: subscribe your app to this WABA's webhooks so you receive message/status events.
     const subscribeRes = await fetch(
@@ -60,7 +66,7 @@ export async function POST(req: NextRequest) {
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${systemUserToken}`,
+          Authorization: `Bearer ${grantedToken}`,
           'Content-Type': 'application/json',
         },
       }
@@ -80,14 +86,27 @@ export async function POST(req: NextRequest) {
     const [phoneRes, wabaRes] = await Promise.all([
       fetch(
         `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`,
-        { headers: { Authorization: `Bearer ${systemUserToken}` } }
+        { headers: { Authorization: `Bearer ${grantedToken}` } }
       ),
       fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${wabaId}?fields=name`, {
-        headers: { Authorization: `Bearer ${systemUserToken}` },
+        headers: { Authorization: `Bearer ${grantedToken}` },
       }),
     ])
     const phoneData = await phoneRes.json()
     const wabaData = await wabaRes.json()
+
+    if (!phoneRes.ok) {
+      return NextResponse.json(
+        { error: phoneData?.error?.message || 'Failed to fetch phone number details', details: phoneData },
+        { status: phoneRes.status }
+      )
+    }
+    if (!wabaRes.ok) {
+      return NextResponse.json(
+        { error: wabaData?.error?.message || 'Failed to fetch WABA details', details: wabaData },
+        { status: wabaRes.status }
+      )
+    }
 
     // Step 4: store the connection.
     const supabase = getSupabaseAdmin()
