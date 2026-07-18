@@ -386,7 +386,7 @@ const { points, quest, pending_pin, redemptions } = status
         >
           <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--pr-card)', border: '1px solid var(--pr-border-hover)', borderRadius: 20, padding: 20, width: '100%', maxWidth: 340 }}>
             <p style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>Choose your reward</p>
-            <p style={{ margin: '0 0 16px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>150 points will be deducted.</p>
+            <p style={{ margin: '0 0 16px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>50 points will be deducted.</p>
             {(['amazon_pay', 'zomato', 'swiggy'] as const).map((type) => (
               <button
                 key={type}

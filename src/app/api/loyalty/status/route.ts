@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-const QUEST_TARGET_POINTS = 150
+const QUEST_TARGET_POINTS = 50
 const QUEST_TARGET_VISITS = 3
 const POINTS_PER_VISIT = 50
 

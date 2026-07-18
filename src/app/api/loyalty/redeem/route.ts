@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
               <p style="color:#555; margin-top:0;">A guest has redeemed their loyalty points. Action needed: issue the gift card and mark it fulfilled.</p>
               <table style="width:100%; border-collapse: collapse; margin-top: 16px;">
                 <tr><td style="padding:6px 0; color:#888;">Reward</td><td style="padding:6px 0; font-weight:600;">${REWARD_LABELS[reward_type]}</td></tr>
-                <tr><td style="padding:6px 0; color:#888;">Points spent</td><td style="padding:6px 0; font-weight:600;">150</td></tr>
+                <tr><td style="padding:6px 0; color:#888;">Points spent</td><td style="padding:6px 0; font-weight:600;">50</td></tr>
                 <tr><td style="padding:6px 0; color:#888;">Customer</td><td style="padding:6px 0; font-weight:600;">${customer?.display_name ?? 'N/A'}</td></tr>
                 <tr><td style="padding:6px 0; color:#888;">Phone</td><td style="padding:6px 0; font-weight:600;">${customer?.phone ?? 'N/A'}</td></tr>
                 <tr><td style="padding:6px 0; color:#888;">Restaurant</td><td style="padding:6px 0; font-weight:600;">${restaurantName}</td></tr>

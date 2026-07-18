@@ -202,7 +202,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={TITLE}>Earn Rewards</p>
               <p style={SUBTITLE}>
-  150 pts = ₹150 gift card{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
+  50 pts = ₹50 gift card{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
 </p>
             </div>
             {offerBadge}
