@@ -28,6 +28,9 @@ import { TranslationLoadingOverlay } from './TranslationLoadingOverlay'
 import { WelcomeSplash } from './WelcomeSplash'
 import { FloatingGameButton } from './games/FloatingGameButton'
 import { GamesModal } from './games/GamesModal'
+import { RewardWelcomePopup } from './RewardWelcomePopup'
+import { useCustomerAuth } from '@/store/customer-auth-store'
+
 
 type OfferRow = {
   id: string; title: string
@@ -112,7 +115,8 @@ const heroItems = (items ?? [])
   const [activeOffers, setActiveOffers] = useState<OfferRow[]>([])
 const [sessionExpired, setSessionExpired] = useState(false)
 const [gamesOpen, setGamesOpen] = useState(false)
-
+const { customer } = useCustomerAuth()
+const [showRewardPopup, setShowRewardPopup] = useState(false)
   const tableToken = searchParams.get('t')
   const legacyTableParam = searchParams.get('table')
   const [loginOpen, setLoginOpen] = useState(false)
@@ -130,6 +134,22 @@ const [gamesOpen, setGamesOpen] = useState(false)
       sessionStorage.setItem(`dinezy_welcome_seen_${initialData.restaurant.id}`, '1')
     } catch {}
   }, [initialData.restaurant.id])
+  
+  useEffect(() => {
+  // Only for logged-out users, only once per browser session, only on the menu tab.
+  if (customer) return
+  if (activeTab !== 'menu') return
+ 
+  const key = `dinezy_reward_popup_seen_${initialData.restaurant.id}`
+  if (sessionStorage.getItem(key) === '1') return
+ 
+  const timer = setTimeout(() => {
+    setShowRewardPopup(true)
+    sessionStorage.setItem(key, '1')
+  }, 10000) // 10s after mount of this effect (i.e. after landing on menu)
+ 
+  return () => clearTimeout(timer)
+}, [customer, activeTab, initialData.restaurant.id])
 
   useEffect(() => {
     setRestaurantData(initialData)
@@ -848,6 +868,16 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
       onExploreRewards={() => setAccountOpen(true)}
     />
   }
+/>
+<RewardWelcomePopup
+  isOpen={showRewardPopup}
+  onClose={() => setShowRewardPopup(false)}
+  onClaim={() => {
+    setShowRewardPopup(false)
+    setLoginOpen(true) // opens your existing OTPLoginModal via CustomerAuthProvider
+  }}
+  points={50}
+  rupeeValue={50}
 />
   </main>
 )}
