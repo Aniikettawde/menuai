@@ -1,230 +1,210 @@
-import Link from 'next/link'
-import { Shield, Lock, Database, Mail, Phone } from 'lucide-react'
+Privacy Policy
 
-export const metadata = {
-title: 'Privacy Policy | Dinezy',
-description:
-'Learn how Dinezy collects, uses, and protects information.',
-}
+Effective Date: July 18, 2026
 
-export default function PrivacyPage() {
-return ( <main className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-white"> <section className="mx-auto max-w-5xl px-6 py-24"> <div className="text-center"> <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700"> <Shield size={16} />
-Privacy Policy </div>
+1. Introduction
 
-```
-      <h1 className="mt-6 text-5xl font-bold tracking-tight text-slate-900">
-        Privacy Policy
-      </h1>
+Welcome to Dinezy.
 
-      <p className="mt-4 text-slate-600">
-        Last Updated: June 2026
-      </p>
-    </div>
+Dinezy is a cloud-based restaurant technology platform that helps restaurants digitize menus, manage QR-based ordering, communicate with customers, analyze restaurant performance, and improve the dining experience.
 
-    <div className="mt-16 rounded-[32px] border border-slate-200 bg-white p-8 md:p-12 shadow-sm">
-      <div className="prose prose-slate max-w-none">
-        <p>
-          Welcome to Dinezy ("Dinezy", "we", "our", or "us").
-          This Privacy Policy explains how we collect, use,
-          and protect information when restaurants and customers
-          use our platform.
-        </p>
+This Privacy Policy explains what information we collect, how we use it, and the choices available to restaurants and end users.
 
-        <h2>1. About Dinezy</h2>
+By using Dinezy, you agree to this Privacy Policy.
 
-        <p>
-          Dinezy is a digital restaurant platform that enables
-          restaurants to create QR-based digital menus,
-          manage menu content, receive waiter requests,
-          and provide AI-powered food recommendations
-          to customers.
-        </p>
+2. Who We Are
 
-        <h2>2. Information We Collect</h2>
+Dinezy provides software services to restaurants including:
 
-        <div className="grid gap-6 md:grid-cols-2 not-prose my-8">
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-            <Database className="mb-4 h-8 w-8 text-blue-600" />
-            <h3 className="font-semibold text-slate-900">
-              Restaurant Information
-            </h3>
+Digital QR menus
+AI-powered menu assistance
+Restaurant dashboards
+Menu management
+Customer engagement
+Restaurant analytics
+Order management
+WhatsApp Business integration
+Loyalty and promotional features
+3. Information We Collect
 
-            <ul className="mt-4 space-y-2 text-sm text-slate-600">
-              <li>Restaurant Name</li>
-              <li>Email Address</li>
-              <li>Password (securely stored)</li>
-              <li>Restaurant Logo (optional)</li>
-              <li>Restaurant Banner (optional)</li>
-              <li>Menu Information</li>
-              <li>Dish Photos & Prices</li>
-            </ul>
-          </div>
+Depending on how Dinezy is used, we may collect:
 
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-            <Lock className="mb-4 h-8 w-8 text-violet-600" />
-            <h3 className="font-semibold text-slate-900">
-              Customer Information
-            </h3>
+Restaurant Information
+Restaurant name
+Business address
+Contact information
+Owner information
+Email address
+Phone number
+Subscription details
+Menu Information
 
-            <ul className="mt-4 space-y-2 text-sm text-slate-600">
-              <li>No account required</li>
-              <li>No payment information collected</li>
-              <li>No government ID collected</li>
-              <li>No sensitive personal information collected</li>
-              <li>Limited technical analytics only</li>
-            </ul>
-          </div>
-        </div>
+Restaurants may upload:
 
-        <h2>3. Information We Do Not Collect</h2>
+Menu items
+Categories
+Prices
+Descriptions
+Images
+Availability status
+Customer Information
 
-        <p>
-          Dinezy does not intentionally collect:
-        </p>
+When customers interact with restaurants using Dinezy, we may process:
 
-        <ul>
-          <li>Credit card information</li>
-          <li>UPI information</li>
-          <li>Government identification numbers</li>
-          <li>Sensitive personal information</li>
-          <li>Bank account details</li>
-          <li>Precise location information</li>
-        </ul>
+Name (if provided)
+Phone number (when required)
+Table number
+Order information
+Loyalty points
+Visit history
+Feedback or reviews
 
-        <h2>4. Cookies & Local Storage</h2>
+Customers are not required to create an account to browse digital menus unless specific features require authentication.
 
-        <p>
-          Dinezy may use cookies, browser storage,
-          and similar technologies to:
-        </p>
+Device Information
 
-        <ul>
-          <li>Maintain user sessions</li>
-          <li>Improve website performance</li>
-          <li>Remember preferences</li>
-          <li>Enhance user experience</li>
-          <li>Improve platform reliability</li>
-        </ul>
+We may collect:
 
-        <h2>5. How We Use Information</h2>
+IP address
+Browser type
+Device type
+Operating system
+Language
+Approximate location (when permitted)
+Session identifiers
+4. WhatsApp Business Integration
 
-        <ul>
-          <li>Provide and maintain Dinezy services</li>
-          <li>Create restaurant accounts</li>
-          <li>Display restaurant menus</li>
-          <li>Enable waiter-call functionality</li>
-          <li>Generate AI-powered food recommendations</li>
-          <li>Improve platform performance</li>
-          <li>Provide customer support</li>
-        </ul>
+Restaurants may choose to connect their own WhatsApp Business Account to Dinezy using Meta's Embedded Signup.
 
-        <h2>6. AI Features</h2>
+When a restaurant authorizes Dinezy:
 
-        <p>
-          Dinezy may use artificial intelligence to recommend
-          dishes, suggest food pairings, improve menu discovery,
-          and enhance the customer dining experience.
-        </p>
+Dinezy receives permission from Meta to manage messaging on behalf of the restaurant.
+The restaurant remains the owner of its WhatsApp Business Account.
+Dinezy does not take ownership of the restaurant's WhatsApp account.
+Restaurants may revoke Dinezy's access at any time through Meta or Facebook Business settings.
+5. WhatsApp Data We Process
 
-        <p>
-          AI recommendations are generated using restaurant-provided
-          menu information and are not based on sensitive personal data.
-        </p>
+When WhatsApp integration is enabled, Dinezy may process:
 
-        <h2>7. Data Sharing</h2>
+WhatsApp Business Account ID
+Phone Number ID
+Business Account ID
+Access tokens issued by Meta
+Message delivery status
+Template information
+Customer phone numbers used for messaging
+Customer communication history necessary for restaurant operations
 
-        <p>
-          We do not sell personal information.
-        </p>
+Access tokens are securely stored and used only to provide messaging services authorized by the restaurant.
 
-        <p>
-          Information may be shared only with trusted service providers,
-          when required by law, or when necessary to protect
-          the security and integrity of Dinezy.
-        </p>
+6. How We Use Information
 
-        <h2>8. Data Security</h2>
+We use information to:
 
-        <p>
-          We implement reasonable technical and organizational
-          safeguards designed to protect information from
-          unauthorized access, disclosure, alteration,
-          or destruction.
-        </p>
+Provide digital menu services
+Process restaurant orders
+Generate QR menus
+Provide restaurant analytics
+Improve AI-powered recommendations
+Send WhatsApp notifications
+Manage customer loyalty programs
+Improve platform performance
+Prevent fraud and abuse
+Comply with legal obligations
+7. AI Features
 
-        <h2>9. Data Retention</h2>
+Dinezy uses artificial intelligence to assist restaurants with tasks such as:
 
-        <p>
-          Restaurant account information and menu content
-          may be retained while an account remains active.
-        </p>
+Menu digitization
+Menu categorization
+Menu recommendations
+Customer assistance
+Restaurant insights
 
-        <p>
-          Upon account deletion, information may be removed
-          within a reasonable period unless retention is
-          required by law.
-        </p>
+AI-generated responses should be reviewed by restaurant staff before relying on them for business decisions.
 
-        <h2>10. Third-Party Services</h2>
+8. Sharing Information
 
-        <p>
-          Dinezy may utilize trusted third-party providers
-          for authentication, hosting, analytics, storage,
-          and infrastructure services.
-        </p>
+We do not sell personal information.
 
-        <h2>11. Children's Privacy</h2>
+We may share information with trusted service providers that help us operate Dinezy, including:
 
-        <p>
-          Dinezy is not directed toward children under
-          13 years of age, and we do not knowingly collect
-          personal information from children.
-        </p>
+Meta Platforms (WhatsApp Business Platform)
+Cloud hosting providers
+Payment providers
+Analytics providers
+Security providers
 
-        <h2>12. Changes To This Policy</h2>
+These providers process information only to deliver their services.
 
-        <p>
-          We may update this Privacy Policy from time to time.
-          Updated versions will be posted on this page.
-        </p>
+9. Data Security
 
-        <h2>13. Contact Us</h2>
+We implement reasonable technical and organizational measures to protect data, including:
 
-        <div className="not-prose mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-6">
-          <div className="flex items-center gap-3 text-slate-700">
-            <Mail size={18} />
-            <a
-              href="mailto:anikettawdee@gmail.com"
-              className="font-medium hover:text-blue-600"
-            >
-              anikettawdee@gmail.com
-            </a>
-          </div>
+Encrypted communication (HTTPS)
+Authentication controls
+Secure cloud infrastructure
+Access restrictions
+Regular monitoring
 
-          <div className="mt-4 flex items-center gap-3 text-slate-700">
-            <Phone size={18} />
-            <a
-              href="tel:+918605123549"
-              className="font-medium hover:text-blue-600"
-            >
-              +91 86051 23549
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
+No online service can guarantee absolute security.
 
-    <div className="mt-10 text-center">
-      <Link
-        href="/"
-        className="inline-flex items-center rounded-full border border-slate-200 px-6 py-3 font-medium text-slate-700 transition hover:bg-slate-100"
-      >
-        Back to Home
-      </Link>
-    </div>
-  </section>
-</main>
+10. Data Retention
 
+We retain information only as long as necessary to:
 
-)
-}
+Provide services
+Comply with legal obligations
+Resolve disputes
+Enforce agreements
+
+Restaurants may request deletion of their account subject to applicable legal requirements.
+
+11. Customer Rights
+
+Depending on applicable law, individuals may have the right to:
+
+Access their information
+Correct inaccurate information
+Request deletion
+Restrict processing
+Object to certain processing
+Withdraw consent where applicable
+
+Requests may be submitted using the contact information below.
+
+12. Third-Party Services
+
+Dinezy integrates with third-party services including:
+
+Meta (WhatsApp Business Platform)
+Google services
+Payment gateways
+Cloud infrastructure providers
+
+These services have their own privacy policies governing their processing of data.
+
+13. Children's Privacy
+
+Dinezy is not intended for children under the age required by applicable law. We do not knowingly collect personal information from children.
+
+14. International Data Transfers
+
+Information may be processed in countries where our service providers operate. Appropriate safeguards are implemented where required by law.
+
+15. Changes to This Privacy Policy
+
+We may update this Privacy Policy from time to time.
+
+Material changes will be posted on this page with an updated effective date.
+
+16. Contact Us
+
+If you have questions regarding this Privacy Policy, please contact:
+
+Dinezy
+
+Website: https://dinezy.in
+
+Email: support@dinezy.in
+
