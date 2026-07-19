@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { LOYALTY_LEVELS, getCurrentLevel, getNextLevel } from '@/lib/loyalty-levels'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-const QUEST_TARGET_POINTS = 50
-const QUEST_TARGET_VISITS = 3
-const POINTS_PER_VISIT = 50
 
 export async function GET(req: NextRequest) {
   const customerId = req.nextUrl.searchParams.get('customer_id')
@@ -16,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   const { data: customer, error: custErr } = await supabase
     .from('customers')
-    .select('id, loyalty_points')
+    .select('id, is_dinezy_legend')
     .eq('id', customerId)
     .maybeSingle()
 
@@ -24,7 +21,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
   }
 
-  const { count: verifiedVisits } = await supabase
+  const { count: verifiedVisitsCount } = await supabase
     .from('visit_verifications')
     .select('id', { count: 'exact', head: true })
     .eq('customer_id', customerId)
@@ -44,20 +41,22 @@ export async function GET(req: NextRequest) {
     .eq('customer_id', customerId)
     .order('requested_at', { ascending: false })
 
-  const points = customer.loyalty_points ?? 0
-  const visits = verifiedVisits ?? 0
+  const verifiedVisits = verifiedVisitsCount ?? 0
+  const isLegend = customer.is_dinezy_legend === true
+  const currentLevel = getCurrentLevel(verifiedVisits, isLegend)
+  const nextLevel = getNextLevel(verifiedVisits, isLegend)
+
+  const base = currentLevel?.visitsRequired ?? 0
+  const span = nextLevel?.visitsRequired ? nextLevel.visitsRequired - base : 0
+  const progressPct = !nextLevel ? 100 : span <= 0 ? 100 : Math.min(100, Math.round(((verifiedVisits - base) / span) * 100))
 
   return NextResponse.json({
-    points,
-    verified_visits: visits,
-    points_per_visit: POINTS_PER_VISIT,
-    quest: {
-      key: 'quest_1_first_feast',
-      target_points: QUEST_TARGET_POINTS,
-      target_visits: QUEST_TARGET_VISITS,
-      unlocked: points >= QUEST_TARGET_POINTS,
-      progress_pct: Math.min(100, Math.round((points / QUEST_TARGET_POINTS) * 100)),
-    },
+    verified_visits: verifiedVisits,
+    is_legend: isLegend,
+    current_level: currentLevel,
+    next_level: nextLevel,
+    progress_pct: progressPct,
+    levels: LOYALTY_LEVELS,
     pending_pin: pendingPin ?? null,
     redemptions: redemptions ?? [],
   })

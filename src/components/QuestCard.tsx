@@ -1,21 +1,10 @@
 'use client'
 
 import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock } from 'lucide-react'
-import { useState, useEffect, useCallback, useRef } from 'react'
-
-interface QuestStatus {
-  points: number
-  verified_visits: number
-  points_per_visit: number
-  quest: {
-    target_points: number
-    target_visits: number
-    unlocked: boolean
-    progress_pct: number
-  }
-  pending_pin: { pin: string; restaurant_id: string; expires_at: string } | null
-  redemptions: { id: string; reward_type: string; status: string; gift_card_code: string | null }[]
-}
+import { useState, useEffect, useCallback } from 'react'
+import { LOYALTY_LEVELS } from '@/lib/loyalty-levels'
+import { useLoyaltyStatus } from '../app/api/loyalty/status/useLoyaltyStatus'
+import { RewardProgressBar } from './RewardProgressBar'
 
 interface Props {
   customerId: string
@@ -32,10 +21,7 @@ function useCountdown(expiresAt: string | null) {
   const [secondsLeft, setSecondsLeft] = useState(0)
   useEffect(() => {
     if (!expiresAt) return
-    const tick = () => {
-      const diff = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000))
-      setSecondsLeft(diff)
-    }
+    const tick = () => setSecondsLeft(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)))
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
@@ -44,50 +30,22 @@ function useCountdown(expiresAt: string | null) {
 }
 
 export function QuestCard({ customerId, restaurantId }: Props) {
-  const [status, setStatus]     = useState<QuestStatus | null>(null)
-  const [loading, setLoading]   = useState(true)
+  const { status, loading, refresh } = useLoyaltyStatus(customerId)
   const [genLoading, setGenLoading] = useState(false)
-  const [redeemLoading, setRedeemLoading] = useState<string | null>(null)
-  const [showRedeem, setShowRedeem] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
-  const [showToast, setShowToast] = useState(false)
-const [pointsGained, setPointsGained] = useState(0)
-const prevPointsRef = useRef<number | null>(null)
-
-const fetchStatus = useCallback(async () => {
-  try {
-    const res = await fetch(`/api/loyalty/status?customer_id=${customerId}`)
-    const json = await res.json()
-    if (res.ok) {
-      if (prevPointsRef.current !== null && json.points > prevPointsRef.current) {
-        setPointsGained(json.points - prevPointsRef.current)
-        setShowToast(true)
-        setTimeout(() => setShowToast(false), 3200)
-      }
-      prevPointsRef.current = json.points
-      setStatus(json)
-    }
-  } catch {}
-  finally { setLoading(false) }
-}, [customerId])
-
-  useEffect(() => { void fetchStatus() }, [fetchStatus])
-
-
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendMsg, setResendMsg] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const secondsLeft = useCountdown(status?.pending_pin?.expires_at ?? null)
-
   const showPinForThisRestaurant =
-    !!status?.pending_pin &&
-    status.pending_pin.restaurant_id === restaurantId &&
-    secondsLeft > 0
+    !!status?.pending_pin && status.pending_pin.restaurant_id === restaurantId && secondsLeft > 0
 
   useEffect(() => {
     if (!showPinForThisRestaurant) return
-    const id = setInterval(() => { void fetchStatus() }, 4000)
+    const id = setInterval(() => { void refresh() }, 4000)
     return () => clearInterval(id)
-  }, [showPinForThisRestaurant, fetchStatus])
+  }, [showPinForThisRestaurant, refresh])
 
   const handleGeneratePin = useCallback(async () => {
     setGenLoading(true)
@@ -100,36 +58,13 @@ const fetchStatus = useCallback(async () => {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      await fetchStatus()
+      await refresh()
     } catch (err: any) {
       setError(err?.message ?? 'Could not generate PIN')
     } finally {
       setGenLoading(false)
     }
-  }, [customerId, restaurantId, fetchStatus])
-
-  const handleRedeem = useCallback(async (rewardType: string) => {
-    setRedeemLoading(rewardType)
-    setError('')
-    try {
-      const res = await fetch('/api/loyalty/redeem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer_id: customerId, reward_type: rewardType }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error)
-      setShowRedeem(false)
-      await fetchStatus()
-    } catch (err: any) {
-      setError(err?.message ?? 'Redemption failed')
-    } finally {
-      setRedeemLoading(null)
-    }
-  }, [customerId, fetchStatus])
-
-  const [resendLoading, setResendLoading] = useState(false)
-  const [resendMsg, setResendMsg] = useState('')
+  }, [customerId, restaurantId, refresh])
 
   const handleResend = useCallback(async () => {
     setResendLoading(true)
@@ -142,7 +77,7 @@ const fetchStatus = useCallback(async () => {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      setResendMsg('Request resent — we\'ll follow up soon.')
+      setResendMsg("Request resent — we'll follow up soon.")
     } catch (err: any) {
       setResendMsg(err?.message ?? 'Could not resend request')
     } finally {
@@ -154,65 +89,20 @@ const fetchStatus = useCallback(async () => {
     return (
       <div style={{ padding: '20px 0', textAlign: 'center' }}>
         <Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite', color: 'var(--pr-gold)', opacity: 0.6 }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
 
-const { points, quest, pending_pin, redemptions } = status
+  const { verified_visits, current_level, next_level, progress_pct, pending_pin, redemptions, is_legend } = status
   const pendingRedemption = redemptions.find((r) => r.status === 'pending')
-
+  const hasClaimedWelcome = verified_visits > 0
 
   return (
     <div style={{ marginBottom: 20 }}>
-	<style>{`
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes toastIn {
-    0%   { transform: translateY(-16px) scale(0.92); opacity: 0; }
-    60%  { transform: translateY(2px) scale(1.02); opacity: 1; }
-    100% { transform: translateY(0) scale(1); opacity: 1; }
-  }
-  @keyframes toastOut {
-    from { transform: translateY(0); opacity: 1; }
-    to   { transform: translateY(-16px); opacity: 0; }
-  }
-  @keyframes toastPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(138,109,31,0.25); }
-    50%      { box-shadow: 0 0 0 8px rgba(138,109,31,0); }
-  }
-  .quest-toast { animation: toastIn 0.4s cubic-bezier(0.34,1.12,0.64,1) both, toastPulse 1.6s ease-out 0.4s; }
-  .quest-toast.leaving { animation: toastOut 0.3s ease both; }
-`}</style>
-
-{showToast && (
-  <div
-    className="quest-toast"
-    style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-orange-dim) 100%)',
-      border: '1px solid var(--pr-border-hover)',
-      borderRadius: 14, padding: '12px 14px', marginBottom: 12,
-    }}
-  >
-    <div style={{
-      width: 32, height: 32, flexShrink: 0, borderRadius: 10,
-      background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <Trophy size={15} color="var(--pr-gold)" />
-    </div>
-    <div>
-      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-        Visit verified! +{pointsGained} points
-      </p>
-      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-        Your waiter confirmed your PIN.
-      </p>
-    </div>
-  </div>
-)}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* Points header */}
+      {/* Header card */}
       <div style={{
         background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-orange-dim) 100%)',
         border: '1px solid var(--pr-border-hover)',
@@ -220,32 +110,34 @@ const { points, quest, pending_pin, redemptions } = status
         padding: '20px 20px 18px',
         marginBottom: 12,
       }}>
-        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-          Reward Points
-        </p>
-        <p style={{ margin: '4px 0 14px', fontSize: 36, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-          {points.toLocaleString('en-IN')}
-        </p>
-
-        {/* Quest progress */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <Trophy size={13} color="var(--pr-gold)" />
-          <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-            Quest: First Feast — {quest.target_visits} verified visits
-          </p>
-        </div>
-        <div style={{ height: 6, background: 'var(--pr-border-hover)', borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
-          <div style={{
-            height: '100%', width: `${quest.progress_pct}%`,
-            background: 'linear-gradient(90deg, var(--pr-gold), var(--pr-orange))',
-            borderRadius: 999, transition: 'width 0.6s ease',
-          }} />
-        </div>
-        <p style={{ margin: 0, fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-          {quest.unlocked
-            ? 'Quest complete! 🎉 Redeem your reward below.'
-            : `${points}/${quest.target_points} points · ${status.verified_visits}/${quest.target_visits} visits`}
-        </p>
+        {hasClaimedWelcome ? (
+          <>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+              Your Status
+            </p>
+            <p style={{ margin: '4px 0 14px', fontSize: 30, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+              {current_level ? `${current_level.emoji} ${current_level.title}` : '🍽️ First Bite'}
+            </p>
+            <RewardProgressBar
+              verifiedVisits={verified_visits}
+              currentLevel={current_level}
+              nextLevel={next_level}
+              progressPct={progress_pct}
+            />
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Gift size={15} color="var(--pr-gold)" />
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+                ₹50 Amazon Pay gift card waiting for you
+              </p>
+            </div>
+            <p style={{ margin: 0, fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+              Generate your PIN and show it to your waiter to claim it instantly.
+            </p>
+          </>
+        )}
       </div>
 
       {/* Verify visit box */}
@@ -266,9 +158,6 @@ const { points, quest, pending_pin, redemptions } = status
                 <Clock size={12} /> {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
               </span>
             </div>
-            <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
-              Your waiter will verify this after your meal to add {status.points_per_visit} points.
-            </p>
           </>
         ) : (
           <>
@@ -279,7 +168,9 @@ const { points, quest, pending_pin, redemptions } = status
               </p>
             </div>
             <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-              After your meal, get a PIN and show it to your waiter to earn {status.points_per_visit} points.
+              {hasClaimedWelcome
+                ? 'Ask your waiter to verify a PIN each visit to level up.'
+                : 'Get a PIN and show it to your waiter to claim your welcome gift.'}
             </p>
             <button
               type="button" onClick={() => void handleGeneratePin()} disabled={genLoading}
@@ -299,24 +190,8 @@ const { points, quest, pending_pin, redemptions } = status
         {error && <p style={{ margin: '8px 0 0', fontSize: 11, color: '#dc2626', fontFamily: 'var(--font-body)' }}>{error}</p>}
       </div>
 
-      {/* Redeem */}
-      {quest.unlocked && !pendingRedemption && (
-        <button
-          type="button" onClick={() => setShowRedeem(true)}
-          style={{
-            width: '100%', height: 46, borderRadius: 12,
-            background: 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
-            border: 'none', color: 'var(--pr-cta-text)', fontSize: 14, fontWeight: 700,
-            fontFamily: 'var(--font-body)', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            marginBottom: 12,
-          }}
-        >
-          <Gift size={15} /> Redeem your reward
-        </button>
-      )}
-
-     {pendingRedemption && (
+      {/* Welcome gift status */}
+      {pendingRedemption && (
         <div style={{
           background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.16)',
           borderRadius: 14, padding: '12px 14px', marginBottom: 12,
@@ -378,33 +253,36 @@ const { points, quest, pending_pin, redemptions } = status
         </div>
       ))}
 
-      {/* Redeem modal */}
-      {showRedeem && (
-        <div
-          onClick={() => setShowRedeem(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(33,30,27,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-        >
-          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--pr-card)', border: '1px solid var(--pr-border-hover)', borderRadius: 20, padding: 20, width: '100%', maxWidth: 340 }}>
-            <p style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>Choose your reward</p>
-            <p style={{ margin: '0 0 16px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>50 points will be deducted.</p>
-            {(['amazon_pay', 'zomato', 'swiggy'] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => void handleRedeem(type)}
-                disabled={redeemLoading !== null}
-                style={{
-                  width: '100%', height: 46, marginBottom: 8, borderRadius: 12,
-                  background: 'rgba(33,30,27,0.03)', border: '1px solid var(--pr-border-hover)',
-                  color: 'var(--pr-text)', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-body)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-              >
-                {redeemLoading === type ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : null}
-                {REWARD_LABELS[type]}
-              </button>
-            ))}
-            {error && <p style={{ margin: '4px 0 0', fontSize: 11, color: '#dc2626', fontFamily: 'var(--font-body)' }}>{error}</p>}
+      {/* Level ladder */}
+      {hasClaimedWelcome && (
+        <div style={{
+          background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
+          borderRadius: 14, padding: '14px 16px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <Trophy size={13} color="var(--pr-gold)" />
+            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+              Your Journey
+            </p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {LOYALTY_LEVELS.map((lvl) => {
+              const unlocked = lvl.visitsRequired !== null ? verified_visits >= lvl.visitsRequired : is_legend
+              return (
+                <div key={lvl.level} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: unlocked ? 1 : 0.45 }}>
+                  <span style={{ fontSize: 16 }}>{lvl.emoji}</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+                      {lvl.title}
+                    </p>
+                    <p style={{ margin: 0, fontSize: 10, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
+                      {lvl.visitsRequired !== null ? `${lvl.visitsRequired} visits` : 'Invite only'}
+                    </p>
+                  </div>
+                  {unlocked && <Check size={14} color="var(--pr-gold)" />}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

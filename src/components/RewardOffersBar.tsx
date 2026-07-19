@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Gift, KeyRound, ChevronRight, ChevronDown, Loader2, Sparkles, Clock } from 'lucide-react'
+import { Gift, KeyRound, ChevronRight, ChevronDown, Loader2, Sparkles, Clock, Trophy } from 'lucide-react'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 import { useLoyaltyStatus } from '../app/api/loyalty/status/useLoyaltyStatus'
 import { RewardProgressBar } from './RewardProgressBar'
@@ -29,87 +29,37 @@ interface Props {
 }
 
 const WRAP: React.CSSProperties = { width: '100%' }
-
 const CARD: React.CSSProperties = {
   borderRadius: 16,
   background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-card) 100%)',
   border: '1px solid var(--pr-border-hover)',
   overflow: 'hidden',
 }
-
 const ROW: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  padding: '12px 14px',
-  position: 'relative',
-  cursor: 'pointer',
+  display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', position: 'relative', cursor: 'pointer',
 }
-
 const ICON_CIRCLE: React.CSSProperties = {
-  width: 40,
-  height: 40,
-  borderRadius: 12,
-  flexShrink: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 18,
-  background: 'var(--pr-gold-dim)',
-  border: '1px solid var(--pr-border-hover)',
+  width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+  background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
 }
-
-const TITLE: React.CSSProperties = {
-  margin: 0,
-  fontSize: 13.5,
-  fontWeight: 700,
-  color: 'var(--pr-text)',
-  fontFamily: 'var(--font-body)',
-  // remove nowrap/ellipsis — let it size naturally since text is now short
-}
-
+const TITLE: React.CSSProperties = { margin: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }
 const SUBTITLE: React.CSSProperties = {
-  margin: '2px 0 0',
-  fontSize: 11.5,
-  color: 'var(--pr-text-muted)',
-  fontFamily: 'var(--font-body)',
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  margin: '2px 0 0', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
-
 const CTA: React.CSSProperties = {
-  flexShrink: 0,
-  height: 34,
-  padding: '0 13px',
-  borderRadius: 10,
-  background: 'var(--pr-gold)',
-  border: 'none',
-  color: 'var(--pr-cta-text)',
-  fontSize: 12.5,
-  fontWeight: 700,
-  fontFamily: 'var(--font-body)',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 4,
-  whiteSpace: 'nowrap',
+  flexShrink: 0, height: 34, padding: '0 13px', borderRadius: 10,
+  background: 'var(--pr-gold)', border: 'none', color: 'var(--pr-cta-text)',
+  fontSize: 12.5, fontWeight: 700, fontFamily: 'var(--font-body)', cursor: 'pointer',
+  display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
 }
-
 const CHEVRON_BTN: React.CSSProperties = {
-  flexShrink: 0,
-  width: 28,
-  height: 28,
-  borderRadius: 8,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'rgba(245,245,243,0.05)',
-  border: '1px solid var(--pr-border)',
-  color: 'var(--pr-text-muted)',
-  cursor: 'pointer',
+  flexShrink: 0, width: 28, height: 28, borderRadius: 8,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  background: 'rgba(245,245,243,0.05)', border: '1px solid var(--pr-border)',
+  color: 'var(--pr-text-muted)', cursor: 'pointer',
 }
-
 const spinKeyframes = '@keyframes ro-spin { to { transform: rotate(360deg); } }'
 
 export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginClick, onExploreRewards }: Props) {
@@ -117,18 +67,15 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
   const customerId = customer?.id ?? null
   const customerName = customer?.display_name ?? null
 
-  const { status, loading, refresh, pointsJustGained, clearPointsGained } = useLoyaltyStatus(customerId)
+  const { status, loading, refresh, justClaimedWelcome, justLeveledUp, clearCelebration } = useLoyaltyStatus(customerId)
   const [expanded, setExpanded] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [genLoading, setGenLoading] = useState(false)
-  const [celebrating, setCelebrating] = useState(false)
   const celebrateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const pendingPin = status?.pending_pin
   const pinActiveHere =
-    !!pendingPin &&
-    pendingPin.restaurant_id === restaurantId &&
-    new Date(pendingPin.expires_at).getTime() > Date.now()
+    !!pendingPin && pendingPin.restaurant_id === restaurantId && new Date(pendingPin.expires_at).getTime() > Date.now()
 
   useEffect(() => {
     if (!pinActiveHere) return
@@ -137,19 +84,13 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
   }, [pinActiveHere, refresh])
 
   useEffect(() => {
-    if (pointsJustGained > 0) {
-      setCelebrating(true)
+    if (justClaimedWelcome || justLeveledUp) {
       setSheetOpen(false)
       if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current)
-      celebrateTimeoutRef.current = setTimeout(() => {
-        setCelebrating(false)
-        clearPointsGained()
-      }, 5000)
+      celebrateTimeoutRef.current = setTimeout(() => clearCelebration(), justClaimedWelcome ? 6500 : 4500)
     }
-    return () => {
-      if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current)
-    }
-  }, [pointsJustGained, clearPointsGained])
+    return () => { if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current) }
+  }, [justClaimedWelcome, justLeveledUp, clearCelebration])
 
   const handleGeneratePin = useCallback(async () => {
     if (!customerId || !restaurantId) return
@@ -175,19 +116,11 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
 
   const offerCount = offers.length
   const offerBadge = offerCount > 0 ? (
-    <span
-      style={{
-        flexShrink: 0,
-        padding: '2px 8px',
-        borderRadius: 999,
-        background: 'var(--pr-gold-dim)',
-        border: '1px solid var(--pr-border-hover)',
-        fontSize: 10,
-        fontWeight: 700,
-        color: 'var(--pr-gold)',
-        fontFamily: 'var(--font-body)',
-      }}
-    >
+    <span style={{
+      flexShrink: 0, padding: '2px 8px', borderRadius: 999,
+      background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+      fontSize: 10, fontWeight: 700, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)',
+    }}>
       {offerCount} offer{offerCount > 1 ? 's' : ''}
     </span>
   ) : null
@@ -202,8 +135,8 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={TITLE}>Earn Rewards</p>
               <p style={SUBTITLE}>
-  50 pts = ₹50 gift card{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
-</p>
+                ₹50 welcome gift{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
+              </p>
             </div>
             {offerBadge}
             <button type="button" onClick={(e) => { e.stopPropagation(); onLoginClick() }} style={CTA}>
@@ -216,7 +149,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
                 <OffersCarousel offers={offers} restaurantId={restaurantId} restaurantName={restaurantName} onLoginClick={onLoginClick} />
               ) : (
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
-                  Log in to start earning points on every verified visit.
+                  Log in to claim your welcome gift and start earning badges.
                 </p>
               )}
             </div>
@@ -238,10 +171,10 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
     )
   }
 
-  const { points, verified_visits, points_per_visit, quest } = status
+  const { verified_visits, current_level, next_level, progress_pct, is_legend } = status
 
-  // ── Just verified — celebration ──────────────────────────────────────────
-  if (celebrating) {
+  // ── Welcome gift just claimed — big celebration ──────────────────────────
+  if (justClaimedWelcome) {
     return (
       <div style={WRAP}>
         <div style={{ ...CARD, cursor: 'default' }}>
@@ -249,8 +182,26 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             <ConfettiBurst />
             <div style={{ ...ICON_CIRCLE, background: 'var(--pr-gold-dim)' }}>🎉</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={TITLE}>+{pointsJustGained} Points Added!</p>
-              <p style={SUBTITLE}>Balance: {points.toLocaleString('en-IN')} pts</p>
+              <p style={TITLE}>Welcome to the club!</p>
+              <p style={SUBTITLE}>Your ₹50 Amazon Pay gift is on its way — you're now eligible to earn badges.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Just leveled up — smaller celebration ────────────────────────────────
+  if (justLeveledUp) {
+    return (
+      <div style={WRAP}>
+        <div style={{ ...CARD, cursor: 'default' }}>
+          <div style={{ ...ROW, cursor: 'default' }}>
+            <ConfettiBurst />
+            <div style={{ ...ICON_CIRCLE, background: 'var(--pr-gold-dim)' }}>{justLeveledUp.emoji}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={TITLE}>Badge unlocked: {justLeveledUp.title}!</p>
+              <p style={SUBTITLE}>Keep visiting to reach the next level.</p>
             </div>
             {onExploreRewards && (
               <button type="button" onClick={onExploreRewards} style={CTA}>
@@ -270,7 +221,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
         <div style={WRAP}>
           <div style={CARD}>
             <div onClick={() => setSheetOpen(true)} style={ROW}>
-               <button
+              <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onExploreRewards?.() }}
                 aria-label="Open your account"
@@ -279,11 +230,11 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
                 <Clock size={17} color="var(--pr-gold)" />
               </button>
               <div style={{ flex: 1, minWidth: 0 }}>
-               <p style={TITLE}>Code {pendingPin.pin} · claiming your points</p>
+                <p style={TITLE}>Code {pendingPin.pin} · claiming your visit</p>
                 <p style={SUBTITLE}>Show this to your waiter</p>
               </div>
               <CountdownTimer expiresAt={pendingPin.expires_at} onExpire={refresh} compact />
-			  {offerCount > 0 && (
+              {offerCount > 0 && (
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
@@ -302,24 +253,24 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
           </div>
         </div>
         <VerificationBottomSheet
-          isOpen={sheetOpen}
-          onClose={() => setSheetOpen(false)}
-          pin={pendingPin.pin}
-          expiresAt={pendingPin.expires_at}
-          pointsPerVisit={points_per_visit}
-          onExpire={refresh}
-        />
+  isOpen={sheetOpen}
+  onClose={() => setSheetOpen(false)}
+  pin={pendingPin.pin}
+  expiresAt={pendingPin.expires_at}
+  isFirstVisit={verified_visits === 0}
+  onExpire={refresh}
+/>
       </>
     )
   }
 
-  // ── Logged in, first-time onboarding (no verified visit yet) ─────────────
+  // ── Logged in, not yet claimed welcome gift ──────────────────────────────
   if (verified_visits === 0) {
     return (
       <div style={WRAP}>
         <div style={CARD}>
           <div style={ROW} onClick={() => setExpanded((v) => !v)}>
-             <button
+            <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onExploreRewards?.() }}
               aria-label="Open your account"
@@ -328,9 +279,9 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
               <KeyRound size={17} color="var(--pr-gold)" />
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={TITLE}>{customerName ? `Hi ${customerName}, claim your points` : 'Claim your visit points'}</p>
+              <p style={TITLE}>{customerName ? `Hi ${customerName}, claim your welcome gift` : 'Claim your welcome gift'}</p>
               <p style={SUBTITLE}>
-                Earn {points_per_visit} pts{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''} available` : ''}
+                ₹50 Amazon Pay{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''} available` : ''}
               </p>
             </div>
             <button
@@ -340,7 +291,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
               style={{ ...CTA, opacity: genLoading ? 0.7 : 1, cursor: genLoading ? 'not-allowed' : 'pointer' }}
             >
               {genLoading ? <Loader2 size={13} style={{ animation: 'ro-spin 0.8s linear infinite' }} /> : <KeyRound size={13} />}
-              Claim Points
+              Claim Gift
             </button>
             {offerCount > 0 && (
               <button
@@ -364,7 +315,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
     )
   }
 
-  // ── Ongoing — steady state after the first verified visit ────────────────
+  // ── Ongoing — steady state after the welcome gift ────────────────────────
   return (
     <div style={WRAP}>
       <div style={CARD}>
@@ -375,12 +326,13 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             aria-label="Open your account"
             style={{ ...ICON_CIRCLE, cursor: 'pointer' }}
           >
-            <Gift size={17} color="var(--pr-gold)" />
+            {is_legend ? <Trophy size={17} color="var(--pr-gold)" /> : <Gift size={17} color="var(--pr-gold)" />}
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={TITLE}>{customerName ? `Hi ${customerName}` : 'Your rewards'}</p>
             <p style={SUBTITLE}>
-              {points.toLocaleString('en-IN')} pts{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
+              {current_level ? `${current_level.emoji} ${current_level.title}` : 'First Bite'}
+              {offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
             </p>
           </div>
           <button
@@ -388,16 +340,12 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             onClick={(e) => { e.stopPropagation(); void handleGeneratePin() }}
             disabled={genLoading}
             style={{
-              ...CTA,
-              background: 'var(--pr-gold-dim)',
-              border: '1px solid var(--pr-border-hover)',
-              color: 'var(--pr-gold)',
-              opacity: genLoading ? 0.7 : 1,
-              cursor: genLoading ? 'not-allowed' : 'pointer',
+              ...CTA, background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+              color: 'var(--pr-gold)', opacity: genLoading ? 0.7 : 1, cursor: genLoading ? 'not-allowed' : 'pointer',
             }}
           >
             {genLoading ? <Loader2 size={13} style={{ animation: 'ro-spin 0.8s linear infinite' }} /> : <KeyRound size={13} />}
-            Claim Points
+            Verify Visit
           </button>
           <button
             type="button"
@@ -411,29 +359,24 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
 
         {expanded && (
           <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <RewardProgressBar current={points} target={quest.target_points} />
-            {quest.unlocked && onExploreRewards && (
+            <RewardProgressBar
+              verifiedVisits={verified_visits}
+              currentLevel={current_level}
+              nextLevel={next_level}
+              progressPct={progress_pct}
+            />
+            {onExploreRewards && (
               <button
                 type="button"
                 onClick={onExploreRewards}
                 style={{
-                  width: '100%',
-                  height: 38,
-                  borderRadius: 11,
-                  background: 'var(--pr-gold)',
-                  border: 'none',
-                  color: 'var(--pr-cta-text)',
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  fontFamily: 'var(--font-body)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
+                  width: '100%', height: 38, borderRadius: 11,
+                  background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+                  color: 'var(--pr-gold)', fontSize: 12.5, fontWeight: 700, fontFamily: 'var(--font-body)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 }}
               >
-                <Sparkles size={13} /> Redeem Reward
+                <Sparkles size={13} /> View your journey
               </button>
             )}
             {offerCount > 0 && (
@@ -461,10 +404,7 @@ function ConfettiBurst() {
         <span
           key={i}
           style={{
-            position: 'absolute',
-            left: `${(i * 9.3) % 100}%`,
-            top: -10,
-            fontSize: 11,
+            position: 'absolute', left: `${(i * 9.3) % 100}%`, top: -10, fontSize: 11,
             animation: `ro-confetti-fall ${0.8 + (i % 5) * 0.12}s ease-in ${i * 0.04}s both`,
           }}
         >

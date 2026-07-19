@@ -340,8 +340,47 @@ export default function PrivacyPage() {
               These providers have their own privacy policies governing the
               processing of data handled through their services.
             </p>
+			
+			<h2>13. Law Enforcement & Government Data Requests</h2>
 
-            <h2>13. Children's Privacy</h2>
+            <p>
+              Dinezy may receive requests from government authorities, law
+              enforcement, or other public authorities for the personal
+              data of restaurants or customers using our platform. We take
+              the following approach to such requests:
+            </p>
+
+            <ul>
+              <li>
+                <strong>Legality review:</strong> Before disclosing any
+                personal data, we review each request to confirm it is
+                issued by an authority with proper jurisdiction and is
+                backed by valid legal process appropriate to the data
+                requested (such as a subpoena, court order, or warrant, as
+                applicable under Indian law).
+              </li>
+              <li>
+                <strong>Challenging unlawful requests:</strong> Where a
+                request is unlawful, overly broad, or improperly issued, we
+                reserve the right to challenge it through appropriate legal
+                channels, seek clarification of its scope, or decline to
+                comply until the deficiency is resolved.
+              </li>
+              <li>
+                <strong>Data minimization:</strong> When we do comply with a
+                valid request, we disclose only the minimum personal data
+                necessary to satisfy its specific, documented scope.
+              </li>
+              <li>
+                <strong>Documentation:</strong> We maintain an internal
+                record of each request received, including the requesting
+                authority, the scope of data requested, our legal
+                assessment, and the response provided.
+              </li>
+            </ul>
+
+
+            <h2>14. Children's Privacy</h2>
 
             <p>
               Dinezy is not intended for children under the age required by
@@ -349,7 +388,7 @@ export default function PrivacyPage() {
               information from children.
             </p>
 
-            <h2>14. International Data Transfers</h2>
+           <h2>15. International Data Transfers</h2>
 
             <p>
               Information processed through Dinezy may be stored or processed
@@ -362,7 +401,7 @@ export default function PrivacyPage() {
               for international transfers of personal information.
             </p>
 
-            <h2>15. Changes to This Privacy Policy</h2>
+            <h2>16. Changes to This Privacy Policy</h2>
 
             <p>
               We may update this Privacy Policy from time to time to reflect
@@ -375,7 +414,7 @@ export default function PrivacyPage() {
               be published on this page with a revised effective date.
             </p>
 
-            <h2>16. Contact Us</h2>
+            <h2>17. Contact Us</h2>
 
             <p>
               If you have any questions about this Privacy Policy or how

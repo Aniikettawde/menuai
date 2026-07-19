@@ -2,19 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { Resend } from 'resend'
 
-// Service-role client for the privileged DB work (RPC + lookups)
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
+const resend = new Resend(process.env.RESEND_API_KEY!)
+
+const REWARD_LABELS: Record<string, string> = {
+  amazon_pay: 'Amazon Pay Gift Card',
+  zomato: 'Zomato Gift Card',
+  swiggy: 'Swiggy Gift Card',
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { restaurant_id, pin } = await req.json() as {
-      restaurant_id: string
-      pin: string
-    }
+    const { restaurant_id, pin } = await req.json() as { restaurant_id: string; pin: string }
 
     if (!restaurant_id || !pin) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -25,7 +30,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'PIN must be 4 digits' }, { status: 400 })
     }
 
-    // ── 1. Identify the caller from their real session cookie ──────────────
     const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,7 +37,7 @@ export async function POST(req: NextRequest) {
       {
         cookies: {
           getAll: () => cookieStore.getAll(),
-          setAll: () => {}, // no-op: we're not mutating cookies in an API route
+          setAll: () => {},
         },
       },
     )
@@ -43,10 +47,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // ── 2. Authorize: caller must be owner OR active staff of THIS restaurant ─
     const { data: restaurant } = await admin
       .from('restaurants')
-      .select('id, owner_id')
+      .select('id, owner_id, name')
       .eq('id', restaurant_id)
       .maybeSingle()
 
@@ -57,7 +60,6 @@ export async function POST(req: NextRequest) {
     let authorized = false
     let verifiedByLabel = user.email
 
-    // Owner check — need the owner's email, so look it up via auth if owner_id matches user.id
     if (restaurant.owner_id && restaurant.owner_id === user.id) {
       authorized = true
       verifiedByLabel = `owner:${user.email}`
@@ -84,7 +86,6 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── 3. Run the actual point-award RPC (atomic, race-condition-safe) ─────
     const { data, error } = await admin.rpc('verify_visit_pin', {
       p_restaurant_id: restaurant_id,
       p_pin: cleanPin,
@@ -103,6 +104,41 @@ export async function POST(req: NextRequest) {
         cooldown: 'This guest already earned points here recently.',
       }
       return NextResponse.json({ error: messages[data.error] ?? data.error }, { status: 400 })
+    }
+
+    // ── Best-effort: notify owner if this visit auto-issued the welcome gift ──
+    if (data.welcome_redemption_id) {
+      try {
+        const { data: customer } = await admin
+          .from('customers')
+          .select('display_name, phone')
+          .eq('id', data.customer_id)
+          .maybeSingle()
+
+        if (process.env.RESEND_API_KEY && process.env.LOYALTY_NOTIFY_EMAIL && process.env.LOYALTY_FROM_EMAIL) {
+          await resend.emails.send({
+            from: process.env.LOYALTY_FROM_EMAIL,
+            to: process.env.LOYALTY_NOTIFY_EMAIL,
+            subject: `🎁 New welcome gift redemption — ${REWARD_LABELS.amazon_pay}`,
+            html: `
+              <div style="font-family: sans-serif; max-width: 480px;">
+                <h2 style="margin-bottom: 4px;">New guest welcome gift</h2>
+                <p style="color:#555; margin-top:0;">A guest's first verified visit auto-issued their ₹50 welcome gift. Action needed: issue the gift card and mark it fulfilled.</p>
+                <table style="width:100%; border-collapse: collapse; margin-top: 16px;">
+                  <tr><td style="padding:6px 0; color:#888;">Reward</td><td style="padding:6px 0; font-weight:600;">${REWARD_LABELS.amazon_pay}</td></tr>
+                  <tr><td style="padding:6px 0; color:#888;">Customer</td><td style="padding:6px 0; font-weight:600;">${customer?.display_name ?? 'N/A'}</td></tr>
+                  <tr><td style="padding:6px 0; color:#888;">Phone</td><td style="padding:6px 0; font-weight:600;">${customer?.phone ?? 'N/A'}</td></tr>
+                  <tr><td style="padding:6px 0; color:#888;">Restaurant</td><td style="padding:6px 0; font-weight:600;">${restaurant.name}</td></tr>
+                  <tr><td style="padding:6px 0; color:#888;">Redemption ID</td><td style="padding:6px 0; font-family:monospace;">${data.welcome_redemption_id}</td></tr>
+                </table>
+                <p style="margin-top:20px; color:#888; font-size:12px;">Enter the gift card code in your <code>redemptions</code> table and set status to <code>fulfilled</code> once sent.</p>
+              </div>
+            `,
+          })
+        }
+      } catch (emailErr) {
+        console.error('[verify-pin welcome email]', emailErr)
+      }
     }
 
     return NextResponse.json(data)
