@@ -24,6 +24,7 @@ import {
   Users,
   X,
   XCircle,
+  Gift,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -46,8 +47,7 @@ type Restaurant = {
   owner_email: string
   is_active: boolean
   is_published: boolean
-    show_in_discovery: boolean
-
+  show_in_discovery: boolean
   avg_rating: number
   total_ratings: number
   created_at: string
@@ -110,42 +110,59 @@ type QuizAnalytics = {
   daily: { date: string; count: number }[]
 }
 
-// Short labels for the admin view only — keeps the quiz analytics readable
-// without reproducing the full question copy here.
+type Redemption = {
+  id: string
+  customer_id: string
+  reward_type: string
+  status: string
+  points_spent: number
+  requested_at: string
+  resent_count: number
+  last_resent_at: string | null
+  gift_card_code: string | null
+  fulfilled_at: string | null
+  fulfilled_by: string | null
+  customers: { display_name: string | null; phone: string | null } | null
+}
+
+const REDEMPTION_REWARD_LABELS: Record<string, string> = {
+  amazon_pay: 'Amazon Pay Gift Card',
+  zomato: 'Zomato Gift Card',
+  swiggy: 'Swiggy Gift Card',
+}
+
 const QUIZ_QUESTION_LABELS: Record<string, string> = {
   started: 'Started quiz',
-  q1: 'Q1 · Friend not hungry',
-  q2: 'Q2 · 2AM fridge mission',
-  q3: 'Q3 · Exciting notification',
-  q4: 'Q4 · Biggest fear',
-  q5: 'Q5 · No-calorie world',
-  q6: 'Q6 · ₹50 cashback reaction',
+  q1: 'Q1',
+  q2: 'Q2',
+  q3: 'Q3',
+  q4: 'Q4',
+  q5: 'Q5',
+  q6: 'Q6',
   completed: 'Completed quiz',
 }
 
 const QUIZ_ANSWER_LABELS: Record<string, Record<string, string>> = {
-  q1: { A: 'Screenshot betrayal 🍟', B: 'Extra fries 🍔', C: 'Two meals 🌮' },
-  q2: { A: 'Water, back to sleep 🥛', B: 'Leftover pizza 🍕', C: 'Anything edible 🍰' },
-  q3: { A: 'Salary credited 📧', B: 'Order arrived 📦', C: 'Food out for delivery 🍽️' },
-  q4: { A: 'No money 😨', B: 'No internet 📶', C: 'Splitting one plate 🍟' },
-  q5: { A: 'Eat healthy anyway 🥗', B: 'Pizza/burgers/desserts 🍕', C: 'Snack every 30 min 🍩' },
-  q6: { A: 'Free money is free money 😎', B: 'Nearest restaurant NOW 🏃', C: 'Is this a dream? 🤣' },
+  q1: { A: 'a', B: 'b', C: 'c' },
+  q2: { A: 'a', B: 'b', C: 'c' },
+  q3: { A: 'a', B: 'b', C: 'c' },
+  q4: { A: 'a', B: 'b', C: 'c' },
+  q5: { A: 'a', B: 'b', C: 'c' },
+  q6: { A: 'a', B: 'b', C: 'c' },
 }
 
 const SHARE_ACTION_LABELS: Record<string, string> = {
-  native_share: 'Shared result (WhatsApp / native share)',
-  find_restaurant: 'Tapped "Find restaurants near me"',
+  native_share: 'Shared result',
+  find_restaurant: 'Tapped find',
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function money(paise: number) {
-  return `₹${new Intl.NumberFormat('en-IN').format(Math.round(paise / 100))}`
+  return `Rs ${Math.round(paise / 100)}`
 }
 
 function formatDate(iso: string | null | undefined) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  if (!iso) return '-'
+  return new Date(iso).toLocaleDateString()
 }
 
 function timeAgo(iso: string) {
@@ -159,12 +176,10 @@ function timeAgo(iso: string) {
 }
 
 function planBadge(r: Restaurant) {
-  if (r.is_paid_active) return { label: `Paid · ${r.subscription?.plan_id ?? ''}`, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' }
-  if (r.is_trial_active) return { label: `Trial · ${r.trial_days_left}d left`, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' }
-  return { label: 'Expired', color: 'text-red-400 bg-red-500/10 border-red-500/20' }
+  if (r.is_paid_active) return { label: `Paid`, color: 'a' }
+  if (r.is_trial_active) return { label: `Trial`, color: 'b' }
+  return { label: 'Expired', color: 'c' }
 }
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function KpiCard({ label, value, sub, icon, color }: { label: string; value: string | number; sub?: string; icon: React.ReactNode; color: string }) {
   return (
@@ -186,7 +201,86 @@ function MiniBar({ value, max }: { value: number; max: number }) {
   )
 }
 
-// ─── Subscription Action Modal ────────────────────────────────────────────────
+function MarkSentModal({
+  redemption,
+  onClose,
+  onDone,
+}: {
+  redemption: Redemption
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [code, setCode] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async () => {
+    if (!code.trim()) {
+      setError('Enter the gift card code you sent')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/admin/redemptions/${redemption.id}/mark-sent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gift_card_code: code.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      onDone()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-sm rounded-3xl border border-white/[0.08] bg-[#111111] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+          <div>
+            <p className="font-bold text-white">Mark as sent</p>
+            <p className="text-xs text-zinc-500">
+              {REDEMPTION_REWARD_LABELS[redemption.reward_type] ?? redemption.reward_type} - {redemption.customers?.display_name ?? 'Customer'}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-2 text-zinc-600 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
+        </div>
+
+        <div className="space-y-3 p-5">
+          <label className="text-xs text-zinc-400">Gift card code sent to the customer</label>
+          <input
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            placeholder="e.g. AMZN-XXXX-XXXX"
+            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none focus:border-purple-500/40"
+          />
+          <p className="text-[10px] text-zinc-700">
+            This becomes visible to the customer in their account immediately, and their resend option disappears.
+          </p>
+
+          {error && (
+            <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+              <AlertCircle size={14} /> {error}
+            </div>
+          )}
+
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full rounded-xl bg-purple-600 py-3 text-sm font-bold text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {loading ? <Loader2 size={15} className="mx-auto animate-spin" /> : 'Confirm sent'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function SubModal({ restaurant, onClose, onDone }: { restaurant: Restaurant; onClose: () => void; onDone: () => void }) {
   const [action, setAction] = useState<string>('')
@@ -232,13 +326,12 @@ function SubModal({ restaurant, onClose, onDone }: { restaurant: Restaurant; onC
         <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
           <div>
             <p className="font-bold text-white">Manage Subscription</p>
-            <p className="text-xs text-zinc-500">{restaurant.name} · {restaurant.owner_email}</p>
+            <p className="text-xs text-zinc-500">{restaurant.name} - {restaurant.owner_email}</p>
           </div>
           <button onClick={onClose} className="rounded-xl p-2 text-zinc-600 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
         </div>
 
         <div className="space-y-3 p-5">
-          {/* Current status */}
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Current status</p>
             <div className="flex items-center gap-2">
@@ -254,7 +347,6 @@ function SubModal({ restaurant, onClose, onDone }: { restaurant: Restaurant; onC
             </div>
           </div>
 
-          {/* Action buttons */}
           <div className="grid grid-cols-2 gap-2">
             {actions.map(a => (
               <button
@@ -272,7 +364,6 @@ function SubModal({ restaurant, onClose, onDone }: { restaurant: Restaurant; onC
             ))}
           </div>
 
-          {/* Days input if needed */}
           {selectedAction?.needsDays && (
             <div className="flex items-center gap-3">
               <label className="text-xs text-zinc-400">Days to add:</label>
@@ -311,8 +402,6 @@ function SubModal({ restaurant, onClose, onDone }: { restaurant: Restaurant; onC
   )
 }
 
-// ─── Restaurant Row ───────────────────────────────────────────────────────────
-
 function RestaurantRow({
   restaurant,
   onManage,
@@ -347,7 +436,7 @@ function RestaurantRow({
             )}
           </div>
           <p className="mt-0.5 text-xs text-zinc-600">
-            {restaurant.owner_email} · {restaurant.cuisine_type}
+            {restaurant.owner_email} - {restaurant.cuisine_type}
           </p>
         </div>
 
@@ -375,17 +464,17 @@ function RestaurantRow({
           </button>
 
           <button
-  onClick={onToggleDiscovery}
-  className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-    restaurant.show_in_discovery
-      ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
-      : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-  }`}
->
-  {restaurant.show_in_discovery
-    ? 'Hide from discovery'
-    : 'Show in discovery'}
-</button>
+            onClick={onToggleDiscovery}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+              restaurant.show_in_discovery
+                ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+            }`}
+          >
+            {restaurant.show_in_discovery
+              ? 'Hide from discovery'
+              : 'Show in discovery'}
+          </button>
 
           <a
             href={`/r/${restaurant.slug}`}
@@ -412,7 +501,7 @@ function RestaurantRow({
               { label: 'Owner', value: restaurant.owner_email },
               { label: 'Created', value: formatDate(restaurant.created_at) },
               { label: 'Menu items', value: restaurant.menu_item_count },
-              { label: 'Avg rating', value: restaurant.avg_rating ? `${restaurant.avg_rating.toFixed(1)} ★` : '—' },
+              { label: 'Avg rating', value: restaurant.avg_rating ? `${restaurant.avg_rating.toFixed(1)}` : '-' },
               { label: 'Page views (30d)', value: restaurant.page_views_30d },
               { label: 'Payments', value: restaurant.payment_count },
             ].map(({ label, value }) => (
@@ -471,10 +560,8 @@ function RestaurantRow({
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
 export default function AdminPage() {
-  const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics' | 'quiz'>('overview')
+  const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics' | 'quiz' | 'redemptions'>('overview')
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
@@ -494,29 +581,33 @@ export default function AdminPage() {
     total_payments: number
     total_failed: number
   } | null>(null)
-
+  const [redemptions, setRedemptions] = useState<Redemption[]>([])
+  const [markingSent, setMarkingSent] = useState<Redemption | null>(null)
   const [quizData, setQuizData] = useState<QuizAnalytics | null>(null)
 
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [rRes, pRes, aRes, qRes] = await Promise.all([
+      const [rRes, pRes, aRes, qRes, redRes] = await Promise.all([
         fetch('/api/admin/restaurants'),
         fetch('/api/admin/payments'),
         fetch('/api/admin/analytics'),
         fetch('/api/admin/quiz-analytics'),
+        fetch('/api/admin/redemptions'),
       ])
 
       const rData = await rRes.json()
       const pData = await pRes.json()
       const aData = await aRes.json()
       const qData = await qRes.json()
+      const redData = await redRes.json()
 
       setRestaurants(rData.restaurants ?? [])
       setPayments(pData.payments ?? [])
       setPaymentSummary(pData.summary ?? null)
       setAnalytics(aData)
       setQuizData(qData)
+      setRedemptions(redData.redemptions ?? [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -539,8 +630,8 @@ export default function AdminPage() {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-  show_in_discovery: nextValue,
-}),
+            show_in_discovery: nextValue,
+          }),
         })
 
         const data = await res.json()
@@ -559,7 +650,6 @@ export default function AdminPage() {
     void loadAll()
   }, [loadAll])
 
-  // ── Computed stats ──
   const totalRestaurants = restaurants.length
   const activeRestaurants = restaurants.filter(r => r.has_access).length
   const trialRestaurants = restaurants.filter(r => r.is_trial_active).length
@@ -568,8 +658,8 @@ export default function AdminPage() {
   const totalRevenue = restaurants.reduce((s, r) => s + r.total_revenue_paise, 0)
   const totalVisitors30d = restaurants.reduce((s, r) => s + r.visitors_30d, 0)
   const totalAiChats30d = restaurants.reduce((s, r) => s + r.ai_chats_30d, 0)
+  const pendingRedemptionsCount = redemptions.filter(r => r.status === 'pending').length
 
-  // ── Filtered restaurants ──
   const filtered = restaurants.filter(r => {
     const matchesSearch = !search || r.name.toLowerCase().includes(search.toLowerCase()) || r.owner_email.toLowerCase().includes(search.toLowerCase())
     const matchesPlan = filterPlan === 'all' ||
@@ -579,13 +669,13 @@ export default function AdminPage() {
     return matchesSearch && matchesPlan
   })
 
-  // ── Analytics chart max ──
   const maxDaily = Math.max(...(analytics?.daily.map(d => Math.max(d.visitors, d.page_views, d.ai_chats)) ?? [1]))
   const maxHour = Math.max(...(analytics?.hour_counts ?? [1]))
 
   const tabs = [
     { key: 'overview', label: 'Overview', icon: <BarChart2 size={13} /> },
     { key: 'restaurants', label: `Restaurants (${totalRestaurants})`, icon: <Users size={13} /> },
+    { key: 'redemptions', label: `Redemptions${pendingRedemptionsCount ? ` (${pendingRedemptionsCount})` : ''}`, icon: <Gift size={13} /> },
     { key: 'payments', label: 'Payments', icon: <CreditCard size={13} /> },
     { key: 'analytics', label: 'Analytics', icon: <Activity size={13} /> },
     { key: 'quiz', label: 'Quiz Tracking', icon: <Sparkles size={13} /> },
@@ -593,7 +683,6 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Admin Dashboard</h1>
@@ -605,7 +694,6 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 rounded-2xl border border-white/[0.06] bg-[#111111] p-1">
         {tabs.map(t => (
           <button
@@ -629,13 +717,62 @@ export default function AdminPage() {
 
       {!loading && (
         <>
-          {/* ── OVERVIEW TAB ── */}
+          {tab === 'redemptions' && (
+            <div className="space-y-2">
+              {redemptions.length === 0 && (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#111111] py-12 text-center text-sm text-zinc-600">
+                  No redemptions yet
+                </div>
+              )}
+              {redemptions.map(r => (
+                <div key={r.id} className="rounded-2xl border border-white/[0.06] bg-[#111111] px-4 py-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-white">
+                          {REDEMPTION_REWARD_LABELS[r.reward_type] ?? r.reward_type}
+                        </p>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                          r.status === 'pending'
+                            ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                            : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                        }`}>
+                          {r.status}
+                        </span>
+                        {r.resent_count > 0 && (
+                          <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-zinc-500">
+                            resent {r.resent_count}x
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs text-zinc-600">
+                        {r.customers?.display_name ?? 'Unknown'} - {r.customers?.phone ?? 'no phone'} - requested {timeAgo(r.requested_at)}
+                      </p>
+                      {r.status === 'fulfilled' && (
+                        <p className="mt-0.5 text-[10px] text-zinc-700">
+                          Sent {r.fulfilled_at ? timeAgo(r.fulfilled_at) : ''} by {r.fulfilled_by ?? '-'} - code {r.gift_card_code}
+                        </p>
+                      )}
+                    </div>
+                    {r.status === 'pending' && (
+                      <button
+                        onClick={() => setMarkingSent(r)}
+                        className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 transition hover:bg-emerald-500/15"
+                      >
+                        Mark as sent
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {tab === 'overview' && (
             <div className="space-y-5">
-              {/* KPI grid */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
                 <KpiCard label="Total restaurants" value={totalRestaurants} icon={<Users size={14} />} color="bg-purple-500/10 text-purple-400" />
-                <KpiCard label="Active" value={activeRestaurants} icon={<CheckCircle2 size={14} />} color="bg-emerald-500/10 text-emerald-400" sub={`${paidRestaurants} paid · ${trialRestaurants} trial`} />
+                <KpiCard label="Active" value={activeRestaurants} icon={<CheckCircle2 size={14} />} color="bg-emerald-500/10 text-emerald-400" sub={`${paidRestaurants} paid - ${trialRestaurants} trial`} />
                 <KpiCard label="Expired" value={expiredRestaurants} icon={<ShieldOff size={14} />} color="bg-red-500/10 text-red-400" />
                 <KpiCard label="Total revenue" value={money(totalRevenue)} icon={<IndianRupee size={14} />} color="bg-amber-500/10 text-amber-400" />
                 <KpiCard label="Visitors (30d)" value={totalVisitors30d} icon={<Eye size={14} />} color="bg-blue-500/10 text-blue-400" />
@@ -644,7 +781,6 @@ export default function AdminPage() {
                 <KpiCard label="Failed payments" value={paymentSummary?.total_failed ?? 0} icon={<XCircle size={14} />} color="bg-rose-500/10 text-rose-400" />
               </div>
 
-              {/* Plan breakdown */}
               <div className="grid gap-4 sm:grid-cols-3">
                 {[
                   { label: 'On Trial', count: trialRestaurants, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/15' },
@@ -659,7 +795,6 @@ export default function AdminPage() {
                 ))}
               </div>
 
-              {/* Top restaurants by activity */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                 <div className="mb-4 flex items-center gap-2">
                   <Flame size={13} className="text-orange-400" />
@@ -684,7 +819,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Recent payments */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                 <div className="mb-4 flex items-center gap-2">
                   <TrendingUp size={13} className="text-emerald-400" />
@@ -695,7 +829,7 @@ export default function AdminPage() {
                     <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2.5">
                       <div className="min-w-0">
                         <p className="truncate text-xs font-medium text-zinc-200">{p.restaurant_name}</p>
-                        <p className="text-[10px] text-zinc-600">{p.owner_email} · {timeAgo(p.created_at)}</p>
+                        <p className="text-[10px] text-zinc-600">{p.owner_email} - {timeAgo(p.created_at)}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-sm font-bold text-emerald-400">{money(p.amount_paise)}</span>
@@ -710,10 +844,8 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* ── QUIZ TRACKING TAB ── */}
           {tab === 'quiz' && quizData && (
             <div className="space-y-5">
-              {/* KPI summary */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <KpiCard
                   label="Quiz sessions"
@@ -746,10 +878,9 @@ export default function AdminPage() {
                 />
               </div>
 
-              {/* Funnel with drop-off */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                 <p className="mb-4 text-sm font-semibold text-white">
-                  Quiz funnel (30d) · {quizData.total_sessions} sessions
+                  Quiz funnel (30d) - {quizData.total_sessions} sessions
                 </p>
                 <div className="space-y-2">
                   {quizData.funnel.map((f, i) => {
@@ -777,7 +908,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Tier / persona distribution */}
               {Object.keys(quizData.tier_distribution).length > 0 && (
                 <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                   <p className="mb-3 text-sm font-semibold text-white">Persona distribution</p>
@@ -805,7 +935,6 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* Per-question answer breakdown */}
               <div className="grid gap-4 lg:grid-cols-2">
                 {Object.entries(quizData.answer_breakdown).map(([qKey, answers]) => {
                   const max = Math.max(...Object.values(answers))
@@ -839,7 +968,6 @@ export default function AdminPage() {
                 })}
               </div>
 
-              {/* Share / CTA engagement */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                 <div className="mb-4 flex items-center gap-2">
                   <Share2 size={13} className="text-purple-400" />
@@ -860,7 +988,6 @@ export default function AdminPage() {
                 <p className="mt-3 text-[10px] text-zinc-700">{quizData.restart_count} restart(s) across all sessions</p>
               </div>
 
-              {/* Daily completions trend */}
               {quizData.daily.length > 0 && (
                 <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                   <p className="mb-4 text-sm font-semibold text-white">Completions per day (30d)</p>
@@ -870,7 +997,7 @@ export default function AdminPage() {
                       return (
                         <div key={d.date} className="group relative flex-1">
                           <div className="absolute -top-6 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-300 group-hover:block">
-                            {d.date} · {d.count}
+                            {d.date} - {d.count}
                           </div>
                           <div
                             className="w-full rounded-sm bg-purple-500 group-hover:bg-purple-400"
@@ -891,17 +1018,15 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* ── RESTAURANTS TAB ── */}
           {tab === 'restaurants' && (
             <div className="space-y-4">
-              {/* Filters */}
               <div className="flex flex-wrap gap-3">
                 <div className="flex flex-1 items-center gap-2 rounded-xl border border-white/[0.06] bg-[#111111] px-3 py-2.5">
                   <Search size={13} className="shrink-0 text-zinc-600" />
                   <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="Search by name or email…"
+                    placeholder="Search by name or email..."
                     className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-700"
                   />
                 </div>
@@ -923,14 +1048,14 @@ export default function AdminPage() {
               <p className="text-xs text-zinc-600">{filtered.length} of {totalRestaurants} restaurants</p>
 
               <div className="space-y-2">
-             {filtered.map((r) => (
-  <RestaurantRow
-    key={r.id}
-    restaurant={r}
-    onManage={() => setManagingRestaurant(r)}
-    onToggleDiscovery={() => toggleDiscovery(r)}
-  />
-))}
+                {filtered.map((r) => (
+                  <RestaurantRow
+                    key={r.id}
+                    restaurant={r}
+                    onManage={() => setManagingRestaurant(r)}
+                    onToggleDiscovery={() => toggleDiscovery(r)}
+                  />
+                ))}
                 {filtered.length === 0 && (
                   <div className="rounded-2xl border border-white/[0.06] bg-[#111111] py-12 text-center text-sm text-zinc-600">
                     No restaurants found
@@ -940,17 +1065,14 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* ── PAYMENTS TAB ── */}
           {tab === 'payments' && (
             <div className="space-y-4">
-              {/* Summary */}
               <div className="grid grid-cols-3 gap-3">
                 <KpiCard label="Total revenue" value={money(paymentSummary?.total_revenue_paise ?? 0)} icon={<IndianRupee size={14} />} color="bg-emerald-500/10 text-emerald-400" />
                 <KpiCard label="Successful payments" value={paymentSummary?.total_payments ?? 0} icon={<CheckCircle2 size={14} />} color="bg-blue-500/10 text-blue-400" />
                 <KpiCard label="Failed payments" value={paymentSummary?.total_failed ?? 0} icon={<XCircle size={14} />} color="bg-red-500/10 text-red-400" />
               </div>
 
-              {/* Payment list */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] overflow-hidden">
                 <div className="border-b border-white/[0.06] px-4 py-3">
                   <p className="text-sm font-semibold text-white">All payments ({payments.length})</p>
@@ -980,7 +1102,7 @@ export default function AdminPage() {
                           </td>
                           <td className="px-4 py-3 text-xs text-zinc-600">{formatDate(p.created_at)}</td>
                           <td className="px-4 py-3 text-[10px] font-mono text-zinc-700">
-                            {p.razorpay_payment_id?.slice(0, 20) ?? '—'}
+                            {p.razorpay_payment_id?.slice(0, 20) ?? '-'}
                           </td>
                         </tr>
                       ))}
@@ -991,10 +1113,8 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* ── ANALYTICS TAB ── */}
           {tab === 'analytics' && analytics && (
             <div className="space-y-5">
-              {/* Platform daily trend */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
@@ -1031,14 +1151,13 @@ export default function AdminPage() {
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
-                {/* Peak hours */}
                 <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                   <p className="mb-4 text-sm font-semibold text-white">Peak hours (platform-wide)</p>
                   <div className="flex h-24 items-end gap-0.5">
                     {analytics.hour_counts.map((count, hour) => (
                       <div key={hour} className="group relative flex-1">
                         <div className="absolute -top-6 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-zinc-800 px-1 py-0.5 text-[9px] text-zinc-300 group-hover:block">
-                          {hour}:00 · {count}
+                          {hour}:00 - {count}
                         </div>
                         <div
                           className={`w-full rounded-sm ${count === maxHour ? 'bg-purple-500' : 'bg-zinc-700 group-hover:bg-zinc-500'}`}
@@ -1052,7 +1171,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Event breakdown */}
                 <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                   <p className="mb-4 text-sm font-semibold text-white">Event breakdown (30d)</p>
                   <div className="space-y-2">
@@ -1076,7 +1194,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Recent event log */}
               <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-5">
                 <div className="mb-4 flex items-center gap-2">
                   <Sparkles size={13} className="text-purple-400" />
@@ -1100,11 +1217,18 @@ export default function AdminPage() {
         </>
       )}
 
-      {/* Subscription management modal */}
       {managingRestaurant && (
         <SubModal
           restaurant={managingRestaurant}
           onClose={() => setManagingRestaurant(null)}
+          onDone={loadAll}
+        />
+      )}
+
+      {markingSent && (
+        <MarkSentModal
+          redemption={markingSent}
+          onClose={() => setMarkingSent(null)}
           onDone={loadAll}
         />
       )}

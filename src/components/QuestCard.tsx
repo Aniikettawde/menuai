@@ -1,10 +1,11 @@
 'use client'
 
-import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock } from 'lucide-react'
+import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock, MessageCircle } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { LOYALTY_LEVELS } from '@/lib/loyalty-levels'
 import { useLoyaltyStatus } from '../app/api/loyalty/status/useLoyaltyStatus'
 import { RewardProgressBar } from './RewardProgressBar'
+
 
 interface Props {
   customerId: string
@@ -15,6 +16,14 @@ const REWARD_LABELS: Record<string, string> = {
   amazon_pay: 'Amazon Pay Gift Card',
   zomato: 'Zomato Gift Card',
   swiggy: 'Swiggy Gift Card',
+}
+
+const SUPPORT_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP_NUMBER ?? '917507002369'
+
+function supportWhatsAppLink(redemption: { id: string; reward_type: string }) {
+  const label = REWARD_LABELS[redemption.reward_type] ?? 'reward'
+  const msg = `Hi, I still haven't received my ${label} (redemption ${redemption.id.slice(0, 8)}). Can you help?`
+  return `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`
 }
 
 function useCountdown(expiresAt: string | null) {
@@ -40,12 +49,15 @@ export function QuestCard({ customerId, restaurantId }: Props) {
   const secondsLeft = useCountdown(status?.pending_pin?.expires_at ?? null)
   const showPinForThisRestaurant =
     !!status?.pending_pin && status.pending_pin.restaurant_id === restaurantId && secondsLeft > 0
+const pendingRedemption = status?.redemptions.find((r) => r.status === 'pending') ?? null
 
-  useEffect(() => {
-    if (!showPinForThisRestaurant) return
-    const id = setInterval(() => { void refresh() }, 4000)
-    return () => clearInterval(id)
-  }, [showPinForThisRestaurant, refresh])
+
+useEffect(() => {
+  if (!showPinForThisRestaurant && !pendingRedemption) return
+  const intervalMs = showPinForThisRestaurant ? 4000 : 15000
+  const id = setInterval(() => { void refresh() }, intervalMs)
+  return () => clearInterval(id)
+}, [showPinForThisRestaurant, pendingRedemption, refresh])
 
   const handleGeneratePin = useCallback(async () => {
     setGenLoading(true)
@@ -95,7 +107,6 @@ export function QuestCard({ customerId, restaurantId }: Props) {
   }
 
   const { verified_visits, current_level, next_level, progress_pct, pending_pin, redemptions, is_legend } = status
-  const pendingRedemption = redemptions.find((r) => r.status === 'pending')
   const hasClaimedWelcome = verified_visits > 0
 
   return (
@@ -227,31 +238,43 @@ export function QuestCard({ customerId, restaurantId }: Props) {
       )}
 
       {redemptions.filter((r) => r.status === 'fulfilled').map((r) => (
-        <div key={r.id} style={{
-          background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
-          borderRadius: 14, padding: '12px 14px', marginBottom: 8,
-        }}>
-          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
-            {REWARD_LABELS[r.reward_type]}
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-            <span style={{
-              background: 'var(--pr-border)', border: '1px dashed var(--pr-border-hover)',
-              borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 700,
-              color: 'var(--pr-text-muted)', fontFamily: 'var(--font-mono, monospace)',
-            }}>
-              {r.gift_card_code}
-            </span>
-            <button
-              type="button"
-              onClick={() => { navigator.clipboard.writeText(r.gift_card_code ?? ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-              style={{ background: 'none', border: 'none', color: 'var(--pr-gold)', cursor: 'pointer', display: 'flex' }}
-            >
-              {copied ? <Check size={13} /> : <Copy size={13} />}
-            </button>
-          </div>
-        </div>
-      ))}
+  <div key={r.id} style={{
+    background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+    borderRadius: 14, padding: '12px 14px', marginBottom: 8,
+  }}>
+    <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
+      {REWARD_LABELS[r.reward_type]}
+    </p>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+      <span style={{
+        background: 'var(--pr-border)', border: '1px dashed var(--pr-border-hover)',
+        borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 700,
+        color: 'var(--pr-text-muted)', fontFamily: 'var(--font-mono, monospace)',
+      }}>
+        {r.gift_card_code}
+      </span>
+      <button
+        type="button"
+        onClick={() => { navigator.clipboard.writeText(r.gift_card_code ?? ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+        style={{ background: 'none', border: 'none', color: 'var(--pr-gold)', cursor: 'pointer', display: 'flex' }}
+      >
+        {copied ? <Check size={13} /> : <Copy size={13} />}
+      </button>
+    </div>
+    
+     <a href={supportWhatsAppLink(r)}
+      target="_blank"
+      rel="noreferrer"
+      style={{
+        marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 5,
+        fontSize: 11, fontWeight: 600, color: 'var(--pr-text-muted)',
+        fontFamily: 'var(--font-body)', textDecoration: 'none',
+      }}
+    >
+      <MessageCircle size={12} /> Didn't receive it? Message support
+    </a>
+  </div>
+))}
 
       {/* Level ladder */}
       {hasClaimedWelcome && (
