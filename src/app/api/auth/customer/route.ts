@@ -216,6 +216,43 @@ export async function POST(req: NextRequest) {
 
     // Log the restaurant visit
    
+    // Add this customer to Dinezy's own global WhatsApp list (restaurant_id:
+    // null — same convention the webhook uses for Dinezy's own number).
+    // Best-effort: never block login if this fails.
+    try {
+      const waId = body.phone.replace(/[^0-9]/g, '')
+      if (waId.length >= 10) {
+        if (isNewCustomer) {
+          let restaurantName: string | null = null
+          if (body.restaurant_id) {
+            const { data: rest } = await supabase
+              .from('restaurants')
+              .select('name')
+              .eq('id', body.restaurant_id)
+              .maybeSingle()
+            restaurantName = rest?.name ?? null
+          }
+          await supabase.from('whatsapp_contacts').upsert(
+            {
+              restaurant_id: null,
+              wa_id: waId,
+              name: customer.display_name ?? null,
+              source: 'customer_login',
+              restaurant_name: restaurantName, // which restaurant they signed up through, for segmentation only
+            },
+            { onConflict: 'restaurant_id,wa_id' },
+          )
+        } else if (customer.display_name) {
+          await supabase
+            .from('whatsapp_contacts')
+            .update({ name: customer.display_name })
+            .eq('wa_id', waId)
+            .is('restaurant_id', null)
+        }
+      }
+    } catch (waErr) {
+      console.error('[customer -> whatsapp_contacts]', waErr)
+    }
 
     return NextResponse.json({ customer, isNewCustomer, bonusAwarded: isNewCustomer ? SIGNUP_BONUS_POINTS : 0 })
   } catch (err) {
