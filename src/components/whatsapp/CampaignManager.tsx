@@ -14,15 +14,14 @@ import {
   Trash2,
   ChevronLeft,
   PlayCircle,
+  Eye,
+  AlertTriangle,
 } from 'lucide-react';
 
-// Same family as WhatsAppInbox, kept self-contained so this component never
-// relies on inherited/global colors.
 const C = {
   pageBg: '#F0F2F5',
   panelBg: '#FFFFFF',
   headerBg: '#008069',
-  accent: '#008069',
   accentBright: '#00A884',
   accentSoft: '#D9FDD3',
   border: '#E9EDEF',
@@ -37,30 +36,35 @@ const C = {
   draftText: '#54656F',
 };
 
+type CampaignStatus = 'queued' | 'sending' | 'completed' | 'failed' | 'insufficient_credits';
+
 type Campaign = {
   id: string;
+  restaurant_id: string | null;
   name: string;
   template_name: string;
-  language_code: string;
-  body_text: string | null;
-  param_source: 'static' | 'name';
-  static_params: string[];
-  audience_filter: { restaurantId?: string; source?: string; sinceDays?: number };
-  status: 'draft' | 'sending' | 'completed' | 'failed';
+  template_language: string;
+  header_variable: string | null;
+  body_variables: string[];
+  audience_filter: { restaurantName?: string; sinceDays?: number };
+  status: CampaignStatus;
   total_recipients: number;
   sent_count: number;
+  delivered_count: number;
+  read_count: number;
   failed_count: number;
+  estimated_cost: number;
+  actual_cost: number;
   created_at: string;
-  started_at: string | null;
-  completed_at: string | null;
+  updated_at: string;
 };
 
 type Recipient = {
   id: string;
   wa_id: string;
   name: string | null;
-  status: 'pending' | 'sent' | 'failed';
-  error: string | null;
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | null;
+  error_message: string | null;
   sent_at: string | null;
 };
 
@@ -72,7 +76,7 @@ type Template = {
   placeholderCount: number;
 };
 
-type RestaurantOption = { restaurant_id: string; restaurant_name: string; count: number };
+type RestaurantOption = { name: string; count: number };
 
 function fillPreview(bodyText: string, params: string[]) {
   let out = bodyText;
@@ -82,33 +86,36 @@ function fillPreview(bodyText: string, params: string[]) {
   return out;
 }
 
-function StatusBadge({ status }: { status: Campaign['status'] }) {
-  const map: Record<Campaign['status'], { bg: string; text: string; label: string }> = {
-    draft: { bg: C.draftBg, text: C.draftText, label: 'Draft' },
-    sending: { bg: C.warnBg, text: C.warnText, label: 'Sending' },
-    completed: { bg: C.accentSoft, text: '#0B3D2E', label: 'Completed' },
-    failed: { bg: C.errBg, text: C.errText, label: 'Failed' },
-  };
-  const s = map[status];
+const STATUS_MAP: Record<CampaignStatus, { bg: string; text: string; label: string }> = {
+  queued: { bg: C.draftBg, text: C.draftText, label: 'Queued' },
+  sending: { bg: C.warnBg, text: C.warnText, label: 'Sending' },
+  completed: { bg: C.accentSoft, text: '#0B3D2E', label: 'Completed' },
+  failed: { bg: C.errBg, text: C.errText, label: 'Failed' },
+  insufficient_credits: { bg: C.errBg, text: C.errText, label: 'Out of credits' },
+};
+
+function StatusBadge({ status }: { status: CampaignStatus }) {
+  const s = STATUS_MAP[status] ?? STATUS_MAP.queued; // fallback guards against any future/unknown status value
   return (
     <span
       className="text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1"
       style={{ background: s.bg, color: s.text }}
     >
       {status === 'sending' && <Loader2 size={11} className="animate-spin" />}
+      {status === 'insufficient_credits' && <AlertTriangle size={11} />}
       {s.label}
     </span>
   );
 }
 
 function ProgressBar({ sent, failed, total }: { sent: number; failed: number; total: number }) {
-  const donePct = total > 0 ? ((sent + failed) / total) * 100 : 0;
-  const failPct = total > 0 ? (failed / total) * 100 : 0;
+  const donePct = total > 0 ? Math.min(((sent + failed) / total) * 100, 100) : 0;
+  const failShare = sent + failed > 0 ? failed / (sent + failed) : 0;
   return (
     <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
       <div className="h-full flex" style={{ width: `${donePct}%` }}>
-        <div className="h-full" style={{ width: `${100 - (failPct / (donePct || 1)) * 100}%`, background: C.accentBright }} />
-        <div className="h-full" style={{ width: `${(failPct / (donePct || 1)) * 100}%`, background: C.errText }} />
+        <div className="h-full" style={{ width: `${(1 - failShare) * 100}%`, background: C.accentBright }} />
+        <div className="h-full" style={{ width: `${failShare * 100}%`, background: C.errText }} />
       </div>
     </div>
   );
@@ -146,10 +153,6 @@ export default function CampaignManager() {
     if (selectedId) loadDetail(selectedId);
   }, [selectedId, loadDetail]);
 
-  // Drives sending: while the selected campaign is 'sending' (or was just
-  // started as 'draft'), keep calling the batch-send endpoint until done.
-  // This is what makes progress move while this page is open; the cron
-  // route is the background fallback when it's not.
   const driveSend = useCallback(
     async (id: string) => {
       if (activeSendRef.current.has(id)) return;
@@ -164,7 +167,7 @@ export default function CampaignManager() {
             setSelectedDetail((prev) => (prev && prev.campaign.id === id ? { ...prev, campaign: data.campaign } : prev));
             setCampaigns((prev) => prev.map((c) => (c.id === id ? data.campaign : c)));
           }
-          if (data.done) break;
+          if (data.done || data.campaign?.status === 'insufficient_credits' || data.campaign?.status === 'failed') break;
           await new Promise((r) => setTimeout(r, 800));
         }
       } finally {
@@ -202,7 +205,7 @@ export default function CampaignManager() {
         <div>
           <h1 className="font-semibold text-[17px] text-white">Campaigns</h1>
           <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            Broadcast approved templates to segments of your WhatsApp contacts
+            Dinezy-wide broadcasts to every logged-in customer, across every restaurant
           </p>
         </div>
         <button
@@ -229,7 +232,7 @@ export default function CampaignManager() {
                 No campaigns yet
               </p>
               <p className="text-sm mt-1" style={{ color: C.textMuted }}>
-                Create one to message a segment of your contacts with an approved template.
+                Create one to message a segment of your Dinezy-wide contacts with an approved template.
               </p>
             </div>
           </div>
@@ -255,13 +258,23 @@ export default function CampaignManager() {
                 </div>
                 <div className="mt-3">
                   <ProgressBar sent={c.sent_count} failed={c.failed_count} total={c.total_recipients} />
-                  <div className="flex items-center gap-3 mt-1.5 text-xs" style={{ color: C.textSecondary }}>
+                  <div className="flex items-center gap-3 mt-1.5 text-xs flex-wrap" style={{ color: C.textSecondary }}>
                     <span className="flex items-center gap-1">
                       <Users size={12} /> {c.total_recipients}
                     </span>
                     <span className="flex items-center gap-1" style={{ color: C.accentBright }}>
                       <CheckCircle2 size={12} /> {c.sent_count} sent
                     </span>
+                    {c.delivered_count > 0 && (
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 size={12} /> {c.delivered_count} delivered
+                      </span>
+                    )}
+                    {c.read_count > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Eye size={12} /> {c.read_count} read
+                      </span>
+                    )}
                     {c.failed_count > 0 && (
                       <span className="flex items-center gap-1" style={{ color: C.errText }}>
                         <XCircle size={12} /> {c.failed_count} failed
@@ -314,7 +327,7 @@ function CampaignDetail({
 
   const { campaign, recipients } = detail;
   const pending = campaign.total_recipients - campaign.sent_count - campaign.failed_count;
-  const canSend = campaign.status === 'draft' || campaign.status === 'sending';
+  const canSend = campaign.status === 'queued' || campaign.status === 'sending' || campaign.status === 'insufficient_credits';
 
   async function handleDelete() {
     if (!confirm(`Delete "${campaign.name}"? This can't be undone.`)) return;
@@ -330,32 +343,23 @@ function CampaignDetail({
   return (
     <div className="flex flex-col h-full w-full" style={{ background: C.pageBg }}>
       <div className="px-3 py-2.5 flex items-center gap-2" style={{ background: C.headerBg }}>
-        <button
-          onClick={onBack}
-          className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10"
-          aria-label="Back to campaigns"
-        >
+        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10" aria-label="Back to campaigns">
           <ChevronLeft size={20} color="#fff" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-[15px] text-white truncate">{campaign.name}</div>
           <div className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            {campaign.template_name} ({campaign.language_code})
+            {campaign.template_name} ({campaign.template_language})
           </div>
         </div>
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 disabled:opacity-50"
-          aria-label="Delete campaign"
-        >
+        <button onClick={handleDelete} disabled={deleting} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 disabled:opacity-50" aria-label="Delete campaign">
           <Trash2 size={17} color="#fff" />
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl">
         <div className="rounded-xl border p-4" style={{ background: C.panelBg, borderColor: C.border }}>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
             <StatusBadge status={campaign.status} />
             {canSend && (
               <button
@@ -364,51 +368,30 @@ function CampaignDetail({
                 style={{ background: C.accentBright }}
               >
                 <PlayCircle size={14} />
-                {campaign.status === 'sending' ? 'Resume sending' : 'Start sending'}
+                {campaign.status === 'queued' ? 'Start sending' : 'Resume sending'}
               </button>
             )}
           </div>
+
+          {campaign.status === 'insufficient_credits' && (
+            <div className="flex items-start gap-2 text-xs mb-3 px-3 py-2.5 rounded-lg font-medium" style={{ background: C.warnBg, color: C.warnText }}>
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              This restaurant ran out of WhatsApp credit mid-send. Recharge, then hit resume to finish the remaining recipients.
+            </div>
+          )}
+
           <ProgressBar sent={campaign.sent_count} failed={campaign.failed_count} total={campaign.total_recipients} />
-          <div className="grid grid-cols-4 gap-2 mt-3 text-center">
-            <div>
-              <div className="text-lg font-semibold" style={{ color: C.textPrimary }}>
-                {campaign.total_recipients}
-              </div>
-              <div className="text-[11px]" style={{ color: C.textMuted }}>
-                Total
-              </div>
-            </div>
-            <div>
-              <div className="text-lg font-semibold" style={{ color: C.accentBright }}>
-                {campaign.sent_count}
-              </div>
-              <div className="text-[11px]" style={{ color: C.textMuted }}>
-                Sent
-              </div>
-            </div>
-            <div>
-              <div className="text-lg font-semibold" style={{ color: C.errText }}>
-                {campaign.failed_count}
-              </div>
-              <div className="text-[11px]" style={{ color: C.textMuted }}>
-                Failed
-              </div>
-            </div>
-            <div>
-              <div className="text-lg font-semibold" style={{ color: C.textSecondary }}>
-                {Math.max(pending, 0)}
-              </div>
-              <div className="text-[11px]" style={{ color: C.textMuted }}>
-                Pending
-              </div>
-            </div>
+          <div className="grid grid-cols-5 gap-2 mt-3 text-center">
+            <Stat label="Total" value={campaign.total_recipients} color={C.textPrimary} />
+            <Stat label="Sent" value={campaign.sent_count} color={C.accentBright} />
+            <Stat label="Read" value={campaign.read_count} color={C.textSecondary} />
+            <Stat label="Failed" value={campaign.failed_count} color={C.errText} />
+            <Stat label="Pending" value={Math.max(pending, 0)} color={C.textSecondary} />
           </div>
-          {campaign.body_text && (
-            <div
-              className="text-[13px] mt-3 px-3.5 py-3 rounded-lg leading-snug"
-              style={{ background: C.accentSoft, color: '#0B3D2E' }}
-            >
-              {campaign.body_text}
+
+          {campaign.restaurant_id && (
+            <div className="text-[11px] mt-3" style={{ color: C.textMuted }}>
+              Billed: ₹{campaign.actual_cost?.toFixed(2) ?? '0.00'} of ₹{campaign.estimated_cost?.toFixed(2) ?? '0.00'} estimated
             </div>
           )}
         </div>
@@ -424,25 +407,23 @@ function CampaignDetail({
               </div>
             ) : (
               recipients.map((r) => (
-                <div
-                  key={r.id}
-                  className="px-4 py-2.5 flex items-center justify-between gap-3 border-b last:border-b-0"
-                  style={{ borderColor: C.border }}
-                >
+                <div key={r.id} className="px-4 py-2.5 flex items-center justify-between gap-3 border-b last:border-b-0" style={{ borderColor: C.border }}>
                   <div className="min-w-0">
                     <div className="text-[13.5px] font-medium truncate" style={{ color: C.textPrimary }}>
                       {r.name || r.wa_id}
                     </div>
-                    {r.error && (
+                    {r.error_message && (
                       <div className="text-[11px] truncate" style={{ color: C.errText }}>
-                        {r.error}
+                        {r.error_message}
                       </div>
                     )}
                   </div>
                   <div className="shrink-0">
-                    {r.status === 'sent' && <CheckCircle2 size={16} color={C.accentBright} />}
+                    {r.status === 'read' && <Eye size={16} color={C.accentBright} />}
+                    {r.status === 'delivered' && <CheckCircle2 size={16} color={C.accentBright} />}
+                    {r.status === 'sent' && <CheckCircle2 size={16} color={C.textSecondary} />}
                     {r.status === 'failed' && <XCircle size={16} color={C.errText} />}
-                    {r.status === 'pending' && <Clock size={16} color={C.textMuted} />}
+                    {(r.status === 'pending' || !r.status) && <Clock size={16} color={C.textMuted} />}
                   </div>
                 </div>
               ))
@@ -454,24 +435,34 @@ function CampaignDetail({
   );
 }
 
+function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div>
+      <div className="text-lg font-semibold" style={{ color }}>
+        {value}
+      </div>
+      <div className="text-[11px]" style={{ color: C.textMuted }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
 // ─── Create modal ───────────────────────────────────────────────────────────
 
-function CreateCampaignModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: (campaign: Campaign) => void;
-}) {
+function CreateCampaignModal({ onClose, onCreated }: { onClose: () => void; onCreated: (campaign: Campaign) => void }) {
   const [name, setName] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [templateName, setTemplateName] = useState('');
-  const [paramSource, setParamSource] = useState<'static' | 'name'>('static');
-  const [staticParams, setStaticParams] = useState<string[]>([]);
+  const [headerVariable, setHeaderVariable] = useState('');
+
+  // Per-{{n}} slot: either a literal value, or "__CUSTOMER_NAME__"
+  const [bodyVars, setBodyVars] = useState<string[]>([]);
+  const [personalizedSlots, setPersonalizedSlots] = useState<boolean[]>([]);
 
   const [audienceMode, setAudienceMode] = useState<'all' | 'restaurant'>('all');
-  const [restaurantId, setRestaurantId] = useState('');
+  const [restaurantName, setRestaurantName] = useState('');
   const [sinceDays, setSinceDays] = useState<string>('');
   const [restaurantOptions, setRestaurantOptions] = useState<RestaurantOption[]>([]);
   const [totalContacts, setTotalContacts] = useState<number | null>(null);
@@ -503,15 +494,18 @@ function CreateCampaignModal({
   }, []);
 
   useEffect(() => {
-    if (selectedTemplate) setStaticParams(Array(selectedTemplate.placeholderCount).fill(''));
+    if (selectedTemplate) {
+      setBodyVars(Array(selectedTemplate.placeholderCount).fill(''));
+      setPersonalizedSlots(Array(selectedTemplate.placeholderCount).fill(false));
+    }
   }, [templateName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const audienceFilter = useMemo(() => {
-    const f: { restaurantId?: string; sinceDays?: number } = {};
-    if (audienceMode === 'restaurant' && restaurantId) f.restaurantId = restaurantId;
+    const f: { restaurantName?: string; sinceDays?: number } = {};
+    if (audienceMode === 'restaurant' && restaurantName) f.restaurantName = restaurantName;
     if (sinceDays && Number(sinceDays) > 0) f.sinceDays = Number(sinceDays);
     return f;
-  }, [audienceMode, restaurantId, sinceDays]);
+  }, [audienceMode, restaurantName, sinceDays]);
 
   useEffect(() => {
     let cancelled = false;
@@ -534,19 +528,21 @@ function CreateCampaignModal({
     };
   }, [audienceFilter]);
 
-  const previewText = selectedTemplate ? fillPreview(selectedTemplate.bodyText, paramSource === 'name' ? ['<contact name>'] : staticParams) : '';
+  const previewParams = bodyVars.map((v, i) => (personalizedSlots[i] ? '<contact name>' : v));
+  const previewText = selectedTemplate ? fillPreview(selectedTemplate.bodyText, previewParams) : '';
 
   async function handleCreate() {
     setError('');
     if (!name.trim()) return setError('Give the campaign a name');
     if (!selectedTemplate) return setError('Select a template');
-    if (paramSource === 'static' && staticParams.some((p) => !p.trim())) {
-      return setError('Fill in all template variables');
+    if (bodyVars.some((v, i) => !personalizedSlots[i] && !v.trim())) {
+      return setError('Fill in every template variable, or mark it to use the contact\'s name');
     }
-    if (audienceMode === 'restaurant' && !restaurantId) return setError('Select a restaurant');
+    if (audienceMode === 'restaurant' && !restaurantName) return setError('Select a restaurant');
 
     setSubmitting(true);
     try {
+      const finalBodyVars = bodyVars.map((v, i) => (personalizedSlots[i] ? '__CUSTOMER_NAME__' : v));
       const res = await fetch('/api/whatsapp/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -554,9 +550,8 @@ function CreateCampaignModal({
           name,
           templateName: selectedTemplate.name,
           languageCode: selectedTemplate.language,
-          bodyText: selectedTemplate.bodyText,
-          paramSource,
-          staticParams,
+          headerVariable: headerVariable || undefined,
+          bodyVariables: finalBodyVars,
           audienceFilter,
         }),
       });
@@ -571,16 +566,8 @@ function CreateCampaignModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(11,20,26,0.6)' }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
-        style={{ background: '#fff' }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(11,20,26,0.6)' }} onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" style={{ background: '#fff' }} onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 flex items-center justify-between shrink-0" style={{ background: C.headerBg }}>
           <h2 className="font-semibold text-[16px] text-white">New campaign</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">
@@ -608,9 +595,7 @@ function CreateCampaignModal({
               Template
             </label>
             {templatesLoading ? (
-              <p className="text-xs" style={{ color: C.textMuted }}>
-                Loading templates...
-              </p>
+              <p className="text-xs" style={{ color: C.textMuted }}>Loading templates...</p>
             ) : templates.length === 0 ? (
               <p className="text-xs px-3.5 py-2.5 rounded-lg font-medium" style={{ background: C.warnBg, color: C.warnText }}>
                 No approved templates found. Create one in WhatsApp Manager first.
@@ -632,58 +617,55 @@ function CreateCampaignModal({
             )}
           </div>
 
-          {selectedTemplate && selectedTemplate.placeholderCount > 0 && (
-            <div>
-              <label className="text-xs font-semibold block mb-1.5" style={{ color: C.textPrimary }}>
-                Variable {'{{1}}'}
-              </label>
-              <div className="flex rounded-lg border overflow-hidden mb-2" style={{ borderColor: C.border }}>
-                <button
-                  onClick={() => setParamSource('static')}
-                  className="flex-1 py-2 text-xs font-semibold"
-                  style={{
-                    background: paramSource === 'static' ? C.accentSoft : '#fff',
-                    color: paramSource === 'static' ? '#0B3D2E' : C.textSecondary,
-                  }}
-                >
-                  Same for everyone
-                </button>
-                <button
-                  onClick={() => setParamSource('name')}
-                  className="flex-1 py-2 text-xs font-semibold border-l"
-                  style={{
-                    borderColor: C.border,
-                    background: paramSource === 'name' ? C.accentSoft : '#fff',
-                    color: paramSource === 'name' ? '#0B3D2E' : C.textSecondary,
-                  }}
-                >
-                  Contact's name
-                </button>
-              </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1.5" style={{ color: C.textPrimary }}>
+              Header value (only needed if this template has a text header variable)
+            </label>
+            <input
+              value={headerVariable}
+              onChange={(e) => setHeaderVariable(e.target.value)}
+              placeholder="Optional"
+              className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none"
+              style={{ borderColor: C.border, color: C.textPrimary }}
+            />
+          </div>
 
-              {paramSource === 'static' && (
-                <div className="space-y-2">
-                  {Array.from({ length: selectedTemplate.placeholderCount }).map((_, i) => (
-                    <input
-                      key={i}
-                      value={staticParams[i] || ''}
-                      onChange={(e) => {
-                        const next = [...staticParams];
-                        next[i] = e.target.value;
-                        setStaticParams(next);
-                      }}
-                      placeholder={`Value for {{${i + 1}}}`}
-                      className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none"
-                      style={{ borderColor: C.border, color: C.textPrimary }}
-                    />
-                  ))}
+          {selectedTemplate && selectedTemplate.placeholderCount > 0 && (
+            <div className="space-y-3">
+              <label className="text-xs font-semibold block" style={{ color: C.textPrimary }}>
+                Body variables
+              </label>
+              {Array.from({ length: selectedTemplate.placeholderCount }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    disabled={personalizedSlots[i]}
+                    value={personalizedSlots[i] ? "Contact's name" : bodyVars[i] || ''}
+                    onChange={(e) => {
+                      const next = [...bodyVars];
+                      next[i] = e.target.value;
+                      setBodyVars(next);
+                    }}
+                    placeholder={`{{${i + 1}}} value`}
+                    className="flex-1 border rounded-lg px-3.5 py-2.5 text-sm outline-none disabled:opacity-60"
+                    style={{ borderColor: C.border, color: C.textPrimary }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = [...personalizedSlots];
+                      next[i] = !next[i];
+                      setPersonalizedSlots(next);
+                    }}
+                    className="text-[11px] font-semibold px-2.5 py-2 rounded-lg shrink-0"
+                    style={{
+                      background: personalizedSlots[i] ? C.accentSoft : C.draftBg,
+                      color: personalizedSlots[i] ? '#0B3D2E' : C.textSecondary,
+                    }}
+                  >
+                    Use name
+                  </button>
                 </div>
-              )}
-              {paramSource === 'name' && selectedTemplate.placeholderCount > 1 && (
-                <p className="text-[11px]" style={{ color: C.textMuted }}>
-                  Only {'{{1}}'} is filled with the contact's name — this template has {selectedTemplate.placeholderCount} variables, so pick "Same for everyone" if the others need values too.
-                </p>
-              )}
+              ))}
             </div>
           )}
 
@@ -701,37 +683,30 @@ function CreateCampaignModal({
               <button
                 onClick={() => setAudienceMode('all')}
                 className="flex-1 py-2 text-xs font-semibold"
-                style={{
-                  background: audienceMode === 'all' ? C.accentSoft : '#fff',
-                  color: audienceMode === 'all' ? '#0B3D2E' : C.textSecondary,
-                }}
+                style={{ background: audienceMode === 'all' ? C.accentSoft : '#fff', color: audienceMode === 'all' ? '#0B3D2E' : C.textSecondary }}
               >
                 All contacts
               </button>
               <button
                 onClick={() => setAudienceMode('restaurant')}
                 className="flex-1 py-2 text-xs font-semibold border-l"
-                style={{
-                  borderColor: C.border,
-                  background: audienceMode === 'restaurant' ? C.accentSoft : '#fff',
-                  color: audienceMode === 'restaurant' ? '#0B3D2E' : C.textSecondary,
-                }}
+                style={{ borderColor: C.border, background: audienceMode === 'restaurant' ? C.accentSoft : '#fff', color: audienceMode === 'restaurant' ? '#0B3D2E' : C.textSecondary }}
               >
-                One restaurant
+                Signed up via one restaurant
               </button>
             </div>
 
             {audienceMode === 'restaurant' && (
               <select
-                value={restaurantId}
-                onChange={(e) => setRestaurantId(e.target.value)}
+                value={restaurantName}
+                onChange={(e) => setRestaurantName(e.target.value)}
                 className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none mb-2"
                 style={{ borderColor: C.border, color: C.textPrimary }}
               >
                 <option value="">Select a restaurant</option>
                 {restaurantOptions.map((r) => (
-                  <option key={r.restaurant_id} value={r.restaurant_id}>
-                    {r.restaurant_name} ({r.count})
+                  <option key={r.name} value={r.name}>
+                    {r.name} ({r.count})
                   </option>
                 ))}
               </select>
