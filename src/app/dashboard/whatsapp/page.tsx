@@ -1,6 +1,8 @@
 // src/app/dashboard/whatsapp/page.tsx
 'use client'
 
+import CampaignsCard from '@/components/whatsapp/CampaignsCard'
+import AnalyticsCard from '@/components/whatsapp/AnalyticsCard'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Script from 'next/script'
 import {
@@ -26,6 +28,7 @@ import {
   type TemplateDraft,
   type FieldError,
 } from '@/lib/whatsapp/templateValidation'
+
 
 const GRAPH_VERSION = 'v21.0'
 
@@ -1181,13 +1184,15 @@ export default function WhatsAppPage() {
           onConnected={setConnection}
         />
       ) : (
-        <>
-          <StatusPanel connection={connection} onDisconnected={handleDisconnect} />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <CreateTemplateCard restaurantId={context.restaurantId} wabaId={connection.waba_id} />
-            <SendMessageCard restaurantId={context.restaurantId} phoneNumberId={connection.phone_number_id} />
-          </div>
-        </>
+       <>
+  <StatusPanel connection={connection} onDisconnected={handleDisconnect} />
+  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <CreateTemplateCard restaurantId={context.restaurantId} wabaId={connection.waba_id} />
+    <SendMessageCard restaurantId={context.restaurantId} phoneNumberId={connection.phone_number_id} />
+  </div>
+  <CampaignsCard restaurantId={context.restaurantId} />
+  <AnalyticsCard restaurantId={context.restaurantId} />
+</>
       )}
     </div>
   )

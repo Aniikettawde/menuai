@@ -79,6 +79,7 @@ async function handleInboundMessage(restaurantId: string | null, message: any, c
 }
 
 /** Handles a status update (sent/delivered/read/failed) for a given restaurant_id (null = Dinezy's own number). */
+/** Handles a status update (sent/delivered/read/failed) for a given restaurant_id (null = Dinezy's own number). */
 async function handleStatusUpdate(restaurantId: string | null, phoneNumberId: string | undefined, status: any) {
   console.log(
     'WhatsApp status event:',
@@ -100,7 +101,42 @@ async function handleStatusUpdate(restaurantId: string | null, phoneNumberId: st
       `No whatsapp_messages row found for wamid ${status.id} (restaurant_id: ${restaurantId ?? 'null'}, phone_number_id: ${phoneNumberId}) — likely an outbound send not yet tracked in this table.`
     );
   }
+
+  // ── Propagate to campaign_recipients + roll up campaign aggregate counts ──
+  if (!updateError && count) {
+    const { data: recipient } = await supabaseAdmin
+      .from('whatsapp_campaign_recipients')
+      .select('id, campaign_id, status')
+      .eq('wamid', status.id)
+      .maybeSingle();
+
+    if (recipient) {
+      const newStatus = status.status as 'delivered' | 'read' | 'failed';
+      if (['delivered', 'read', 'failed'].includes(newStatus)) {
+        await supabaseAdmin
+          .from('whatsapp_campaign_recipients')
+          .update({ status: newStatus })
+          .eq('id', recipient.id);
+
+        const columnMap = { delivered: 'delivered_count', read: 'read_count', failed: 'failed_count' } as const;
+        const column = columnMap[newStatus];
+        const { data: campaign } = await supabaseAdmin
+          .from('whatsapp_campaigns')
+          .select(column)
+          .eq('id', recipient.campaign_id)
+          .single();
+        if (campaign) {
+          await supabaseAdmin
+            .from('whatsapp_campaigns')
+            .update({ [column]: ((campaign as any)[column] ?? 0) + 1 })
+            .eq('id', recipient.campaign_id);
+        }
+      }
+    }
+  }
 }
+
+ 
 
 export async function POST(req: Request) {
   const body = await req.json();
