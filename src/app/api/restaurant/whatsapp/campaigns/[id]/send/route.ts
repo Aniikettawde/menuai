@@ -164,12 +164,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await sleep(DELAY_BETWEEN_SENDS_MS)
     }
 
+    let bulkFailedCount = 0
     if (outOfCredits) {
-      await supabaseAdmin
+      const { count } = await supabaseAdmin
         .from('whatsapp_campaign_recipients')
-        .update({ status: 'failed', error_message: 'Insufficient credits — recharge to resume this campaign.' })
+        .update(
+          { status: 'failed', error_message: 'Insufficient credits — recharge to resume this campaign.' },
+          { count: 'exact' }
+        )
         .eq('campaign_id', params.id)
         .eq('status', 'pending')
+      bulkFailedCount = count ?? 0
     }
 
     const { count: remainingPending } = await supabaseAdmin
@@ -188,7 +193,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from('whatsapp_campaigns')
       .update({
         sent_count: (updatedCampaign?.sent_count ?? 0) + sentInBatch,
-        failed_count: (updatedCampaign?.failed_count ?? 0) + failedInBatch,
+        failed_count: (updatedCampaign?.failed_count ?? 0) + failedInBatch + bulkFailedCount,
         actual_cost: (updatedCampaign?.actual_cost ?? 0) + costSpent,
         status: (remainingPending ?? 0) > 0 ? 'sending' : 'completed',
         updated_at: new Date().toISOString(),
