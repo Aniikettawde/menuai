@@ -49,6 +49,7 @@ export function CustomerAuthProvider({
         onClose={() => setLoginOpen(false)}
         restaurantId={restaurantId}
         tableNumber={tableNumber}
+        onViewRewards={() => setAccountOpen(true)}
       />
       <CustomerAccountDrawer
         isOpen={accountOpen}

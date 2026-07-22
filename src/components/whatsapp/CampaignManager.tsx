@@ -1,6 +1,9 @@
 // src/components/whatsapp/CampaignManager.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   Megaphone,

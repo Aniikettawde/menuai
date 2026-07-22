@@ -1,5 +1,6 @@
 // src/app/api/whatsapp/campaigns/process-pending/route.ts
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { processCampaignBatch } from '@/lib/campaignSender';

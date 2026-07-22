@@ -1,5 +1,7 @@
 // src/app/api/whatsapp/campaigns/audience-options/route.ts
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getRestaurantAudienceOptions } from '@/lib/whatsapp/audience';

@@ -328,19 +328,20 @@ export default function DiscoveryPage() {
         <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>© {new Date().getFullYear()} Dinezy · {CITY}</span>
       </footer>
 
-      <SignupBonusPopup onClaim={() => setLoginOpen(true)} />
-      <OTPLoginModal
-        isOpen={loginOpen}
-        onClose={() => setLoginOpen(false)}
-        restaurantId={null}
-        tableNumber={null}
-      />
+     <SignupBonusPopup onClaim={() => setLoginOpen(true)} />
+<OTPLoginModal
+  isOpen={loginOpen}
+  onClose={() => setLoginOpen(false)}
+  restaurantId={null}
+  tableNumber={null}
+  onViewRewards={() => setAccountOpen(true)}
+/>
 
-      <CustomerAccountDrawer
-        isOpen={accountOpen}
-        onClose={() => setAccountOpen(false)}
-        restaurantId={null}
-      />
+<CustomerAccountDrawer
+  isOpen={accountOpen}
+  onClose={() => setAccountOpen(false)}
+  restaurantId={null}
+/>
     </main>
   )
 }

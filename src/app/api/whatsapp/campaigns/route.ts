@@ -1,6 +1,6 @@
 // src/app/api/whatsapp/campaigns/route.ts
 export const dynamic = 'force-dynamic';
-
+export const revalidate = 0;
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { lookupTemplate, parseMetaTemplateVariables } from '@/lib/whatsapp/metaApi';

@@ -10,13 +10,16 @@ import {
 import { type ConfirmationResult } from 'firebase/auth'
 import { sendOTP, verifyOTP, clearRecaptcha, prepareRecaptcha } from '@/lib/firebase'
 import { useCustomerAuth } from '@/store/customer-auth-store'
-import { X, Phone, Shield, Gift, ChevronRight, Loader2 } from 'lucide-react'
+import { X, Phone, Shield, Gift, ChevronRight, Loader2, KeyRound } from 'lucide-react'
 
 interface Props {
   isOpen: boolean
   onClose: () => void
   restaurantId?: string | null
   tableNumber?: number | null
+  // NEW: lets the parent page open the account drawer / rewards view
+  // the moment the user taps the CTA on the "done" screen.
+  onViewRewards?: () => void
 }
 
 type Screen = 'phone' | 'otp' | 'name' | 'done'
@@ -85,7 +88,7 @@ function SingleOTPInput({
   )
 }
 
-export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Props) {
+export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onViewRewards }: Props) {
   const { setCustomer } = useCustomerAuth()
 
   const [screen, setScreen] = useState<Screen>('phone')
@@ -189,14 +192,14 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
       const res = await fetch('/api/auth/customer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({
-  firebase_uid: uid,
-  phone: fbPhone ?? `+91${phone}`,
-  display_name: null,
-  restaurant_id: restaurantId ?? null,
-  table_number: tableNumber ?? null,
-  log_visit: true,   // ← add this line
-}),
+        body: JSON.stringify({
+          firebase_uid: uid,
+          phone: fbPhone ?? `+91${phone}`,
+          display_name: null,
+          restaurant_id: restaurantId ?? null,
+          table_number: tableNumber ?? null,
+          log_visit: true,
+        }),
       })
 
       const data = await res.json()
@@ -207,7 +210,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
       if (data.customer.display_name) {
         setCustomer(data.customer)
         setScreen('done')
-        setTimeout(onClose, 1800)
+        // NEW: no more auto-close here — the done screen now has its own
+        // CTA buttons, so the user decides when to leave, not a timer.
       } else {
         setScreen('name')
       }
@@ -217,7 +221,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
     } finally {
       setLoading(false)
     }
-  }, [otp, phone, restaurantId, tableNumber, setCustomer, onClose])
+  }, [otp, phone, restaurantId, tableNumber, setCustomer])
 
   const handleSaveProfile = useCallback(async () => {
     const session = sessionRef.current
@@ -234,34 +238,30 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
       const res = await fetch('/api/auth/customer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({
-  firebase_uid: session.uid,
-  phone: session.phone,
-  display_name: displayName.trim() || null,
-  restaurant_id: restaurantId ?? null,
-  table_number: tableNumber ?? null,
-  log_visit: false,   // ← add this line (explicit, for clarity)
-}),
+        body: JSON.stringify({
+          firebase_uid: session.uid,
+          phone: session.phone,
+          display_name: displayName.trim() || null,
+          restaurant_id: restaurantId ?? null,
+          table_number: tableNumber ?? null,
+          log_visit: false,
+        }),
       })
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      // The bonus was already awarded on the first /api/auth/customer call
-      // in handleVerifyOTP (that's the true first-signup moment). This second
-      // call only adds the display name, so it will report bonusAwarded: 0 —
-      // keep whatever value we already captured instead of overwriting it.
       if (data.bonusAwarded) setBonusAwarded(Number(data.bonusAwarded))
 
       setCustomer(data.customer)
       setScreen('done')
-      setTimeout(onClose, 1800)
+      // NEW: same as above — done screen owns the exit now.
     } catch (err: any) {
       setError(err?.message ?? 'Something went wrong')
     } finally {
       setLoading(false)
     }
-  }, [displayName, restaurantId, tableNumber, setCustomer, onClose])
+  }, [displayName, restaurantId, tableNumber, setCustomer])
 
   if (!isOpen) return null
 
@@ -817,42 +817,103 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
               </div>
             )}
 
-            {screen === 'done' && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  textAlign: 'center',
-                  padding: '12px 0 8px',
-                }}
-              >
-                <div style={{ fontSize: 52, marginBottom: 16 }}>🎊</div>
-                <h2
-                  style={{
-                    margin: '0 0 8px',
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 24,
-                    fontWeight: 600,
-                    color: 'var(--pr-text)',
-                  }}
-                >
-                  {displayName ? `Welcome, ${displayName}!` : "You're in!"}
-                </h2>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 13,
-                    color: 'var(--pr-text-muted)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {bonusAwarded > 0
-                    ? `+${bonusAwarded} points credited — enjoy exclusive rewards and personalised recommendations.`
-                    : 'Enjoy exclusive rewards and personalised recommendations.'}
-                </p>
-              </div>
-            )}
+            {/* ── "done" screen: rebuilt so it never auto-closes without    ─┐
+                telling the user the actual next action. This is the exact   │
+                place the "You are in" confusion was coming from.           ─┘ */}
+           {screen === 'done' && (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      textAlign: 'center',
+      padding: '12px 0 4px',
+    }}
+  >
+    <div style={{ fontSize: 46, marginBottom: 12 }}>🎊</div>
+    <h2
+      style={{
+        margin: '0 0 8px',
+        fontFamily: 'var(--font-display)',
+        fontSize: 22,
+        fontWeight: 600,
+        color: 'var(--pr-text)',
+      }}
+    >
+      {displayName ? `Welcome, ${displayName}!` : "You're in!"}
+    </h2>
+    <p
+      style={{
+        margin: '0 0 20px',
+        fontSize: 13,
+        color: 'var(--pr-text-muted)',
+        lineHeight: 1.5,
+        maxWidth: 340,
+      }}
+    >
+      {restaurantId
+        ? bonusAwarded > 0
+          ? `+${bonusAwarded} points credited. Ask your waiter to verify a PIN each visit — after 3 verified visits you'll unlock a ₹50 gift card.`
+          : "Ask your waiter to verify a PIN each visit — after 3 verified visits you'll unlock a ₹50 gift card."
+        : bonusAwarded > 0
+          ? `+${bonusAwarded} points credited. Visit any Dinezy restaurant and verify a PIN with your waiter to start earning toward a ₹50 gift card.`
+          : 'Visit any Dinezy restaurant and verify a PIN with your waiter to start earning toward a ₹50 gift card.'}
+    </p>
+
+    {/* NEW: explicit next step, not a silent auto-close.
+       Label adapts — only offers "get PIN" when we're actually
+       at a restaurant; otherwise routes to the rewards overview. */}
+    <button
+      type="button"
+      onClick={() => {
+        onViewRewards?.()
+        onClose()
+      }}
+      style={{
+        width: '100%',
+        height: 52,
+        background: 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
+        border: 'none',
+        borderRadius: 14,
+        color: 'var(--pr-cta-text)',
+        fontSize: 15,
+        fontWeight: 700,
+        fontFamily: 'var(--font-body)',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        touchAction: 'manipulation',
+      } as React.CSSProperties}
+    >
+      {restaurantId ? (
+        <><KeyRound size={16} /> Get my PIN now</>
+      ) : (
+        <><Gift size={16} /> View my rewards</>
+      )}
+    </button>
+
+    <button
+      type="button"
+      onClick={onClose}
+      style={{
+        marginTop: 10,
+        width: '100%',
+        height: 40,
+        background: 'none',
+        border: 'none',
+        color: 'var(--pr-text-faint)',
+        cursor: 'pointer',
+        fontSize: 12,
+        fontFamily: 'var(--font-body)',
+        touchAction: 'manipulation',
+      } as React.CSSProperties}
+    >
+      {restaurantId ? 'Maybe later, just browse the menu' : 'Maybe later'}
+    </button>
+  </div>
+)}
           </div>
         </div>
       </div>

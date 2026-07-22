@@ -1,5 +1,6 @@
 // src/app/api/whatsapp/campaigns/preview-count/route.ts
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { NextResponse } from 'next/server';
 import { getAudienceRecipients } from '@/lib/whatsapp/audience';
 
