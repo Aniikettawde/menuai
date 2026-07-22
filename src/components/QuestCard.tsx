@@ -1,7 +1,7 @@
 'use client'
 
 import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock, MessageCircle } from 'lucide-react'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { LOYALTY_LEVELS } from '@/lib/loyalty-levels'
 import { useLoyaltyStatus } from '../app/api/loyalty/status/useLoyaltyStatus'
 import { RewardProgressBar } from './RewardProgressBar'
@@ -38,26 +38,108 @@ function useCountdown(expiresAt: string | null) {
   return secondsLeft
 }
 
+// ─── NEW: visual stepper so the user always knows where they are ─────────────
+function GiftStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
+  const steps = [
+    { n: 1 as const, label: 'Get PIN' },
+    { n: 2 as const, label: 'Show waiter' },
+    { n: 3 as const, label: 'Processing' },
+    { n: 4 as const, label: 'Received' },
+  ]
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 16, padding: '0 2px' }}>
+      {steps.map((s, i) => {
+        const done = step > s.n
+        const active = step === s.n
+        return (
+          <div key={s.n} style={{ display: 'contents' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flex: '0 0 auto', width: 54 }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: done ? 'var(--pr-gold)' : active ? 'var(--pr-gold-dim)' : 'var(--pr-border)',
+                border: active ? '2px solid var(--pr-gold)' : '2px solid transparent',
+                color: done ? 'var(--pr-cta-text)' : active ? 'var(--pr-gold)' : 'var(--pr-text-faint)',
+                fontSize: 11, fontWeight: 700, flexShrink: 0,
+                transition: 'all 0.2s',
+              }}>
+                {done ? <Check size={12} /> : s.n}
+              </div>
+              <span style={{
+                fontSize: 9, fontWeight: active ? 700 : 600, textAlign: 'center', lineHeight: 1.2,
+                color: active ? 'var(--pr-gold)' : done ? 'var(--pr-text-muted)' : 'var(--pr-text-faint)',
+                fontFamily: 'var(--font-body)',
+              }}>
+                {s.label}
+              </span>
+            </div>
+            {i < steps.length - 1 && (
+              <div style={{
+                flex: 1, height: 2, marginTop: 10, marginLeft: -8, marginRight: -8,
+                background: done ? 'var(--pr-gold)' : 'var(--pr-border)',
+                transition: 'background 0.3s',
+              }} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── NEW: celebration banner reused inside the drawer ─────────────────────────
+function CelebrationBanner({ kind, level }: { kind: 'welcome' | 'levelup'; level?: { emoji: string; title: string } }) {
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-orange-dim) 100%)',
+      border: '1px solid var(--pr-border-hover)', borderRadius: 16,
+      padding: '16px 16px', marginBottom: 12,
+      display: 'flex', alignItems: 'center', gap: 10,
+    }}>
+      <span style={{ fontSize: 26 }}>{kind === 'welcome' ? '✅' : level?.emoji ?? '🏅'}</span>
+      <div>
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+          {kind === 'welcome' ? 'Visit verified!' : `Badge unlocked: ${level?.title ?? ''}!`}
+        </p>
+        <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+          {kind === 'welcome'
+            ? 'Your ₹50 Amazon Pay gift is being processed — usually ready within 24 hours.'
+            : 'Keep visiting to unlock the next level.'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function QuestCard({ customerId, restaurantId }: Props) {
-  const { status, loading, refresh } = useLoyaltyStatus(customerId)
+  const { status, loading, refresh, justClaimedWelcome, justLeveledUp, clearCelebration } = useLoyaltyStatus(customerId)
   const [genLoading, setGenLoading] = useState(false)
   const [error, setError] = useState('')
   const [resendLoading, setResendLoading] = useState(false)
   const [resendMsg, setResendMsg] = useState('')
   const [copied, setCopied] = useState(false)
+  const celebrateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const secondsLeft = useCountdown(status?.pending_pin?.expires_at ?? null)
   const showPinForThisRestaurant =
     !!status?.pending_pin && status.pending_pin.restaurant_id === restaurantId && secondsLeft > 0
-const pendingRedemption = status?.redemptions.find((r) => r.status === 'pending') ?? null
+  const pendingRedemption = status?.redemptions.find((r) => r.status === 'pending') ?? null
 
+  useEffect(() => {
+    if (!showPinForThisRestaurant && !pendingRedemption) return
+    const intervalMs = showPinForThisRestaurant ? 4000 : 15000
+    const id = setInterval(() => { void refresh() }, intervalMs)
+    return () => clearInterval(id)
+  }, [showPinForThisRestaurant, pendingRedemption, refresh])
 
-useEffect(() => {
-  if (!showPinForThisRestaurant && !pendingRedemption) return
-  const intervalMs = showPinForThisRestaurant ? 4000 : 15000
-  const id = setInterval(() => { void refresh() }, intervalMs)
-  return () => clearInterval(id)
-}, [showPinForThisRestaurant, pendingRedemption, refresh])
+  // NEW: auto-clear celebration banners after a few seconds, same pattern as RewardOffersBar
+  useEffect(() => {
+    if (justClaimedWelcome || justLeveledUp) {
+      if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current)
+      celebrateTimeoutRef.current = setTimeout(() => clearCelebration(), justClaimedWelcome ? 7000 : 5000)
+    }
+    return () => { if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current) }
+  }, [justClaimedWelcome, justLeveledUp, clearCelebration])
 
   const handleGeneratePin = useCallback(async () => {
     setGenLoading(true)
@@ -109,9 +191,20 @@ useEffect(() => {
   const { verified_visits, current_level, next_level, progress_pct, pending_pin, redemptions, is_legend } = status
   const hasClaimedWelcome = verified_visits > 0
 
+  // NEW: figure out which step of the welcome-gift journey the user is on
+  const showGiftStepper = !hasClaimedWelcome || !!pendingRedemption || !!justClaimedWelcome
+  let giftStep: 1 | 2 | 3 | 4 = 1
+  if (justClaimedWelcome) giftStep = 4
+  else if (pendingRedemption) giftStep = 3
+  else if (showPinForThisRestaurant) giftStep = 2
+
   return (
     <div style={{ marginBottom: 20 }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* NEW: celebration banners — this is what was missing after PIN verification */}
+      {justClaimedWelcome && <CelebrationBanner kind="welcome" />}
+      {justLeveledUp && <CelebrationBanner kind="levelup" level={justLeveledUp} />}
 
       {/* Header card */}
       <div style={{
@@ -145,73 +238,86 @@ useEffect(() => {
               </p>
             </div>
             <p style={{ margin: 0, fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-              Generate your PIN and show it to your waiter to claim it instantly.
+              3 quick steps: get a PIN, show it to your waiter, and we'll send your gift card here.
             </p>
           </>
         )}
       </div>
+
+      {/* NEW: always-visible stepper for the welcome-gift journey */}
+      {showGiftStepper && !justClaimedWelcome && <GiftStepper step={giftStep} />}
 
       {/* Verify visit box */}
-      <div style={{
-        background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
-        borderRadius: 14, padding: '14px 16px', marginBottom: 12,
-      }}>
-        {showPinForThisRestaurant ? (
-          <>
-            <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-              Show this PIN to your waiter
-            </p>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 32, fontWeight: 800, letterSpacing: '0.15em', color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
-                {pending_pin!.pin}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-                <Clock size={12} /> {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
-              </span>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <KeyRound size={14} color="var(--pr-gold)" />
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-                Verify your visit
+      {!pendingRedemption && (
+        <div style={{
+          background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
+          borderRadius: 14, padding: '14px 16px', marginBottom: 12,
+        }}>
+          {showPinForThisRestaurant ? (
+            <>
+              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+                Show this PIN to your waiter
               </p>
-            </div>
-            <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-              {hasClaimedWelcome
-                ? 'Ask your waiter to verify a PIN each visit to level up.'
-                : 'Get a PIN and show it to your waiter to claim your welcome gift.'}
-            </p>
-            <button
-              type="button" onClick={() => void handleGeneratePin()} disabled={genLoading}
-              style={{
-                width: '100%', height: 40, borderRadius: 10,
-                background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
-                color: 'var(--pr-gold)', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-body)',
-                cursor: genLoading ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}
-            >
-              {genLoading ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <KeyRound size={14} />}
-              Get my PIN
-            </button>
-          </>
-        )}
-        {error && <p style={{ margin: '8px 0 0', fontSize: 11, color: '#dc2626', fontFamily: 'var(--font-body)' }}>{error}</p>}
-      </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 32, fontWeight: 800, letterSpacing: '0.15em', color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
+                  {pending_pin!.pin}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+                  <Clock size={12} /> {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
+                </span>
+              </div>
+              <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
+                {hasClaimedWelcome
+                  ? "Once your waiter enters this code, your visit is logged instantly."
+                  : "Once your waiter enters this code, we'll start processing your gift card automatically."}
+              </p>
+            </>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <KeyRound size={14} color="var(--pr-gold)" />
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+                  Verify your visit
+                </p>
+              </div>
+              <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+                {hasClaimedWelcome
+                  ? 'Ask your waiter to verify a PIN each visit to level up.'
+                  : 'Get a PIN and show it to your waiter to claim your welcome gift.'}
+              </p>
+              <button
+                type="button" onClick={() => void handleGeneratePin()} disabled={genLoading}
+                style={{
+                  width: '100%', height: 40, borderRadius: 10,
+                  background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+                  color: 'var(--pr-gold)', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-body)',
+                  cursor: genLoading ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                {genLoading ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <KeyRound size={14} />}
+                Get my PIN
+              </button>
+            </>
+          )}
+          {error && <p style={{ margin: '8px 0 0', fontSize: 11, color: '#dc2626', fontFamily: 'var(--font-body)' }}>{error}</p>}
+        </div>
+      )}
 
-      {/* Welcome gift status */}
+      {/* Welcome gift status — reframed with a clear timeline instead of a bare "requested" state */}
       {pendingRedemption && (
         <div style={{
           background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.16)',
-          borderRadius: 14, padding: '12px 14px', marginBottom: 12,
+          borderRadius: 14, padding: '14px 16px', marginBottom: 12,
         }}>
-          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: '#16a34a', fontFamily: 'var(--font-body)' }}>
-            {REWARD_LABELS[pendingRedemption.reward_type]} requested
-          </p>
-          <p style={{ margin: '4px 0 10px', fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-            We'll send your gift card code here once it's issued.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <Check size={15} color="#16a34a" />
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#16a34a', fontFamily: 'var(--font-body)' }}>
+              Visit verified — {REWARD_LABELS[pendingRedemption.reward_type]} on the way
+            </p>
+          </div>
+          <p style={{ margin: '2px 0 12px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+            Usually processed within 24 hours. We'll show your code right here — no need to come back and check.
           </p>
           <button
             type="button"
@@ -227,7 +333,7 @@ useEffect(() => {
             }}
           >
             {resendLoading ? <Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> : null}
-            {resendLoading ? 'Resending…' : 'Resend request'}
+            {resendLoading ? 'Resending…' : "Still nothing after 24 hrs? Resend request"}
           </button>
           {resendMsg && (
             <p style={{ margin: '8px 0 0', fontSize: 10.5, color: resendMsg.startsWith('Request resent') ? '#16a34a' : '#dc2626', fontFamily: 'var(--font-body)' }}>
@@ -238,43 +344,46 @@ useEffect(() => {
       )}
 
       {redemptions.filter((r) => r.status === 'fulfilled').map((r) => (
-  <div key={r.id} style={{
-    background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
-    borderRadius: 14, padding: '12px 14px', marginBottom: 8,
-  }}>
-    <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
-      {REWARD_LABELS[r.reward_type]}
-    </p>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-      <span style={{
-        background: 'var(--pr-border)', border: '1px dashed var(--pr-border-hover)',
-        borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 700,
-        color: 'var(--pr-text-muted)', fontFamily: 'var(--font-mono, monospace)',
-      }}>
-        {r.gift_card_code}
-      </span>
-      <button
-        type="button"
-        onClick={() => { navigator.clipboard.writeText(r.gift_card_code ?? ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-        style={{ background: 'none', border: 'none', color: 'var(--pr-gold)', cursor: 'pointer', display: 'flex' }}
-      >
-        {copied ? <Check size={13} /> : <Copy size={13} />}
-      </button>
-    </div>
-    
-     <a href={supportWhatsAppLink(r)}
-      target="_blank"
-      rel="noreferrer"
-      style={{
-        marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 5,
-        fontSize: 11, fontWeight: 600, color: 'var(--pr-text-muted)',
-        fontFamily: 'var(--font-body)', textDecoration: 'none',
-      }}
-    >
-      <MessageCircle size={12} /> Didn't receive it? Message support
-    </a>
-  </div>
-))}
+        <div key={r.id} style={{
+          background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+          borderRadius: 14, padding: '12px 14px', marginBottom: 8,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 14 }}>🎉</span>
+            <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
+              {REWARD_LABELS[r.reward_type]} ready
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+            <span style={{
+              background: 'var(--pr-border)', border: '1px dashed var(--pr-border-hover)',
+              borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 700,
+              color: 'var(--pr-text-muted)', fontFamily: 'var(--font-mono, monospace)',
+            }}>
+              {r.gift_card_code}
+            </span>
+            <button
+              type="button"
+              onClick={() => { navigator.clipboard.writeText(r.gift_card_code ?? ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+              style={{ background: 'none', border: 'none', color: 'var(--pr-gold)', cursor: 'pointer', display: 'flex' }}
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+            </button>
+          </div>
+
+          <a href={supportWhatsAppLink(r)}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontSize: 11, fontWeight: 600, color: 'var(--pr-text-muted)',
+              fontFamily: 'var(--font-body)', textDecoration: 'none',
+            }}
+          >
+            <MessageCircle size={12} /> Didn't receive it? Message support
+          </a>
+        </div>
+      ))}
 
       {/* Level ladder */}
       {hasClaimedWelcome && (

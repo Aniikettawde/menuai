@@ -73,6 +73,16 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
   const [genLoading, setGenLoading] = useState(false)
   const celebrateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // NEW: the moment the user logs in, auto-expand this bar so the reward
+  // CTA is immediately visible instead of requiring an extra tap to discover it.
+  const prevCustomerIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!prevCustomerIdRef.current && customerId) {
+      setExpanded(true)
+    }
+    prevCustomerIdRef.current = customerId
+  }, [customerId])
+
   const pendingPin = status?.pending_pin
   const pinActiveHere =
     !!pendingPin && pendingPin.restaurant_id === restaurantId && new Date(pendingPin.expires_at).getTime() > Date.now()
@@ -253,13 +263,13 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
           </div>
         </div>
         <VerificationBottomSheet
-  isOpen={sheetOpen}
-  onClose={() => setSheetOpen(false)}
-  pin={pendingPin.pin}
-  expiresAt={pendingPin.expires_at}
-  isFirstVisit={verified_visits === 0}
-  onExpire={refresh}
-/>
+          isOpen={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          pin={pendingPin.pin}
+          expiresAt={pendingPin.expires_at}
+          isFirstVisit={verified_visits === 0}
+          onExpire={refresh}
+        />
       </>
     )
   }
