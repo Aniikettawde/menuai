@@ -57,10 +57,12 @@ export async function getAudienceRecipients(filter: AudienceFilter): Promise<Aud
     return out;
   }
 
-  // Restaurant-scoped audience — restaurant_customers is the source of truth
+  // Restaurant-scoped audience — restaurant_customers is the source of truth.
+  // Two separate queries instead of an embedded customers ( phone, display_name )
+  // join — see the comment in getRestaurantAudienceOptions for why.
   let rcQuery = supabaseAdmin
     .from('restaurant_customers')
-    .select('customer_id, last_visit_at, marketing_consent, customers ( phone, display_name )')
+    .select('customer_id, last_visit_at, marketing_consent')
     .eq('restaurant_id', filter.restaurantId)
     .eq('marketing_consent', true);
 
@@ -72,17 +74,29 @@ export async function getAudienceRecipients(filter: AudienceFilter): Promise<Aud
   const { data: rcRows, error: rcErr } = await rcQuery.limit(20000);
   if (rcErr) throw new Error(rcErr.message);
 
+  const customerIds = [...new Set((rcRows ?? []).map((r) => r.customer_id as string))];
+  if (customerIds.length === 0) return [];
+
+  const { data: customerRows, error: custErr } = await supabaseAdmin
+    .from('customers')
+    .select('id, phone, display_name')
+    .in('id', customerIds);
+
+  if (custErr) throw new Error(custErr.message);
+
+  const phoneById = new Map(
+    (customerRows ?? []).map((c) => [c.id as string, { phone: c.phone as string, name: c.display_name as string | null }]),
+  );
+
   const seen = new Set<string>();
   const candidates: AudienceRecipient[] = [];
-  for (const row of rcRows ?? []) {
-    const cust = Array.isArray(row.customers) ? row.customers[0] : row.customers;
-    const phone = (cust as { phone?: string } | null)?.phone;
-    const displayName = (cust as { display_name?: string | null } | null)?.display_name ?? null;
-    if (!phone) continue;
-    const cleaned = cleanPhone(phone);
+  for (const cid of customerIds) {
+    const cust = phoneById.get(cid);
+    if (!cust?.phone) continue;
+    const cleaned = cleanPhone(cust.phone);
     if (!cleaned || seen.has(cleaned)) continue;
     seen.add(cleaned);
-    candidates.push({ wa_id: cleaned, name: displayName });
+    candidates.push({ wa_id: cleaned, name: cust.name });
   }
 
   if (candidates.length === 0) return [];
@@ -114,24 +128,37 @@ export async function getAudienceRecipients(filter: AudienceFilter): Promise<Aud
 export async function getRestaurantAudienceOptions(): Promise<
   { id: string; name: string; count: number }[]
 > {
-  const { data, error } = await supabaseAdmin
+  // Two separate queries instead of an embedded join (restaurant_customers.restaurant_id
+  // -> restaurants.id). The embed depends on PostgREST's cached relationship graph, which
+  // can silently return an empty/broken embed after a schema change even when the raw SQL
+  // join works fine and a manual "reload schema cache" doesn't pick it up. Doing it as two
+  // plain queries + an in-memory map has no such dependency.
+  const { data: rcRows, error: rcErr } = await supabaseAdmin
     .from('restaurant_customers')
-    .select('restaurant_id, restaurants ( name )')
+    .select('restaurant_id')
     .eq('marketing_consent', true);
 
-  if (error) throw new Error(error.message);
+  if (rcErr) throw new Error(rcErr.message);
 
-  const counts = new Map<string, { name: string; count: number }>();
-  for (const row of data ?? []) {
+  const counts = new Map<string, number>();
+  for (const row of rcRows ?? []) {
     const rid = row.restaurant_id as string;
-    const rest = Array.isArray(row.restaurants) ? row.restaurants[0] : row.restaurants;
-    const name = (rest as { name?: string } | null)?.name ?? 'Unknown restaurant';
-    const existing = counts.get(rid);
-    if (existing) existing.count += 1;
-    else counts.set(rid, { name, count: 1 });
+    counts.set(rid, (counts.get(rid) ?? 0) + 1);
   }
 
+  const restaurantIds = [...counts.keys()];
+  if (restaurantIds.length === 0) return [];
+
+  const { data: restaurantRows, error: restErr } = await supabaseAdmin
+    .from('restaurants')
+    .select('id, name')
+    .in('id', restaurantIds);
+
+  if (restErr) throw new Error(restErr.message);
+
+  const nameById = new Map((restaurantRows ?? []).map((r) => [r.id as string, r.name as string]));
+
   return [...counts.entries()]
-    .map(([id, v]) => ({ id, name: v.name, count: v.count }))
+    .map(([id, count]) => ({ id, name: nameById.get(id) ?? 'Unknown restaurant', count }))
     .sort((a, b) => b.count - a.count);
 }
