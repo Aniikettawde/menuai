@@ -189,13 +189,14 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
       const res = await fetch('/api/auth/customer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firebase_uid: uid,
-          phone: fbPhone ?? `+91${phone}`,
-          display_name: null,
-          restaurant_id: restaurantId ?? null,
-          table_number: tableNumber ?? null,
-        }),
+       body: JSON.stringify({
+  firebase_uid: uid,
+  phone: fbPhone ?? `+91${phone}`,
+  display_name: null,
+  restaurant_id: restaurantId ?? null,
+  table_number: tableNumber ?? null,
+  log_visit: true,   // ← add this line
+}),
       })
 
       const data = await res.json()
@@ -233,13 +234,14 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber }: Pr
       const res = await fetch('/api/auth/customer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firebase_uid: session.uid,
-          phone: session.phone,
-          display_name: displayName.trim() || null,
-          restaurant_id: restaurantId ?? null,
-          table_number: tableNumber ?? null,
-        }),
+       body: JSON.stringify({
+  firebase_uid: session.uid,
+  phone: session.phone,
+  display_name: displayName.trim() || null,
+  restaurant_id: restaurantId ?? null,
+  table_number: tableNumber ?? null,
+  log_visit: false,   // ← add this line (explicit, for clarity)
+}),
       })
 
       const data = await res.json()

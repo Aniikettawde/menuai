@@ -46,7 +46,7 @@ type Campaign = {
   template_language: string;
   header_variable: string | null;
   body_variables: string[];
-  audience_filter: { restaurantName?: string; sinceDays?: number };
+  audience_filter: { restaurantId?: string; sinceDays?: number };
   status: CampaignStatus;
   total_recipients: number;
   sent_count: number;
@@ -76,7 +76,7 @@ type Template = {
   placeholderCount: number;
 };
 
-type RestaurantOption = { name: string; count: number };
+type RestaurantOption = { id: string; name: string; count: number };
 
 function fillPreview(bodyText: string, params: string[]) {
   let out = bodyText;
@@ -205,7 +205,7 @@ export default function CampaignManager() {
         <div>
           <h1 className="font-semibold text-[17px] text-white">Campaigns</h1>
           <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            Dinezy-wide broadcasts to every logged-in customer, across every restaurant
+            Broadcasts to every logged-in customer, Dinezy-wide or filtered to one restaurant
           </p>
         </div>
         <button
@@ -462,7 +462,7 @@ function CreateCampaignModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [personalizedSlots, setPersonalizedSlots] = useState<boolean[]>([]);
 
   const [audienceMode, setAudienceMode] = useState<'all' | 'restaurant'>('all');
-  const [restaurantName, setRestaurantName] = useState('');
+  const [restaurantId, setRestaurantId] = useState('');
   const [sinceDays, setSinceDays] = useState<string>('');
   const [restaurantOptions, setRestaurantOptions] = useState<RestaurantOption[]>([]);
   const [totalContacts, setTotalContacts] = useState<number | null>(null);
@@ -501,11 +501,11 @@ function CreateCampaignModal({ onClose, onCreated }: { onClose: () => void; onCr
   }, [templateName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const audienceFilter = useMemo(() => {
-    const f: { restaurantName?: string; sinceDays?: number } = {};
-    if (audienceMode === 'restaurant' && restaurantName) f.restaurantName = restaurantName;
+    const f: { restaurantId?: string; sinceDays?: number } = {};
+    if (audienceMode === 'restaurant' && restaurantId) f.restaurantId = restaurantId;
     if (sinceDays && Number(sinceDays) > 0) f.sinceDays = Number(sinceDays);
     return f;
-  }, [audienceMode, restaurantName, sinceDays]);
+  }, [audienceMode, restaurantId, sinceDays]);
 
   useEffect(() => {
     let cancelled = false;
@@ -538,7 +538,7 @@ function CreateCampaignModal({ onClose, onCreated }: { onClose: () => void; onCr
     if (bodyVars.some((v, i) => !personalizedSlots[i] && !v.trim())) {
       return setError('Fill in every template variable, or mark it to use the contact\'s name');
     }
-    if (audienceMode === 'restaurant' && !restaurantName) return setError('Select a restaurant');
+    if (audienceMode === 'restaurant' && !restaurantId) return setError('Select a restaurant');
 
     setSubmitting(true);
     try {
@@ -692,20 +692,20 @@ function CreateCampaignModal({ onClose, onCreated }: { onClose: () => void; onCr
                 className="flex-1 py-2 text-xs font-semibold border-l"
                 style={{ borderColor: C.border, background: audienceMode === 'restaurant' ? C.accentSoft : '#fff', color: audienceMode === 'restaurant' ? '#0B3D2E' : C.textSecondary }}
               >
-                Signed up via one restaurant
+                One restaurant's customers
               </button>
             </div>
 
             {audienceMode === 'restaurant' && (
               <select
-                value={restaurantName}
-                onChange={(e) => setRestaurantName(e.target.value)}
+                value={restaurantId}
+                onChange={(e) => setRestaurantId(e.target.value)}
                 className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none mb-2"
                 style={{ borderColor: C.border, color: C.textPrimary }}
               >
                 <option value="">Select a restaurant</option>
                 {restaurantOptions.map((r) => (
-                  <option key={r.name} value={r.name}>
+                  <option key={r.id} value={r.id}>
                     {r.name} ({r.count})
                   </option>
                 ))}
@@ -715,7 +715,11 @@ function CreateCampaignModal({ onClose, onCreated }: { onClose: () => void; onCr
             <input
               value={sinceDays}
               onChange={(e) => setSinceDays(e.target.value.replace(/\D/g, ''))}
-              placeholder="Only contacts active in the last N days (optional)"
+              placeholder={
+                audienceMode === 'restaurant'
+                  ? 'Only customers who visited in the last N days (optional)'
+                  : 'Only contacts active in the last N days (optional)'
+              }
               className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none"
               style={{ borderColor: C.border, color: C.textPrimary }}
             />

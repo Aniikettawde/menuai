@@ -4,13 +4,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { lookupTemplate, parseMetaTemplateVariables } from '@/lib/whatsapp/metaApi';
+import { getAudienceRecipients } from '@/lib/whatsapp/audience';
 
 const MAX_RECIPIENTS_PER_CAMPAIGN = 20000; // Dinezy-wide, not per-restaurant — much higher cap
-
-function cleanPhone(raw: string): string | null {
-  const digits = String(raw).replace(/[^\d]/g, '');
-  return digits.length >= 10 ? digits : null;
-}
 
 // GET — list only Dinezy's own (restaurant_id null) campaigns, never a restaurant's.
 export async function GET() {
@@ -33,7 +29,7 @@ export async function POST(req: Request) {
       languageCode,
       headerVariable,
       bodyVariables, // (string | "__CUSTOMER_NAME__")[]
-      audienceFilter, // { restaurantName?: string; sinceDays?: number }
+      audienceFilter, // { restaurantId?: string; sinceDays?: number }
     } = await req.json();
 
     if (!name?.trim() || !templateName) {
@@ -71,29 +67,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Every body variable must have a value, or be set to use the customer name.' }, { status: 400 });
     }
 
-    // Build the audience from Dinezy's global contact list (restaurant_id null).
-    let query = supabaseAdmin
-      .from('whatsapp_contacts')
-      .select('wa_id, name')
-      .is('restaurant_id', null)
-      .eq('opted_out', false);
-
-    if (audienceFilter?.restaurantName) query = query.eq('restaurant_name', audienceFilter.restaurantName);
-    if (audienceFilter?.sinceDays) {
-      const since = new Date(Date.now() - audienceFilter.sinceDays * 86400000).toISOString();
-      query = query.gte('last_message_at', since);
+    // Build the audience — restaurant-scoped (via restaurant_customers) or
+    // Dinezy-wide global list, both resolved through the same helper used
+    // by preview-count, so this number always matches what was previewed.
+    let recipients;
+    try {
+      recipients = await getAudienceRecipients({
+        restaurantId: audienceFilter?.restaurantId || null,
+        sinceDays: audienceFilter?.sinceDays || undefined,
+      });
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message || 'Failed to resolve audience' }, { status: 500 });
     }
 
-    const { data: contacts, error: contactsErr } = await query.limit(MAX_RECIPIENTS_PER_CAMPAIGN);
-    if (contactsErr) return NextResponse.json({ error: contactsErr.message }, { status: 500 });
-
-    const seen = new Set<string>();
-    const recipients: { wa_id: string; name: string | null }[] = [];
-    for (const c of contacts ?? []) {
-      const cleaned = cleanPhone(c.wa_id);
-      if (!cleaned || seen.has(cleaned)) continue;
-      seen.add(cleaned);
-      recipients.push({ wa_id: cleaned, name: c.name });
+    if (recipients.length > MAX_RECIPIENTS_PER_CAMPAIGN) {
+      recipients = recipients.slice(0, MAX_RECIPIENTS_PER_CAMPAIGN);
     }
 
     if (recipients.length === 0) {
@@ -103,7 +91,7 @@ export async function POST(req: Request) {
     const { data: campaign, error: campaignErr } = await supabaseAdmin
       .from('whatsapp_campaigns')
       .insert({
-        restaurant_id: null,
+        restaurant_id: null, // this is a Dinezy-run send, even when the audience is restaurant-scoped
         name: name.trim(),
         template_name: template.name,
         template_language: template.language,

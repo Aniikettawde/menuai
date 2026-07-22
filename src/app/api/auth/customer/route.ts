@@ -15,6 +15,7 @@ export interface CustomerUpsertPayload {
   display_name?:  string | null
   restaurant_id?: string | null
   table_number?:  number | null
+  log_visit?:     boolean   // true only on the actual login moment (OTP verify), not on the follow-up "save name" call
 }
 
 export interface CustomerProfile {
@@ -93,8 +94,6 @@ export async function GET(req: NextRequest) {
     )
 
     // Fetch offers for this customer
-    // Table: customer_offers (id, customer_id, title, description, expires_at, is_used, created_at)
-    // If you don't have this table yet, the query safely returns []
     const { data: offerRows, error: offerErr } = await supabase
       .from('customer_offers')
       .select('id, title, description, expires_at, is_used')
@@ -102,7 +101,6 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (offerErr && offerErr.code !== 'PGRST116') {
-      // PGRST116 = table not found — silently return empty offers
       console.error('[customer offers]', offerErr)
     }
 
@@ -113,7 +111,7 @@ export async function GET(req: NextRequest) {
       expires_at:  o.expires_at as string | null,
       is_used:     o.is_used as boolean ?? false,
     }))
-	
+
 	const { data: claimedRows, error: claimedErr } = await supabase
   .from('claimed_offers')
   .select(`
@@ -173,10 +171,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing firebase_uid or phone' }, { status: 400 })
     }
 
-    // Determine BEFORE writing whether this is a brand-new customer — the
-    // 50-point welcome bonus must only ever fire once, on true first signup,
-    // never on a later profile update (e.g. adding a display name) or on a
-    // repeat visit from an already-registered phone.
     const { data: existing, error: lookupErr } = await supabase
       .from('customers')
       .select('id')
@@ -190,35 +184,39 @@ export async function POST(req: NextRequest) {
 
     const isNewCustomer = !existing
 
-    // Upsert customer — create or return existing
-   const { data: customer, error } = await supabase
-  .from('customers')
-  .upsert(
-    {
-      firebase_uid: body.firebase_uid,
-      phone:        body.phone,
-      // ✅ Only set display_name if one was actually provided
-      ...(body.display_name != null && { display_name: body.display_name }),
-      // ✅ Welcome bonus — only included on the insert path, so an existing
-      // customer's balance is never touched or reset by this upsert.
-      ...(isNewCustomer && { loyalty_points: SIGNUP_BONUS_POINTS }),
-      updated_at:   new Date().toISOString(),
-    },
-    { onConflict: 'firebase_uid', ignoreDuplicates: false },
-  )
-  .select('id, firebase_uid, phone, display_name, loyalty_points, created_at')
-  .single()
+    const { data: customer, error } = await supabase
+      .from('customers')
+      .upsert(
+        {
+          firebase_uid: body.firebase_uid,
+          phone:        body.phone,
+          ...(body.display_name != null && { display_name: body.display_name }),
+          ...(isNewCustomer && { loyalty_points: SIGNUP_BONUS_POINTS }),
+          updated_at:   new Date().toISOString(),
+        },
+        { onConflict: 'firebase_uid', ignoreDuplicates: false },
+      )
+      .select('id, firebase_uid, phone, display_name, loyalty_points, created_at')
+      .single()
 
     if (error) {
       console.error('[customer upsert]', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Log the restaurant visit
-   
-    // Add this customer to Dinezy's own global WhatsApp list (restaurant_id:
-    // null — same convention the webhook uses for Dinezy's own number).
-    // Best-effort: never block login if this fails.
+    // Log the restaurant visit — internal only, drives WhatsApp campaign
+    // segmentation (new vs repeat). Never shown to the restaurant.
+    // Guarded by log_visit so this fires exactly once per real login,
+    // not again on the follow-up "save name" call for brand-new customers.
+    if (body.log_visit && body.restaurant_id) {
+      const { error: visitErr } = await supabase.rpc('record_customer_visit', {
+        p_customer_id: customer.id,
+        p_restaurant_id: body.restaurant_id,
+      })
+      if (visitErr) console.error('[record_customer_visit]', visitErr)
+    }
+
+    // Add this customer to Dinezy's own global WhatsApp list
     try {
       const waId = body.phone.replace(/[^0-9]/g, '')
       if (waId.length >= 10) {
@@ -238,7 +236,7 @@ export async function POST(req: NextRequest) {
               wa_id: waId,
               name: customer.display_name ?? null,
               source: 'customer_login',
-              restaurant_name: restaurantName, // which restaurant they signed up through, for segmentation only
+              restaurant_name: restaurantName,
             },
             { onConflict: 'restaurant_id,wa_id' },
           )

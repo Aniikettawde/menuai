@@ -2,31 +2,23 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getRestaurantAudienceOptions } from '@/lib/whatsapp/audience';
 
 export async function GET() {
-  const { count: totalContacts } = await supabaseAdmin
-    .from('whatsapp_contacts')
-    .select('id', { count: 'exact', head: true })
-    .is('restaurant_id', null)
-    .eq('opted_out', false);
+  try {
+    const { count: totalContacts } = await supabaseAdmin
+      .from('whatsapp_contacts')
+      .select('id', { count: 'exact', head: true })
+      .is('restaurant_id', null)
+      .eq('opted_out', false);
 
-  const { data: rows, error } = await supabaseAdmin
-    .from('whatsapp_contacts')
-    .select('restaurant_name')
-    .is('restaurant_id', null)
-    .eq('opted_out', false)
-    .not('restaurant_name', 'is', null);
+    const restaurants = await getRestaurantAudienceOptions();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const counts = new Map<string, number>();
-  for (const row of rows ?? []) {
-    const key = row.restaurant_name as string;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    return NextResponse.json({
+      totalContacts: totalContacts ?? 0,
+      restaurants, // [{ id, name, count }]
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to load audience options' }, { status: 500 });
   }
-
-  return NextResponse.json({
-    totalContacts: totalContacts ?? 0,
-    restaurants: [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
-  });
 }
