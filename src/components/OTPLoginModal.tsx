@@ -39,9 +39,11 @@ function SingleOTPInput({
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
+    const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+    if (isTouchDevice) return // mobile pe skip — user ka real tap hi focus + keyboard trigger karega
     const t = window.setTimeout(() => inputRef.current?.focus(), 50)
     return () => window.clearTimeout(t)
-  }, [])
+}, [])
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const cleaned = e.target.value.replace(/\D/g, '').slice(0, 6)
@@ -524,9 +526,9 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
                       setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))
                       setError('')
                     }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
-                    autoFocus
-                    style={{
+                   onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
+autoFocus={typeof window !== 'undefined' && !window.matchMedia('(pointer: coarse)').matches}
+style={{
                       flex: 1,
                       height: 52,
                       background: 'transparent',
