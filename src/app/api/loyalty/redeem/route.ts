@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import { sendWhatsAppTemplate } from '@/lib/whatsapp/sendTemplate'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,8 +28,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 1. Run the atomic redeem RPC first — this is what actually
-    // deducts points and creates the redemption row. Email is a side
-    // effect and must never block or reverse this.
+    // deducts points and creates the redemption row. Email/WhatsApp are
+    // side effects and must never block or reverse this.
     const { data, error } = await supabase.rpc('redeem_quest', {
       p_customer_id: customer_id,
       p_reward_type: reward_type,
@@ -52,14 +53,18 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── 2. Fetch context for the notification email. Best-effort only —
-    // if this fails, the redemption itself has already succeeded above.
+    // ── 2. Fetch context for notifications. Best-effort only — if this
+    // fails, the redemption itself has already succeeded above.
+    let customer: { display_name: string | null; phone: string | null } | null = null
+    let restaurantName = 'Unknown restaurant'
+
     try {
-      const { data: customer } = await supabase
+      const { data: custRow } = await supabase
         .from('customers')
         .select('display_name, phone')
         .eq('id', customer_id)
         .maybeSingle()
+      customer = custRow ?? null
 
       const { data: redemption } = await supabase
         .from('redemptions')
@@ -77,7 +82,7 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .maybeSingle()
 
-      const restaurantName = (lastVisit?.restaurants as unknown as { name?: string } | null)?.name ?? 'Unknown restaurant'
+      restaurantName = (lastVisit?.restaurants as unknown as { name?: string } | null)?.name ?? 'Unknown restaurant'
 
       if (process.env.RESEND_API_KEY && process.env.LOYALTY_NOTIFY_EMAIL && process.env.LOYALTY_FROM_EMAIL) {
         await resend.emails.send({
@@ -104,6 +109,22 @@ export async function POST(req: NextRequest) {
     } catch (emailErr) {
       // Never fail the redemption because the email failed
       console.error('[redeem email notify]', emailErr)
+    }
+
+    // ── 3. WhatsApp confirmation to the guest — separate try/catch so a
+    // failure here never affects the email above or the redemption itself.
+    try {
+      if (customer?.phone) {
+        const result = await sendWhatsAppTemplate({
+          to: customer.phone,
+          templateName: 'gift_card_request_received',
+          languageCode: 'en',
+          bodyParams: [restaurantName],
+        })
+        if (!result.ok) console.error('[redeem whatsapp confirm]', result.error)
+      }
+    } catch (waErr) {
+      console.error('[redeem whatsapp confirm]', waErr)
     }
 
     return NextResponse.json(data)

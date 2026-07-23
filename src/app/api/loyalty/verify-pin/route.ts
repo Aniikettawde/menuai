@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { Resend } from 'resend'
+import { sendWhatsAppTemplate } from '@/lib/whatsapp/sendTemplate'
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -106,14 +107,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: messages[data.error] ?? data.error }, { status: 400 })
     }
 
-    // ── Best-effort: notify owner if this visit auto-issued the welcome gift ──
+    // ── Best-effort: notify owner + guest if this visit auto-issued the welcome gift ──
     if (data.welcome_redemption_id) {
+      let customerForNotify: { display_name: string | null; phone: string | null } | null = null
+
       try {
         const { data: customer } = await admin
           .from('customers')
           .select('display_name, phone')
           .eq('id', data.customer_id)
           .maybeSingle()
+
+        customerForNotify = customer ?? null
 
         if (process.env.RESEND_API_KEY && process.env.LOYALTY_NOTIFY_EMAIL && process.env.LOYALTY_FROM_EMAIL) {
           await resend.emails.send({
@@ -138,6 +143,22 @@ export async function POST(req: NextRequest) {
         }
       } catch (emailErr) {
         console.error('[verify-pin welcome email]', emailErr)
+      }
+
+      // Separate try/catch — a WhatsApp failure must never affect the email
+      // above, or the successful visit-verification response below.
+      try {
+        if (customerForNotify?.phone) {
+          const result = await sendWhatsAppTemplate({
+            to: customerForNotify.phone,
+            templateName: 'gift_card_request_received',
+            languageCode: 'en',
+            bodyParams: [restaurant.name],
+          })
+          if (!result.ok) console.error('[verify-pin whatsapp confirm]', result.error)
+        }
+      } catch (waErr) {
+        console.error('[verify-pin whatsapp confirm]', waErr)
       }
     }
 
