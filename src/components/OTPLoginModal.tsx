@@ -8,9 +8,9 @@ import {
   type ChangeEvent,
 } from 'react'
 import { type ConfirmationResult } from 'firebase/auth'
-import { sendOTP, verifyOTP, clearRecaptcha, prepareRecaptcha } from '@/lib/firebase'
+import { sendOTP, verifyOTP, signInWithWhatsAppToken, clearRecaptcha, prepareRecaptcha } from '@/lib/firebase'
 import { useCustomerAuth } from '@/store/customer-auth-store'
-import { X, Phone, Shield, Gift, ChevronRight, Loader2, KeyRound } from 'lucide-react'
+import { X, Phone, MessageCircle, Shield, Gift, ChevronRight, Loader2, KeyRound } from 'lucide-react'
 
 interface Props {
   isOpen: boolean
@@ -23,6 +23,7 @@ interface Props {
 }
 
 type Screen = 'phone' | 'otp' | 'name' | 'done'
+type Channel = 'sms' | 'whatsapp'
 
 function SingleOTPInput({
   value,
@@ -82,7 +83,6 @@ function SingleOTPInput({
         WebkitAppearance: 'none',
         MozAppearance: 'textfield',
         touchAction: 'manipulation',
-        boxSizing: 'border-box',
       } as React.CSSProperties}
     />
   )
@@ -92,6 +92,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
   const { setCustomer } = useCustomerAuth()
 
   const [screen, setScreen] = useState<Screen>('phone')
+  const [channel, setChannel] = useState<Channel>('sms')
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -107,6 +108,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
   useEffect(() => {
     if (isOpen) {
       setScreen('phone')
+      setChannel('sms')
       setPhone('')
       setOtp('')
       setDisplayName('')
@@ -159,8 +161,18 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
     setLoading(true)
 
     try {
-      const result = await sendOTP(cleaned, 'recaptcha-container')
-      confirmRef.current = result
+      if (channel === 'sms') {
+        const result = await sendOTP(cleaned, 'recaptcha-container')
+        confirmRef.current = result
+      } else {
+        const res = await fetch('/api/auth/whatsapp-otp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: cleaned }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to send code')
+      }
       setScreen('otp')
       startResendTimer()
     } catch (err: any) {
@@ -168,7 +180,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
     } finally {
       setLoading(false)
     }
-  }, [phone, startResendTimer])
+  }, [phone, channel, startResendTimer])
 
   const handleVerifyOTP = useCallback(async () => {
     const code = otp.replace(/\D/g, '')
@@ -177,24 +189,44 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
       return
     }
 
-    if (!confirmRef.current) {
-      setError('Session expired. Resend OTP.')
-      return
-    }
-
     setError('')
     setLoading(true)
 
     try {
-      const { uid, phone: fbPhone } = await verifyOTP(confirmRef.current, code)
-      sessionRef.current = { uid, phone: fbPhone ?? `+91${phone}` }
+      let uid: string
+      let resolvedPhone: string
+
+      if (channel === 'sms') {
+        if (!confirmRef.current) {
+          setError('Session expired. Resend OTP.')
+          setLoading(false)
+          return
+        }
+        const result = await verifyOTP(confirmRef.current, code)
+        uid = result.uid
+        resolvedPhone = result.phone ?? `+91${phone}`
+      } else {
+        const res = await fetch('/api/auth/whatsapp-otp/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, code }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Incorrect code')
+
+        const signInResult = await signInWithWhatsAppToken(data.customToken)
+        uid = signInResult.uid
+        resolvedPhone = data.phone
+      }
+
+      sessionRef.current = { uid, phone: resolvedPhone }
 
       const res = await fetch('/api/auth/customer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           firebase_uid: uid,
-          phone: fbPhone ?? `+91${phone}`,
+          phone: resolvedPhone,
           display_name: null,
           restaurant_id: restaurantId ?? null,
           table_number: tableNumber ?? null,
@@ -210,18 +242,16 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
       if (data.customer.display_name) {
         setCustomer(data.customer)
         setScreen('done')
-        // NEW: no more auto-close here — the done screen now has its own
-        // CTA buttons, so the user decides when to leave, not a timer.
       } else {
         setScreen('name')
       }
-    } catch {
-      setError('Incorrect OTP. Please try again.')
+    } catch (err: any) {
+      setError(channel === 'whatsapp' ? (err?.message ?? 'Incorrect code. Please try again.') : 'Incorrect OTP. Please try again.')
       setOtp('')
     } finally {
       setLoading(false)
     }
-  }, [otp, phone, restaurantId, tableNumber, setCustomer])
+  }, [otp, phone, channel, restaurantId, tableNumber, setCustomer])
 
   const handleSaveProfile = useCallback(async () => {
     const session = sessionRef.current
@@ -255,7 +285,6 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
 
       setCustomer(data.customer)
       setScreen('done')
-      // NEW: same as above — done screen owns the exit now.
     } catch (err: any) {
       setError(err?.message ?? 'Something went wrong')
     } finally {
@@ -361,7 +390,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
                 </h2>
                 <p
                   style={{
-                    margin: '0 0 24px',
+                    margin: '0 0 16px',
                     fontSize: 13,
                     color: 'var(--pr-text-muted)',
                     lineHeight: 1.5,
@@ -369,6 +398,61 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
                 >
                   We&apos;ll send a one-time code to verify your number.
                 </p>
+
+                {/* Channel toggle — SMS vs WhatsApp */}
+                <div
+                  style={{
+                    display: 'flex',
+                    borderRadius: 12,
+                    border: '1px solid var(--pr-border-hover)',
+                    overflow: 'hidden',
+                    marginBottom: 16,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setChannel('sms')}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      height: 42,
+                      background: channel === 'sms' ? 'var(--pr-gold-dim)' : 'transparent',
+                      border: 'none',
+                      color: channel === 'sms' ? 'var(--pr-gold)' : 'var(--pr-text-faint)',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      fontFamily: 'var(--font-body)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Phone size={14} /> SMS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChannel('whatsapp')}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      height: 42,
+                      background: channel === 'whatsapp' ? 'var(--pr-gold-dim)' : 'transparent',
+                      border: 'none',
+                      borderLeft: '1px solid var(--pr-border-hover)',
+                      color: channel === 'whatsapp' ? 'var(--pr-gold)' : 'var(--pr-text-faint)',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      fontFamily: 'var(--font-body)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <MessageCircle size={14} /> WhatsApp
+                  </button>
+                </div>
 
                 <div
                   style={{
@@ -560,7 +644,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
                     lineHeight: 1.5,
                   }}
                 >
-                  Sent to +91 {phone.replace(/(\d{5})(\d{5})/, '$1 $2')}
+                  Sent via {channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} to +91 {phone.replace(/(\d{5})(\d{5})/, '$1 $2')}
                   <button
                     type="button"
                     onClick={() => {
@@ -817,103 +901,97 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
               </div>
             )}
 
-            {/* ── "done" screen: rebuilt so it never auto-closes without    ─┐
-                telling the user the actual next action. This is the exact   │
-                place the "You are in" confusion was coming from.           ─┘ */}
-           {screen === 'done' && (
-  <div
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      textAlign: 'center',
-      padding: '12px 0 4px',
-    }}
-  >
-    <div style={{ fontSize: 46, marginBottom: 12 }}>🎊</div>
-    <h2
-      style={{
-        margin: '0 0 8px',
-        fontFamily: 'var(--font-display)',
-        fontSize: 22,
-        fontWeight: 600,
-        color: 'var(--pr-text)',
-      }}
-    >
-      {displayName ? `Welcome, ${displayName}!` : "You're in!"}
-    </h2>
-    <p
-      style={{
-        margin: '0 0 20px',
-        fontSize: 13,
-        color: 'var(--pr-text-muted)',
-        lineHeight: 1.5,
-        maxWidth: 340,
-      }}
-    >
-      {restaurantId
-        ? bonusAwarded > 0
-          ? `+${bonusAwarded} points credited. Ask your waiter to verify a PIN each visit — after 3 verified visits you'll unlock a ₹50 gift card.`
-          : "Ask your waiter to verify a PIN each visit — after 3 verified visits you'll unlock a ₹50 gift card."
-        : bonusAwarded > 0
-          ? `+${bonusAwarded} points credited. Visit any Dinezy restaurant and verify a PIN with your waiter to start earning toward a ₹50 gift card.`
-          : 'Visit any Dinezy restaurant and verify a PIN with your waiter to start earning toward a ₹50 gift card.'}
-    </p>
+            {screen === 'done' && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  padding: '12px 0 4px',
+                }}
+              >
+                <div style={{ fontSize: 46, marginBottom: 12 }}>🎊</div>
+                <h2
+                  style={{
+                    margin: '0 0 8px',
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 22,
+                    fontWeight: 600,
+                    color: 'var(--pr-text)',
+                  }}
+                >
+                  {displayName ? `Welcome, ${displayName}!` : "You're in!"}
+                </h2>
+                <p
+                  style={{
+                    margin: '0 0 20px',
+                    fontSize: 13,
+                    color: 'var(--pr-text-muted)',
+                    lineHeight: 1.5,
+                    maxWidth: 340,
+                  }}
+                >
+                  {restaurantId
+                    ? bonusAwarded > 0
+                      ? `+${bonusAwarded} points credited. Ask your waiter to verify a PIN each visit — after 3 verified visits you'll unlock a ₹50 gift card.`
+                      : "Ask your waiter to verify a PIN each visit — after 3 verified visits you'll unlock a ₹50 gift card."
+                    : bonusAwarded > 0
+                      ? `+${bonusAwarded} points credited. Visit any Dinezy restaurant and verify a PIN with your waiter to start earning toward a ₹50 gift card.`
+                      : 'Visit any Dinezy restaurant and verify a PIN with your waiter to start earning toward a ₹50 gift card.'}
+                </p>
 
-    {/* NEW: explicit next step, not a silent auto-close.
-       Label adapts — only offers "get PIN" when we're actually
-       at a restaurant; otherwise routes to the rewards overview. */}
-    <button
-      type="button"
-      onClick={() => {
-        onViewRewards?.()
-        onClose()
-      }}
-      style={{
-        width: '100%',
-        height: 52,
-        background: 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
-        border: 'none',
-        borderRadius: 14,
-        color: 'var(--pr-cta-text)',
-        fontSize: 15,
-        fontWeight: 700,
-        fontFamily: 'var(--font-body)',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        touchAction: 'manipulation',
-      } as React.CSSProperties}
-    >
-      {restaurantId ? (
-        <><KeyRound size={16} /> Get my PIN now</>
-      ) : (
-        <><Gift size={16} /> View my rewards</>
-      )}
-    </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onViewRewards?.()
+                    onClose()
+                  }}
+                  style={{
+                    width: '100%',
+                    height: 52,
+                    background: 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
+                    border: 'none',
+                    borderRadius: 14,
+                    color: 'var(--pr-cta-text)',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-body)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties}
+                >
+                  {restaurantId ? (
+                    <><KeyRound size={16} /> Get my PIN now</>
+                  ) : (
+                    <><Gift size={16} /> View my rewards</>
+                  )}
+                </button>
 
-    <button
-      type="button"
-      onClick={onClose}
-      style={{
-        marginTop: 10,
-        width: '100%',
-        height: 40,
-        background: 'none',
-        border: 'none',
-        color: 'var(--pr-text-faint)',
-        cursor: 'pointer',
-        fontSize: 12,
-        fontFamily: 'var(--font-body)',
-        touchAction: 'manipulation',
-      } as React.CSSProperties}
-    >
-      {restaurantId ? 'Maybe later, just browse the menu' : 'Maybe later'}
-    </button>
-  </div>
-)}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{
+                    marginTop: 10,
+                    width: '100%',
+                    height: 40,
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--pr-text-faint)',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontFamily: 'var(--font-body)',
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties}
+                >
+                  {restaurantId ? 'Maybe later, just browse the menu' : 'Maybe later'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
