@@ -86,10 +86,14 @@ export async function POST(req: NextRequest) {
           components: [
             { type: 'body', parameters: [{ type: 'text', text: code }] },
             {
+              // Meta creates the template with an OTP/COPY_CODE button, but
+              // internally stores + expects it as a "url" type button when
+              // actually SENDING the message — using "COPY_CODE" here throws
+              // error 132018 ("Button at index 0 must be of type Url").
               type: 'button',
-              sub_type: 'COPY_CODE',
+              sub_type: 'url',
               index: '0',
-              parameters: [{ type: 'coupon_code', coupon_code: code }],
+              parameters: [{ type: 'text', text: code }],
             },
           ],
         },
