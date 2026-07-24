@@ -131,21 +131,19 @@ export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
               </span>
-              Built for independent restaurants in India
+              Now onboarding founding restaurants in Pune
             </motion.div>
 
             <motion.h1
               variants={heroReveal}
-              className="text-balance text-[2.2rem] font-black leading-[1.1] tracking-tight text-ink xs:text-[2.4rem] sm:text-5xl sm:leading-[1.08] lg:text-[3.4rem] xl:text-[3.8rem]"
+              className="text-balance text-[2.1rem] font-black leading-[1.12] tracking-tight text-ink xs:text-[2.3rem] sm:text-[2.9rem] sm:leading-[1.1] lg:text-[3.2rem] xl:text-[3.6rem]"
             >
-              Guests visit once.
-              <br />
-              Dinezy makes sure they{' '}
+              Turn First-Time Guests Into{' '}
               <span className="relative inline-block">
-                come back.
+                Regular Customers.
                 <motion.svg
                   aria-hidden
-                  viewBox="0 0 140 14"
+                  viewBox="0 0 340 14"
                   className="absolute -bottom-2 left-0 h-[0.3em] w-full text-accent sm:-bottom-2.5"
                   preserveAspectRatio="none"
                   initial={{ pathLength: 0, opacity: 0 }}
@@ -153,7 +151,7 @@ export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
                   transition={{ delay: 0.9, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                 >
                   <motion.path
-                    d="M2 9 C 30 3, 70 12, 100 6 S 130 3, 138 8"
+                    d="M2 9 C 70 3, 170 12, 250 6 S 320 3, 338 8"
                     stroke="currentColor"
                     strokeWidth="4"
                     strokeLinecap="round"
@@ -167,9 +165,9 @@ export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
               variants={fadeUp}
               className="mx-auto mt-6 max-w-lg text-balance text-[16px] leading-relaxed text-ink-soft sm:text-lg lg:mx-0"
             >
-              QR menu, WhatsApp campaigns, and Dinezy Points — quietly working
-              together in the background. Scroll down to see exactly what a
-              guest experiences, table to table.
+              Give every table a smart QR menu, instant waiter calling, loyalty rewards, and
+              customer insights — all from one platform that helps restaurants increase repeat
+              visits without changing their existing POS.
             </motion.p>
 
             <motion.div
@@ -185,13 +183,13 @@ export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
                   className="absolute inset-0 scale-0 rounded-full bg-white/15 transition-transform duration-500 group-hover:scale-[2.4]"
                   style={{ transformOrigin: 'center' }}
                 />
-                <span className="relative">Book Demo</span>
+                <span className="relative">Book Free Demo</span>
               </button>
               <button
                 onClick={() => document.querySelector('#product-demo')?.scrollIntoView({ behavior: 'smooth' })}
                 className="w-full rounded-full border border-line px-7 py-4 text-[15px] font-semibold text-ink transition-colors hover:bg-canvas sm:w-auto"
               >
-                Watch Product Tour
+                See Live Restaurant Demo
               </button>
             </motion.div>
 
