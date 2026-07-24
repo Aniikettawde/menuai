@@ -7,7 +7,7 @@ import { stagger, fadeUp } from '@/lib/motion'
 const PLANS = [
   {
     name: 'Starter',
-    price: '₹6,999',
+    price: '₹8,999',
     period: '/ year',
     setup: 'One-time setup, based on number of tables',
     desc: 'For a single restaurant getting started with QR menus and WhatsApp.',
