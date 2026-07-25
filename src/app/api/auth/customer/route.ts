@@ -38,8 +38,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing customer id' }, { status: 400 })
     }
 
-    // Fetch visit history — joined with restaurants so we get the name
-   const { data: visitRows, error: visitErr } = await supabase
+    // Aggregate: count visits per restaurant and keep the most recent date.
+    // Two sources feed this now:
+    //   - visit_verifications (status='verified'): the original PIN-based visits,
+    //     including the very first one that unlocks the welcome gift.
+    //   - customer_visits: auto-logged visits from a valid table session,
+    //     which only start accumulating after the welcome gift is claimed.
+    const visitMap = new Map<string, {
+      restaurant_id:   string
+      restaurant_name: string
+      restaurant_slug: string
+      visit_count:     number
+      last_visited_at: string
+    }>()
+
+    const { data: pinVisitRows, error: pinVisitErr } = await supabase
       .from('visit_verifications')
       .select(`
         restaurant_id,
@@ -50,33 +63,22 @@ export async function GET(req: NextRequest) {
       .eq('status', 'verified')
       .order('verified_at', { ascending: false })
 
-    if (visitErr) {
-      console.error('[customer visits]', visitErr)
-      return NextResponse.json({ error: visitErr.message }, { status: 500 })
+    if (pinVisitErr) {
+      console.error('[customer visits - pin]', pinVisitErr)
+      return NextResponse.json({ error: pinVisitErr.message }, { status: 500 })
     }
 
-    // Aggregate: count visits per restaurant and keep the most recent date
-    const visitMap = new Map<string, {
-      restaurant_id:   string
-      restaurant_name: string
-      restaurant_slug: string
-      visit_count:     number
-      last_visited_at: string
-    }>()
-
-    for (const row of visitRows ?? []) {
+    for (const row of pinVisitRows ?? []) {
       const rid  = row.restaurant_id as string
       const rest = Array.isArray(row.restaurants) ? row.restaurants[0] : row.restaurants
       const name = (rest as { name?: string } | null)?.name ?? 'Unknown Restaurant'
       const slug = (rest as { slug?: string } | null)?.slug ?? ''
       const verifiedAt = row.verified_at as string
 
-      if (visitMap.has(rid)) {
-        const existing = visitMap.get(rid)!
+      const existing = visitMap.get(rid)
+      if (existing) {
         existing.visit_count += 1
-        if (verifiedAt > existing.last_visited_at) {
-          existing.last_visited_at = verifiedAt
-        }
+        if (verifiedAt > existing.last_visited_at) existing.last_visited_at = verifiedAt
       } else {
         visitMap.set(rid, {
           restaurant_id:   rid,
@@ -84,6 +86,43 @@ export async function GET(req: NextRequest) {
           restaurant_slug: slug,
           visit_count:     1,
           last_visited_at: verifiedAt,
+        })
+      }
+    }
+
+    const { data: autoVisitRows, error: autoVisitErr } = await supabase
+      .from('customer_visits')
+      .select(`
+        restaurant_id,
+        visited_at,
+        restaurants ( name, slug )
+      `)
+      .eq('customer_id', customerId)
+      .order('visited_at', { ascending: false })
+
+    if (autoVisitErr) {
+      console.error('[customer visits - auto]', autoVisitErr)
+      return NextResponse.json({ error: autoVisitErr.message }, { status: 500 })
+    }
+
+    for (const row of autoVisitRows ?? []) {
+      const rid  = row.restaurant_id as string
+      const rest = Array.isArray(row.restaurants) ? row.restaurants[0] : row.restaurants
+      const name = (rest as { name?: string } | null)?.name ?? 'Unknown Restaurant'
+      const slug = (rest as { slug?: string } | null)?.slug ?? ''
+      const visitedAt = row.visited_at as string
+
+      const existing = visitMap.get(rid)
+      if (existing) {
+        existing.visit_count += 1
+        if (visitedAt > existing.last_visited_at) existing.last_visited_at = visitedAt
+      } else {
+        visitMap.set(rid, {
+          restaurant_id:   rid,
+          restaurant_name: name,
+          restaurant_slug: slug,
+          visit_count:     1,
+          last_visited_at: visitedAt,
         })
       }
     }

@@ -9,10 +9,13 @@ import {
   Eye,
   Flame,
   MessageSquareMore,
+  QrCode,
   Receipt,
+  Repeat,
   Sparkles,
   Star,
   Timer,
+  UserPlus,
   Users,
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -55,6 +58,22 @@ interface WaiterStats {
   acceptanceRate: number
   avgAcceptSeconds: number | null
   byType: WaiterTypeStat[]
+}
+
+interface CustomerRow {
+  customer_id: string
+  display_name: string | null
+  phone: string | null
+  visit_count: number
+  first_visit_at: string
+  last_visit_at: string
+}
+
+interface CustomerStats {
+  totalCustomers: number
+  newInPeriod: number
+  repeatCustomers: number
+  repeatRate: number
 }
 
 type AnalyticsEvent = {
@@ -100,6 +119,21 @@ function formatPercent(v: number) {
   return `${(v * 100).toFixed(v >= 1 ? 0 : 1)}%`
 }
 
+function formatDate(iso: string) {
+  try {
+    return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
+
+function maskPhone(phone: string | null) {
+  if (!phone) return '—'
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 4) return phone
+  return `•••• ${digits.slice(-4)}`
+}
+
 function KpiCard({
   label,
   value,
@@ -138,6 +172,14 @@ export default function AnalyticsPage() {
   const [daily, setDaily] = useState<DailySummary[]>([])
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([])
   const [waiterStats, setWaiterStats] = useState<WaiterStats | null>(null)
+  const [qrScans, setQrScans] = useState(0)
+  const [customerRows, setCustomerRows] = useState<CustomerRow[]>([])
+  const [customerStats, setCustomerStats] = useState<CustomerStats>({
+    totalCustomers: 0,
+    newInPeriod: 0,
+    repeatCustomers: 0,
+    repeatRate: 0,
+  })
   const [totals, setTotals] = useState({
     visitors: 0,
     itemViews: 0,
@@ -187,7 +229,12 @@ export default function AnalyticsPage() {
       since.setDate(since.getDate() - range)
       const sinceISO = since.toISOString()
 
-      const [{ data: eventsRaw, error }, { data: waiterRowsRaw, error: waiterErr }] = await Promise.all([
+      const [
+        { data: eventsRaw, error },
+        { data: waiterRowsRaw, error: waiterErr },
+        { count: qrScanCount, error: qrErr },
+        { data: customerRowsRaw, error: customerErr },
+      ] = await Promise.all([
         supabase
           .from('analytics_events')
           .select('event_type, item_id, item_name, session_id, timestamp, hour_of_day, day_of_week, metadata')
@@ -201,6 +248,29 @@ export default function AnalyticsPage() {
           .eq('restaurant_id', restaurantId)
           .gte('created_at', sinceISO)
           .in('request_type', ['assistance', 'water', 'bill']),
+        // Real QR scans — one row per table session created, unaffected by
+        // heartbeat pings or plain menu browsing without a scan.
+        supabase
+          .from('table_sessions')
+          .select('id', { count: 'exact', head: true })
+          .eq('restaurant_id', restaurantId)
+          .gte('created_at', sinceISO),
+        // All-time per-customer relationship with this restaurant — gives us
+        // total signups, repeat-visit counts, and names in one shot. Not
+        // date-filtered here; period-scoped numbers (new signups) are
+        // derived client-side from first_visit_at below.
+        supabase
+          .from('restaurant_customers')
+          .select(`
+            customer_id,
+            visit_count,
+            first_visit_at,
+            last_visit_at,
+            customers ( display_name, phone )
+          `)
+          .eq('restaurant_id', restaurantId)
+          .order('last_visit_at', { ascending: false })
+          .limit(2000),
       ])
 
       if (error) {
@@ -209,9 +279,40 @@ export default function AnalyticsPage() {
       if (waiterErr) {
         console.error('Waiter requests fetch error:', waiterErr)
       }
+      if (qrErr) {
+        console.error('QR scan count error:', qrErr)
+      }
+      if (customerErr) {
+        console.error('Restaurant customers fetch error:', customerErr)
+      }
 
       const events = (eventsRaw ?? []) as AnalyticsEvent[]
       const waiterRows = (waiterRowsRaw ?? []) as TableRequestRow[]
+
+      setQrScans(qrScanCount ?? 0)
+
+      // ── Customer signups / repeat visits ─────────────────────────────────
+      const customers: CustomerRow[] = (customerRowsRaw ?? []).map((row: any) => {
+        const c = Array.isArray(row.customers) ? row.customers[0] : row.customers
+        return {
+          customer_id: row.customer_id as string,
+          display_name: (c as { display_name?: string } | null)?.display_name ?? null,
+          phone: (c as { phone?: string } | null)?.phone ?? null,
+          visit_count: row.visit_count as number,
+          first_visit_at: row.first_visit_at as string,
+          last_visit_at: row.last_visit_at as string,
+        }
+      })
+      setCustomerRows(customers)
+
+      const newInPeriod = customers.filter((c) => new Date(c.first_visit_at) >= since).length
+      const repeatCustomers = customers.filter((c) => c.visit_count > 1).length
+      setCustomerStats({
+        totalCustomers: customers.length,
+        newInPeriod,
+        repeatCustomers,
+        repeatRate: customers.length > 0 ? repeatCustomers / customers.length : 0,
+      })
 
       // ── Waiter bell stats ────────────────────────────────────────────────
       const typeMap = new Map<WaiterRequestType, { count: number; accepted: number; acceptSecondsSum: number }>()
@@ -442,6 +543,32 @@ export default function AnalyticsPage() {
           icon={<Star size={14} />}
           color="text-amber-400"
           sub={`${totals.totalRatings} reviews`}
+        />
+      </div>
+
+      {/* ── QR scans + customer signups / repeat visits ────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard label="QR Scans" value={qrScans} icon={<QrCode size={14} />} color="text-cyan-400" sub={`last ${range}d`} />
+        <KpiCard
+          label="Total Customers"
+          value={customerStats.totalCustomers}
+          icon={<Users size={14} />}
+          color="text-blue-400"
+          sub="all-time, this restaurant"
+        />
+        <KpiCard
+          label="New Signups"
+          value={customerStats.newInPeriod}
+          icon={<UserPlus size={14} />}
+          color="text-emerald-400"
+          sub={`last ${range}d`}
+        />
+        <KpiCard
+          label="Repeat Customers"
+          value={customerStats.repeatCustomers}
+          icon={<Repeat size={14} />}
+          color="text-violet-400"
+          sub={`${formatPercent(customerStats.repeatRate)} of all-time`}
         />
       </div>
 
@@ -722,6 +849,63 @@ export default function AnalyticsPage() {
             <span className="h-2 w-2 rounded-full bg-emerald-500" /> Ordered (qty in confirmed orders)
           </span>
         </div>
+      </div>
+
+      {/* ── Customers list ──────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <Users size={14} className="text-blue-400" />
+          <h2 className="text-sm font-semibold text-zinc-200">Customers</h2>
+        </div>
+        <p className="mb-4 text-xs text-zinc-600">
+          Everyone who has signed up at this restaurant — contact details are never shared externally
+        </p>
+
+        {customerRows.length === 0 ? (
+          <p className="text-xs italic text-zinc-600">No customers yet</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-[10px] uppercase tracking-wider text-zinc-600">
+                  <th className="pb-2.5 text-left font-medium">Name</th>
+                  <th className="pb-2.5 text-left font-medium">Phone</th>
+                  <th className="pb-2.5 text-right font-medium">Visits</th>
+                  <th className="pb-2.5 text-right font-medium">First Visit</th>
+                  <th className="pb-2.5 text-right font-medium">Last Visit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerRows.slice(0, 50).map((c) => (
+                  <tr
+                    key={c.customer_id}
+                    className="border-b border-zinc-800/50 transition last:border-0 hover:bg-zinc-800/30"
+                  >
+                    <td className="py-2.5 pr-4 text-zinc-200">{c.display_name ?? 'Guest'}</td>
+                    <td className="py-2.5 pr-4 text-zinc-400">{maskPhone(c.phone)}</td>
+                    <td className="py-2.5 text-right">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          c.visit_count > 1 ? 'bg-violet-500/10 text-violet-400' : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {c.visit_count > 1 && <Repeat size={9} />}
+                        {c.visit_count}×
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-right text-xs text-zinc-500">{formatDate(c.first_visit_at)}</td>
+                    <td className="py-2.5 text-right text-xs text-zinc-500">{formatDate(c.last_visit_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {customerRows.length > 50 && (
+              <p className="mt-3 text-center text-[10px] text-zinc-600">
+                Showing 50 of {customerRows.length} customers
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">

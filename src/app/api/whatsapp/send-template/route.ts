@@ -1,6 +1,6 @@
 // src/app/api/whatsapp/send-template/route.ts
 export const dynamic = 'force-dynamic';
-
+export const revalidate = 0;
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendWhatsAppTemplate } from '@/lib/whatsapp';
