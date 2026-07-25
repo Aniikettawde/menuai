@@ -58,7 +58,6 @@ export async function POST(req: NextRequest) {
       channel: 'whatsapp',
       expires_at: expiresAt,
     })
-
     if (insertErr) {
       console.error('[whatsapp-otp send insert]', insertErr)
       return NextResponse.json({ error: 'Failed to generate code' }, { status: 500 })
@@ -107,6 +106,38 @@ export async function POST(req: NextRequest) {
         { error: data?.error?.message || 'Failed to send WhatsApp OTP' },
         { status: 500 },
       )
+    }
+
+    // ── Track this send so it shows up in admin/whatsapp and so the
+    // delivered/read status webhook has a row to match against. Best-effort:
+    // never fail the OTP response over a tracking hiccup — the code already sent.
+    const wamid = data?.messages?.[0]?.id ?? null
+    if (wamid) {
+      try {
+        const preview = 'Login verification code sent'
+
+        await supabase.from('whatsapp_messages').insert({
+          restaurant_id: null,
+          wa_id: digits,
+          wamid,
+          direction: 'outbound',
+          message_type: 'template',
+          body: preview,
+          status: 'sent',
+        })
+
+        await supabase.from('whatsapp_contacts').upsert(
+          {
+            restaurant_id: null,
+            wa_id: digits,
+            last_message_at: new Date().toISOString(),
+            last_message_preview: preview,
+          },
+          { onConflict: 'restaurant_id,wa_id' },
+        )
+      } catch (trackErr) {
+        console.error('[whatsapp-otp send] tracking insert failed:', trackErr)
+      }
     }
 
     return NextResponse.json({ ok: true, expiresInSeconds: OTP_TTL_MINUTES * 60 })

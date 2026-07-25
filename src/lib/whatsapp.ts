@@ -1,4 +1,6 @@
 // src/lib/whatsapp.ts
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
+
 const WHATSAPP_API_VERSION = 'v20.0';
 
 function apiUrl(path: string) {
@@ -20,7 +22,6 @@ export async function sendWhatsAppText(to: string, body: string) {
       text: { body },
     }),
   });
-
   const data = await res.json();
   if (!res.ok) {
     console.error('WhatsApp send error:', JSON.stringify(data));
@@ -36,7 +37,6 @@ export async function sendWhatsAppTemplate(
   bodyParams: string[]
 ) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
-
   const components =
     bodyParams.length > 0
       ? [
@@ -64,12 +64,47 @@ export async function sendWhatsAppTemplate(
       },
     }),
   });
-
   const data = await res.json();
   if (!res.ok) {
     console.error('WhatsApp template send error:', JSON.stringify(data));
     throw new Error(data?.error?.message || 'Failed to send template message');
   }
+
+  // ── Track every template send here, once, regardless of which route
+  // called this (manual "new conversation", campaigns, etc). Forced to
+  // restaurant_id: null — everything routes into admin/whatsapp for now.
+  // Best-effort: a tracking failure must never throw, since the message
+  // already sent successfully via Meta.
+  const wamid = data?.messages?.[0]?.id ?? null;
+  if (wamid) {
+    try {
+      const cleaned = String(to).replace(/[^0-9]/g, '');
+      const preview = `[Template: ${templateName}]${bodyParams.length ? ' ' + bodyParams.join(', ') : ''}`;
+
+      await supabaseAdmin.from('whatsapp_messages').insert({
+        restaurant_id: null,
+        wa_id: cleaned,
+        wamid,
+        direction: 'outbound',
+        message_type: 'template',
+        body: preview,
+        status: 'sent',
+      });
+
+      await supabaseAdmin.from('whatsapp_contacts').upsert(
+        {
+          restaurant_id: null,
+          wa_id: cleaned,
+          last_message_at: new Date().toISOString(),
+          last_message_preview: preview.slice(0, 120),
+        },
+        { onConflict: 'restaurant_id,wa_id' }
+      );
+    } catch (trackErr) {
+      console.error('[sendWhatsAppTemplate] tracking insert failed:', trackErr);
+    }
+  }
+
   return data;
 }
 
@@ -83,7 +118,6 @@ export async function listWhatsAppTemplates() {
       },
     }
   );
-
   const data = await res.json();
   if (!res.ok) {
     console.error('WhatsApp template list error:', JSON.stringify(data));
