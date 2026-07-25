@@ -20,6 +20,33 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
+// ── Brand tokens (mirrors the ivory/burgundy system used elsewhere in the dashboard) ──
+const BRAND = {
+  ivory: '#FBF6EC',
+  ivorySoft: '#F3ECDD',
+  ivoryDeep: '#F8F3E7',
+  card: '#FFFFFF',
+  line: '#E7DDC9',
+  ink: '#2B211F',
+  inkSoft: '#6E5F57',
+  inkFaint: '#9C8F86',
+  burgundy: '#7A2333',
+  burgundyDark: '#5C1A27',
+  burgundyLight: '#9B3049',
+  gold: '#C08A2E',
+  goldDeep: '#8A5E14',
+  sky: '#3E6FA6',
+  skyDeep: '#2E5883',
+  emerald: '#2F7A5C',
+  plum: '#6B4C7A',
+  rose: '#B23B4A',
+  magenta: '#A8446B',
+}
+
+const cardBase = 'rounded-2xl border shadow-[0_1px_2px_rgba(43,33,31,0.04)]'
+const cardStyle = { borderColor: BRAND.line, background: BRAND.card }
+const skeletonStyle = { borderColor: BRAND.line, background: BRAND.ivorySoft }
+
 interface TopItem {
   item_id: string
   item_name: string
@@ -27,15 +54,6 @@ interface TopItem {
   add_to_cart_count: number
   order_count: number
   suggestion_add_count: number
-}
-
-interface DailySummary {
-  date: string
-  unique_visitors: number
-  item_views: number
-  ai_chats: number
-  cart_opens: number
-  waiter_calls: number
 }
 
 interface SearchTerm {
@@ -102,9 +120,9 @@ const RANGE_OPTIONS = [
 ]
 
 const WAITER_TYPE_META: Record<WaiterRequestType, { label: string; icon: ReactNode; color: string }> = {
-  assistance: { label: 'Call Waiter', icon: <BellRing size={12} />, color: 'text-orange-400' },
-  water: { label: 'Water', icon: <Droplets size={12} />, color: 'text-sky-400' },
-  bill: { label: 'Bill', icon: <Receipt size={12} />, color: 'text-amber-400' },
+  assistance: { label: 'Call Waiter', icon: <BellRing size={12} />, color: BRAND.burgundy },
+  water: { label: 'Water', icon: <Droplets size={12} />, color: BRAND.sky },
+  bill: { label: 'Bill', icon: <Receipt size={12} />, color: BRAND.gold },
 }
 
 function formatDuration(seconds: number | null) {
@@ -148,13 +166,19 @@ function KpiCard({
   sub?: string
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-      <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 ${color}`}>
+    <div
+      className="relative overflow-hidden rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5"
+      style={{ borderColor: `${color}33`, background: `${color}0D` }}
+    >
+      <div
+        className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg"
+        style={{ background: BRAND.card, color }}
+      >
         {icon}
       </div>
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
-      <p className="mt-0.5 text-xs font-medium text-zinc-300">{label}</p>
-      {sub && <p className="mt-0.5 text-[10px] text-zinc-600">{sub}</p>}
+      <p className="text-xl font-bold tracking-tight" style={{ color }}>{value}</p>
+      <p className="mt-0.5 text-xs font-semibold" style={{ color: `${BRAND.ink}B3` }}>{label}</p>
+      {sub && <p className="mt-0.5 text-[10px] leading-none" style={{ color: `${BRAND.ink}59` }}>{sub}</p>}
     </div>
   )
 }
@@ -169,7 +193,6 @@ export default function AnalyticsPage() {
 
   const [topItems, setTopItems] = useState<TopItem[]>([])
   const [hourly, setHourly] = useState<number[]>(Array(24).fill(0))
-  const [daily, setDaily] = useState<DailySummary[]>([])
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([])
   const [waiterStats, setWaiterStats] = useState<WaiterStats | null>(null)
   const [qrScans, setQrScans] = useState(0)
@@ -407,41 +430,6 @@ export default function AnalyticsPage() {
         })
       setHourly(hourCounts)
 
-      const dayMap: Record<string, DailySummary> = {}
-      for (let i = range - 1; i >= 0; i--) {
-        const d = new Date()
-        d.setDate(d.getDate() - i)
-        const key = d.toISOString().split('T')[0]!
-        dayMap[key] = {
-          date: key,
-          unique_visitors: 0,
-          item_views: 0,
-          ai_chats: 0,
-          cart_opens: 0,
-          waiter_calls: 0,
-        }
-      }
-
-      const sessionsByDay: Record<string, Set<string>> = {}
-
-      events.forEach((e) => {
-        if (!e.timestamp) return
-        const key = e.timestamp.split('T')[0]!
-        if (!dayMap[key]) return
-
-        if (e.event_type === 'page_view') {
-          if (!sessionsByDay[key]) sessionsByDay[key] = new Set()
-          if (e.session_id) sessionsByDay[key].add(e.session_id)
-          dayMap[key].unique_visitors = sessionsByDay[key].size
-        }
-        if (e.event_type === 'item_view') dayMap[key].item_views += 1
-        if (e.event_type === 'item_search') dayMap[key].ai_chats += 1
-        if (e.event_type === 'cart_opened') dayMap[key].cart_opens += 1
-        if (e.event_type === 'waiter_called') dayMap[key].waiter_calls += 1
-      })
-
-      setDaily(Object.values(dayMap))
-
       const termMap: Record<string, number> = {}
       aiSearchEvents.forEach((e) => {
         const meta = e.metadata as { query?: string } | null
@@ -466,7 +454,6 @@ export default function AnalyticsPage() {
   }
 
   const maxHour = useMemo(() => Math.max(...hourly, 1), [hourly])
-  const maxDailyVisitors = useMemo(() => Math.max(...daily.map((d) => d.unique_visitors), 1), [daily])
   const peakHour = hourly.indexOf(Math.max(...hourly))
   const peakHourLabel = `${peakHour}:00–${peakHour + 1}:00`
 
@@ -476,7 +463,8 @@ export default function AnalyticsPage() {
         {[...Array(4)].map((_, i) => (
           <div
             key={i}
-            className="h-24 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900"
+            className="h-24 animate-pulse rounded-2xl border"
+            style={skeletonStyle}
           />
         ))}
       </div>
@@ -487,19 +475,25 @@ export default function AnalyticsPage() {
     <div className="mx-auto max-w-7xl space-y-5 px-4 py-4 sm:px-6 lg:px-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Analytics</h1>
-          <p className="mt-0.5 text-sm text-zinc-500">Full customer journey — from scan to order</p>
+          <h1
+            className="text-2xl font-bold tracking-tight"
+            style={{ color: BRAND.ink, fontFamily: 'var(--font-fraunces, Fraunces, Georgia, serif)' }}
+          >
+            Analytics
+          </h1>
+          <p className="mt-0.5 text-sm" style={{ color: BRAND.inkSoft }}>Full customer journey — from scan to order</p>
         </div>
-        <div className="flex flex-wrap gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+        <div className="flex flex-wrap gap-1 rounded-xl border p-1" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
           {RANGE_OPTIONS.map((o) => (
             <button
               key={o.days}
               onClick={() => setRange(o.days)}
-              className={`rounded-lg px-4 py-1.5 text-sm transition ${
+              className="rounded-lg px-4 py-1.5 text-sm font-medium transition"
+              style={
                 range === o.days
-                  ? 'bg-orange-500 font-medium text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
+                  ? { background: BRAND.burgundy, color: '#fff' }
+                  : { color: BRAND.inkSoft }
+              }
             >
               {o.label}
             </button>
@@ -508,79 +502,74 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <KpiCard label="Visitors" value={totals.visitors} icon={<Users size={14} />} color="text-blue-400" sub={`last ${range}d`} />
-        <KpiCard label="Dish Views" value={totals.itemViews} icon={<Eye size={14} />} color="text-orange-400" />
+        <KpiCard label="Visitors" value={totals.visitors} icon={<Users size={14} />} color={BRAND.sky} sub={`last ${range}d`} />
+        <KpiCard label="Dish Views" value={totals.itemViews} icon={<Eye size={14} />} color={BRAND.burgundy} />
         <KpiCard
           label="Avg Rating"
           value={totals.avgRating ? totals.avgRating.toFixed(1) : '—'}
           icon={<Star size={14} />}
-          color="text-amber-400"
+          color={BRAND.gold}
           sub={`${totals.totalRatings} reviews`}
         />
       </div>
 
       {/* ── QR scans + customer signups / repeat visits ────────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="QR Scans" value={qrScans} icon={<QrCode size={14} />} color="text-cyan-400" sub={`last ${range}d`} />
+        <KpiCard label="QR Scans" value={qrScans} icon={<QrCode size={14} />} color={BRAND.plum} sub={`last ${range}d`} />
         <KpiCard
           label="Total Customers"
           value={customerStats.totalCustomers}
           icon={<Users size={14} />}
-          color="text-blue-400"
+          color={BRAND.sky}
           sub="all-time, this restaurant"
         />
         <KpiCard
           label="New Signups"
           value={customerStats.newInPeriod}
           icon={<UserPlus size={14} />}
-          color="text-emerald-400"
+          color={BRAND.emerald}
           sub={`last ${range}d`}
         />
         <KpiCard
           label="Repeat Customers"
           value={customerStats.repeatCustomers}
           icon={<Repeat size={14} />}
-          color="text-violet-400"
+          color={BRAND.magenta}
           sub={`${formatPercent(customerStats.repeatRate)} of all-time`}
         />
       </div>
 
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+      <div className={`${cardBase} p-5`} style={cardStyle}>
         <div className="mb-1 flex items-center gap-2">
-          <BellRing size={14} className="text-orange-400" />
-          <h2 className="text-sm font-semibold text-zinc-200">Waiter Bell Requests</h2>
+          <BellRing size={14} style={{ color: BRAND.burgundy }} />
+          <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Waiter Bell Requests</h2>
         </div>
-        <p className="mb-5 text-xs text-zinc-600">
+        <p className="mb-5 text-xs" style={{ color: BRAND.inkFaint }}>
           Every time a guest tapped Call Waiter, Water, or Bill on the bell — and how fast staff responded
         </p>
 
         {!waiterStats || waiterStats.total === 0 ? (
-          <p className="text-xs italic text-zinc-600">No waiter bell requests yet in this period</p>
+          <p className="text-xs italic" style={{ color: BRAND.inkFaint }}>No waiter bell requests yet in this period</p>
         ) : (
           <>
             <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-orange-500/15 bg-orange-500/5 p-3 text-center">
-                <p className="text-2xl font-bold text-orange-400">{waiterStats.total}</p>
-                <p className="mt-0.5 text-[11px] font-medium text-zinc-400">Total presses</p>
-              </div>
-              <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-3 text-center">
-                <p className="text-2xl font-bold text-emerald-400">{waiterStats.acceptedCount}</p>
-                <p className="mt-0.5 text-[11px] font-medium text-zinc-400">Accepted</p>
-              </div>
-              <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 text-center">
-                <p className="text-2xl font-bold text-cyan-400">{formatPercent(waiterStats.acceptanceRate)}</p>
-                <p className="mt-0.5 text-[11px] font-medium text-zinc-400">Acceptance rate</p>
-              </div>
-              <div className="rounded-xl border border-violet-500/15 bg-violet-500/5 p-3 text-center">
-                <p className="flex items-center justify-center gap-1 text-2xl font-bold text-violet-400">
-                  <Timer size={16} />
-                  {formatDuration(waiterStats.avgAcceptSeconds)}
-                </p>
-                <p className="mt-0.5 text-[11px] font-medium text-zinc-400">Avg accept time</p>
-              </div>
+              {[
+                { value: waiterStats.total, label: 'Total presses', color: BRAND.burgundy },
+                { value: waiterStats.acceptedCount, label: 'Accepted', color: BRAND.emerald },
+                { value: formatPercent(waiterStats.acceptanceRate), label: 'Acceptance rate', color: BRAND.sky },
+                { value: formatDuration(waiterStats.avgAcceptSeconds), label: 'Avg accept time', color: BRAND.plum, icon: <Timer size={16} /> },
+              ].map((s) => (
+                <div key={s.label} className="rounded-xl border p-3 text-center" style={{ borderColor: `${s.color}26`, background: `${s.color}0D` }}>
+                  <p className="flex items-center justify-center gap-1 text-2xl font-bold" style={{ color: s.color }}>
+                    {s.icon}
+                    {s.value}
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-medium" style={{ color: BRAND.inkSoft }}>{s.label}</p>
+                </div>
+              ))}
             </div>
 
-            <p className="mb-2.5 text-xs font-semibold text-zinc-400">By request type</p>
+            <p className="mb-2.5 text-xs font-semibold" style={{ color: BRAND.inkSoft }}>By request type</p>
             <div className="space-y-2">
               {waiterStats.byType.map((row) => {
                 const meta = WAITER_TYPE_META[row.type]
@@ -588,22 +577,26 @@ export default function AnalyticsPage() {
                 return (
                   <div
                     key={row.type}
-                    className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/40 px-3 py-2.5"
+                    className="flex items-center justify-between rounded-xl border px-3 py-2.5"
+                    style={{ borderColor: BRAND.line, background: BRAND.ivory }}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-800 ${meta.color}`}>
+                      <span
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                        style={{ background: BRAND.card, color: meta.color }}
+                      >
                         {meta.icon}
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-medium text-zinc-200">{meta.label}</p>
-                        <p className="text-[10px] text-zinc-500">
+                        <p className="truncate text-xs font-medium" style={{ color: BRAND.ink }}>{meta.label}</p>
+                        <p className="text-[10px]" style={{ color: BRAND.inkFaint }}>
                           {row.count} press{row.count !== 1 ? 'es' : ''} · {row.accepted} accepted ({formatPercent(rate)})
                         </p>
                       </div>
                     </div>
                     <div className="ml-3 shrink-0 text-right">
-                      <p className="text-sm font-bold text-violet-400">{formatDuration(row.avgAcceptSeconds)}</p>
-                      <p className="text-[10px] text-zinc-600">avg accept time</p>
+                      <p className="text-sm font-bold" style={{ color: BRAND.plum }}>{formatDuration(row.avgAcceptSeconds)}</p>
+                      <p className="text-[10px]" style={{ color: BRAND.inkFaint }}>avg accept time</p>
                     </div>
                   </div>
                 )
@@ -613,64 +606,13 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-200">Daily Activity</h2>
-            <p className="mt-0.5 text-xs text-zinc-600">Visitors, orders, and cart opens per day</p>
-          </div>
-          <div className="flex items-center gap-4 text-[10px] text-zinc-600">
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" />Visitors</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-500" />Orders</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-cyan-500" />Cart opens</span>
-          </div>
-        </div>
-
-        <div className="flex h-32 items-end gap-1 sm:h-40">
-          {daily.map((d) => {
-            const isToday = d.date === new Date().toISOString().split('T')[0]
-            const maxOrders = Math.max(1, ...daily.map((x) => x.waiter_calls))
-            const maxCartOpens = Math.max(1, ...daily.map((x) => x.cart_opens))
-            return (
-              <div key={d.date} className="group relative flex flex-1 flex-col items-center gap-px">
-                <div className="absolute -top-10 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-[10px] text-zinc-300 shadow-lg group-hover:block pointer-events-none">
-                  <p className="font-medium">{d.date}</p>
-                  <p>Visitors: {d.unique_visitors}</p>
-                  <p>Cart opens: {d.cart_opens}</p>
-                  <p>Orders: {d.waiter_calls}</p>
-                </div>
-                <div className="flex w-full flex-1 items-end gap-px">
-                  <div
-                    className={`flex-1 rounded-t transition-all ${isToday ? 'bg-blue-400' : 'bg-blue-500/60 group-hover:bg-blue-500'}`}
-                    style={{ height: `${Math.max(4, (d.unique_visitors / maxDailyVisitors) * 100)}%` }}
-                  />
-                  <div
-                    className="flex-1 rounded-t bg-orange-500/70 transition-all group-hover:bg-orange-500"
-                    style={{ height: `${Math.max(4, (d.waiter_calls / maxOrders) * 100)}%` }}
-                  />
-                  <div
-                    className="flex-1 rounded-t bg-cyan-500/60 transition-all group-hover:bg-cyan-500"
-                    style={{ height: `${Math.max(4, (d.cart_opens / maxCartOpens) * 100)}%` }}
-                  />
-                </div>
-                <p className="mt-1 whitespace-nowrap text-[8px] text-zinc-700 sm:text-[9px]">
-                  {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(
-                    new Date(`${d.date}T00:00:00`),
-                  )}
-                </p>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className={`${cardBase} p-5`} style={cardStyle}>
           <div className="mb-1 flex items-center gap-2">
-            <Clock size={13} className="text-orange-400" />
-            <h2 className="text-sm font-semibold text-zinc-200">Peak Hours</h2>
+            <Clock size={13} style={{ color: BRAND.burgundy }} />
+            <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Peak Hours</h2>
           </div>
-          <p className="mb-4 text-xs text-zinc-600">When customers browse your menu</p>
+          <p className="mb-4 text-xs" style={{ color: BRAND.inkFaint }}>When customers browse your menu</p>
 
           <div className="flex h-24 items-end gap-0.5">
             {hourly.map((count, hour) => {
@@ -679,14 +621,15 @@ export default function AnalyticsPage() {
 
               return (
                 <div key={hour} className="group relative flex-1">
-                  <div className="absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-300 group-hover:block pointer-events-none">
+                  <div
+                    className="absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded px-1.5 py-0.5 text-xs group-hover:block pointer-events-none"
+                    style={{ background: BRAND.ink, color: BRAND.ivory }}
+                  >
                     {hour}:00 · {count}
                   </div>
                   <div
-                    className={`w-full rounded-sm transition-all ${
-                      isPeak ? 'bg-orange-500' : 'bg-zinc-700 group-hover:bg-zinc-500'
-                    }`}
-                    style={{ height: `${Math.max(pct, 2)}%` }}
+                    className="w-full rounded-sm transition-all"
+                    style={{ height: `${Math.max(pct, 2)}%`, background: isPeak ? BRAND.burgundy : BRAND.line }}
                   />
                 </div>
               )
@@ -694,42 +637,42 @@ export default function AnalyticsPage() {
           </div>
 
           <div className="mt-1 flex justify-between">
-            <span className="text-xs text-zinc-600">12 AM</span>
-            <span className="text-xs text-zinc-600">12 PM</span>
-            <span className="text-xs text-zinc-600">11 PM</span>
+            <span className="text-xs" style={{ color: BRAND.inkFaint }}>12 AM</span>
+            <span className="text-xs" style={{ color: BRAND.inkFaint }}>12 PM</span>
+            <span className="text-xs" style={{ color: BRAND.inkFaint }}>11 PM</span>
           </div>
 
           <p className="mt-3 text-sm">
-            <span className="text-zinc-400">Busiest time: </span>
-            <span className="font-medium text-orange-400">{peakHourLabel}</span>
+            <span style={{ color: BRAND.inkSoft }}>Busiest time: </span>
+            <span className="font-medium" style={{ color: BRAND.burgundy }}>{peakHourLabel}</span>
           </p>
         </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className={`${cardBase} p-5`} style={cardStyle}>
           <div className="mb-1 flex items-center gap-2">
-            <MessageSquareMore size={13} className="text-violet-400" />
-            <h2 className="text-sm font-semibold text-zinc-200">Most Searched Dishes</h2>
+            <MessageSquareMore size={13} style={{ color: BRAND.plum }} />
+            <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Most Searched Dishes</h2>
           </div>
-          <p className="mb-4 text-xs text-zinc-600">What customers asked the AI chatbot about</p>
+          <p className="mb-4 text-xs" style={{ color: BRAND.inkFaint }}>What customers asked the AI chatbot about</p>
 
           {searchTerms.length === 0 ? (
-            <p className="text-xs italic text-zinc-600">No AI searches yet in this period</p>
+            <p className="text-xs italic" style={{ color: BRAND.inkFaint }}>No AI searches yet in this period</p>
           ) : (
             <div className="space-y-2">
               {searchTerms.slice(0, 7).map((t, i) => {
                 const maxCount = searchTerms[0]?.count ?? 1
                 return (
                   <div key={t.term} className="flex items-center gap-3">
-                    <span className="w-4 shrink-0 text-right text-xs text-zinc-600">{i + 1}</span>
+                    <span className="w-4 shrink-0 text-right text-xs" style={{ color: BRAND.inkFaint }}>{i + 1}</span>
                     <div className="min-w-0 flex-1">
                       <div className="mb-0.5 flex items-center justify-between">
-                        <span className="truncate text-xs text-zinc-300">{t.term}</span>
-                        <span className="ml-2 shrink-0 text-xs text-zinc-500">{t.count}</span>
+                        <span className="truncate text-xs" style={{ color: BRAND.ink }}>{t.term}</span>
+                        <span className="ml-2 shrink-0 text-xs" style={{ color: BRAND.inkFaint }}>{t.count}</span>
                       </div>
-                      <div className="h-1 w-full rounded-full bg-zinc-800">
+                      <div className="h-1 w-full rounded-full" style={{ background: BRAND.line }}>
                         <div
-                          className="h-1 rounded-full bg-violet-500"
-                          style={{ width: `${(t.count / maxCount) * 100}%` }}
+                          className="h-1 rounded-full"
+                          style={{ width: `${(t.count / maxCount) * 100}%`, background: BRAND.plum }}
                         />
                       </div>
                     </div>
@@ -741,32 +684,32 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+      <div className={`${cardBase} p-5`} style={cardStyle}>
         <div className="mb-1 flex items-center gap-2">
-          <Flame size={14} className="text-orange-400" />
-          <h2 className="text-sm font-semibold text-zinc-200">Dish Performance</h2>
+          <Flame size={14} style={{ color: BRAND.burgundy }} />
+          <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Dish Performance</h2>
         </div>
-        <p className="mb-4 text-xs text-zinc-600">
+        <p className="mb-4 text-xs" style={{ color: BRAND.inkFaint }}>
           Views → cart adds → suggestion adds → actual orders
         </p>
 
         {topItems.length === 0 ? (
-          <p className="text-xs italic text-zinc-600">No data yet in this period</p>
+          <p className="text-xs italic" style={{ color: BRAND.inkFaint }}>No data yet in this period</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-[10px] uppercase tracking-wider text-zinc-600">
+                <tr className="border-b text-[10px] uppercase tracking-wider" style={{ borderColor: BRAND.line, color: BRAND.inkFaint }}>
                   <th className="pb-2.5 text-left font-medium">Dish</th>
                   <th className="pb-2.5 text-right font-medium">Views</th>
                   <th className="pb-2.5 text-right font-medium">Added to Cart</th>
                   <th className="pb-2.5 text-right font-medium">
                     <span className="flex items-center justify-end gap-1">
-                      <Sparkles size={9} className="text-violet-400" />
+                      <Sparkles size={9} style={{ color: BRAND.plum }} />
                       Via Suggestion
                     </span>
                   </th>
-                  <th className="pb-2.5 text-right font-medium text-emerald-500">Ordered (qty)</th>
+                  <th className="pb-2.5 text-right font-medium" style={{ color: BRAND.emerald }}>Ordered (qty)</th>
                   <th className="pb-2.5 text-right font-medium">View→Order</th>
                 </tr>
               </thead>
@@ -779,24 +722,25 @@ export default function AnalyticsPage() {
                   return (
                     <tr
                       key={item.item_id}
-                      className="border-b border-zinc-800/50 transition last:border-0 hover:bg-zinc-800/30"
+                      className="border-b transition last:border-0 hover:bg-black/[0.02]"
+                      style={{ borderColor: `${BRAND.line}80` }}
                     >
                       <td className="py-2.5 pr-4">
                         <div className="flex items-center gap-2">
-                          <span className="w-5 shrink-0 text-right text-xs text-zinc-600">{i + 1}</span>
-                          <span className="text-zinc-200">{item.item_name}</span>
-                          {i === 0 && item.order_count > 0 && <Flame size={11} className="text-orange-400" />}
+                          <span className="w-5 shrink-0 text-right text-xs" style={{ color: BRAND.inkFaint }}>{i + 1}</span>
+                          <span style={{ color: BRAND.ink }}>{item.item_name}</span>
+                          {i === 0 && item.order_count > 0 && <Flame size={11} style={{ color: BRAND.burgundy }} />}
                         </div>
                       </td>
-                      <td className="py-2.5 text-right text-orange-400">{item.view_count || '—'}</td>
-                      <td className="py-2.5 text-right text-cyan-400">{item.add_to_cart_count || '—'}</td>
-                      <td className="py-2.5 text-right text-violet-400">
+                      <td className="py-2.5 text-right" style={{ color: BRAND.burgundy }}>{item.view_count || '—'}</td>
+                      <td className="py-2.5 text-right" style={{ color: BRAND.sky }}>{item.add_to_cart_count || '—'}</td>
+                      <td className="py-2.5 text-right" style={{ color: BRAND.plum }}>
                         {item.suggestion_add_count > 0 ? item.suggestion_add_count : '—'}
                       </td>
-                      <td className="py-2.5 text-right font-semibold text-emerald-400">
+                      <td className="py-2.5 text-right font-semibold" style={{ color: BRAND.emerald }}>
                         {item.order_count > 0 ? item.order_count : '—'}
                       </td>
-                      <td className="py-2.5 text-right text-xs text-zinc-500">
+                      <td className="py-2.5 text-right text-xs" style={{ color: BRAND.inkFaint }}>
                         {convRate}
                         {convRate !== '—' ? '%' : ''}
                       </td>
@@ -808,39 +752,37 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap gap-3 border-t border-zinc-800 pt-3">
-          <span className="flex items-center gap-1.5 text-[10px] text-zinc-600">
-            <span className="h-2 w-2 rounded-full bg-orange-500" /> Views = item card expanded
-          </span>
-          <span className="flex items-center gap-1.5 text-[10px] text-zinc-600">
-            <span className="h-2 w-2 rounded-full bg-cyan-500" /> Added to cart (menu)
-          </span>
-          <span className="flex items-center gap-1.5 text-[10px] text-zinc-600">
-            <span className="h-2 w-2 rounded-full bg-violet-500" /> Added via recommendation card
-          </span>
-          <span className="flex items-center gap-1.5 text-[10px] text-zinc-600">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" /> Ordered (qty in confirmed orders)
-          </span>
+        <div className="mt-4 flex flex-wrap gap-3 border-t pt-3" style={{ borderColor: BRAND.line }}>
+          {[
+            { color: BRAND.burgundy, label: 'Views = item card expanded' },
+            { color: BRAND.sky, label: 'Added to cart (menu)' },
+            { color: BRAND.plum, label: 'Added via recommendation card' },
+            { color: BRAND.emerald, label: 'Ordered (qty in confirmed orders)' },
+          ].map((l) => (
+            <span key={l.label} className="flex items-center gap-1.5 text-[10px]" style={{ color: BRAND.inkFaint }}>
+              <span className="h-2 w-2 rounded-full" style={{ background: l.color }} /> {l.label}
+            </span>
+          ))}
         </div>
       </div>
 
       {/* ── Customers list ──────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+      <div className={`${cardBase} p-5`} style={cardStyle}>
         <div className="mb-1 flex items-center gap-2">
-          <Users size={14} className="text-blue-400" />
-          <h2 className="text-sm font-semibold text-zinc-200">Customers</h2>
+          <Users size={14} style={{ color: BRAND.sky }} />
+          <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Customers</h2>
         </div>
-        <p className="mb-4 text-xs text-zinc-600">
+        <p className="mb-4 text-xs" style={{ color: BRAND.inkFaint }}>
           Everyone who has signed up at this restaurant — contact details are never shared externally
         </p>
 
         {customerRows.length === 0 ? (
-          <p className="text-xs italic text-zinc-600">No customers yet</p>
+          <p className="text-xs italic" style={{ color: BRAND.inkFaint }}>No customers yet</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-[10px] uppercase tracking-wider text-zinc-600">
+                <tr className="border-b text-[10px] uppercase tracking-wider" style={{ borderColor: BRAND.line, color: BRAND.inkFaint }}>
                   <th className="pb-2.5 text-left font-medium">Name</th>
                   <th className="pb-2.5 text-left font-medium">Phone</th>
                   <th className="pb-2.5 text-right font-medium">Visits</th>
@@ -852,28 +794,32 @@ export default function AnalyticsPage() {
                 {customerRows.slice(0, 50).map((c) => (
                   <tr
                     key={c.customer_id}
-                    className="border-b border-zinc-800/50 transition last:border-0 hover:bg-zinc-800/30"
+                    className="border-b transition last:border-0 hover:bg-black/[0.02]"
+                    style={{ borderColor: `${BRAND.line}80` }}
                   >
-                    <td className="py-2.5 pr-4 text-zinc-200">{c.display_name ?? 'Guest'}</td>
-                    <td className="py-2.5 pr-4 text-zinc-400">{maskPhone(c.phone)}</td>
+                    <td className="py-2.5 pr-4" style={{ color: BRAND.ink }}>{c.display_name ?? 'Guest'}</td>
+                    <td className="py-2.5 pr-4" style={{ color: BRAND.inkSoft }}>{maskPhone(c.phone)}</td>
                     <td className="py-2.5 text-right">
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          c.visit_count > 1 ? 'bg-violet-500/10 text-violet-400' : 'bg-zinc-800 text-zinc-400'
-                        }`}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+                        style={
+                          c.visit_count > 1
+                            ? { background: `${BRAND.plum}1A`, color: BRAND.plum }
+                            : { background: BRAND.ivorySoft, color: BRAND.inkFaint }
+                        }
                       >
                         {c.visit_count > 1 && <Repeat size={9} />}
                         {c.visit_count}×
                       </span>
                     </td>
-                    <td className="py-2.5 text-right text-xs text-zinc-500">{formatDate(c.first_visit_at)}</td>
-                    <td className="py-2.5 text-right text-xs text-zinc-500">{formatDate(c.last_visit_at)}</td>
+                    <td className="py-2.5 text-right text-xs" style={{ color: BRAND.inkFaint }}>{formatDate(c.first_visit_at)}</td>
+                    <td className="py-2.5 text-right text-xs" style={{ color: BRAND.inkFaint }}>{formatDate(c.last_visit_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {customerRows.length > 50 && (
-              <p className="mt-3 text-center text-[10px] text-zinc-600">
+              <p className="mt-3 text-center text-[10px]" style={{ color: BRAND.inkFaint }}>
                 Showing 50 of {customerRows.length} customers
               </p>
             )}
@@ -881,32 +827,32 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+      <div className={`${cardBase} p-5`} style={cardStyle}>
         <div className="mb-4 flex items-center gap-2">
-          <Star size={14} className="text-amber-400" />
-          <h2 className="text-sm font-semibold text-zinc-200">Customer Ratings</h2>
+          <Star size={14} style={{ color: BRAND.gold }} />
+          <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Customer Ratings</h2>
         </div>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
           <div className="text-center">
-            <p className="text-5xl font-bold text-amber-400">
+            <p className="text-5xl font-bold" style={{ color: BRAND.gold }}>
               {totals.avgRating ? totals.avgRating.toFixed(1) : '—'}
             </p>
-            <p className="mt-1 text-xs text-zinc-500">out of 5</p>
+            <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>out of 5</p>
           </div>
           <div>
             <div className="mb-1 flex items-center gap-0.5">
               {'★★★★★'.split('').map((s, i) => (
                 <span
                   key={i}
-                  className={i < Math.round(totals.avgRating) ? 'text-amber-400' : 'text-zinc-700'}
+                  style={{ color: i < Math.round(totals.avgRating) ? BRAND.gold : BRAND.line }}
                 >
                   ★
                 </span>
               ))}
             </div>
-            <p className="text-sm text-zinc-400">{totals.totalRatings} total ratings</p>
-            <p className="mt-0.5 text-xs text-zinc-600">Collected after order completion</p>
+            <p className="text-sm" style={{ color: BRAND.inkSoft }}>{totals.totalRatings} total ratings</p>
+            <p className="mt-0.5 text-xs" style={{ color: BRAND.inkFaint }}>Collected after order completion</p>
           </div>
         </div>
       </div>

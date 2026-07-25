@@ -31,20 +31,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'PIN must be 4 digits' }, { status: 400 })
     }
 
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      },
-    )
+    // ── Auth: Bearer token (mobile app) or cookie session (web dashboard) ──
+    const authHeader = req.headers.get('authorization')
+    let user: { id: string; email?: string | null } | null = null
 
-    const { data: { user }, error: authErr } = await supabase.auth.getUser()
-    if (authErr || !user?.email) {
+    if (authHeader?.startsWith('Bearer ')) {
+      const anon = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      )
+      const { data, error } = await anon.auth.getUser(authHeader.slice(7))
+      if (error || !data.user) {
+        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+      }
+      user = data.user
+    } else {
+      const cookieStore = await cookies()
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll: () => cookieStore.getAll(),
+            setAll: () => {},
+          },
+        },
+      )
+      const { data: { user: cookieUser }, error: authErr } = await supabase.auth.getUser()
+      if (authErr) console.error('[verify-pin cookie auth]', authErr)
+      user = cookieUser
+    }
+
+    if (!user?.email) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
@@ -145,8 +163,6 @@ export async function POST(req: NextRequest) {
         console.error('[verify-pin welcome email]', emailErr)
       }
 
-      // Separate try/catch — a WhatsApp failure must never affect the email
-      // above, or the successful visit-verification response below.
       try {
         if (customerForNotify?.phone) {
           const result = await sendWhatsAppTemplate({
