@@ -1,31 +1,26 @@
-// src/app/api/whatsapp/contacts/add/route.ts
-export const dynamic = 'force-dynamic';
-
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { DINEZY_RESTAURANT_ID } from '@/lib/whatsappConfig';
 
 export async function POST(req: Request) {
   try {
     const { wa_id, name } = await req.json();
     if (!wa_id) return NextResponse.json({ error: 'wa_id is required' }, { status: 400 });
-
-    // normalize: strip spaces, +, dashes
     const cleanId = wa_id.replace(/[^0-9]/g, '');
     if (cleanId.length < 10) {
       return NextResponse.json({ error: 'Enter number with country code, e.g. 91XXXXXXXXXX' }, { status: 400 });
     }
-
     const { error } = await supabaseAdmin.from('whatsapp_contacts').upsert(
       {
+        restaurant_id: DINEZY_RESTAURANT_ID,
         wa_id: cleanId,
         name: name || null,
         last_message_at: new Date().toISOString(),
         last_message_preview: null,
         unread_count: 0,
       },
-      { onConflict: 'wa_id', ignoreDuplicates: false }
+      { onConflict: 'restaurant_id,wa_id', ignoreDuplicates: false }
     );
-
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true, wa_id: cleanId });
   } catch (err: any) {

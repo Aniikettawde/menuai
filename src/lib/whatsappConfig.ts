@@ -1,0 +1,1 @@
+export const DINEZY_RESTAURANT_ID = 'f2c384ba-3764-4962-8c25-8201f48a15b4';
