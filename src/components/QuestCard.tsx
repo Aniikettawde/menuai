@@ -1,6 +1,6 @@
 'use client'
 
-import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock, MessageCircle } from 'lucide-react'
+import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock, MessageCircle, MapPin } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { LOYALTY_LEVELS } from '@/lib/loyalty-levels'
 import { useLoyaltyStatus } from '../app/api/loyalty/status/useLoyaltyStatus'
@@ -38,7 +38,7 @@ function useCountdown(expiresAt: string | null) {
   return secondsLeft
 }
 
-// ─── NEW: visual stepper so the user always knows where they are ─────────────
+// ─── visual stepper so the user always knows where they are ─────────────
 function GiftStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
   const steps = [
     { n: 1 as const, label: 'Get PIN' },
@@ -87,7 +87,7 @@ function GiftStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
   )
 }
 
-// ─── NEW: celebration banner reused inside the drawer ─────────────────────────
+// ─── celebration banner reused inside the drawer ─────────────────────────
 function CelebrationBanner({ kind, level }: { kind: 'welcome' | 'levelup'; level?: { emoji: string; title: string } }) {
   return (
     <div style={{
@@ -132,7 +132,7 @@ export function QuestCard({ customerId, restaurantId }: Props) {
     return () => clearInterval(id)
   }, [showPinForThisRestaurant, pendingRedemption, refresh])
 
-  // NEW: auto-clear celebration banners after a few seconds, same pattern as RewardOffersBar
+  // auto-clear celebration banners after a few seconds, same pattern as RewardOffersBar
   useEffect(() => {
     if (justClaimedWelcome || justLeveledUp) {
       if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current)
@@ -191,7 +191,10 @@ export function QuestCard({ customerId, restaurantId }: Props) {
   const { verified_visits, current_level, next_level, progress_pct, pending_pin, redemptions, is_legend } = status
   const hasClaimedWelcome = verified_visits > 0
 
-  // NEW: figure out which step of the welcome-gift journey the user is on
+  // Figure out which step of the welcome-gift journey the user is on.
+  // This entire stepper/PIN flow only applies BEFORE the welcome gift is
+  // claimed — after that, visits are counted automatically from QR scans
+  // and no PIN generation happens anymore.
   const showGiftStepper = !hasClaimedWelcome || !!pendingRedemption || !!justClaimedWelcome
   let giftStep: 1 | 2 | 3 | 4 = 1
   if (justClaimedWelcome) giftStep = 4
@@ -202,7 +205,7 @@ export function QuestCard({ customerId, restaurantId }: Props) {
     <div style={{ marginBottom: 20 }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* NEW: celebration banners — this is what was missing after PIN verification */}
+      {/* celebration banners */}
       {justClaimedWelcome && <CelebrationBanner kind="welcome" />}
       {justLeveledUp && <CelebrationBanner kind="levelup" level={justLeveledUp} />}
 
@@ -244,11 +247,11 @@ export function QuestCard({ customerId, restaurantId }: Props) {
         )}
       </div>
 
-      {/* NEW: always-visible stepper for the welcome-gift journey */}
+      {/* Stepper only shows for the pre-welcome-gift journey */}
       {showGiftStepper && !justClaimedWelcome && <GiftStepper step={giftStep} />}
 
-      {/* Verify visit box */}
-      {!pendingRedemption && (
+      {/* PIN generation box — pre-welcome-gift only */}
+      {!hasClaimedWelcome && !pendingRedemption && (
         <div style={{
           background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
           borderRadius: 14, padding: '14px 16px', marginBottom: 12,
@@ -267,9 +270,7 @@ export function QuestCard({ customerId, restaurantId }: Props) {
                 </span>
               </div>
               <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
-                {hasClaimedWelcome
-                  ? "Once your waiter enters this code, your visit is logged instantly."
-                  : "Once your waiter enters this code, we'll start processing your gift card automatically."}
+                Once your waiter enters this code, we'll start processing your gift card automatically.
               </p>
             </>
           ) : (
@@ -281,9 +282,7 @@ export function QuestCard({ customerId, restaurantId }: Props) {
                 </p>
               </div>
               <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-                {hasClaimedWelcome
-                  ? 'Ask your waiter to verify a PIN each visit to level up.'
-                  : 'Get a PIN and show it to your waiter to claim your welcome gift.'}
+                Get a PIN and show it to your waiter to claim your welcome gift.
               </p>
               <button
                 type="button" onClick={() => void handleGeneratePin()} disabled={genLoading}
@@ -304,7 +303,32 @@ export function QuestCard({ customerId, restaurantId }: Props) {
         </div>
       )}
 
-      {/* Welcome gift status — reframed with a clear timeline instead of a bare "requested" state */}
+      {/* Post-welcome-gift: no PIN, no button — visits count automatically */}
+      {hasClaimedWelcome && !pendingRedemption && (
+        <div style={{
+          background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
+          borderRadius: 14, padding: '14px 16px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <div style={{
+            width: 34, height: 34, flexShrink: 0, borderRadius: 10,
+            background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <MapPin size={15} color="var(--pr-gold)" />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+              No PIN needed anymore
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+              Just visit any Dinezy restaurant — we count it automatically toward your next badge.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Welcome gift status */}
       {pendingRedemption && (
         <div style={{
           background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.16)',

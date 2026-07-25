@@ -151,6 +151,21 @@ const [showRewardPopup, setShowRewardPopup] = useState(false)
   return () => clearTimeout(timer)
 }, [customer, activeTab, initialData.restaurant.id])
 
+const autoVisitFiredRef = useRef(false)
+  useEffect(() => {
+    if (!customer?.id || !restaurant?.id) return
+    if (tableSessionValid !== true) return
+    if (autoVisitFiredRef.current) return
+    autoVisitFiredRef.current = true
+
+    void fetch('/api/loyalty/log-auto-visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customer.id, restaurant_id: restaurant.id }),
+      credentials: 'same-origin',
+    }).catch(() => {})
+  }, [customer?.id, restaurant?.id, tableSessionValid])
+
   useEffect(() => {
     setRestaurantData(initialData)
     setCachedMenu(initialData.restaurant.slug, initialData)

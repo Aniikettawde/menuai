@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Gift, KeyRound, ChevronRight, ChevronDown, Loader2, Sparkles, Clock, Trophy } from 'lucide-react'
+import { Gift, KeyRound, ChevronRight, ChevronDown, Loader2, Sparkles, Clock, Trophy, MapPin } from 'lucide-react'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 import { useLoyaltyStatus } from '../app/api/loyalty/status/useLoyaltyStatus'
 import { RewardProgressBar } from './RewardProgressBar'
@@ -73,7 +73,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
   const [genLoading, setGenLoading] = useState(false)
   const celebrateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // NEW: the moment the user logs in, auto-expand this bar so the reward
+  // The moment the user logs in, auto-expand this bar so the reward
   // CTA is immediately visible instead of requiring an extra tap to discover it.
   const prevCustomerIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -102,6 +102,8 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
     return () => { if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current) }
   }, [justClaimedWelcome, justLeveledUp, clearCelebration])
 
+  // PIN generation only ever applies pre-welcome-gift now — kept here
+  // for the verified_visits === 0 state below.
   const handleGeneratePin = useCallback(async () => {
     if (!customerId || !restaurantId) return
     setGenLoading(true)
@@ -224,7 +226,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
     )
   }
 
-  // ── Pending — PIN outstanding ─────────────────────────────────────────────
+  // ── Pending — PIN outstanding (pre-welcome-gift only) ─────────────────────
   if (pinActiveHere && pendingPin) {
     return (
       <>
@@ -326,6 +328,8 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
   }
 
   // ── Ongoing — steady state after the welcome gift ────────────────────────
+  // No more "Verify Visit" PIN button here: visits are now counted
+  // automatically from a valid table session on any Dinezy QR scan.
   return (
     <div style={WRAP}>
       <div style={CARD}>
@@ -345,26 +349,16 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
               {offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); void handleGeneratePin() }}
-            disabled={genLoading}
-            style={{
-              ...CTA, background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
-              color: 'var(--pr-gold)', opacity: genLoading ? 0.7 : 1, cursor: genLoading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {genLoading ? <Loader2 size={13} style={{ animation: 'ro-spin 0.8s linear infinite' }} /> : <KeyRound size={13} />}
-            Verify Visit
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
-            style={CHEVRON_BTN}
-            aria-label={expanded ? 'Collapse' : 'Expand'}
-          >
-            <ChevronDown size={15} style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-          </button>
+          {offerCount > 0 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
+              style={CHEVRON_BTN}
+              aria-label={expanded ? 'Collapse' : 'Expand'}
+            >
+              <ChevronDown size={15} style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+            </button>
+          )}
         </div>
 
         {expanded && (
@@ -375,6 +369,16 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
               nextLevel={next_level}
               progressPct={progress_pct}
             />
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 12px', borderRadius: 10,
+              background: 'rgba(255,255,255,0.4)', border: '1px solid var(--pr-border)',
+            }}>
+              <MapPin size={13} color="var(--pr-gold)" style={{ flexShrink: 0 }} />
+              <p style={{ margin: 0, fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+                Just visit any Dinezy restaurant — we count it automatically.
+              </p>
+            </div>
             {onExploreRewards && (
               <button
                 type="button"

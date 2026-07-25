@@ -21,11 +21,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
   }
 
-  const { count: verifiedVisitsCount } = await supabase
+  const { count: verifiedPinCount } = await supabase
     .from('visit_verifications')
     .select('id', { count: 'exact', head: true })
     .eq('customer_id', customerId)
     .eq('status', 'verified')
+
+  // Auto-counted visits only start accumulating once the welcome gift PIN
+  // has been verified at least once — enforced server-side in log_auto_visit,
+  // this is just for display math.
+  const { count: autoVisitCount } = await supabase
+    .from('customer_visits')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+
+  const verifiedVisitsCount = (verifiedPinCount ?? 0) + (autoVisitCount ?? 0)
 
   const { data: pendingPin } = await supabase
     .from('visit_verifications')
@@ -41,7 +51,7 @@ export async function GET(req: NextRequest) {
     .eq('customer_id', customerId)
     .order('requested_at', { ascending: false })
 
-  const verifiedVisits = verifiedVisitsCount ?? 0
+  const verifiedVisits = verifiedVisitsCount
   const isLegend = customer.is_dinezy_legend === true
   const currentLevel = getCurrentLevel(verifiedVisits, isLegend)
   const nextLevel = getNextLevel(verifiedVisits, isLegend)
