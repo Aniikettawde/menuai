@@ -232,8 +232,7 @@ export default function AnalyticsPage() {
       const [
         { data: eventsRaw, error },
         { data: waiterRowsRaw, error: waiterErr },
-        { count: qrScanCount, error: qrErr },
-        { data: customerRowsRaw, error: customerErr },
+        customerStatsJson,
       ] = await Promise.all([
         supabase
           .from('analytics_events')
@@ -248,29 +247,16 @@ export default function AnalyticsPage() {
           .eq('restaurant_id', restaurantId)
           .gte('created_at', sinceISO)
           .in('request_type', ['assistance', 'water', 'bill']),
-        // Real QR scans — one row per table session created, unaffected by
-        // heartbeat pings or plain menu browsing without a scan.
-        supabase
-          .from('table_sessions')
-          .select('id', { count: 'exact', head: true })
-          .eq('restaurant_id', restaurantId)
-          .gte('created_at', sinceISO),
-        // All-time per-customer relationship with this restaurant — gives us
-        // total signups, repeat-visit counts, and names in one shot. Not
-        // date-filtered here; period-scoped numbers (new signups) are
-        // derived client-side from first_visit_at below.
-        supabase
-          .from('restaurant_customers')
-          .select(`
-            customer_id,
-            visit_count,
-            first_visit_at,
-            last_visit_at,
-            customers ( display_name, phone )
-          `)
-          .eq('restaurant_id', restaurantId)
-          .order('last_visit_at', { ascending: false })
-          .limit(2000),
+        // table_sessions and restaurant_customers are locked to
+        // service-role-only RLS (restaurant_customers holds phone numbers),
+        // so these go through an authenticated server route instead of a
+        // direct browser query, which would just come back empty.
+        fetch(`/api/dashboard/analytics/customer-stats?restaurant_id=${restaurantId}&since=${encodeURIComponent(sinceISO)}`)
+          .then((res) => res.json())
+          .catch((err) => {
+            console.error('Customer stats fetch error:', err)
+            return { qr_scans: 0, customers: [] }
+          }),
       ])
 
       if (error) {
@@ -279,30 +265,17 @@ export default function AnalyticsPage() {
       if (waiterErr) {
         console.error('Waiter requests fetch error:', waiterErr)
       }
-      if (qrErr) {
-        console.error('QR scan count error:', qrErr)
-      }
-      if (customerErr) {
-        console.error('Restaurant customers fetch error:', customerErr)
+      if (customerStatsJson?.error) {
+        console.error('Customer stats error:', customerStatsJson.error)
       }
 
       const events = (eventsRaw ?? []) as AnalyticsEvent[]
       const waiterRows = (waiterRowsRaw ?? []) as TableRequestRow[]
 
-      setQrScans(qrScanCount ?? 0)
+      setQrScans(customerStatsJson?.qr_scans ?? 0)
 
       // ── Customer signups / repeat visits ─────────────────────────────────
-      const customers: CustomerRow[] = (customerRowsRaw ?? []).map((row: any) => {
-        const c = Array.isArray(row.customers) ? row.customers[0] : row.customers
-        return {
-          customer_id: row.customer_id as string,
-          display_name: (c as { display_name?: string } | null)?.display_name ?? null,
-          phone: (c as { phone?: string } | null)?.phone ?? null,
-          visit_count: row.visit_count as number,
-          first_visit_at: row.first_visit_at as string,
-          last_visit_at: row.last_visit_at as string,
-        }
-      })
+      const customers: CustomerRow[] = (customerStatsJson?.customers ?? []) as CustomerRow[]
       setCustomerRows(customers)
 
       const newInPeriod = customers.filter((c) => new Date(c.first_visit_at) >= since).length
