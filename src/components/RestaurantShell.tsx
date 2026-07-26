@@ -30,7 +30,7 @@ import { FloatingGameButton } from './games/FloatingGameButton'
 import { GamesModal } from './games/GamesModal'
 import { RewardWelcomePopup } from './RewardWelcomePopup'
 import { useCustomerAuth } from '@/store/customer-auth-store'
-
+import { RateUsSlideDown } from './RateUsSlideDown'
 
 type OfferRow = {
   id: string; title: string
@@ -829,6 +829,7 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
     />
   )}
 	   <TranslationLoadingOverlay />   {/* ← add this line */}
+	   <RateUsSlideDown restaurantId={restaurant.id} enabled={tableSessionValid === true} />
 
   <OfflineBanner />
   <MenuTypeSelector />
