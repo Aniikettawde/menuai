@@ -161,32 +161,11 @@ export function RateUsSlideDown({ restaurantId, enabled }: Props) {
           from { transform: translateY(0); opacity: 1; }
           to   { transform: translateY(-120%); opacity: 0; }
         }
-        @keyframes rate-us-backdrop-in {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        .rate-us-backdrop { animation: rate-us-backdrop-in 0.3s ease both; }
-        .rate-us-backdrop.closing { opacity: 0; transition: opacity 0.28s ease; }
         .rate-us-card { animation: rate-us-in 0.38s cubic-bezier(0.32, 0.72, 0, 1) both; }
         .rate-us-card.closing { animation: rate-us-out 0.3s cubic-bezier(0.32, 0.72, 0, 1) both; }
         .rate-us-star { transition: transform 0.12s ease; }
         .rate-us-star:active { transform: scale(0.88); }
       `}</style>
-
-      {/* Soft backdrop so the card reads as its own layer above the menu,
-          not just floating text on top of whatever's scrolled underneath. */}
-      <div
-        className={`rate-us-backdrop${closing ? ' closing' : ''}`}
-        onClick={dismiss}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(33,30,27,0.22)',
-          backdropFilter: 'blur(1.5px)',
-          WebkitBackdropFilter: 'blur(1.5px)',
-          pointerEvents: 'auto',
-        }}
-      />
 
       <div
         className={`rate-us-card${closing ? ' closing' : ''}`}
@@ -259,7 +238,7 @@ export function RateUsSlideDown({ restaurantId, enabled }: Props) {
                   </div>
                   <div>
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-                      How was your visit?
+                      Rate us after your meal
                     </p>
                     <p style={{ margin: '1px 0 0', fontSize: 11, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
                       Tap a star to rate us
