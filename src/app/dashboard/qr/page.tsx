@@ -449,33 +449,41 @@ export default function QRPage() {
   }
 
   useEffect(() => {
-    let mounted = true
-    async function buildPreviews() {
-      if (!menuUrl || tableNumbers.length === 0) { if (mounted) setTablePreviewMap({}); return }
-      const tablesWithTokens = tableNumbers.filter((n) => tokenMap.has(n))
-      if (tablesWithTokens.length === 0) {
-        if (restaurantId) ensureTokens(tableNumbers).catch(console.error)
-        return
-      }
-      try {
-        const entries = await Promise.all(
-          tablesWithTokens.map(async (tableNo) => {
-            const url = getTableMenuUrl(tableNo)
-            if (!url) return null
-            const qr = await generateQRWithLogoHole(url, 420)
-            return [tableNo, qr] as const
-          }),
-        )
-        if (!mounted) return
-        setTablePreviewMap(Object.fromEntries((entries.filter(Boolean) as [number, string][])))
-      } catch (err) {
-        console.error('Preview error:', err)
-      }
+  let mounted = true
+  async function buildPreviews() {
+    if (!menuUrl || tableNumbers.length === 0) { if (mounted) setTablePreviewMap({}); return }
+
+    const missingTokens = tableNumbers.filter((n) => !tokenMap.has(n))
+    if (missingTokens.length > 0) {
+      if (restaurantId) ensureTokens(tableNumbers).catch(console.error)
+      // don't return here if some tables already have tokens — still render those
     }
-    void buildPreviews()
-    return () => { mounted = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menuUrl, tableNumbers, tokenMap, restaurantId])
+
+    const tablesWithTokens = tableNumbers.filter((n) => tokenMap.has(n))
+    if (tablesWithTokens.length === 0) return
+
+    try {
+      const entries = await Promise.all(
+        tablesWithTokens.map(async (tableNo) => {
+          const url = getTableMenuUrl(tableNo)
+          if (!url) return null
+          const qr = await generateQRWithLogoHole(url, 420)
+          return [tableNo, qr] as const
+        }),
+      )
+      if (!mounted) return
+      setTablePreviewMap((prev) => ({
+        ...prev,
+        ...Object.fromEntries(entries.filter(Boolean) as [number, string][]),
+      }))
+    } catch (err) {
+      console.error('Preview error:', err)
+    }
+  }
+  void buildPreviews()
+  return () => { mounted = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [menuUrl, tableNumbers, tokenMap, restaurantId])
 
   async function copyLink() {
     if (!menuUrl) return
