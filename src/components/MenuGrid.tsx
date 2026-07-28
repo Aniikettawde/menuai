@@ -210,13 +210,15 @@ function SearchResults({
 }
 
 function CategorySection({
-  category, items, showChefsPick, onAsk, pickLabel,
+  category, items, showChefsPick, onAsk, pickLabel, isOpen, onToggle,
 }: {
   category: MenuCategory
   items: MenuItem[]
   showChefsPick: boolean
   onAsk?: (t: string) => void
   pickLabel: string
+  isOpen: boolean
+  onToggle: () => void
 }) {
   const chefsPick = showChefsPick ? getChefsPick(items) : null
   const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
@@ -229,7 +231,7 @@ function CategorySection({
 
   return (
     <section id={`cat-${category.id}`} className="mg-section mg-cat-section">
-      <div className="mg-cat-header">
+      <button type="button" className="mg-cat-header" onClick={onToggle} aria-expanded={isOpen}>
         <div className="mg-cat-thumb">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -253,66 +255,39 @@ function CategorySection({
 
         <div className="mg-cat-right">
           <span className="mg-count-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+          <ChevronRight size={16} className={`mg-chevron${isOpen ? ' mg-chevron--open' : ''}`} />
         </div>
-      </div>
+      </button>
 
-      <div className="mg-cat-body">
-        <div className="mg-divided-list">
-          {chefsPick && (
-            <div className="mg-chefspick-wrap">
-              <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
-            </div>
-          )}
-          {otherItems.map((item) => {
-            const badge = getBadge(item, items)
-            return (
-              <div key={item.id} className="mg-item-row">
-                {badge.kind !== 'none' && (
-                  <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
-                )}
-                <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
-                  <MenuItemCard item={item} onAsk={onAsk} />
-                </div>
+      {isOpen && (
+        <div className="mg-cat-body">
+          <div className="mg-divided-list">
+            {chefsPick && (
+              <div className="mg-chefspick-wrap">
+                <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
               </div>
-            )
-          })}
+            )}
+            {otherItems.map((item) => {
+              const badge = getBadge(item, items)
+              return (
+                <div key={item.id} className="mg-item-row">
+                  {badge.kind !== 'none' && (
+                    <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
+                  )}
+                  <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
+                    <MenuItemCard item={item} onAsk={onAsk} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </section>
   )
 }
 
-function CategoryPillBar({
-  categories, selectedId, onSelect, counts,
-}: {
-  categories: MenuCategory[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-  counts: Map<string, number>
-}) {
-  return (
-    <div className="mg-pills-row">
-      <div className="mg-pills-scroll">
-        {categories.map((cat) => {
-          const isActive = cat.id === selectedId
-          const count = counts.get(cat.id) ?? 0
-          return (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => onSelect(cat.id)}
-              className={`mg-pill${isActive ? ' mg-pill--active' : ''}`}
-              aria-pressed={isActive}
-            >
-              {cat.name}
-              <span className="mg-pill-count">{count}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
+
 
 function SearchBar({
   value, onChange, onClear, placeholder,
@@ -377,14 +352,14 @@ export function MenuGrid({
   const menuType = activeMenuType ?? 'food'
   const isBarView = menuType === 'bar'
 const { t, plural } = useTranslation()
-  const [query, setQuery] = useState('')
- const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+ const [query, setQuery] = useState('')
+const [openCategoryIds, setOpenCategoryIds] = useState<Set<string>>(new Set())
 
 const [lastMenuType, setLastMenuType] = useState(menuType)
 if (lastMenuType !== menuType) {
   setLastMenuType(menuType)
   setQuery('')
-  setSelectedCategoryId(null) // was: setOpenCategoryIds(new Set())
+  setOpenCategoryIds(new Set())
 }
 
   const categoriesForType = useMemo(
@@ -452,13 +427,15 @@ const bestSellerItems = useMemo(
 
 // Keep the selection valid; default to the first category whenever
 // nothing is selected, or the selected one disappears (e.g. menu switch).
-const firstCategoryId = categoriesWithItems[0]?.id ?? null
-if (
-  (selectedCategoryId === null || !categoriesWithItems.some((c) => c.id === selectedCategoryId)) &&
-  selectedCategoryId !== firstCategoryId
-) {
-  setSelectedCategoryId(firstCategoryId)
-}
+
+const toggleCategory = useCallback((id: string) => {
+  setOpenCategoryIds((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+}, [])
 
   const handleClearSearch = useCallback(() => {
     setQuery('')
@@ -795,18 +772,7 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   <SearchResults results={searchResults} emptyLabel={emptyLabel} onAsk={onAsk} />
 ) : (
   <>
-    {categoriesWithItems.length > 0 && (
-      <CategoryPillBar
-        categories={categoriesWithItems}
-        counts={categoryCounts}
-        selectedId={selectedCategoryId}
-        onSelect={setSelectedCategoryId}
-      />
-    )}
-
-    {selectedCategoryId && (() => {
-      const cat = categoriesWithItems.find((c) => c.id === selectedCategoryId)
-      if (!cat) return null
+    {categoriesWithItems.map((cat) => {
       const catItems = translatedItems.filter((i) => i.category_id === cat.id && i.is_available)
       if (catItems.length === 0) return null
       return (
@@ -817,9 +783,11 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
           showChefsPick
           onAsk={onAsk}
           pickLabel={pickLabel}
+          isOpen={openCategoryIds.has(cat.id)}
+          onToggle={() => toggleCategory(cat.id)}
         />
       )
-    })()}
+    })}
   </>
 )}
       </div>

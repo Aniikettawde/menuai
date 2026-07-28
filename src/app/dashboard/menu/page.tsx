@@ -8,10 +8,41 @@ import {
   ArrowLeft, Camera, ChevronRight, Clock, ImagePlus, Loader2,
   MoreVertical, Pencil, Plus, Sparkles, Trash2, UtensilsCrossed,
   X, ToggleLeft, ToggleRight, Flame, Leaf, Zap, Settings2, GripVertical,
-  CheckSquare, Circle, Link2, Search, Check,
+  CheckSquare, Circle, Link2, Search,
 } from 'lucide-react'
 import { TodaysSpecialPicker } from '@/components/TodaysSpecialPicker'
 const BOTTOM_NAV_H = 72
+
+// ─── Brand tokens (mirrors the ivory/burgundy system used across the dashboard) ──
+const BRAND = {
+  ivory: '#FBF6EC',
+  ivorySoft: '#F3ECDD',
+  ivoryDeep: '#F8F3E7',
+  card: '#FFFFFF',
+  line: '#E7DDC9',
+  ink: '#2B211F',
+  inkSoft: '#6E5F57',
+  inkFaint: '#9C8F86',
+  burgundy: '#7A2333',
+  burgundyDark: '#5C1A27',
+  burgundyLight: '#9B3049',
+  gold: '#C08A2E',
+  goldDeep: '#8A5E14',
+  sky: '#3E6FA6',
+  skyDeep: '#2E5883',
+  emerald: '#2F7A5C',
+  plum: '#6B4C7A',
+  rose: '#B23B4A',
+  magenta: '#A8446B',
+}
+
+const cardBase = 'rounded-2xl border shadow-[0_1px_2px_rgba(43,33,31,0.04)]'
+const cardStyle = { borderColor: BRAND.line, background: BRAND.card }
+const sheetStyle = { background: BRAND.card }
+const softStyle = { borderColor: BRAND.line, background: BRAND.ivory }
+
+const INPUT = 'w-full rounded-2xl border px-4 py-3 text-sm placeholder:opacity-60 focus:outline-none focus:ring-1 transition'
+const INPUT_STYLE = { borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.ink }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,16 +150,16 @@ function BottomSheet({
 }) {
   return (
     <div
-      className={`fixed inset-x-0 top-0 ${zIndex} flex flex-col justify-end bg-black/70 sm:inset-0 sm:items-center sm:justify-center sm:p-3`}
+      className={`fixed inset-x-0 top-0 ${zIndex} flex flex-col justify-end bg-black/50 sm:inset-0 sm:items-center sm:justify-center sm:p-3`}
       style={{ bottom: `${BOTTOM_NAV_H}px` }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`w-full ${maxWidthClass} flex flex-col overflow-hidden rounded-t-3xl border border-zinc-800 bg-[#111111] shadow-2xl sm:rounded-3xl`}
-        style={{ maxHeight: '100%' }}
+        className={`w-full ${maxWidthClass} flex flex-col overflow-hidden rounded-t-3xl border shadow-2xl sm:rounded-3xl`}
+        style={{ ...sheetStyle, borderColor: BRAND.line, maxHeight: '100%' }}
       >
         <div className="flex justify-center pt-2.5 pb-0 sm:hidden shrink-0">
-          <div className="h-1 w-10 rounded-full bg-zinc-700" />
+          <div className="h-1 w-10 rounded-full" style={{ background: BRAND.line }} />
         </div>
         {children}
       </div>
@@ -192,14 +223,15 @@ function PairingSelector({
           {selectedNames.map((name) => (
             <span
               key={name}
-              className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400"
+              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium"
+              style={{ borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}1A`, color: BRAND.goldDeep }}
             >
               <Link2 size={9} />
               {name}
               <button
                 type="button"
                 onClick={() => removePairing(name)}
-                className="ml-0.5 text-amber-600 hover:text-amber-300"
+                className="ml-0.5 opacity-70 hover:opacity-100"
               >
                 <X size={9} />
               </button>
@@ -210,21 +242,22 @@ function PairingSelector({
 
       {/* Search / trigger input */}
       <div className="relative">
-        <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+        <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: BRAND.inkFaint }} />
         <input
           value={search}
           onFocus={() => setOpen(true)}
           onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
           placeholder={`Search your ${isBar ? 'drinks' : 'dishes'} to pair…`}
-          className="w-full rounded-2xl border border-zinc-700/60 bg-zinc-800/50 py-3 pl-9 pr-4 text-sm text-white placeholder-zinc-500 focus:border-orange-500/60 focus:outline-none focus:ring-1 focus:ring-orange-500/20 transition"
+          className={`${INPUT} pl-9`}
+          style={INPUT_STYLE}
         />
       </div>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-20 mt-1.5 max-h-56 w-full overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 shadow-xl">
+        <div className="absolute z-20 mt-1.5 max-h-56 w-full overflow-y-auto rounded-2xl border shadow-xl" style={cardStyle}>
           {options.length === 0 ? (
-            <div className="px-4 py-3 text-xs text-zinc-500">
+            <div className="px-4 py-3 text-xs" style={{ color: BRAND.inkFaint }}>
               {allItems.length <= 1
                 ? 'Add a few more items to your menu first.'
                 : search.trim()
@@ -237,15 +270,15 @@ function PairingSelector({
                 key={item.id}
                 type="button"
                 onClick={() => addPairing(item.name)}
-                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-zinc-800"
+                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-black/[0.03]"
               >
                 {item.image_url
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={resolveMenuImageUrl(item.image_url)} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
-                  : <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-sm">{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
+                  : <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm" style={{ background: BRAND.ivorySoft }}>{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
                 }
-                <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{item.name}</span>
-                <span className="shrink-0 text-xs text-zinc-600">₹{((Number(item.price) || 0) / 100).toFixed(0)}</span>
+                <span className="min-w-0 flex-1 truncate text-sm" style={{ color: BRAND.ink }}>{item.name}</span>
+                <span className="shrink-0 text-xs" style={{ color: BRAND.inkFaint }}>₹{((Number(item.price) || 0) / 100).toFixed(0)}</span>
               </button>
             ))
           )}
@@ -332,31 +365,35 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
 
   return (
     <BottomSheet onClose={onClose}>
-      <div className="shrink-0 border-b border-white/[0.06] px-4 py-3.5">
+      <div className="shrink-0 border-b px-4 py-3.5" style={{ borderColor: BRAND.line }}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-orange-400">
+            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: BRAND.burgundy }}>
               <Sparkles size={16} /> AI Menu Import
             </div>
-            <p className="mt-1 text-xs text-zinc-500">Powered by Gemini · auto-fills pairings too</p>
+            <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>Powered by Gemini · auto-fills pairings too</p>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
+          <button onClick={onClose} className="rounded-xl p-2 transition hover:bg-black/[0.04]" style={{ color: BRAND.inkFaint }}><X size={16} /></button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {error && <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
+        {error && (
+          <div className="mb-4 rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}14`, color: BRAND.rose }}>
+            {error}
+          </div>
+        )}
 
         {step === 'choose' && (
           <div className="space-y-3">
-            <p className="text-sm text-zinc-400">Upload a photo or file of your menu — AI will extract all dishes and auto-suggest pairings.</p>
-            <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-4 rounded-2xl border border-zinc-700/60 bg-zinc-800/40 p-4 text-left transition hover:border-orange-500/50 hover:bg-zinc-800/80">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400"><Camera size={20} /></div>
-              <div><p className="text-sm font-semibold text-white">Scan Photo</p><p className="text-xs text-zinc-500">Take a photo of your menu</p></div>
+            <p className="text-sm" style={{ color: BRAND.inkSoft }}>Upload a photo or file of your menu — AI will extract all dishes and auto-suggest pairings.</p>
+            <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition hover:shadow-[0_2px_10px_rgba(122,35,51,0.08)]" style={softStyle}>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}><Camera size={20} /></div>
+              <div><p className="text-sm font-semibold" style={{ color: BRAND.ink }}>Scan Photo</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>Take a photo of your menu</p></div>
             </button>
-            <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-4 rounded-2xl border border-zinc-700/60 bg-zinc-800/40 p-4 text-left transition hover:border-amber-500/50 hover:bg-zinc-800/80">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400"><ImagePlus size={20} /></div>
-              <div><p className="text-sm font-semibold text-white">Upload File</p><p className="text-xs text-zinc-500">PDF, JPG, PNG, WEBP</p></div>
+            <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition hover:shadow-[0_2px_10px_rgba(192,138,46,0.08)]" style={softStyle}>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: `${BRAND.gold}14`, color: BRAND.goldDeep }}><ImagePlus size={20} /></div>
+              <div><p className="text-sm font-semibold" style={{ color: BRAND.ink }}>Upload File</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>PDF, JPG, PNG, WEBP</p></div>
             </button>
             <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f) }} />
@@ -365,37 +402,37 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
 
         {step === 'scanning' && (
           <div className="py-10 text-center">
-            <Loader2 className="mx-auto animate-spin text-orange-400" size={28} />
-            <p className="mt-4 text-sm font-medium text-white">{progress}</p>
-            <p className="mt-1 text-xs text-zinc-500">Usually takes 5–15 seconds</p>
+            <Loader2 className="mx-auto animate-spin" style={{ color: BRAND.burgundy }} size={28} />
+            <p className="mt-4 text-sm font-medium" style={{ color: BRAND.ink }}>{progress}</p>
+            <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>Usually takes 5–15 seconds</p>
           </div>
         )}
 
         {step === 'preview' && result && (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-4">
-              <p className="text-sm font-semibold text-green-300">Scan complete!</p>
-              <p className="mt-1 text-xs text-zinc-400">Found {result.categories.length} categories and {totalItems} dishes. Pairings auto-filled where possible.</p>
+            <div className="rounded-2xl border p-4" style={{ borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}14` }}>
+              <p className="text-sm font-semibold" style={{ color: BRAND.emerald }}>Scan complete!</p>
+              <p className="mt-1 text-xs" style={{ color: BRAND.inkSoft }}>Found {result.categories.length} categories and {totalItems} dishes. Pairings auto-filled where possible.</p>
             </div>
             <div className="space-y-3">
               {result.categories.map((cat) => (
-                <div key={cat.name} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+                <div key={cat.name} className="rounded-2xl border p-4" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="font-semibold text-white">{cat.name}</p>
-                    <p className="text-xs text-zinc-500">{cat.items.length} dishes</p>
+                    <p className="font-semibold" style={{ color: BRAND.ink }}>{cat.name}</p>
+                    <p className="text-xs" style={{ color: BRAND.inkFaint }}>{cat.items.length} dishes</p>
                   </div>
                   <div className="space-y-2">
                     {cat.items.map((item) => (
-                      <div key={`${cat.name}-${item.name}`} className="rounded-xl bg-black/20 px-3 py-2">
+                      <div key={`${cat.name}-${item.name}`} className="rounded-xl px-3 py-2" style={{ background: BRAND.ivoryDeep }}>
                         <div className="flex items-center justify-between">
                           <div className="min-w-0">
-                            <p className="truncate text-sm text-zinc-200">{item.is_veg ? '🟢' : '🔴'} {item.name}</p>
-                            {item.description && <p className="truncate text-xs text-zinc-500">{item.description}</p>}
+                            <p className="truncate text-sm" style={{ color: BRAND.ink }}>{item.is_veg ? '🟢' : '🔴'} {item.name}</p>
+                            {item.description && <p className="truncate text-xs" style={{ color: BRAND.inkFaint }}>{item.description}</p>}
                           </div>
-                          {typeof item.price === 'number' && <span className="shrink-0 text-sm text-orange-400 ml-2">₹{item.price}</span>}
+                          {typeof item.price === 'number' && <span className="shrink-0 text-sm ml-2" style={{ color: BRAND.burgundy }}>₹{item.price}</span>}
                         </div>
                         {item.best_with && item.best_with.length > 0 && (
-                          <p className="mt-1 text-[10px] text-amber-400/80">
+                          <p className="mt-1 text-[10px]" style={{ color: BRAND.goldDeep }}>
                             🔗 Pairs with: {item.best_with.join(', ')}
                           </p>
                         )}
@@ -405,32 +442,32 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
                 </div>
               ))}
             </div>
-            <p className="text-xs text-zinc-500">You can edit pairings or any dish details after importing.</p>
+            <p className="text-xs" style={{ color: BRAND.inkFaint }}>You can edit pairings or any dish details after importing.</p>
           </div>
         )}
 
         {step === 'importing' && (
           <div className="py-10 text-center">
-            <Loader2 className="mx-auto animate-spin text-orange-400" size={28} />
-            <p className="mt-4 text-sm font-medium text-white">Adding to your menu…</p>
+            <Loader2 className="mx-auto animate-spin" style={{ color: BRAND.burgundy }} size={28} />
+            <p className="mt-4 text-sm font-medium" style={{ color: BRAND.ink }}>Adding to your menu…</p>
           </div>
         )}
 
         {step === 'done' && (
           <div className="py-8 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/15 text-green-400"><Sparkles size={24} /></div>
-            <p className="mt-4 text-lg font-bold text-white">Menu imported! 🎉</p>
-            <p className="mt-1 text-sm text-zinc-500">{totalItems} dishes added across {result?.categories.length} categories</p>
-            <button onClick={onClose} className="mt-6 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white hover:bg-orange-400">View Menu</button>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: `${BRAND.emerald}1F`, color: BRAND.emerald }}><Sparkles size={24} /></div>
+            <p className="mt-4 text-lg font-bold" style={{ color: BRAND.ink }}>Menu imported! 🎉</p>
+            <p className="mt-1 text-sm" style={{ color: BRAND.inkFaint }}>{totalItems} dishes added across {result?.categories.length} categories</p>
+            <button onClick={onClose} className="mt-6 rounded-2xl px-5 py-3 text-sm font-semibold text-white transition active:scale-95" style={{ background: BRAND.burgundy }}>View Menu</button>
           </div>
         )}
       </div>
 
       {step === 'preview' && result && (
-        <div className="shrink-0 border-t border-white/[0.06] bg-[#111111] px-4 py-4">
+        <div className="shrink-0 border-t px-4 py-4" style={{ borderColor: BRAND.line, background: BRAND.card }}>
           <div className="flex gap-3">
-            <button onClick={() => { setResult(null); setStep('choose') }} className="flex-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-3.5 text-sm font-medium text-zinc-300 hover:bg-zinc-700">Try Again</button>
-            <button onClick={() => void handleImport()} className="flex-[2] rounded-2xl bg-orange-500 py-3.5 text-sm font-bold text-white hover:bg-orange-400">Import {totalItems} Dishes →</button>
+            <button onClick={() => { setResult(null); setStep('choose') }} className="flex-1 rounded-2xl border py-3.5 text-sm font-medium transition hover:bg-black/[0.03]" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>Try Again</button>
+            <button onClick={() => void handleImport()} className="flex-[2] rounded-2xl py-3.5 text-sm font-bold text-white transition active:scale-[0.98]" style={{ background: BRAND.burgundy }}>Import {totalItems} Dishes →</button>
           </div>
         </div>
       )}
@@ -452,34 +489,34 @@ function ItemActionSheet({ item, onClose, onEdit, onDelete, onToggle, onCustomiz
             {item.image_url
               // eslint-disable-next-line @next/next/no-img-element
               ? <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-14 w-14 rounded-2xl object-cover" />
-              : <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-800 text-2xl">{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
+              : <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-2xl" style={{ background: BRAND.ivorySoft }}>{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
             }
             <div>
-              <p className="font-semibold text-white">{item.name}</p>
-              <p className="text-sm text-zinc-500">₹{((Number(item.price) || 0) / 100).toFixed(0)}</p>
+              <p className="font-semibold" style={{ color: BRAND.ink }}>{item.name}</p>
+              <p className="text-sm" style={{ color: BRAND.inkFaint }}>₹{((Number(item.price) || 0) / 100).toFixed(0)}</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
+          <button onClick={onClose} className="rounded-xl p-2 transition hover:bg-black/[0.04]" style={{ color: BRAND.inkFaint }}><X size={16} /></button>
         </div>
         <div className="space-y-2">
-          <button onClick={() => { onToggle(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/40 px-4 py-4 text-left hover:bg-zinc-800 active:scale-[0.99] transition">
-            {item.is_available ? <ToggleRight size={18} className="text-green-400 shrink-0" /> : <ToggleLeft size={18} className="text-zinc-400 shrink-0" />}
+          <button onClick={() => { onToggle(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left transition hover:bg-black/[0.03] active:scale-[0.99]" style={softStyle}>
+            {item.is_available ? <ToggleRight size={18} className="shrink-0" style={{ color: BRAND.emerald }} /> : <ToggleLeft size={18} className="shrink-0" style={{ color: BRAND.inkFaint }} />}
             <div>
-              <p className="text-sm font-medium text-zinc-200">{item.is_available ? 'Mark as Unavailable' : 'Mark as Available'}</p>
-              <p className="text-xs text-zinc-500">{item.is_available ? 'Hide from customers temporarily' : 'Show to customers again'}</p>
+              <p className="text-sm font-medium" style={{ color: BRAND.ink }}>{item.is_available ? 'Mark as Unavailable' : 'Mark as Available'}</p>
+              <p className="text-xs" style={{ color: BRAND.inkFaint }}>{item.is_available ? 'Hide from customers temporarily' : 'Show to customers again'}</p>
             </div>
           </button>
-          <button onClick={() => { onEdit(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/40 px-4 py-4 text-left hover:bg-zinc-800 active:scale-[0.99] transition">
-            <Pencil size={18} className="text-orange-400 shrink-0" />
-            <div><p className="text-sm font-medium text-zinc-200">Edit {isBar ? 'Drink' : 'Dish'}</p><p className="text-xs text-zinc-500">Update name, price, description…</p></div>
+          <button onClick={() => { onEdit(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left transition hover:bg-black/[0.03] active:scale-[0.99]" style={softStyle}>
+            <Pencil size={18} className="shrink-0" style={{ color: BRAND.burgundy }} />
+            <div><p className="text-sm font-medium" style={{ color: BRAND.ink }}>Edit {isBar ? 'Drink' : 'Dish'}</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>Update name, price, description…</p></div>
           </button>
-          <button onClick={() => { onCustomize(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/40 px-4 py-4 text-left hover:bg-zinc-800 active:scale-[0.99] transition">
-            <Settings2 size={18} className="text-purple-400 shrink-0" />
-            <div><p className="text-sm font-medium text-zinc-200">{isBar ? 'Serving Sizes & Variants' : 'Customisation Options'}</p><p className="text-xs text-zinc-500">{isBar ? 'e.g. 30ml / 60ml, Pint / Bottle' : 'Add choices like base, size, extras'}</p></div>
+          <button onClick={() => { onCustomize(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left transition hover:bg-black/[0.03] active:scale-[0.99]" style={softStyle}>
+            <Settings2 size={18} className="shrink-0" style={{ color: BRAND.plum }} />
+            <div><p className="text-sm font-medium" style={{ color: BRAND.ink }}>{isBar ? 'Serving Sizes & Variants' : 'Customisation Options'}</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>{isBar ? 'e.g. 30ml / 60ml, Pint / Bottle' : 'Add choices like base, size, extras'}</p></div>
           </button>
-          <button onClick={() => { onDelete(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-4 text-left hover:bg-red-500/10 active:scale-[0.99] transition">
-            <Trash2 size={18} className="text-red-400 shrink-0" />
-            <div><p className="text-sm font-medium text-zinc-200">Delete {isBar ? 'Drink' : 'Dish'}</p><p className="text-xs text-zinc-500">This cannot be undone</p></div>
+          <button onClick={() => { onDelete(); onClose() }} className="flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left transition hover:opacity-90 active:scale-[0.99]" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}0D` }}>
+            <Trash2 size={18} className="shrink-0" style={{ color: BRAND.rose }} />
+            <div><p className="text-sm font-medium" style={{ color: BRAND.ink }}>Delete {isBar ? 'Drink' : 'Dish'}</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>This cannot be undone</p></div>
           </button>
         </div>
       </div>
@@ -580,43 +617,44 @@ function CustomiseOptionsModal({
 
   return (
     <BottomSheet onClose={onClose} zIndex="z-[80]" maxWidthClass="max-w-2xl">
-      <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
+      <div className="flex shrink-0 items-center justify-between border-b px-4 py-3.5" style={{ borderColor: BRAND.line }}>
         <div>
-          <div className="flex items-center gap-2 text-sm font-bold text-purple-400">
+          <div className="flex items-center gap-2 text-sm font-bold" style={{ color: BRAND.plum }}>
             <Settings2 size={15} /> {isBar ? 'Serving Sizes & Variants' : 'Customisation Options'}
           </div>
-          <p className="mt-0.5 text-xs text-zinc-500 truncate max-w-[240px]">{item.name}</p>
+          <p className="mt-0.5 text-xs truncate max-w-[240px]" style={{ color: BRAND.inkFaint }}>{item.name}</p>
         </div>
-        <button onClick={onClose} className="rounded-xl p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
+        <button onClick={onClose} className="rounded-xl p-2 transition hover:bg-black/[0.04]" style={{ color: BRAND.inkFaint }}><X size={16} /></button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 px-4 py-3">
-          <p className="text-xs text-purple-300 font-medium">
+        <div className="rounded-2xl border px-4 py-3" style={{ borderColor: `${BRAND.plum}33`, background: `${BRAND.plum}14` }}>
+          <p className="text-xs font-medium" style={{ color: BRAND.plum }}>
             {isBar ? 'What are serving sizes & variants?' : 'What are customisation options?'}
           </p>
-          <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
+          <p className="mt-1 text-xs leading-relaxed" style={{ color: BRAND.inkSoft }}>
             {isBar ? (
-              <>Set up sizes like <span className="text-zinc-300 font-medium">30ml / 60ml / 90ml</span>, or <span className="text-zinc-300 font-medium">Pint / Bottle</span> — each with its own price. Use a quick preset below or build your own.</>
+              <>Set up sizes like <span className="font-medium" style={{ color: BRAND.ink }}>30ml / 60ml / 90ml</span>, or <span className="font-medium" style={{ color: BRAND.ink }}>Pint / Bottle</span> — each with its own price. Use a quick preset below or build your own.</>
             ) : (
-              <><span className="text-zinc-300 font-medium">Add-ons</span> let customers add extras on top of the dish price (e.g. "Extra cheese +₹50"). <span className="text-zinc-300 font-medium">Variants</span> let customers pick a version that has its own price, replacing the dish price entirely (e.g. "Half Plate ₹320 / Full Plate ₹640").</>
+              <><span className="font-medium" style={{ color: BRAND.ink }}>Add-ons</span> let customers add extras on top of the dish price (e.g. &quot;Extra cheese +₹50&quot;). <span className="font-medium" style={{ color: BRAND.ink }}>Variants</span> let customers pick a version that has its own price, replacing the dish price entirely (e.g. &quot;Half Plate ₹320 / Full Plate ₹640&quot;).</>
             )}
           </p>
         </div>
 
         {isBar && (
           <div>
-            <p className="mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">Quick presets</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider px-1" style={{ color: BRAND.inkFaint }}>Quick presets</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {BAR_VARIANT_PRESETS.map((preset) => (
                 <button
                   key={preset.key}
                   type="button"
                   onClick={() => addPreset(preset)}
-                  className="flex flex-col items-start gap-1 rounded-2xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-left transition hover:border-amber-500/50 hover:bg-amber-500/10"
+                  className="flex flex-col items-start gap-1 rounded-2xl border px-3 py-2.5 text-left transition hover:shadow-[0_2px_10px_rgba(192,138,46,0.1)]"
+                  style={{ borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}0D` }}
                 >
                   <span className="text-lg">{preset.icon}</span>
-                  <span className="text-xs font-semibold text-amber-200 leading-tight">{preset.label}</span>
+                  <span className="text-xs font-semibold leading-tight" style={{ color: BRAND.goldDeep }}>{preset.label}</span>
                 </button>
               ))}
             </div>
@@ -624,10 +662,10 @@ function CustomiseOptionsModal({
         )}
 
         {drafts.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-zinc-700 p-8 text-center">
-            <Settings2 size={24} className="mx-auto text-zinc-600 mb-3" />
-            <p className="text-sm font-medium text-zinc-400">No options yet</p>
-            <p className="mt-1 text-xs text-zinc-600">
+          <div className="rounded-2xl border border-dashed p-8 text-center" style={{ borderColor: BRAND.line }}>
+            <Settings2 size={24} className="mx-auto mb-3" style={{ color: BRAND.inkFaint }} />
+            <p className="text-sm font-medium" style={{ color: BRAND.inkSoft }}>No options yet</p>
+            <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>
               {isBar ? 'Tap a preset above, or add a custom group like "Size" or "Strength"' : 'Add option groups like "Choose base", "Size", "Extras"'}
             </p>
           </div>
@@ -636,63 +674,72 @@ function CustomiseOptionsModal({
         {drafts.map((opt, optIdx) => {
           const isOverride = opt.price_mode === 'override'
           return (
-            <div key={optIdx} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-              <div className="p-4 space-y-3 border-b border-zinc-800/60">
+            <div key={optIdx} className="rounded-2xl border overflow-hidden" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+              <div className="p-4 space-y-3 border-b" style={{ borderColor: BRAND.line }}>
                 <div className="flex items-center gap-2">
-                  <GripVertical size={16} className="text-zinc-600 shrink-0" />
+                  <GripVertical size={16} className="shrink-0" style={{ color: BRAND.inkFaint }} />
                   <input
                     value={opt.name}
                     onChange={(e) => updateOption(optIdx, { name: e.target.value })}
                     placeholder={isBar ? 'Group name, e.g. "Serving Size"' : 'Group name, e.g. "Choose base"'}
                     className={`${INPUT} flex-1`}
+                    style={INPUT_STYLE}
                   />
-                  <button onClick={() => removeOption(optIdx)} className="shrink-0 rounded-xl p-2 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 transition">
+                  <button onClick={() => removeOption(optIdx)} className="shrink-0 rounded-xl p-2 transition hover:opacity-80" style={{ color: BRAND.inkFaint }}>
                     <Trash2 size={15} />
                   </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     onClick={() => updateOption(optIdx, { is_required: !opt.is_required })}
-                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${opt.is_required ? 'border-orange-500/40 bg-orange-500/15 text-orange-400' : 'border-zinc-700 bg-zinc-800/50 text-zinc-500'}`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition"
+                    style={opt.is_required
+                      ? { borderColor: `${BRAND.burgundy}40`, background: `${BRAND.burgundy}1A`, color: BRAND.burgundy }
+                      : { borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkFaint }}
                   >
                     {opt.is_required ? '★ Required' : '☆ Optional'}
                   </button>
-                  <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-1">
+                  <div className="flex items-center gap-1.5 rounded-xl border p-1" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }}>
                     <button
                       onClick={() => updateOption(optIdx, { max_selections: 1, min_selections: 0 })}
-                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.max_selections === 1 ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition"
+                      style={opt.max_selections === 1 ? { background: BRAND.card, color: BRAND.ink } : { color: BRAND.inkFaint }}
                     >
                       <Circle size={10} /> Single
                     </button>
                     <button
                       onClick={() => updateOption(optIdx, { max_selections: Math.max(2, opt.choices.length) })}
-                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.max_selections > 1 ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition"
+                      style={opt.max_selections > 1 ? { background: BRAND.card, color: BRAND.ink } : { color: BRAND.inkFaint }}
                     >
                       <CheckSquare size={10} /> Multiple
                     </button>
                   </div>
-                  <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-1">
+                  <div className="flex items-center gap-1.5 rounded-xl border p-1" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }}>
                     <button
                       onClick={() => updateOption(optIdx, { price_mode: 'add' })}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${opt.price_mode === 'add' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      className="rounded-lg px-2.5 py-1 text-xs font-medium transition"
+                      style={opt.price_mode === 'add' ? { background: BRAND.card, color: BRAND.ink } : { color: BRAND.inkFaint }}
                     >
                       Add-on (+₹)
                     </button>
                     <button
                       onClick={() => updateOption(optIdx, { price_mode: 'override' })}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${isOverride ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      className="rounded-lg px-2.5 py-1 text-xs font-medium transition"
+                      style={isOverride ? { background: BRAND.card, color: BRAND.ink } : { color: BRAND.inkFaint }}
                     >
                       Variant (sets price)
                     </button>
                   </div>
                   {opt.max_selections > 1 && (
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                    <div className="flex items-center gap-1.5 text-xs" style={{ color: BRAND.inkFaint }}>
                       <span>Max</span>
                       <input
                         type="number" min={1} max={20}
                         value={opt.max_selections}
                         onChange={(e) => updateOption(optIdx, { max_selections: Math.max(1, parseInt(e.target.value) || 1) })}
-                        className="w-14 rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-1 text-center text-xs text-white focus:outline-none focus:border-purple-500/60"
+                        className="w-14 rounded-xl border px-2 py-1 text-center text-xs focus:outline-none"
+                        style={{ borderColor: BRAND.line, background: BRAND.card, color: BRAND.ink }}
                       />
                       <span>choices</span>
                     </div>
@@ -701,36 +748,40 @@ function CustomiseOptionsModal({
               </div>
 
               <div className="p-3 space-y-2">
-                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">
-                  Choices {isOverride && <span className="text-zinc-600">— enter each variant's full price</span>}
+                <p className="text-xs font-semibold uppercase tracking-wider px-1" style={{ color: BRAND.inkFaint }}>
+                  Choices {isOverride && <span style={{ color: BRAND.inkFaint }}>— enter each variant&apos;s full price</span>}
                 </p>
                 {opt.choices.map((choice, choiceIdx) => (
                   <div key={choiceIdx} className="flex items-center gap-2">
-                    <GripVertical size={14} className="text-zinc-700 shrink-0" />
+                    <GripVertical size={14} className="shrink-0" style={{ color: BRAND.inkFaint }} />
                     <button
                       onClick={() => updateChoice(optIdx, choiceIdx, { is_default: !choice.is_default })}
-                      className={`h-5 w-5 shrink-0 rounded-full border-2 transition ${choice.is_default ? 'border-orange-500 bg-orange-500' : 'border-zinc-600 bg-transparent hover:border-orange-400'}`}
+                      className="h-5 w-5 shrink-0 rounded-full border-2 transition"
+                      style={choice.is_default ? { borderColor: BRAND.burgundy, background: BRAND.burgundy } : { borderColor: BRAND.line, background: 'transparent' }}
                     />
                     <input
                       value={choice.name}
                       onChange={(e) => updateChoice(optIdx, choiceIdx, { name: e.target.value })}
                       placeholder={`Choice ${choiceIdx + 1}, e.g. ${isBar ? '60 ml' : 'Chapati'}`}
                       className={`${INPUT} flex-1 min-w-0 py-2 text-xs`}
+                      style={{ ...INPUT_STYLE, background: BRAND.card }}
                     />
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-xs text-zinc-600">{isOverride ? '₹' : '+₹'}</span>
+                      <span className="text-xs" style={{ color: BRAND.inkFaint }}>{isOverride ? '₹' : '+₹'}</span>
                       <input
                         type="number" min={0}
                         value={choice.extra_price ? (choice.extra_price / 100).toFixed(0) : ''}
                         onChange={(e) => updateChoice(optIdx, choiceIdx, { extra_price: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 })}
                         placeholder="0"
-                        className="w-14 rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-2 text-center text-xs text-white focus:outline-none focus:border-purple-500/60"
+                        className="w-14 rounded-xl border px-2 py-2 text-center text-xs focus:outline-none"
+                        style={{ borderColor: BRAND.line, background: BRAND.card, color: BRAND.ink }}
                       />
                     </div>
                     <button
                       onClick={() => removeChoice(optIdx, choiceIdx)}
                       disabled={opt.choices.length <= 1}
-                      className="shrink-0 rounded-lg p-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-30 transition"
+                      className="shrink-0 rounded-lg p-1.5 transition hover:opacity-80 disabled:opacity-30"
+                      style={{ color: BRAND.inkFaint }}
                     >
                       <X size={13} />
                     </button>
@@ -738,14 +789,15 @@ function CustomiseOptionsModal({
                 ))}
                 <button
                   onClick={() => addChoice(optIdx)}
-                  className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 py-2.5 text-xs font-medium text-zinc-500 hover:border-purple-500/40 hover:text-purple-400 transition"
+                  className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed py-2.5 text-xs font-medium transition hover:opacity-80"
+                  style={{ borderColor: BRAND.line, color: BRAND.inkFaint }}
                 >
                   <Plus size={12} /> Add choice
                 </button>
               </div>
 
               <div className="px-3 pb-3">
-                <p className="text-[10px] text-zinc-600">
+                <p className="text-[10px]" style={{ color: BRAND.inkFaint }}>
                   {opt.max_selections === 1 ? '◉ Single select — customer picks one.' : `☑ Multi-select — customer picks up to ${opt.max_selections}.`}
                   {' '}{opt.is_required ? 'Selection is required.' : 'Selection is optional.'}
                   {' '}Filled circle = default pre-selected.
@@ -758,17 +810,18 @@ function CustomiseOptionsModal({
 
         <button
           onClick={addOption}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-700 py-4 text-sm font-semibold text-zinc-500 hover:border-purple-500/40 hover:text-purple-400 transition"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-4 text-sm font-semibold transition hover:opacity-80"
+          style={{ borderColor: BRAND.line, color: BRAND.inkFaint }}
         >
           <Plus size={16} /> Add {isBar ? 'custom' : 'option'} group
         </button>
       </div>
 
-      <div className="shrink-0 border-t border-white/[0.06] bg-[#111111] px-4 py-4">
-        {error && <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-200">{error}</div>}
+      <div className="shrink-0 border-t px-4 py-4" style={{ borderColor: BRAND.line, background: BRAND.card }}>
+        {error && <div className="mb-3 rounded-xl border px-3 py-2.5 text-xs" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}14`, color: BRAND.rose }}>{error}</div>}
         <div className="flex gap-2.5">
-          <button onClick={onClose} className="flex-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-3.5 text-sm font-semibold text-zinc-300 hover:bg-zinc-700 active:scale-[0.98] transition">Cancel</button>
-          <button onClick={() => void handleSave()} disabled={saving} className="flex-[2] rounded-2xl bg-purple-600 py-3.5 text-sm font-bold text-white disabled:opacity-50 active:scale-[0.98] transition hover:bg-purple-500">
+          <button onClick={onClose} className="flex-1 rounded-2xl border py-3.5 text-sm font-semibold transition hover:bg-black/[0.03] active:scale-[0.98]" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>Cancel</button>
+          <button onClick={() => void handleSave()} disabled={saving} className="flex-[2] rounded-2xl py-3.5 text-sm font-bold text-white disabled:opacity-50 active:scale-[0.98] transition" style={{ background: BRAND.plum }}>
             {saving ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" /> Saving…</span> : 'Save Options'}
           </button>
         </div>
@@ -1117,21 +1170,21 @@ export default function MenuPage() {
   if (loading || contextLoading) {
     return (
       <div className="space-y-4">
-        <div className="h-24 animate-pulse rounded-3xl bg-white/[0.04]" />
+        <div className="h-24 animate-pulse rounded-3xl" style={{ background: BRAND.ivorySoft }} />
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          <div className="h-96 animate-pulse rounded-3xl bg-white/[0.04]" />
-          <div className="h-96 animate-pulse rounded-3xl bg-white/[0.04]" />
+          <div className="h-96 animate-pulse rounded-3xl" style={{ background: BRAND.ivorySoft }} />
+          <div className="h-96 animate-pulse rounded-3xl" style={{ background: BRAND.ivorySoft }} />
         </div>
       </div>
     )
   }
 
   if (!restaurant) return (
-    <div className="mx-auto max-w-xl rounded-3xl border border-white/[0.07] bg-[#111111] p-8 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400"><UtensilsCrossed size={22} /></div>
-      <h1 className="mt-4 text-xl font-bold text-white">Set up your restaurant first</h1>
-      <p className="mt-2 text-sm text-zinc-500">Create your restaurant profile before adding menu items.</p>
-      <Link href="/dashboard/restaurant" className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-400">Go to Restaurant</Link>
+    <div className="mx-auto max-w-xl rounded-3xl border p-8 text-center" style={cardStyle}>
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}><UtensilsCrossed size={22} /></div>
+      <h1 className="mt-4 text-xl font-bold" style={{ color: BRAND.ink }}>Set up your restaurant first</h1>
+      <p className="mt-2 text-sm" style={{ color: BRAND.inkFaint }}>Create your restaurant profile before adding menu items.</p>
+      <Link href="/dashboard/restaurant" className="mt-6 inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition active:scale-95" style={{ background: BRAND.burgundy }}>Go to Restaurant</Link>
     </div>
   )
 
@@ -1140,12 +1193,12 @@ export default function MenuPage() {
 
       {/* ══ MOBILE LAYOUT ══ */}
       <div className="lg:hidden space-y-3">
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-[#111111] px-4 py-3">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border px-4 py-3" style={cardStyle}>
           <div>
-            <p className="text-base font-bold text-white">Menu</p>
-            <p className="text-xs text-zinc-500">{totalCategories} categories · {totalDishes} {itemLabel(false, true)}</p>
+            <p className="text-base font-bold" style={{ color: BRAND.ink }}>Menu</p>
+            <p className="text-xs" style={{ color: BRAND.inkFaint }}>{totalCategories} categories · {totalDishes} {itemLabel(false, true)}</p>
           </div>
-          <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-400">
+          <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>
             <Sparkles size={12} /> AI Import
           </button>
         </div>
@@ -1175,16 +1228,16 @@ export default function MenuPage() {
 )}
 
 
-        {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
+        {error && <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}14`, color: BRAND.rose }}>{error}</div>}
 
         {mobileView === 'categories' && (
           <div className="space-y-2">
             {categories.length === 0 ? (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center">
+              <div className="rounded-2xl border p-6 text-center" style={cardStyle}>
                 <p className="text-2xl">🗂️</p>
-                <p className="mt-2 text-sm font-semibold text-white">No categories yet</p>
-                <p className="mt-1 text-xs text-zinc-500">Import your menu with AI or add manually</p>
-                <button onClick={() => setShowImport(true)} className="mt-4 rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-2.5 text-sm font-semibold text-orange-400">Import with AI</button>
+                <p className="mt-2 text-sm font-semibold" style={{ color: BRAND.ink }}>No categories yet</p>
+                <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>Import your menu with AI or add manually</p>
+                <button onClick={() => setShowImport(true)} className="mt-4 rounded-xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>Import with AI</button>
               </div>
             ) : (
               <>
@@ -1204,27 +1257,28 @@ export default function MenuPage() {
                     >
                       <button
                         onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
-                        className={['group flex w-full items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left active:scale-[0.99] transition', draggedCatId === cat.id ? 'ring-2 ring-orange-500/40 opacity-80' : ''].join(' ')}
+                        className="group flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition active:scale-[0.99]"
+                        style={{ ...cardStyle, ...(draggedCatId === cat.id ? { boxShadow: `0 0 0 2px ${BRAND.burgundy}40`, opacity: 0.85 } : {}) }}
                       >
-                        <div className="flex items-center gap-2 shrink-0 text-zinc-600"><GripVertical size={15} /></div>
+                        <div className="flex items-center gap-2 shrink-0" style={{ color: BRAND.inkFaint }}><GripVertical size={15} /></div>
                         <div className="relative shrink-0">
                           {catWithImage.image_url
                             // eslint-disable-next-line @next/next/no-img-element
                             ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
-                            : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-2xl">{isBarTab ? '🍸' : '🍱'}</div>
+                            : <div className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl" style={{ background: BRAND.ivorySoft }}>{isBarTab ? '🍸' : '🍱'}</div>
                           }
                           <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-orange-500 hover:text-white transition">
+                            <div className="flex h-5 w-5 items-center justify-center rounded-full transition" style={{ background: BRAND.line, color: BRAND.inkSoft }}>
                               {catImageUploading === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Camera size={9} />}
                             </div>
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
                           </label>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-zinc-100">{cat.name}</p>
-                          <p className="text-xs text-zinc-500">{count} {itemLabel(false, true)} · {avail} available</p>
+                          <p className="truncate text-sm font-semibold" style={{ color: BRAND.ink }}>{cat.name}</p>
+                          <p className="text-xs" style={{ color: BRAND.inkFaint }}>{count} {itemLabel(false, true)} · {avail} available</p>
                         </div>
-                        <ChevronRight size={16} className="text-zinc-600 shrink-0" />
+                        <ChevronRight size={16} className="shrink-0" style={{ color: BRAND.inkFaint }} />
                       </button>
                     </div>
                   )
@@ -1232,11 +1286,11 @@ export default function MenuPage() {
               </>
             )}
 
-            <div className="rounded-2xl border border-white/[0.07] bg-[#111111] p-4 space-y-2.5 mt-2">
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">New Category</p>
+            <div className="rounded-2xl border p-4 space-y-2.5 mt-2" style={cardStyle}>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.inkSoft }}>New Category</p>
               <div className="flex gap-2">
-                <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder={isBarTab ? 'e.g. Whisky, Beer, Cocktails…' : 'e.g. Starters, Mains…'} className={INPUT} />
-                <button onClick={() => void addCategory()} disabled={addingCat || !newCatName.trim()} className="rounded-xl bg-orange-500 px-4 text-sm font-bold text-white disabled:opacity-40">
+                <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder={isBarTab ? 'e.g. Whisky, Beer, Cocktails…' : 'e.g. Starters, Mains…'} className={INPUT} style={INPUT_STYLE} />
+                <button onClick={() => void addCategory()} disabled={addingCat || !newCatName.trim()} className="rounded-xl px-4 text-sm font-bold text-white disabled:opacity-40" style={{ background: BRAND.burgundy }}>
                   {addingCat ? '…' : '+'}
                 </button>
               </div>
@@ -1248,8 +1302,8 @@ export default function MenuPage() {
                   if (activeCat) setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })
                   else if (categories[0]) { setActiveCat(categories[0].id); setEditingItem({ ...EMPTY_ITEM, category_id: categories[0].id }) }
                 }}
-                className="fixed right-4 z-20 flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/30"
-                style={{ bottom: `${BOTTOM_NAV_H + 12}px` }}
+                className="fixed right-4 z-20 flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold text-white shadow-lg"
+                style={{ bottom: `${BOTTOM_NAV_H + 12}px`, background: BRAND.burgundy, boxShadow: `0 8px 20px ${BRAND.burgundy}40` }}
               >
                 <Plus size={16} /> Add {itemLabel()}
               </button>
@@ -1259,21 +1313,21 @@ export default function MenuPage() {
 
         {mobileView === 'items' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-[#111111] px-4 py-3">
-              <button onClick={() => setMobileView('categories')} className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-300 shrink-0"><ArrowLeft size={16} /></button>
+            <div className="flex items-center justify-between gap-3 rounded-2xl border px-4 py-3" style={cardStyle}>
+              <button onClick={() => setMobileView('categories')} className="flex h-9 w-9 items-center justify-center rounded-xl shrink-0" style={{ background: BRAND.ivorySoft, color: BRAND.inkSoft }}><ArrowLeft size={16} /></button>
               <div className="text-center min-w-0">
-                <p className="truncate text-sm font-bold text-white">{activeCatData?.name ?? 'Category'}</p>
-                <p className="text-xs text-zinc-500">{catItems.length} {catItems.length === 1 ? itemLabel(false) : itemLabel(false, true)}</p>
+                <p className="truncate text-sm font-bold" style={{ color: BRAND.ink }}>{activeCatData?.name ?? 'Category'}</p>
+                <p className="text-xs" style={{ color: BRAND.inkFaint }}>{catItems.length} {catItems.length === 1 ? itemLabel(false) : itemLabel(false, true)}</p>
               </div>
-              <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? '' })} className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-bold text-white shrink-0">
+              <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? '' })} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-white shrink-0" style={{ background: BRAND.burgundy }}>
                 <Plus size={13} /> Add
               </button>
             </div>
             {catItems.length === 0 ? (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-center">
+              <div className="rounded-2xl border p-8 text-center" style={cardStyle}>
                 <p className="text-3xl">{isBarTab ? '🍹' : '🍽️'}</p>
-                <p className="mt-3 text-sm font-semibold text-white">No {itemLabel(false, true)} yet</p>
-                <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? '' })} className="mt-5 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white">+ Add First {itemLabel()}</button>
+                <p className="mt-3 text-sm font-semibold" style={{ color: BRAND.ink }}>No {itemLabel(false, true)} yet</p>
+                <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? '' })} className="mt-5 rounded-xl px-5 py-2.5 text-sm font-semibold text-white" style={{ background: BRAND.burgundy }}>+ Add First {itemLabel()}</button>
               </div>
             ) : (
               <div className="space-y-2">
@@ -1295,24 +1349,24 @@ export default function MenuPage() {
 
       {/* ══ DESKTOP LAYOUT ══ */}
       <div className="hidden lg:block space-y-4">
-       <div className="flex items-center justify-between gap-4 rounded-3xl border border-white/[0.07] bg-[#111111] p-5">
+       <div className="flex items-center justify-between gap-4 rounded-3xl border p-5" style={cardStyle}>
           <div>
-            <p className="text-2xl font-bold text-white">Menu</p>
-            <p className="mt-1 text-sm text-zinc-500">{totalDishes} {itemLabel(false, true)} across {totalCategories} categories</p>
+            <p className="text-2xl font-bold" style={{ color: BRAND.ink }}>Menu</p>
+            <p className="mt-1 text-sm" style={{ color: BRAND.inkFaint }}>{totalDishes} {itemLabel(false, true)} across {totalCategories} categories</p>
           </div>
           <div className="flex items-center gap-3">
             {restaurant?.has_bar_menu && (
               <MenuTabToggle active={menuTab} onChange={(t) => { setMenuTab(t); setActiveCat(null) }} />
             )}
-            <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5 text-sm font-semibold text-orange-400"><Sparkles size={14} /> Import with AI</button>
-            <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? categories[0]?.id ?? '' })} className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={14} /> Add {itemLabel()}</button>
+            <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}><Sparkles size={14} /> Import with AI</button>
+            <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? categories[0]?.id ?? '' })} className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-white" style={{ background: BRAND.burgundy }}><Plus size={14} /> Add {itemLabel()}</button>
           </div>
         </div>
         <div className="grid grid-cols-4 gap-2.5">
-          <DesktopStat value={totalCategories} label="Categories" icon={<UtensilsCrossed size={16} />} color="text-blue-400" bg="bg-blue-500/10" />
-          <DesktopStat value={totalDishes} label={itemLabel(false, true)} icon={<Plus size={16} />} color="text-green-400" bg="bg-green-500/10" />
-          <DesktopStat value={availableDishes} label="Available" icon={<ToggleRight size={16} />} color="text-orange-400" bg="bg-orange-500/10" />
-          <DesktopStat value={bestsellers} label="Bestsellers" icon={<Flame size={16} />} color="text-rose-400" bg="bg-rose-500/10" />
+          <DesktopStat value={totalCategories} label="Categories" icon={<UtensilsCrossed size={16} />} color={BRAND.sky} />
+          <DesktopStat value={totalDishes} label={itemLabel(false, true)} icon={<Plus size={16} />} color={BRAND.emerald} />
+          <DesktopStat value={availableDishes} label="Available" icon={<ToggleRight size={16} />} color={BRAND.burgundy} />
+          <DesktopStat value={bestsellers} label="Bestsellers" icon={<Flame size={16} />} color={BRAND.rose} />
         </div>
 		
 		{restaurant && (
@@ -1321,12 +1375,12 @@ export default function MenuPage() {
     allItems={items}
   />
 )}
-        {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
+        {error && <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}14`, color: BRAND.rose }}>{error}</div>}
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          <aside className="rounded-3xl border border-white/[0.07] bg-[#111111] p-4">
+          <aside className="rounded-3xl border p-4" style={cardStyle}>
             <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm font-semibold text-white">Categories</p>
-              <p className="text-xs text-zinc-500">{categories.length}</p>
+              <p className="text-sm font-semibold" style={{ color: BRAND.ink }}>Categories</p>
+              <p className="text-xs" style={{ color: BRAND.inkFaint }}>{categories.length}</p>
             </div>
             <div className="space-y-1">
               {orderedCategories.map((cat) => {
@@ -1345,32 +1399,36 @@ export default function MenuPage() {
                   >
                     <div
                       onClick={() => setActiveCat(cat.id)}
-                      className={[
-                        `flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-3 transition ${active ? 'bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/20' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'}`,
-                        draggedCatId === cat.id ? 'ring-2 ring-orange-500/40 opacity-80' : '',
-                      ].join(' ')}
+                      className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-3 transition"
+                      style={{
+                        ...(active
+                          ? { background: `${BRAND.burgundy}14`, color: BRAND.burgundy, boxShadow: `inset 0 0 0 1px ${BRAND.burgundy}33` }
+                          : { color: BRAND.inkFaint }),
+                        ...(draggedCatId === cat.id ? { boxShadow: `0 0 0 2px ${BRAND.burgundy}40`, opacity: 0.85 } : {}),
+                      }}
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="flex items-center justify-center text-zinc-600 shrink-0"><GripVertical size={14} /></span>
+                        <span className="flex items-center justify-center shrink-0" style={{ color: BRAND.inkFaint }}><GripVertical size={14} /></span>
                         {catWithImage.image_url
                           // eslint-disable-next-line @next/next/no-img-element
                           ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-8 w-8 rounded-xl object-cover shrink-0" />
-                          : <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-800 text-sm shrink-0">{isBarTab ? '🍸' : '🍱'}</div>
+                          : <div className="flex h-8 w-8 items-center justify-center rounded-xl text-sm shrink-0" style={{ background: BRAND.ivorySoft }}>{isBarTab ? '🍸' : '🍱'}</div>
                         }
                         <span className="truncate text-sm">{cat.name}</span>
                       </div>
                       <span className="flex items-center gap-2 text-xs shrink-0">
-                        <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{count}</span>
+                        <span className="rounded-full px-2 py-0.5" style={{ background: BRAND.ivorySoft }}>{count}</span>
                         <button
                           onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
-                          className="rounded-lg p-1 text-zinc-700 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                          className="rounded-lg p-1 opacity-0 transition hover:opacity-100"
+                          style={{ color: BRAND.rose }}
                         >
                           <Trash2 size={14} />
                         </button>
                       </span>
                     </div>
                     <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900/80 text-zinc-400 hover:bg-orange-500 hover:text-white transition">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-lg transition" style={{ background: `${BRAND.ink}CC`, color: '#fff' }}>
                         {catImageUploading === cat.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
                       </div>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
@@ -1380,31 +1438,31 @@ export default function MenuPage() {
               })}
             </div>
             <div className="mt-4 space-y-2">
-              <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder={isBarTab ? 'e.g. Whisky, Beer, Wine…' : 'New category name…'} className={INPUT} />
-              <button onClick={() => void addCategory()} disabled={addingCat || !newCatName.trim()} className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-orange-500/20 bg-orange-500/10 py-2.5 text-xs font-semibold text-orange-400 disabled:cursor-not-allowed disabled:opacity-40">
+              <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addCategory()} placeholder={isBarTab ? 'e.g. Whisky, Beer, Wine…' : 'New category name…'} className={INPUT} style={INPUT_STYLE} />
+              <button onClick={() => void addCategory()} disabled={addingCat || !newCatName.trim()} className="flex w-full items-center justify-center gap-1.5 rounded-xl border py-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>
                 {addingCat ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                 {addingCat ? 'Adding…' : 'Add Category'}
               </button>
             </div>
           </aside>
 
-          <section className="rounded-3xl border border-white/[0.07] bg-[#111111] p-4">
+          <section className="rounded-3xl border p-4" style={cardStyle}>
             {activeCat ? (
               <>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <div><p className="text-lg font-bold text-white">{activeCatData?.name}</p><p className="text-xs text-zinc-500">{catItems.length} {itemLabel(false, true)}</p></div>
+                  <div><p className="text-lg font-bold" style={{ color: BRAND.ink }}>{activeCatData?.name}</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>{catItems.length} {itemLabel(false, true)}</p></div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white">+ Add {itemLabel()}</button>
-                    <button onClick={() => setShowImport(true)} className="rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-300">Import AI</button>
+                    <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="rounded-2xl px-4 py-2.5 text-sm font-semibold text-white" style={{ background: BRAND.burgundy }}>+ Add {itemLabel()}</button>
+                    <button onClick={() => setShowImport(true)} className="rounded-2xl border px-4 py-2.5 text-sm font-medium" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>Import AI</button>
                   </div>
                 </div>
                 {catItems.length === 0 ? (
-                  <div className="flex min-h-[280px] flex-col items-center justify-center rounded-3xl border border-dashed border-zinc-800 text-center">
+                  <div className="flex min-h-[280px] flex-col items-center justify-center rounded-3xl border border-dashed text-center" style={{ borderColor: BRAND.line }}>
                     <p className="text-2xl">{isBarTab ? '🍹' : '🍽️'}</p>
-                    <p className="mt-2 text-sm font-semibold text-white">No {itemLabel(false, true)} in this category</p>
+                    <p className="mt-2 text-sm font-semibold" style={{ color: BRAND.ink }}>No {itemLabel(false, true)} in this category</p>
                     <div className="mt-5 flex gap-2">
-                      <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white">+ Add {itemLabel()}</button>
-                      <button onClick={() => setShowImport(true)} className="rounded-2xl border border-zinc-700 bg-zinc-800 px-5 py-2.5 text-sm font-medium text-zinc-300">Import with AI</button>
+                      <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="rounded-2xl px-5 py-2.5 text-sm font-semibold text-white" style={{ background: BRAND.burgundy }}>+ Add {itemLabel()}</button>
+                      <button onClick={() => setShowImport(true)} className="rounded-2xl border px-5 py-2.5 text-sm font-medium" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>Import with AI</button>
                     </div>
                   </div>
                 ) : (
@@ -1420,17 +1478,17 @@ export default function MenuPage() {
                         onCustomize={() => setCustomiseItem(item)}
                       />
                     ))}
-                    <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-zinc-800 text-zinc-600 hover:border-orange-500/40 hover:text-orange-500/70 transition">
+                    <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat })} className="flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-3xl border border-dashed transition hover:opacity-80" style={{ borderColor: BRAND.line, color: BRAND.inkFaint }}>
                       <Plus size={24} /><span className="text-sm">Add {itemLabel(false)}</span>
                     </button>
                   </div>
                 )}
               </>
             ) : (
-              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-3xl border border-dashed border-zinc-800 text-center">
+              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-3xl border border-dashed text-center" style={{ borderColor: BRAND.line }}>
                 <p className="text-2xl">🗂️</p>
-                <p className="mt-2 text-sm font-semibold text-white">Select a category</p>
-                <button onClick={() => setShowImport(true)} className="mt-5 rounded-2xl bg-orange-500/10 px-5 py-3 text-sm font-semibold text-orange-400 ring-1 ring-orange-500/20">Import with AI</button>
+                <p className="mt-2 text-sm font-semibold" style={{ color: BRAND.ink }}>Select a category</p>
+                <button onClick={() => setShowImport(true)} className="mt-5 rounded-2xl px-5 py-3 text-sm font-semibold" style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy, boxShadow: `inset 0 0 0 1px ${BRAND.burgundy}33` }}>Import with AI</button>
               </div>
             )}
           </section>
@@ -1440,37 +1498,44 @@ export default function MenuPage() {
       {/* ══ EDIT / ADD ITEM MODAL ══ */}
       {editingItem && (
         <BottomSheet onClose={() => setEditingItem(null)} zIndex="z-[70]">
-          <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
+          <div className="flex shrink-0 items-center justify-between border-b px-4 py-3.5" style={{ borderColor: BRAND.line }}>
             <div>
-              <p className="text-base font-bold text-white">{editingItem.id ? `Edit ${editingIsBar ? 'Drink' : 'Dish'}` : `New ${editingIsBar ? 'Drink' : 'Dish'}`}</p>
-              <p className="text-xs text-zinc-500">Fill in the details below</p>
+              <p className="text-base font-bold" style={{ color: BRAND.ink }}>{editingItem.id ? `Edit ${editingIsBar ? 'Drink' : 'Dish'}` : `New ${editingIsBar ? 'Drink' : 'Dish'}`}</p>
+              <p className="text-xs" style={{ color: BRAND.inkFaint }}>Fill in the details below</p>
             </div>
-            <button onClick={() => setEditingItem(null)} className="rounded-xl p-2 text-zinc-500 hover:bg-white/[0.04] hover:text-white"><X size={16} /></button>
+            <button onClick={() => setEditingItem(null)} className="rounded-xl p-2 transition hover:bg-black/[0.04]" style={{ color: BRAND.inkFaint }}><X size={16} /></button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-5">
             {!editingIsBar && (
               <div className="mb-4 flex gap-2">
                 <button onClick={() => setEditingItem((f) => (f ? { ...f, is_veg: true } : f))}
-                  className={`flex-1 rounded-2xl border py-3 text-sm font-semibold transition ${editingItem.is_veg ? 'border-green-500/50 bg-green-500/15 text-green-400' : 'border-zinc-700 bg-zinc-800/40 text-zinc-500'}`}>
+                  className="flex-1 rounded-2xl border py-3 text-sm font-semibold transition"
+                  style={editingItem.is_veg
+                    ? { borderColor: `${BRAND.emerald}66`, background: `${BRAND.emerald}1A`, color: BRAND.emerald }
+                    : { borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkFaint }}>
                   <Leaf size={13} className="mr-1.5 inline" /> Veg
                 </button>
                 <button onClick={() => setEditingItem((f) => (f ? { ...f, is_veg: false } : f))}
-                  className={`flex-1 rounded-2xl border py-3 text-sm font-semibold transition ${!editingItem.is_veg ? 'border-red-500/50 bg-red-500/15 text-red-400' : 'border-zinc-700 bg-zinc-800/40 text-zinc-500'}`}>
+                  className="flex-1 rounded-2xl border py-3 text-sm font-semibold transition"
+                  style={!editingItem.is_veg
+                    ? { borderColor: `${BRAND.rose}66`, background: `${BRAND.rose}1A`, color: BRAND.rose }
+                    : { borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkFaint }}>
                   <Zap size={13} className="mr-1.5 inline" /> Non-Veg
                 </button>
               </div>
             )}
             <div className="space-y-4">
               <Field label={editingIsBar ? 'Drink Name' : 'Dish Name'}>
-                <input value={editingItem.name ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, name: e.target.value } : f))} placeholder={editingIsBar ? 'e.g. Jack Daniel\'s' : 'e.g. Butter Chicken'} className={INPUT} autoFocus />
+                <input value={editingItem.name ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, name: e.target.value } : f))} placeholder={editingIsBar ? "e.g. Jack Daniel's" : 'e.g. Butter Chicken'} className={INPUT} style={INPUT_STYLE} autoFocus />
               </Field>
               <Field label="Description">
                 <div className="space-y-2">
-                  <textarea value={editingItem.description ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, description: e.target.value } : f))} rows={3} placeholder={editingIsBar ? 'Smooth Tennessee whiskey, oak-aged…' : 'Rich, creamy tomato-based curry…'} className={`${INPUT} resize-none`} />
+                  <textarea value={editingItem.description ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, description: e.target.value } : f))} rows={3} placeholder={editingIsBar ? 'Smooth Tennessee whiskey, oak-aged…' : 'Rich, creamy tomato-based curry…'} className={`${INPUT} resize-none`} style={INPUT_STYLE} />
                   {editingItem.name?.trim() && (
                     <button type="button" onClick={() => void generateDescription()} disabled={descriptionGenerating}
-                      className="inline-flex items-center gap-2 rounded-xl border border-orange-500/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-400 transition hover:bg-orange-500/15 disabled:cursor-not-allowed disabled:opacity-50">
+                      className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>
                       {descriptionGenerating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
                       {editingItem.description?.trim() ? 'Improve with AI' : 'Generate with AI'}
                     </button>
@@ -1481,9 +1546,9 @@ export default function MenuPage() {
                 <input type="number" min={0}
                   value={editingItem.price ? (Number(editingItem.price) / 100).toFixed(0) : ''}
                   onChange={(e) => setEditingItem((f) => f ? { ...f, price: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 } : f)}
-                  placeholder="299" className={INPUT} />
+                  placeholder="299" className={INPUT} style={INPUT_STYLE} />
                 {editingIsBar && (
-                  <p className="mt-1.5 text-xs text-zinc-600">If you add serving sizes/variants below, each size's own price will be shown to customers instead.</p>
+                  <p className="mt-1.5 text-xs" style={{ color: BRAND.inkFaint }}>If you add serving sizes/variants below, each size&apos;s own price will be shown to customers instead.</p>
                 )}
               </Field>
               <Field label="Photo">
@@ -1491,12 +1556,12 @@ export default function MenuPage() {
                   {editingItem.image_url ? (
                     <div className="relative shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={resolveMenuImageUrl(editingItem.image_url)} className="h-16 w-16 rounded-2xl object-cover ring-1 ring-zinc-700" alt="" />
-                      <button onClick={() => setEditingItem((f) => (f ? { ...f, image_url: '' } : f))} className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-zinc-300 hover:bg-red-500 hover:text-white"><X size={11} /></button>
+                      <img src={resolveMenuImageUrl(editingItem.image_url)} className="h-16 w-16 rounded-2xl object-cover" style={{ boxShadow: `0 0 0 1px ${BRAND.line}` }} alt="" />
+                      <button onClick={() => setEditingItem((f) => (f ? { ...f, image_url: '' } : f))} className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full transition hover:opacity-90" style={{ background: BRAND.rose, color: '#fff' }}><X size={11} /></button>
                     </div>
                   ) : null}
                   <label className="flex-1 cursor-pointer">
-                    <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-700 bg-zinc-800/40 py-4 text-sm font-medium text-zinc-400 hover:border-orange-500/40 hover:text-orange-400 transition">
+                    <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed py-4 text-sm font-medium transition" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkFaint }}>
                       {imageUploading ? <><Loader2 size={15} className="animate-spin" /> Uploading…</> : <><ImagePlus size={15} /> {editingItem.image_url ? 'Change Photo' : 'Add Photo'}</>}
                     </div>
                     <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadItemImage(f) }} />
@@ -1515,27 +1580,30 @@ export default function MenuPage() {
                     const fullItem = items.find((i) => i.id === editingItem.id)
                     if (fullItem) { setEditingItem(null); setCustomiseItem(fullItem) }
                   }}
-                  className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${editingIsBar ? 'border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15' : 'border-purple-500/20 bg-purple-500/10 hover:bg-purple-500/15'}`}
+                  className="flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition"
+                  style={editingIsBar
+                    ? { borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}14` }
+                    : { borderColor: `${BRAND.plum}33`, background: `${BRAND.plum}14` }}
                 >
-                  <Settings2 size={16} className={`shrink-0 ${editingIsBar ? 'text-amber-400' : 'text-purple-400'}`} />
+                  <Settings2 size={16} className="shrink-0" style={{ color: editingIsBar ? BRAND.goldDeep : BRAND.plum }} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold ${editingIsBar ? 'text-amber-300' : 'text-purple-300'}`}>{editingIsBar ? 'Serving Sizes & Variants' : 'Customisation Options'}</p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-sm font-semibold" style={{ color: editingIsBar ? BRAND.goldDeep : BRAND.plum }}>{editingIsBar ? 'Serving Sizes & Variants' : 'Customisation Options'}</p>
+                    <p className="text-xs" style={{ color: BRAND.inkFaint }}>
                       {editingItem.id && (optionsByItem[editingItem.id] ?? []).length > 0
                         ? `${(optionsByItem[editingItem.id] ?? []).length} option group(s) configured`
                         : editingIsBar ? 'e.g. 30ml / 60ml / 90ml, Pint / Bottle…' : 'Add choices like base, size, extras…'}
                     </p>
                   </div>
-                  <ChevronRight size={14} className="text-zinc-600 shrink-0" />
+                  <ChevronRight size={14} className="shrink-0" style={{ color: BRAND.inkFaint }} />
                 </button>
               )}
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Prep time (mins)">
-                  <input type="number" min={0} value={editingItem.prep_time_minutes ?? ''} onChange={(e) => setEditingItem((f) => f ? { ...f, prep_time_minutes: e.target.value ? parseInt(e.target.value) : undefined } : f)} placeholder="20" className={INPUT} />
+                  <input type="number" min={0} value={editingItem.prep_time_minutes ?? ''} onChange={(e) => setEditingItem((f) => f ? { ...f, prep_time_minutes: e.target.value ? parseInt(e.target.value) : undefined } : f)} placeholder="20" className={INPUT} style={INPUT_STYLE} />
                 </Field>
                 <Field label="Calories">
-                  <input type="number" min={0} value={editingItem.calories ?? ''} onChange={(e) => setEditingItem((f) => f ? { ...f, calories: e.target.value ? parseInt(e.target.value) : undefined } : f)} placeholder="450" className={INPUT} />
+                  <input type="number" min={0} value={editingItem.calories ?? ''} onChange={(e) => setEditingItem((f) => f ? { ...f, calories: e.target.value ? parseInt(e.target.value) : undefined } : f)} placeholder="450" className={INPUT} style={INPUT_STYLE} />
                 </Field>
               </div>
 
@@ -1548,26 +1616,26 @@ export default function MenuPage() {
                   isBar={editingIsBar}
                   onChange={(names) => setEditingItem((f) => (f ? { ...f, best_with: names } : f))}
                 />
-                <p className="mt-1.5 text-xs text-zinc-500">
+                <p className="mt-1.5 text-xs" style={{ color: BRAND.inkFaint }}>
                   Pick {editingIsBar ? 'snacks or sides' : 'items'} from your own menu that pair well with this {editingIsBar ? 'drink' : 'dish'} — the AI uses these for smart upsell suggestions.
                 </p>
               </Field>
 
               <Field label="Tags">
-                <input value={(editingItem.tags ?? []).join(', ')} onChange={(e) => setEditingItem((f) => f ? { ...f, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) } : f)} placeholder={editingIsBar ? 'smoky, single-malt, chilled' : 'spicy, new, chef-special'} className={INPUT} />
-                <p className="mt-1.5 text-xs text-zinc-600">Separate with commas</p>
+                <input value={(editingItem.tags ?? []).join(', ')} onChange={(e) => setEditingItem((f) => f ? { ...f, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) } : f)} placeholder={editingIsBar ? 'smoky, single-malt, chilled' : 'spicy, new, chef-special'} className={INPUT} style={INPUT_STYLE} />
+                <p className="mt-1.5 text-xs" style={{ color: BRAND.inkFaint }}>Separate with commas</p>
               </Field>
               <Field label="Allergens">
-                <input value={(editingItem.allergens ?? []).join(', ')} onChange={(e) => setEditingItem((f) => f ? { ...f, allergens: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) } : f)} placeholder="dairy, gluten, nuts" className={INPUT} />
+                <input value={(editingItem.allergens ?? []).join(', ')} onChange={(e) => setEditingItem((f) => f ? { ...f, allergens: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) } : f)} placeholder="dairy, gluten, nuts" className={INPUT} style={INPUT_STYLE} />
               </Field>
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-white/[0.06] bg-[#111111] px-4 py-4">
-            {error && <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-200">{error}</div>}
+          <div className="shrink-0 border-t px-4 py-4" style={{ borderColor: BRAND.line, background: BRAND.card }}>
+            {error && <div className="mb-3 rounded-xl border px-3 py-2.5 text-xs" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}14`, color: BRAND.rose }}>{error}</div>}
             <div className="flex gap-2.5">
-              <button onClick={() => { setEditingItem(null); setError('') }} className="flex-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-3.5 text-sm font-semibold text-zinc-300 hover:bg-zinc-700 active:scale-[0.98] transition">Cancel</button>
-              <button onClick={() => void saveItem()} disabled={itemSaving || !editingItem.name?.trim()} className="flex-[2] rounded-2xl bg-orange-500 py-3.5 text-sm font-bold text-white disabled:opacity-50 active:scale-[0.98] transition">
+              <button onClick={() => { setEditingItem(null); setError('') }} className="flex-1 rounded-2xl border py-3.5 text-sm font-semibold transition hover:bg-black/[0.03] active:scale-[0.98]" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>Cancel</button>
+              <button onClick={() => void saveItem()} disabled={itemSaving || !editingItem.name?.trim()} className="flex-[2] rounded-2xl py-3.5 text-sm font-bold text-white disabled:opacity-50 active:scale-[0.98] transition" style={{ background: BRAND.burgundy }}>
                 {itemSaving ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" /> Saving…</span> : editingItem.id ? 'Save Changes' : `Add ${editingIsBar ? 'Drink' : 'Dish'}`}
               </button>
             </div>
@@ -1605,17 +1673,17 @@ export default function MenuPage() {
 // ─── Small components ─────────────────────────────────────────────────────────
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <div><label className="mb-1.5 block text-xs font-semibold text-zinc-400">{label}</label>{children}</div>
+  return <div><label className="mb-1.5 block text-xs font-semibold" style={{ color: BRAND.inkSoft }}>{label}</label>{children}</div>
 }
 
 function ToggleRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <button type="button" onClick={() => onChange(!checked)} className="flex w-full items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/30 px-4 py-3 text-left active:scale-[0.99] transition">
+    <button type="button" onClick={() => onChange(!checked)} className="flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition active:scale-[0.99]" style={softStyle}>
       <div className="flex items-center gap-3">
         <span className="text-base">{label === 'Bestseller' ? '🔥' : '✅'}</span>
-        <div><p className="text-sm font-medium text-zinc-200">{label}</p><p className="text-xs text-zinc-500">{description}</p></div>
+        <div><p className="text-sm font-medium" style={{ color: BRAND.ink }}>{label}</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>{description}</p></div>
       </div>
-      <div className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-orange-500' : 'bg-zinc-700'}`}>
+      <div className="relative h-6 w-11 shrink-0 rounded-full transition-colors" style={{ background: checked ? BRAND.burgundy : BRAND.line }}>
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
       </div>
     </button>
@@ -1624,19 +1692,19 @@ function ToggleRow({ label, description, checked, onChange }: { label: string; d
 
 function MiniStat({ value, label, icon }: { value: number; label: string; icon: string }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-2 py-2.5 text-center">
-      <p className="text-base font-bold text-white">{value}</p>
-      <p className="mt-0.5 text-[10px] text-zinc-500 leading-tight">{icon} {label}</p>
+    <div className="rounded-xl border px-2 py-2.5 text-center" style={cardStyle}>
+      <p className="text-base font-bold" style={{ color: BRAND.ink }}>{value}</p>
+      <p className="mt-0.5 text-[10px] leading-tight" style={{ color: BRAND.inkFaint }}>{icon} {label}</p>
     </div>
   )
 }
 
-function DesktopStat({ value, label, icon, color, bg }: { value: number; label: string; icon: ReactNode; color: string; bg: string }) {
+function DesktopStat({ value, label, icon, color }: { value: number; label: string; icon: ReactNode; color: string }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-4">
+    <div className="rounded-2xl border px-4 py-4" style={cardStyle}>
       <div className="flex items-center gap-3">
-        <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${bg} ${color}`}>{icon}</div>
-        <div><p className="text-xl font-bold text-white">{value}</p><p className="text-xs text-zinc-500">{label}</p></div>
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: `${color}1A`, color }}>{icon}</div>
+        <div><p className="text-xl font-bold" style={{ color: BRAND.ink }}>{value}</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>{label}</p></div>
       </div>
     </div>
   )
@@ -1646,22 +1714,20 @@ function MenuTabToggle({
   active, onChange,
 }: { active: 'food' | 'bar'; onChange: (t: 'food' | 'bar') => void }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-2xl border border-zinc-800 bg-zinc-900 p-1">
+    <div className="inline-flex items-center gap-1 rounded-2xl border p-1" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }}>
       <button
         type="button"
         onClick={() => onChange('food')}
-        className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
-          active === 'food' ? 'bg-orange-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
-        }`}
+        className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition"
+        style={active === 'food' ? { background: BRAND.burgundy, color: '#fff' } : { color: BRAND.inkFaint }}
       >
         🍽️ Food Menu
       </button>
       <button
         type="button"
         onClick={() => onChange('bar')}
-        className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
-          active === 'bar' ? 'bg-amber-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
-        }`}
+        className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition"
+        style={active === 'bar' ? { background: BRAND.gold, color: '#fff' } : { color: BRAND.inkFaint }}
       >
         🍸 Bar Menu
       </button>
@@ -1673,50 +1739,54 @@ function MobileItemRow({ item, optionCount, onTap, onToggle, onCustomize, isBar 
   item: MenuItemRow; optionCount: number; onTap: () => void; onToggle: () => void; onCustomize: () => void; isBar?: boolean
 }) {
   return (
-    <div className={`flex items-center gap-3 rounded-2xl border bg-zinc-900/80 p-3 transition active:scale-[0.99] ${item.is_available ? 'border-zinc-800' : 'border-zinc-800/40 opacity-50'}`}>
+    <div className="flex items-center gap-3 rounded-2xl border p-3 transition active:scale-[0.99]" style={{ borderColor: BRAND.line, background: BRAND.card, opacity: item.is_available ? 1 : 0.55 }}>
       <button onClick={onTap} className="shrink-0">
         {item.image_url
           // eslint-disable-next-line @next/next/no-img-element
           ? <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-16 w-16 rounded-xl object-cover" />
-          : <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-zinc-800 text-3xl">{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
+          : <div className="flex h-16 w-16 items-center justify-center rounded-xl text-3xl" style={{ background: BRAND.ivorySoft }}>{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
         }
       </button>
       <button onClick={onTap} className="min-w-0 flex-1 text-left">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-sm font-bold text-white">{item.name}</p>
-          <p className="shrink-0 text-sm font-bold text-orange-400">₹{((Number(item.price) || 0) / 100).toFixed(0)}</p>
+          <p className="truncate text-sm font-bold" style={{ color: BRAND.ink }}>{item.name}</p>
+          <p className="shrink-0 text-sm font-bold" style={{ color: BRAND.burgundy }}>₹{((Number(item.price) || 0) / 100).toFixed(0)}</p>
         </div>
-        {item.description && <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500">{item.description}</p>}
+        {item.description && <p className="mt-0.5 line-clamp-1 text-xs" style={{ color: BRAND.inkFaint }}>{item.description}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {!isBar && (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.is_veg ? 'bg-green-500/15 text-green-400 ring-1 ring-green-500/20' : 'bg-red-500/15 text-red-400 ring-1 ring-red-500/20'}`}>
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.is_veg ? '#22c55e' : '#ef4444' }} />
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={item.is_veg
+              ? { background: `${BRAND.emerald}1A`, color: BRAND.emerald, boxShadow: `inset 0 0 0 1px ${BRAND.emerald}33` }
+              : { background: `${BRAND.rose}1A`, color: BRAND.rose, boxShadow: `inset 0 0 0 1px ${BRAND.rose}33` }}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.is_veg ? BRAND.emerald : BRAND.rose }} />
               {item.is_veg ? 'Veg' : 'Non-veg'}
             </span>
           )}
-          {item.is_bestseller && <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-semibold text-orange-400 ring-1 ring-orange-500/20">🔥 Best</span>}
-          {typeof item.prep_time_minutes === 'number' && <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500"><Clock size={9} /> {item.prep_time_minutes}m</span>}
-          {!item.is_available && <span className="inline-flex rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">Unavailable</span>}
+          {item.is_bestseller && <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: `${BRAND.burgundy}1A`, color: BRAND.burgundy, boxShadow: `inset 0 0 0 1px ${BRAND.burgundy}33` }}>🔥 Best</span>}
+          {typeof item.prep_time_minutes === 'number' && <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]" style={{ background: BRAND.ivorySoft, color: BRAND.inkFaint }}><Clock size={9} /> {item.prep_time_minutes}m</span>}
+          {!item.is_available && <span className="inline-flex rounded-full px-2 py-0.5 text-[10px]" style={{ background: BRAND.ivorySoft, color: BRAND.inkFaint }}>Unavailable</span>}
           {optionCount > 0 && (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${isBar ? 'bg-amber-500/15 text-amber-400 ring-amber-500/20' : 'bg-purple-500/15 text-purple-400 ring-purple-500/20'}`}>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={isBar
+              ? { background: `${BRAND.gold}1A`, color: BRAND.goldDeep, boxShadow: `inset 0 0 0 1px ${BRAND.gold}33` }
+              : { background: `${BRAND.plum}1A`, color: BRAND.plum, boxShadow: `inset 0 0 0 1px ${BRAND.plum}33` }}>
               <Settings2 size={8} /> {optionCount} {isBar ? 'size' : 'opt'}{optionCount > 1 ? 's' : ''}
             </span>
           )}
           {(item.best_with ?? []).length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400 ring-1 ring-amber-500/20">
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: `${BRAND.gold}1A`, color: BRAND.goldDeep, boxShadow: `inset 0 0 0 1px ${BRAND.gold}33` }}>
               <Link2 size={8} /> {(item.best_with ?? []).length} pairs
             </span>
           )}
         </div>
       </button>
       <div className="flex shrink-0 flex-col items-center gap-2">
-        <button onClick={onToggle} className={`relative h-6 w-11 rounded-full ${item.is_available ? 'bg-green-500' : 'bg-zinc-600'}`}>
+        <button onClick={onToggle} className="relative h-6 w-11 rounded-full" style={{ background: item.is_available ? BRAND.emerald : BRAND.line }}>
           <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${item.is_available ? 'translate-x-5' : 'translate-x-0.5'}`} />
         </button>
-        <button onClick={onCustomize} className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${isBar ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'}`} title={isBar ? 'Serving sizes & variants' : 'Customisation options'}>
+        <button onClick={onCustomize} className="flex h-7 w-7 items-center justify-center rounded-lg transition" style={isBar ? { background: `${BRAND.gold}1A`, color: BRAND.goldDeep } : { background: `${BRAND.plum}1A`, color: BRAND.plum }} title={isBar ? 'Serving sizes & variants' : 'Customisation options'}>
           <Settings2 size={13} />
         </button>
-        <button onClick={onTap} className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"><MoreVertical size={14} /></button>
+        <button onClick={onTap} className="flex h-7 w-7 items-center justify-center rounded-lg transition" style={{ background: BRAND.ivorySoft, color: BRAND.inkFaint }}><MoreVertical size={14} /></button>
       </div>
     </div>
   )
@@ -1726,50 +1796,52 @@ function DesktopItemCard({ item, optionCount, onEdit, onDelete, onToggle, onCust
   item: MenuItemRow; optionCount: number; onEdit: () => void; onDelete: () => void; onToggle: () => void; onCustomize: () => void; isBar?: boolean
 }) {
   return (
-    <div className={`group relative overflow-hidden rounded-3xl border bg-zinc-900 transition hover:border-zinc-700 ${item.is_available ? 'border-zinc-800' : 'border-zinc-800/40 opacity-60'}`}>
+    <div className="group relative overflow-hidden rounded-3xl border transition hover:shadow-[0_4px_16px_rgba(43,33,31,0.08)]" style={{ borderColor: BRAND.line, background: BRAND.card, opacity: item.is_available ? 1 : 0.6 }}>
       {item.image_url
         // eslint-disable-next-line @next/next/no-img-element
         ? <img src={resolveMenuImageUrl(item.image_url)} alt={item.name} className="h-36 w-full object-cover" />
-        : <div className="flex h-32 w-full items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 text-4xl">{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
+        : <div className="flex h-32 w-full items-center justify-center text-4xl" style={{ background: `linear-gradient(135deg, ${BRAND.ivorySoft}, ${BRAND.ivoryDeep})` }}>{isBar ? '🍹' : (item.is_veg ? '🥗' : '🍖')}</div>
       }
       <div className="absolute left-3 top-3 flex flex-wrap gap-1">
         {!isBar && (
-          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${item.is_veg ? 'bg-green-500/20 text-green-400 ring-green-500/30' : 'bg-red-500/20 text-red-400 ring-red-500/30'}`}>{item.is_veg ? '🌿 Veg' : '🍖 Non-veg'}</span>
+          <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={item.is_veg
+            ? { background: `${BRAND.emerald}26`, color: BRAND.emerald, boxShadow: `inset 0 0 0 1px ${BRAND.emerald}40` }
+            : { background: `${BRAND.rose}26`, color: BRAND.rose, boxShadow: `inset 0 0 0 1px ${BRAND.rose}40` }}>{item.is_veg ? '🌿 Veg' : '🍖 Non-veg'}</span>
         )}
-        {item.is_bestseller && <span className="rounded-full bg-orange-500/20 px-2.5 py-1 text-[10px] font-bold text-orange-400 ring-1 ring-orange-500/30">🔥 Best</span>}
-        {optionCount > 0 && <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${isBar ? 'bg-amber-500/20 text-amber-400 ring-amber-500/30' : 'bg-purple-500/20 text-purple-400 ring-purple-500/30'}`}>⚙ {optionCount} {isBar ? 'sizes' : 'opts'}</span>}
+        {item.is_bestseller && <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: `${BRAND.burgundy}26`, color: BRAND.burgundy, boxShadow: `inset 0 0 0 1px ${BRAND.burgundy}40` }}>🔥 Best</span>}
+        {optionCount > 0 && <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={isBar
+          ? { background: `${BRAND.gold}26`, color: BRAND.goldDeep, boxShadow: `inset 0 0 0 1px ${BRAND.gold}40` }
+          : { background: `${BRAND.plum}26`, color: BRAND.plum, boxShadow: `inset 0 0 0 1px ${BRAND.plum}40` }}>⚙ {optionCount} {isBar ? 'sizes' : 'opts'}</span>}
         {(item.best_with ?? []).length > 0 && (
-          <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold text-amber-400 ring-1 ring-amber-500/30">
+          <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: `${BRAND.gold}26`, color: BRAND.goldDeep, boxShadow: `inset 0 0 0 1px ${BRAND.gold}40` }}>
             🔗 {(item.best_with ?? []).length} pairs
           </span>
         )}
       </div>
-      <button onClick={onToggle} className={`absolute right-3 top-3 h-6 w-11 rounded-full ${item.is_available ? 'bg-green-500' : 'bg-zinc-600'}`}>
+      <button onClick={onToggle} className="absolute right-3 top-3 h-6 w-11 rounded-full" style={{ background: item.is_available ? BRAND.emerald : BRAND.line }}>
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${item.is_available ? 'translate-x-5' : 'translate-x-0.5'}`} />
       </button>
       <div className="p-4">
         <div className="mb-1 flex items-start justify-between gap-2">
-          <p className="truncate text-sm font-bold text-zinc-200">{item.name}</p>
-          <p className="shrink-0 text-sm font-bold text-orange-400">₹{((Number(item.price) || 0) / 100).toFixed(0)}</p>
+          <p className="truncate text-sm font-bold" style={{ color: BRAND.ink }}>{item.name}</p>
+          <p className="shrink-0 text-sm font-bold" style={{ color: BRAND.burgundy }}>₹{((Number(item.price) || 0) / 100).toFixed(0)}</p>
         </div>
-        {item.description && <p className="mb-2 line-clamp-2 text-xs text-zinc-500">{item.description}</p>}
+        {item.description && <p className="mb-2 line-clamp-2 text-xs" style={{ color: BRAND.inkFaint }}>{item.description}</p>}
         {(item.best_with ?? []).length > 0 && (
-          <p className="mb-2 text-[10px] text-amber-400/70">
+          <p className="mb-2 text-[10px]" style={{ color: BRAND.goldDeep }}>
             🔗 {(item.best_with ?? []).slice(0, 2).join(', ')}{(item.best_with ?? []).length > 2 ? ` +${(item.best_with ?? []).length - 2}` : ''}
           </p>
         )}
-        <div className="mb-3 flex items-center gap-3 text-[11px] text-zinc-600">
+        <div className="mb-3 flex items-center gap-3 text-[11px]" style={{ color: BRAND.inkFaint }}>
           {typeof item.prep_time_minutes === 'number' && <span className="flex items-center gap-1"><Clock size={10} />{item.prep_time_minutes}m</span>}
           {typeof item.calories === 'number' && <span className="flex items-center gap-1"><Zap size={10} />{item.calories} cal</span>}
         </div>
         <div className="flex gap-2">
-          <button onClick={onEdit} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700"><Pencil size={12} /> Edit</button>
-          <button onClick={onCustomize} className={`flex items-center justify-center rounded-xl px-3 py-2.5 transition ${isBar ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'}`} title={isBar ? 'Serving sizes & variants' : 'Options'}><Settings2 size={13} /></button>
-          <button onClick={onDelete} className="flex items-center justify-center rounded-xl bg-zinc-800 px-3 py-2.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400"><Trash2 size={13} /></button>
+          <button onClick={onEdit} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition" style={{ background: BRAND.ivorySoft, color: BRAND.inkSoft }}><Pencil size={12} /> Edit</button>
+          <button onClick={onCustomize} className="flex items-center justify-center rounded-xl px-3 py-2.5 transition" style={isBar ? { background: `${BRAND.gold}1A`, color: BRAND.goldDeep } : { background: `${BRAND.plum}1A`, color: BRAND.plum }} title={isBar ? 'Serving sizes & variants' : 'Options'}><Settings2 size={13} /></button>
+          <button onClick={onDelete} className="flex items-center justify-center rounded-xl px-3 py-2.5 transition" style={{ background: BRAND.ivorySoft, color: BRAND.rose }}><Trash2 size={13} /></button>
         </div>
       </div>
     </div>
   )
 }
-
-const INPUT = 'w-full rounded-2xl border border-zinc-700/60 bg-zinc-800/50 px-4 py-3 text-sm text-white placeholder-zinc-500 focus:border-orange-500/60 focus:outline-none focus:ring-1 focus:ring-orange-500/20 transition'
