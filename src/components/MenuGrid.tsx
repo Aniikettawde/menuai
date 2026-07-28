@@ -348,7 +348,7 @@ export function MenuGrid({
   todaysSpecial,
   upsellCard,
 }: MenuGridProps = {}) {
-  const { categories, items, activeMenuType, hasBarMenu, switchMenuType } = useAppStore()
+  const { categories, items, activeMenuType, hasBarMenu, hasCorporateMenu, switchMenuType } = useAppStore()
   const menuType = activeMenuType ?? 'food'
   const isBarView = menuType === 'bar'
 const { t, plural } = useTranslation()
@@ -730,11 +730,11 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   .mg-empty-sub { margin: 4px 0 0; font-size: 12px; color: var(--pr-text-faint); }
 `}</style>
 
-      {hasBarMenu && (
+     {(hasBarMenu || hasCorporateMenu) && (
         <div className="mg-switch-row">
           <button type="button" className="mg-switch-btn" onClick={switchMenuType}>
-            {isBarView ? <UtensilsCrossed size={12} /> : <Wine size={12} />}
-            Switch to {isBarView ? 'Food' : 'Bar'} Menu
+            <Sparkles size={12} />
+            Switch Menu
           </button>
         </div>
       )}

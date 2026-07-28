@@ -855,7 +855,7 @@ export default function MenuPage() {
   const { context, loading: contextLoading } = useDashboardContext()
 
   const [draggedCatId, setDraggedCatId] = useState<string | null>(null)
-  const [menuTab, setMenuTab] = useState<'food' | 'bar'>('food')
+  const [menuTab, setMenuTab] = useState<'food' | 'bar' | 'corporate'>('food')
    const orderedCategories = useMemo(() => {
     return [...categories]
       .filter((c) => (c.menu_type ?? 'food') === menuTab)
@@ -1203,11 +1203,13 @@ export default function MenuPage() {
           </button>
         </div>
 
-        {restaurant?.has_bar_menu && (
+       {(restaurant?.has_bar_menu || restaurant?.has_corporate_menu) && (
           <div className="flex justify-center">
             <MenuTabToggle
               active={menuTab}
               onChange={(t) => { setMenuTab(t); setActiveCat(null); setMobileView('categories') }}
+              showBar={!!restaurant?.has_bar_menu}
+              showCorporate={!!restaurant?.has_corporate_menu}
             />
           </div>
         )}
@@ -1355,8 +1357,13 @@ export default function MenuPage() {
             <p className="mt-1 text-sm" style={{ color: BRAND.inkFaint }}>{totalDishes} {itemLabel(false, true)} across {totalCategories} categories</p>
           </div>
           <div className="flex items-center gap-3">
-            {restaurant?.has_bar_menu && (
-              <MenuTabToggle active={menuTab} onChange={(t) => { setMenuTab(t); setActiveCat(null) }} />
+            {(restaurant?.has_bar_menu || restaurant?.has_corporate_menu) && (
+              <MenuTabToggle
+                active={menuTab}
+                onChange={(t) => { setMenuTab(t); setActiveCat(null) }}
+                showBar={!!restaurant?.has_bar_menu}
+                showCorporate={!!restaurant?.has_corporate_menu}
+              />
             )}
             <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}><Sparkles size={14} /> Import with AI</button>
             <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? categories[0]?.id ?? '' })} className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-white" style={{ background: BRAND.burgundy }}><Plus size={14} /> Add {itemLabel()}</button>
@@ -1711,8 +1718,13 @@ function DesktopStat({ value, label, icon, color }: { value: number; label: stri
 }
 
 function MenuTabToggle({
-  active, onChange,
-}: { active: 'food' | 'bar'; onChange: (t: 'food' | 'bar') => void }) {
+  active, onChange, showBar, showCorporate,
+}: {
+  active: 'food' | 'bar' | 'corporate'
+  onChange: (t: 'food' | 'bar' | 'corporate') => void
+  showBar: boolean
+  showCorporate: boolean
+}) {
   return (
     <div className="inline-flex items-center gap-1 rounded-2xl border p-1" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft }}>
       <button
@@ -1723,14 +1735,26 @@ function MenuTabToggle({
       >
         🍽️ Food Menu
       </button>
-      <button
-        type="button"
-        onClick={() => onChange('bar')}
-        className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition"
-        style={active === 'bar' ? { background: BRAND.gold, color: '#fff' } : { color: BRAND.inkFaint }}
-      >
-        🍸 Bar Menu
-      </button>
+      {showBar && (
+        <button
+          type="button"
+          onClick={() => onChange('bar')}
+          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition"
+          style={active === 'bar' ? { background: BRAND.gold, color: '#fff' } : { color: BRAND.inkFaint }}
+        >
+          🍸 Bar Menu
+        </button>
+      )}
+      {showCorporate && (
+        <button
+          type="button"
+          onClick={() => onChange('corporate')}
+          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition"
+          style={active === 'corporate' ? { background: BRAND.burgundy, color: '#fff' } : { color: BRAND.inkFaint }}
+        >
+          💼 Corporate Menu
+        </button>
+      )}
     </div>
   )
 }

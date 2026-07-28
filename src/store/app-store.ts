@@ -32,7 +32,7 @@ export type CartItem = {
   deliveryPreference?: DeliveryPreference
 }
 
-export type MenuType = 'food' | 'bar'
+export type MenuType = 'food' | 'bar' | 'corporate'
 
 interface AppStore {
   restaurant: Restaurant | null
@@ -56,6 +56,8 @@ setIsTranslating: (v: boolean) => void
   // ── Bar menu ──────────────────────────────────────────────
   activeMenuType: MenuType | null
   hasBarMenu: boolean
+  hasCorporateMenu: boolean
+
   showMenuTypeSelector: boolean
   setActiveMenuType: (type: MenuType) => void
   dismissMenuTypeSelector: () => void
@@ -134,7 +136,7 @@ function menuTypeStorageKey(restaurantId: string) {
 function getPersistedMenuType(restaurantId: string): MenuType | null {
   if (typeof window === 'undefined') return null
   const v = sessionStorage.getItem(menuTypeStorageKey(restaurantId))
-  return v === 'food' || v === 'bar' ? v : null
+  return v === 'food' || v === 'bar' || v === 'corporate' ? v : null
 }
 
 // Threshold at which we ask the customer how they want multi-quantity
@@ -158,6 +160,7 @@ export const useAppStore = create<AppStore>()(
 
     activeMenuType: null,
     hasBarMenu: false,
+	hasCorporateMenu: false,
     showMenuTypeSelector: false,
 
     deliveryPromptCartKey: null,
@@ -190,21 +193,25 @@ activeTab: 'menu',
         state.items = items
 
         const hasBar = !!restaurant.has_bar_menu && categories.some((c) => c.menu_type === 'bar')
+        const hasCorporate = !!restaurant.has_corporate_menu && categories.some((c) => c.menu_type === 'corporate')
         const hasFood = categories.some((c) => c.menu_type === 'food')
         state.hasBarMenu = hasBar
+        state.hasCorporateMenu = hasCorporate
 
-        if (!hasBar) {
-          // No bar menu at all — just behave like before, no picker.
-          state.activeMenuType = 'food'
+        const availableTypes: MenuType[] = [
+          ...(hasFood ? (['food'] as MenuType[]) : []),
+          ...(hasBar ? (['bar'] as MenuType[]) : []),
+          ...(hasCorporate ? (['corporate'] as MenuType[]) : []),
+        ]
+
+        if (availableTypes.length <= 1) {
+          // Only one menu type (or none) exists — no picker needed.
+          state.activeMenuType = availableTypes[0] ?? 'food'
           state.showMenuTypeSelector = false
         } else {
           const persisted = getPersistedMenuType(restaurant.id)
-          if (persisted) {
+          if (persisted && availableTypes.includes(persisted)) {
             state.activeMenuType = persisted
-            state.showMenuTypeSelector = false
-          } else if (!hasFood) {
-            // Bar-only restaurant, nothing to pick between.
-            state.activeMenuType = 'bar'
             state.showMenuTypeSelector = false
           } else {
             state.activeMenuType = null
@@ -234,9 +241,9 @@ activeTab: 'menu',
         state.showMenuTypeSelector = false
       }),
 
-    switchMenuType: () =>
+      switchMenuType: () =>
       set((state) => {
-        if (state.hasBarMenu) state.showMenuTypeSelector = true
+        if (state.hasBarMenu || state.hasCorporateMenu) state.showMenuTypeSelector = true
       }),
 
     openDeliveryPrompt: (cartKey) =>

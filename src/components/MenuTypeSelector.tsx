@@ -1,9 +1,9 @@
 'use client'
-import { Wine, UtensilsCrossed, Sparkles } from 'lucide-react'
+import { Wine, UtensilsCrossed, Sparkles, Briefcase } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 
 export function MenuTypeSelector() {
-  const { showMenuTypeSelector, setActiveMenuType, restaurant } = useAppStore()
+  const { showMenuTypeSelector, setActiveMenuType, restaurant, hasBarMenu, hasCorporateMenu } = useAppStore()
   if (!showMenuTypeSelector || !restaurant) return null
 
   return (
@@ -64,15 +64,15 @@ export function MenuTypeSelector() {
           color: var(--pr-text-muted);
         }
 
-        .mts-grid {
-          position: relative;
-          z-index: 1;
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-          width: 100%;
-          max-width: 26rem;
-        }
+       .mts-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem;
+  width: 100%;
+  max-width: 34rem;
+}
 
         .mts-card {
           position: relative;
@@ -91,16 +91,21 @@ export function MenuTypeSelector() {
           box-shadow: 0 2px 10px rgba(33,30,27,0.05);
         }
         .mts-card:nth-child(2) { animation-delay: 80ms; }
+.mts-card:nth-child(3) { animation-delay: 140ms; }
         .mts-card:active { transform: scale(0.95); }
 
-        .mts-card--food:hover {
-          border-color: rgba(122,31,43,0.35);
-          background: var(--pr-orange-dim);
-        }
-        .mts-card--bar:hover {
-          border-color: rgba(138,109,31,0.35);
-          background: var(--pr-gold-dim);
-        }
+       .mts-card--food:hover {
+  border-color: rgba(122,31,43,0.35);
+  background: var(--pr-orange-dim);
+}
+.mts-card--bar:hover {
+  border-color: rgba(138,109,31,0.35);
+  background: var(--pr-gold-dim);
+}
+.mts-card--corporate:hover {
+  border-color: rgba(122,31,43,0.35);
+  background: var(--pr-orange-dim);
+}
 
         .mts-card-icon {
           display: flex;
@@ -110,8 +115,9 @@ export function MenuTypeSelector() {
           width: 3.5rem;
           border-radius: 1.1rem;
         }
-        .mts-card--food .mts-card-icon { background: var(--pr-orange-dim); color: var(--pr-orange); }
-        .mts-card--bar .mts-card-icon  { background: var(--pr-gold-dim); color: var(--pr-gold); }
+       .mts-card--food .mts-card-icon { background: var(--pr-orange-dim); color: var(--pr-orange); }
+.mts-card--bar .mts-card-icon  { background: var(--pr-gold-dim); color: var(--pr-gold); }
+.mts-card--corporate .mts-card-icon { background: var(--pr-orange-dim); color: var(--pr-orange); }
 
         .mts-card-title {
           font-size: 1rem;
@@ -172,7 +178,7 @@ export function MenuTypeSelector() {
         <p className="mts-tagline">What would you like to browse?</p>
       </div>
 
-      <div className="mts-grid">
+     <div className="mts-grid">
         <button
           type="button"
           className="mts-card mts-card--food"
@@ -184,16 +190,31 @@ export function MenuTypeSelector() {
           <span className="mts-card-sub">Dishes, starters &amp; mains</span>
         </button>
 
-        <button
-          type="button"
-          className="mts-card mts-card--bar"
-          onClick={() => setActiveMenuType('bar')}
-        >
-          <span className="mts-card-shine" />
-          <div className="mts-card-icon"><Wine size={26} /></div>
-          <span className="mts-card-title">Bar Menu</span>
-          <span className="mts-card-sub">Cocktails, spirits &amp; beer</span>
-        </button>
+        {hasBarMenu && (
+          <button
+            type="button"
+            className="mts-card mts-card--bar"
+            onClick={() => setActiveMenuType('bar')}
+          >
+            <span className="mts-card-shine" />
+            <div className="mts-card-icon"><Wine size={26} /></div>
+            <span className="mts-card-title">Bar Menu</span>
+            <span className="mts-card-sub">Cocktails, spirits &amp; beer</span>
+          </button>
+        )}
+
+        {hasCorporateMenu && (
+          <button
+            type="button"
+            className="mts-card mts-card--corporate"
+            onClick={() => setActiveMenuType('corporate')}
+          >
+            <span className="mts-card-shine" />
+            <div className="mts-card-icon"><Briefcase size={26} /></div>
+            <span className="mts-card-title">Corporate Menu</span>
+            <span className="mts-card-sub">Bulk orders &amp; catering packs</span>
+          </button>
+        )}
       </div>
 
       <p className="mts-footnote">

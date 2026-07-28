@@ -30,6 +30,7 @@ type RestaurantForm = {
     kot_mode: 'manual' | 'dinezy_print'
 orders_enabled: boolean
   has_bar_menu: boolean
+has_corporate_menu: boolean
 
 
 
@@ -93,6 +94,7 @@ export default function RestaurantPage() {
   kot_mode: 'manual',
   orders_enabled: true,
   has_bar_menu: false,
+  has_corporate_menu: false,
 })
 
   const [logoUrl, setLogoUrl] = useState('')
@@ -129,6 +131,7 @@ google_review_count: data.google_review_count != null ? String(data.google_revie
    kot_mode: (data.kot_mode as 'manual' | 'dinezy_print') ?? 'manual',
 orders_enabled: data.orders_enabled ?? true,
 has_bar_menu: data.has_bar_menu ?? false,
+has_corporate_menu: data.has_corporate_menu ?? false,
           })
           setLogoUrl(data.logo_url ?? '')
           setCoverUrl(data.cover_url ?? '')
@@ -742,6 +745,34 @@ has_bar_menu: data.has_bar_menu ?? false,
         className={[
           'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition duration-200 ease-in-out',
           form.has_bar_menu ? 'translate-x-5' : 'translate-x-0',
+        ].join(' ')}
+      />
+    </button>
+  </div>
+</Section>
+
+<Section title="Corporate Menu">
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <p className="text-sm font-medium text-white">Enable a separate corporate menu</p>
+      <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+        Use this for bulk/catering pricing, meeting packages, or B2B office orders. Create corporate categories from the Menu tab and mark them as "Corporate" to populate it.
+      </p>
+    </div>
+    <button
+      type="button"
+      onClick={() => setForm((f) => ({ ...f, has_corporate_menu: !f.has_corporate_menu }))}
+      className={[
+        'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+        form.has_corporate_menu ? 'bg-orange-500' : 'bg-zinc-700',
+      ].join(' ')}
+      role="switch"
+      aria-checked={form.has_corporate_menu}
+    >
+      <span
+        className={[
+          'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition duration-200 ease-in-out',
+          form.has_corporate_menu ? 'translate-x-5' : 'translate-x-0',
         ].join(' ')}
       />
     </button>

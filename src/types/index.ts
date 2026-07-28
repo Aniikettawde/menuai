@@ -52,6 +52,7 @@ google_rating?: number | null
 google_reviews_url?: string | null
 
 has_bar_menu?: boolean
+has_corporate_menu?: boolean
 avg_prep_time?: number
   
 }
@@ -105,7 +106,7 @@ export interface MenuCategory {
   position: number
   is_active: boolean
   image_url?: string | null
-    menu_type: 'food' | 'bar'
+ menu_type: 'food' | 'bar' | 'corporate'
 
 
 }
