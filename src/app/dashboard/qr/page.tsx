@@ -504,49 +504,78 @@ export default function QRPage() {
   }
 
   async function downloadTableSheet() {
-    if (!restaurant) return
-    if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted.'); return }
-    if (tableNumbers.length === 0) { alert('Please choose at least one table.'); return }
+  if (!restaurant) return
+  if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted.'); return }
+  if (tableNumbers.length === 0) { alert('Please choose at least one table.'); return }
 
-    setBusy(true)
-    try {
-      const JsPDF = await loadJsPDF()
-      const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
+  setBusy(true)
+  try {
+    const JsPDF = await loadJsPDF()
+    const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
 
-      const pageW = doc.internal.pageSize.getWidth()
-      const pageH = doc.internal.pageSize.getHeight()
-      const margin = 22
-      const gap = 12
-      const cols = 2
-      const rows = 2
-      const cardsPerPage = cols * rows
-      const cardW = (pageW - margin * 2 - gap * (cols - 1)) / cols
-      const cardH = (pageH - margin * 2 - gap * (rows - 1)) / rows
+    const pageW = doc.internal.pageSize.getWidth()
+    const pageH = doc.internal.pageSize.getHeight()
+    const margin = 22
+    const gap = 12
+    const cols = 2
 
-      for (let i = 0; i < tableNumbers.length; i++) {
-        const tableNo = tableNumbers[i]
-        const node = cardRefs.current[tableNo]
-        if (!node) throw new Error(`Card not ready for Table ${tableNo}`)
-        if (i > 0 && i % cardsPerPage === 0) doc.addPage()
+    // Measure the FIRST card's real aspect ratio once, then derive how many
+    // rows actually fit on a page for that ratio — instead of assuming rows=2.
+    const firstNode = cardRefs.current[tableNumbers[0]]
+    if (!firstNode) throw new Error('No card ready to measure')
+    const aspect = firstNode.offsetWidth / firstNode.offsetHeight // w/h
 
-        const posInPage = i % cardsPerPage
-        const col = posInPage % cols
-        const row = Math.floor(posInPage / cols)
-        const x = margin + col * (cardW + gap)
-        const y = margin + row * (cardH + gap)
+    const cellW = (pageW - margin * 2 - gap * (cols - 1)) / cols
+    // Height a card would take up if drawn at full cellW, preserving aspect ratio
+    const cardHAtCellW = cellW / aspect
 
-        const png = await toPng(node, { cacheBust: true, pixelRatio: 3, backgroundColor: '#ffffff' })
-        doc.addImage(png, 'PNG', x, y, cardW, cardH)
+    // How many rows of that height actually fit vertically on the page?
+    const rows = Math.max(
+      1,
+      Math.floor((pageH - margin * 2 + gap) / (cardHAtCellW + gap)),
+    )
+    const cardsPerPage = cols * rows
+
+    // Recompute the cell height based on the rows that actually fit,
+    // so cards are centered nicely rather than crammed to one edge.
+    const cellH = (pageH - margin * 2 - gap * (rows - 1)) / rows
+
+    for (let i = 0; i < tableNumbers.length; i++) {
+      const tableNo = tableNumbers[i]
+      const node = cardRefs.current[tableNo]
+      if (!node) throw new Error(`Card not ready for Table ${tableNo}`)
+      if (i > 0 && i % cardsPerPage === 0) doc.addPage()
+
+      const posInPage = i % cardsPerPage
+      const col = posInPage % cols
+      const row = Math.floor(posInPage / cols)
+      const cellX = margin + col * (cellW + gap)
+      const cellY = margin + row * (cellH + gap)
+
+      const png = await toPng(node, { cacheBust: true, pixelRatio: 3, backgroundColor: '#ffffff' })
+
+      const nodeAspect = node.offsetWidth / node.offsetHeight
+      let drawW = cellW
+      let drawH = drawW / nodeAspect
+      if (drawH > cellH) {
+        drawH = cellH
+        drawW = drawH * nodeAspect
       }
 
-      doc.save(`${restaurant.slug}-table-qr-sheet.pdf`)
-    } catch (err) {
-      console.error('Download error:', err)
-      alert('Could not generate PDF. Please try again.')
-    } finally {
-      setBusy(false)
+      const x = cellX + (cellW - drawW) / 2
+      const y = cellY + (cellH - drawH) / 2
+
+      doc.addImage(png, 'PNG', x, y, drawW, drawH)
     }
+
+    doc.save(`${restaurant.slug}-table-qr-sheet.pdf`)
+  } catch (err) {
+    console.error('Download error:', err)
+    alert('Could not generate PDF. Please try again.')
+  } finally {
+    setBusy(false)
   }
+}
 
   // ─── Loading / error states ────────────────────────────────────────────────
   if (contextLoading) {
