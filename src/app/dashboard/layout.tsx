@@ -64,7 +64,6 @@ const ALL_NAV: NavItem[] = [
   { href: '/dashboard/qr', label: 'QR Code', shortLabel: 'QR', icon: QrCode },
   { href: '/dashboard/staff', label: 'Staff', shortLabel: 'Staff', icon: Users },
   { href: '/dashboard/billing', label: 'Billing', shortLabel: 'Billing', icon: CreditCard },
-  { href: '/dashboard/whatsapp', label: 'WhatsApp', shortLabel: 'WA', icon: MessageCircle },
 
 ]
 
@@ -127,7 +126,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: '/dashboard/offers', label: 'Offers', shortLabel: 'Offers', icon: Tag },
     { href: '/dashboard/staff', label: 'Staff', shortLabel: 'Staff', icon: Users },
     { href: '/dashboard/billing', label: 'Billing', shortLabel: 'Billing', icon: CreditCard },
-	{ href: '/dashboard/whatsapp', label: 'WhatsApp', shortLabel: 'WA', icon: MessageCircle },
 
   ]
 
