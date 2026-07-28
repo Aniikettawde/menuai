@@ -172,21 +172,24 @@ async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
   }
 }
 
+// ─── QR Card ────────────────────────────────────────────────────────────────
 function FixedQrCard({
   tableNo,
   restaurantName,
+  restaurantLogoDataUrl,
   qrDataUrl,
-  logoDataUrl,
   isLoading,
   cardRef,
 }: {
   tableNo: number
   restaurantName: string
+  restaurantLogoDataUrl?: string | null
   qrDataUrl?: string
-  logoDataUrl?: string | null
   isLoading?: boolean
   cardRef?: (el: HTMLDivElement | null) => void
 }) {
+  const initial = restaurantName?.trim()?.[0]?.toUpperCase() ?? 'R'
+
   return (
     <div
       ref={cardRef}
@@ -200,6 +203,7 @@ function FixedQrCard({
           T{String(tableNo).padStart(2, '0')}
         </div>
 
+        {/* Restaurant name only — no logo beside it */}
         <p className="relative z-10 text-[15px] font-black uppercase tracking-[0.18em] text-white">
           {restaurantName}
         </p>
@@ -221,12 +225,12 @@ function FixedQrCard({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrDataUrl} alt={`Table ${tableNo} QR`} className="h-[220px] w-[220px]" />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white">
-                  {logoDataUrl ? (
+                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white">
+                  {restaurantLogoDataUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={logoDataUrl} alt="Logo" className="h-10 w-10 object-contain" />
+                    <img src={restaurantLogoDataUrl} alt="Logo" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="text-[#f97316]">D</span>
+                    <span className="text-xl font-black text-[#f97316]">{initial}</span>
                   )}
                 </div>
               </div>
@@ -235,12 +239,7 @@ function FixedQrCard({
         </div>
 
         <div className="relative z-10 mt-7 flex items-center justify-center gap-2">
-          {logoDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoDataUrl} alt="Dinezy" className="h-5 w-5 object-contain" />
-          ) : (
-            <span className="text-[#f97316]">D</span>
-          )}
+          <span className="text-[#f97316]">D</span>
           <span className="text-[15px] font-extrabold tracking-tight text-white">Dinezy</span>
         </div>
 
@@ -311,17 +310,22 @@ export default function QRPage() {
   const [tokenMap, setTokenMap] = useState<TokenMap>(new Map())
   const [tokensLoading, setTokensLoading] = useState(false)
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
-  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
+  const [restaurantLogoDataUrl, setRestaurantLogoDataUrl] = useState<string | null>(null)
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({})
   useEffect(() => { setBaseUrl(window.location.origin) }, [])
 
+  // Load the restaurant's own logo (used beside the name + inside the QR hole)
   useEffect(() => {
     let mounted = true
-    void loadImageDataUrl('/dinezy-logo.png').then((data) => {
-      if (mounted) setLogoDataUrl(data)
+    if (!restaurant?.logo_url) {
+      setRestaurantLogoDataUrl(null)
+      return
+    }
+    void loadImageDataUrl(restaurant.logo_url).then((data) => {
+      if (mounted) setRestaurantLogoDataUrl(data)
     })
     return () => { mounted = false }
-  }, [])
+  }, [restaurant?.logo_url])
 
   const menuUrl = useMemo(() => {
     if (!baseUrl || !restaurant?.slug) return ''
@@ -399,37 +403,37 @@ export default function QRPage() {
   )
 
   function getTableMenuUrl(tableNo: number): string {
-  if (!baseUrl || !restaurant?.slug) return ''
-  const token = tokenMap.get(tableNo)
-  if (!token) return ''
-  const qs = new URLSearchParams({
-    slug: restaurant.slug,
-    table: String(tableNo),
-    t: token,
-  })
-  return `${baseUrl}/api/table-session/activate?${qs.toString()}`
-}
+    if (!baseUrl || !restaurant?.slug) return ''
+    const token = tokenMap.get(tableNo)
+    if (!token) return ''
+    const qs = new URLSearchParams({
+      slug: restaurant.slug,
+      table: String(tableNo),
+      t: token,
+    })
+    return `${baseUrl}/api/table-session/activate?${qs.toString()}`
+  }
 
-async function regenerateTokens(tables: number[]): Promise<void> {
-  if (!restaurantId) return
-  const res = await fetch('/api/qr-tokens/upsert', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ restaurantId, tableNumbers: tables, regenerate: true }),
-  })
-  if (!res.ok) throw new Error(`Token regenerate failed: ${res.status}`)
-  const { tokens } = (await res.json()) as { tokens: { table_number: number; token: string }[] }
-  const updated = new Map(tokenMap)
-  for (const row of tokens) updated.set(row.table_number, row.token)
-  setTokenMap(updated)
-  setTablePreviewMap({}) // force QR images to regenerate with new tokens
-}
+  async function regenerateTokens(tables: number[]): Promise<void> {
+    if (!restaurantId) return
+    const res = await fetch('/api/qr-tokens/upsert', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId, tableNumbers: tables, regenerate: true }),
+    })
+    if (!res.ok) throw new Error(`Token regenerate failed: ${res.status}`)
+    const { tokens } = (await res.json()) as { tokens: { table_number: number; token: string }[] }
+    const updated = new Map(tokenMap)
+    for (const row of tokens) updated.set(row.table_number, row.token)
+    setTokenMap(updated)
+    setTablePreviewMap({}) // force QR images to regenerate with new tokens
+  }
 
   async function ensureTokens(tables: number[]): Promise<TokenMap> {
     if (!restaurantId) return tokenMap
-   const missing = tables.filter((n) => !tokenMap.has(n))
-if (missing.length === 0) return tokenMap
+    const missing = tables.filter((n) => !tokenMap.has(n))
+    if (missing.length === 0) return tokenMap
     const res = await fetch('/api/qr-tokens/upsert', {
       method: 'POST',
       credentials: 'include',
@@ -595,7 +599,6 @@ if (missing.length === 0) return tokenMap
 
       {/* ── Hero Header ──────────────────────────────────────────────────── */}
       <div className="mb-8">
-        {/* eyebrow */}
         <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1">
           <Sparkles size={11} className="text-purple-400" />
           <span className="text-[11px] font-semibold uppercase tracking-widest text-purple-400">Table QR System</span>
@@ -608,13 +611,10 @@ if (missing.length === 0) return tokenMap
           </span>
         </h1>
         <p className="mt-2 max-w-lg text-sm text-zinc-500">
-          Print these cards, place them on tables — guests scan and instantly get your AI-powered digital menu, 
+          Print these cards, place them on tables — guests scan and instantly get your AI-powered digital menu,
           can call your waiter, and place orders. Zero friction.
         </p>
-		
-		
 
-        {/* Feature pills row */}
         <div className="mt-5 flex flex-wrap gap-2">
           {[
             { icon: <Sparkles size={12} className="text-purple-300" />, label: 'AI Digital Menu', color: '#9333ea' },
@@ -639,7 +639,6 @@ if (missing.length === 0) return tokenMap
         {/* ── Left: Preview ──────────────────────────────────────────────── */}
         <div className="overflow-hidden rounded-[28px] border border-zinc-800/80 bg-[#0c0a14]">
 
-          {/* Preview header */}
           <div className="border-b border-zinc-800/60 px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -659,7 +658,6 @@ if (missing.length === 0) return tokenMap
             </div>
           </div>
 
-          {/* Dot-grid canvas */}
           <div
             className="p-5 sm:p-7"
             style={{
@@ -681,8 +679,8 @@ if (missing.length === 0) return tokenMap
                     cardRef={(el) => { cardRefs.current[tableNo] = el }}
                     tableNo={tableNo}
                     restaurantName={restaurant.name}
+                    restaurantLogoDataUrl={restaurantLogoDataUrl}
                     qrDataUrl={tablePreviewMap[tableNo]}
-                    logoDataUrl={logoDataUrl}
                     isLoading={tokensLoading || !tokenMap.has(tableNo)}
                   />
                 ))
@@ -690,9 +688,7 @@ if (missing.length === 0) return tokenMap
             </div>
           </div>
 
-          {/* CTA Footer */}
           <div className="border-t border-zinc-800/60 p-5">
-            {/* Primary CTA */}
             <button
               onClick={downloadTableSheet}
               disabled={busy || isQuotaExhausted || tableNumbers.length === 0}
@@ -713,22 +709,20 @@ if (missing.length === 0) return tokenMap
                   </>
                 )}
               </span>
-              {/* shine sweep */}
               <div className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
             </button>
-			
-			<button
-  onClick={() => {
-    if (!confirm('This invalidates all currently printed QR codes for these tables. Continue?')) return
-    void regenerateTokens(tableNumbers)
-  }}
-  className="flex items-center justify-center gap-2 rounded-xl border border-amber-700/40 bg-amber-900/20 py-3 text-xs font-semibold text-amber-300 transition hover:border-amber-600 hover:bg-amber-800/30"
->
-  <Shield size={13} />
-  Regenerate QR Codes
-</button>
 
-            {/* Secondary CTAs */}
+            <button
+              onClick={() => {
+                if (!confirm('This invalidates all currently printed QR codes for these tables. Continue?')) return
+                void regenerateTokens(tableNumbers)
+              }}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-700/40 bg-amber-900/20 py-3 text-xs font-semibold text-amber-300 transition hover:border-amber-600 hover:bg-amber-800/30"
+            >
+              <Shield size={13} />
+              Regenerate QR Codes
+            </button>
+
             <div className="mt-3 grid grid-cols-2 gap-2.5">
               <button
                 onClick={shareMenu}
@@ -751,7 +745,6 @@ if (missing.length === 0) return tokenMap
         {/* ── Right: Controls ─────────────────────────────────────────────── */}
         <div className="flex flex-col gap-3">
 
-          {/* What guests unlock */}
           <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
               What guests unlock on scan
@@ -788,7 +781,6 @@ if (missing.length === 0) return tokenMap
             </div>
           </div>
 
-          {/* Table count */}
           <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
             <div className="mb-2.5 flex items-center gap-2">
               <Hash size={12} className="text-zinc-500" />
@@ -810,9 +802,8 @@ if (missing.length === 0) return tokenMap
             </p>
           </div>
 
-          {/* WhatsApp share */}
-          <a
-            href={`https://wa.me/?text=${encodeURIComponent(`Hey! Scan this QR at our table to see the menu, call waiter & order 🍽️\n${menuUrl}`)}`}
+          
+           <a href={`https://wa.me/?text=${encodeURIComponent(`Hey! Scan this QR at our table to see the menu, call waiter & order 🍽️\n${menuUrl}`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between rounded-2xl border border-green-600/20 bg-green-600/8 px-4 py-3.5 transition hover:bg-green-600/15"
@@ -829,7 +820,6 @@ if (missing.length === 0) return tokenMap
             <ExternalLink size={13} className="text-green-600" />
           </a>
 
-          {/* Setup steps */}
           <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Setup in 3 Steps</p>
             <div className="space-y-3">
@@ -851,7 +841,6 @@ if (missing.length === 0) return tokenMap
             </div>
           </div>
 
-          {/* Plan quota */}
           <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Your Plan</p>
@@ -882,7 +871,6 @@ if (missing.length === 0) return tokenMap
         </div>
       </div>
 
-      {/* ── Quota exhausted banner ───────────────────────────────────────── */}
       {isQuotaExhausted && (
         <div className="mt-5 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
           <div className="flex items-start gap-3">
@@ -895,7 +883,6 @@ if (missing.length === 0) return tokenMap
         </div>
       )}
 
-      {/* ── Stats strip ─────────────────────────────────────────────────── */}
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
           <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Current plan</p>
@@ -919,8 +906,8 @@ if (missing.length === 0) return tokenMap
         </div>
         <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
           <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Menu link</p>
-          <a
-            href={menuUrl}
+          
+           <a href={menuUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-2 flex items-center gap-1.5 break-all font-mono text-xs text-purple-400 hover:text-purple-300"
