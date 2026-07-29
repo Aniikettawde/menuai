@@ -307,11 +307,14 @@ export default function QRPage() {
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
   const [tableCount, setTableCount] = useState(10)
+  const [doublePrint, setDoublePrint] = useState(false)
   const [tokenMap, setTokenMap] = useState<TokenMap>(new Map())
   const [tokensLoading, setTokensLoading] = useState(false)
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
   const [restaurantLogoDataUrl, setRestaurantLogoDataUrl] = useState<string | null>(null)
-  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  // Keyed by "<tableNo>-<copyIndex>" instead of just tableNo, since Double
+  // Print mode renders two cards for the same table number side by side.
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
   useEffect(() => { setBaseUrl(window.location.origin) }, [])
 
   // Load the restaurant's own logo (used beside the name + inside the QR hole)
@@ -401,6 +404,23 @@ export default function QRPage() {
     () => Array.from({ length: safeTableCount }, (_, i) => i + 1),
     [safeTableCount],
   )
+
+  // The actual list of cards to render/print. Normally one card per table
+  // (1, 2, 3…). In Double Print mode each table gets two consecutive
+  // cards, so with a 2-column grid they land as a pair — Table 1 | Table 1
+  // on one row, Table 2 | Table 2 on the next — instead of pairing with
+  // the next different table number.
+  type PrintSlot = { tableNo: number; key: string }
+  const printSlots = useMemo<PrintSlot[]>(() => {
+    const copies = doublePrint ? 2 : 1
+    const slots: PrintSlot[] = []
+    for (const tableNo of tableNumbers) {
+      for (let copyIndex = 0; copyIndex < copies; copyIndex++) {
+        slots.push({ tableNo, key: `${tableNo}-${copyIndex}` })
+      }
+    }
+    return slots
+  }, [tableNumbers, doublePrint])
 
   function getTableMenuUrl(tableNo: number): string {
     if (!baseUrl || !restaurant?.slug) return ''
@@ -506,7 +526,7 @@ export default function QRPage() {
   async function downloadTableSheet() {
   if (!restaurant) return
   if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted.'); return }
-  if (tableNumbers.length === 0) { alert('Please choose at least one table.'); return }
+  if (printSlots.length === 0) { alert('Please choose at least one table.'); return }
 
   setBusy(true)
   try {
@@ -521,7 +541,7 @@ export default function QRPage() {
 
     // Measure the FIRST card's real aspect ratio once, then derive how many
     // rows actually fit on a page for that ratio — instead of assuming rows=2.
-    const firstNode = cardRefs.current[tableNumbers[0]]
+    const firstNode = cardRefs.current[printSlots[0].key]
     if (!firstNode) throw new Error('No card ready to measure')
     const aspect = firstNode.offsetWidth / firstNode.offsetHeight // w/h
 
@@ -540,10 +560,10 @@ export default function QRPage() {
     // so cards are centered nicely rather than crammed to one edge.
     const cellH = (pageH - margin * 2 - gap * (rows - 1)) / rows
 
-    for (let i = 0; i < tableNumbers.length; i++) {
-      const tableNo = tableNumbers[i]
-      const node = cardRefs.current[tableNo]
-      if (!node) throw new Error(`Card not ready for Table ${tableNo}`)
+    for (let i = 0; i < printSlots.length; i++) {
+      const slot = printSlots[i]
+      const node = cardRefs.current[slot.key]
+      if (!node) throw new Error(`Card not ready for Table ${slot.tableNo}`)
       if (i > 0 && i % cardsPerPage === 0) doc.addPage()
 
       const posInPage = i % cardsPerPage
@@ -703,22 +723,22 @@ export default function QRPage() {
             }}
           >
             <div className="grid grid-cols-1 gap-6 justify-items-center">
-              {tableNumbers.length === 0 ? (
+              {printSlots.length === 0 ? (
                 <div className="col-span-full rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-10 text-center">
                   <Table size={20} className="mx-auto text-zinc-600" />
                   <p className="mt-3 text-sm font-semibold text-zinc-400">No QR cards to generate</p>
                   <p className="mt-1 text-xs text-zinc-600">Increase the table count or upgrade your plan.</p>
                 </div>
               ) : (
-                tableNumbers.map((tableNo) => (
+                printSlots.map((slot) => (
                   <FixedQrCard
-                    key={tableNo}
-                    cardRef={(el) => { cardRefs.current[tableNo] = el }}
-                    tableNo={tableNo}
+                    key={slot.key}
+                    cardRef={(el) => { cardRefs.current[slot.key] = el }}
+                    tableNo={slot.tableNo}
                     restaurantName={restaurant.name}
                     restaurantLogoDataUrl={restaurantLogoDataUrl}
-                    qrDataUrl={tablePreviewMap[tableNo]}
-                    isLoading={tokensLoading || !tokenMap.has(tableNo)}
+                    qrDataUrl={tablePreviewMap[slot.tableNo]}
+                    isLoading={tokensLoading || !tokenMap.has(slot.tableNo)}
                   />
                 ))
               )}
@@ -728,7 +748,7 @@ export default function QRPage() {
           <div className="border-t border-zinc-800/60 p-5">
             <button
               onClick={downloadTableSheet}
-              disabled={busy || isQuotaExhausted || tableNumbers.length === 0}
+              disabled={busy || isQuotaExhausted || printSlots.length === 0}
               className="group relative w-full overflow-hidden rounded-2xl py-4 text-sm font-bold text-white transition-all duration-300 hover:shadow-[0_0_30px_rgba(139,92,246,0.35)] disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 40%, #f97316 100%)' }}
             >
@@ -837,6 +857,19 @@ export default function QRPage() {
                 ? 'Upgrade your plan to generate more QR codes.'
                 : `Generating cards for Table 1 – ${safeTableCount}`}
             </p>
+
+            <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-2.5">
+              <div>
+                <p className="text-xs font-semibold text-zinc-200">Double print</p>
+                <p className="mt-0.5 text-[10.5px] text-zinc-600">Print each table number twice, side by side</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={doublePrint}
+                onChange={(e) => setDoublePrint(e.target.checked)}
+                className="h-4 w-4 shrink-0 accent-purple-500"
+              />
+            </label>
           </div>
 
           
