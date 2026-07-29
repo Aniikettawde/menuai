@@ -98,7 +98,7 @@ export function RateUsSlideDown({ restaurantId, enabled }: Props) {
       // soft success so the person still sees a thank-you rather than an error.
       if (error && error.code !== '23505') throw error
 
-      if (!error) {
+        if (!error) {
         await track(restaurant.id, 'rating_submitted', {
           metadata: {
             score: selected,
@@ -107,6 +107,20 @@ export function RateUsSlideDown({ restaurantId, enabled }: Props) {
             table_number: tableNumber ?? null,
           },
         })
+
+        // Low ratings ping the manager right away
+        if (selected <= 3) {
+          fetch('/api/rating-alert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              restaurantSlug: restaurant.slug,
+              tableNumber: tableNumber ?? null,
+              score: selected,
+              comment: comment.trim() || null,
+            }),
+          }).catch((err) => console.error('rating-alert error:', err))
+        }
 
         const { data: updated } = await supabase
           .from('restaurants')

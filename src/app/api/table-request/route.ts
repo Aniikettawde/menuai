@@ -423,8 +423,12 @@ const { data: inserted, error: insertError } = await admin
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
-    const assignedStaff = await getAssignedStaff(admin, restaurant.id, resolvedTableNumber)
-    const assignedStaffIds = assignedStaff.map((s) => s.id)
+     const assignedStaff = await getAssignedStaff(admin, restaurant.id, resolvedTableNumber)
+    // "Call waiter" alerts should only reach waiters, not managers
+    const notifyStaff = reqType === 'assistance'
+      ? assignedStaff.filter((s) => s.role === 'waiter')
+      : assignedStaff
+    const assignedStaffIds = notifyStaff.map((s) => s.id)
 
     // FIX 2: proper tag per request type; FIX 3: removed dead itemSummary/moreCount
     const title =

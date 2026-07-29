@@ -52,8 +52,7 @@ const handleSubmit = async () => {
       }
 
       if (error) throw error
-
-     await track(restaurant.id, 'rating_submitted', {
+  await track(restaurant.id, 'rating_submitted', {
   metadata: {
     score: selected,
     order_id: ratingContext?.orderId ?? null,
@@ -61,6 +60,20 @@ const handleSubmit = async () => {
     table_number: ratingContext?.tableNumber ?? tableNumber ?? null,
   },
 })
+
+      // Low ratings ping the manager right away
+      if (selected <= 3) {
+        fetch('/api/rating-alert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            restaurantSlug: restaurant.slug,
+            tableNumber: ratingContext?.tableNumber ?? tableNumber ?? null,
+            score: selected,
+            comment: comment.trim() || null,
+          }),
+        }).catch((err) => console.error('rating-alert error:', err))
+      }
 
       const { data: updated } = await supabase
         .from('restaurants')

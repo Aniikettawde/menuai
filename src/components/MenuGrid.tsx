@@ -29,7 +29,7 @@ import type { WaiterCallItem } from '@/types'
 
 
 function formatPrice(paise: number) {
-  if (!paise || paise <= 0) return ''
+  if (!paise || paise <= 0) return 'ASP'
   return `₹${Math.round(paise / 100)}`
 }
 
@@ -627,8 +627,8 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     overflow: hidden;
   }
 
-  :global(.mg-cat-header) {
-    display: flex; align-items: center; gap: 12px; width: 100%;
+    :global(.mg-cat-header) {
+    display: flex; align-items: flex-start; gap: 12px; width: 100%;
     padding: 16px 16px; background: none; border: none; cursor: pointer;
     text-align: left; transition: background 0.15s;
   }
@@ -652,8 +652,8 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
 
   :global(.mg-cat-name) {
     font-family: var(--font-display); font-size: 17px; font-weight: 700;
-    color: var(--pr-text); margin: 0; overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; letter-spacing: -0.005em;
+    color: var(--pr-text); margin: 0; letter-spacing: -0.005em;
+    overflow-wrap: break-word;
   }
   :global(.mg-featured-pill) {
     flex-shrink: 0; border-radius: 999px; border: 1px solid rgba(138,109,31,0.25);

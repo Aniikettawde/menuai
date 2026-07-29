@@ -116,12 +116,11 @@ export function CategoryTabs() {
                 </div>
 
                 {/* Full name, wraps to 2 lines max — no "Main…" truncation */}
-                <p
+                 <p
                   className={[
-                    'line-clamp-2 w-full text-[10px] font-semibold leading-tight',
+                    'w-full break-words text-[10px] font-semibold leading-tight',
                     isActive ? 'text-stone-900' : 'text-stone-500',
                   ].join(' ')}
-                  title={cat.name}
                 >
                   {cat.name}
                 </p>

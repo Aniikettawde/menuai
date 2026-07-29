@@ -94,7 +94,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
   const { setCustomer } = useCustomerAuth()
 
   const [screen, setScreen] = useState<Screen>('phone')
-  const [channel, setChannel] = useState<Channel>('sms')
+   const [channel, setChannel] = useState<Channel>('whatsapp')
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -110,7 +110,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
   useEffect(() => {
     if (isOpen) {
       setScreen('phone')
-      setChannel('sms')
+      setChannel('whatsapp')
       setPhone('')
       setOtp('')
       setDisplayName('')
@@ -152,18 +152,24 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
     }, 1000)
   }, [])
 
-  const handleSendOTP = useCallback(async () => {
+  const handleSendOTP = useCallback(async (channelOverride?: Channel) => {
     const cleaned = phone.replace(/\D/g, '')
     if (cleaned.length !== 10) {
       setError('Enter a valid 10-digit mobile number')
       return
     }
 
+    // channelOverride lets the SMS-fallback links (phone screen + OTP
+    // screen) send via SMS immediately without waiting on a setChannel
+    // re-render first — using the `channel` state here directly would
+    // read the stale value on that same click.
+    const activeChannel = channelOverride ?? channel
+
     setError('')
     setLoading(true)
 
     try {
-      if (channel === 'sms') {
+      if (activeChannel === 'sms') {
         const result = await sendOTP(cleaned, 'recaptcha-container')
         confirmRef.current = result
       } else {
@@ -175,6 +181,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Failed to send code')
       }
+      if (channelOverride && channelOverride !== channel) setChannel(channelOverride)
       setScreen('otp')
       startResendTimer()
     } catch (err: any) {
@@ -398,63 +405,8 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
                     lineHeight: 1.5,
                   }}
                 >
-                  We&apos;ll send a one-time code to verify your number.
+                  We&apos;ll send a one-time code to your WhatsApp.
                 </p>
-
-                {/* Channel toggle — SMS vs WhatsApp */}
-                <div
-                  style={{
-                    display: 'flex',
-                    borderRadius: 12,
-                    border: '1px solid var(--pr-border-hover)',
-                    overflow: 'hidden',
-                    marginBottom: 16,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setChannel('sms')}
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      height: 42,
-                      background: channel === 'sms' ? 'var(--pr-gold-dim)' : 'transparent',
-                      border: 'none',
-                      color: channel === 'sms' ? 'var(--pr-gold)' : 'var(--pr-text-faint)',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      fontFamily: 'var(--font-body)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <Phone size={14} /> SMS
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChannel('whatsapp')}
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      height: 42,
-                      background: channel === 'whatsapp' ? 'var(--pr-gold-dim)' : 'transparent',
-                      border: 'none',
-                      borderLeft: '1px solid var(--pr-border-hover)',
-                      color: channel === 'whatsapp' ? 'var(--pr-gold)' : 'var(--pr-text-faint)',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      fontFamily: 'var(--font-body)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <MessageCircle size={14} /> WhatsApp
-                  </button>
-                </div>
 
                 <div
                   style={{
@@ -551,7 +503,7 @@ style={{
 
                 <button
                   type="button"
-                  onClick={handleSendOTP}
+                  onClick={() => void handleSendOTP()}
                   disabled={loading || phone.length < 10}
                   style={{
                     width: '100%',
@@ -586,6 +538,35 @@ style={{
                     </>
                   )}
                 </button>
+<div
+                  style={{
+                    marginTop: 12,
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: 'var(--pr-text-faint)',
+                    fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  Prefer SMS?{' '}
+                  <button
+                    type="button"
+                    onClick={() => void handleSendOTP('sms')}
+                    disabled={loading || phone.length < 10}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: loading || phone.length < 10 ? 'var(--pr-text-faint)' : 'var(--pr-gold)',
+                      cursor: loading || phone.length < 10 ? 'not-allowed' : 'pointer',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      fontFamily: 'var(--font-body)',
+                      touchAction: 'manipulation',
+                    } as React.CSSProperties}
+                  >
+                    Send code via SMS instead
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -762,6 +743,42 @@ style={{
                     </button>
                   )}
                 </div>
+
+                {channel === 'whatsapp' && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      textAlign: 'center',
+                      fontSize: 12,
+                      color: 'var(--pr-text-faint)',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    Not on WhatsApp?{' '}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setOtp('')
+                        setError('')
+                        await handleSendOTP('sms')
+                      }}
+                      disabled={loading}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        color: loading ? 'var(--pr-text-faint)' : 'var(--pr-gold)',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-body)',
+                        touchAction: 'manipulation',
+                      } as React.CSSProperties}
+                    >
+                      Sign in with SMS OTP
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

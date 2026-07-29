@@ -27,9 +27,35 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import type { MenuItem } from '@/types'
 import {
-  ChefHat, Search, Star, X, Plus, Loader2, Sparkles,
-  Check, Flame, Clock, Trash2,
+  ChefHat, Search, X, Plus, Loader2, Sparkles,
+  Flame, Clock,
 } from 'lucide-react'
+
+// ── Brand tokens (mirrors the ivory/burgundy system used across the dashboard) ──
+const BRAND = {
+  ivory: '#FBF6EC',
+  ivorySoft: '#F3ECDD',
+  ivoryDeep: '#F8F3E7',
+  card: '#FFFFFF',
+  line: '#E7DDC9',
+  ink: '#2B211F',
+  inkSoft: '#6E5F57',
+  inkFaint: '#9C8F86',
+  burgundy: '#7A2333',
+  burgundyDark: '#5C1A27',
+  burgundyLight: '#9B3049',
+  gold: '#C08A2E',
+  goldDeep: '#8A5E14',
+  sky: '#3E6FA6',
+  skyDeep: '#2E5883',
+  emerald: '#2F7A5C',
+  plum: '#6B4C7A',
+  rose: '#B23B4A',
+  magenta: '#A8446B',
+}
+
+const cardBase = 'rounded-2xl border shadow-[0_1px_2px_rgba(43,33,31,0.04)]'
+const cardStyle = { borderColor: BRAND.line, background: BRAND.card }
 
 interface TodaysSpecialRow {
   id: string
@@ -160,83 +186,68 @@ export function TodaysSpecialPicker({ restaurantId, allItems }: Props) {
   }, [restaurantId, today, supabase])
 
   return (
-    <div
-      style={{
-        borderRadius: 24,
-        border: '1px solid rgba(232,197,71,0.18)',
-        background: 'linear-gradient(135deg, rgba(232,197,71,0.06) 0%, #111111 60%)',
-        padding: '20px 20px 18px',
-        position: 'relative',
-      }}
-    >
+    <div className={`relative overflow-hidden ${cardBase} p-5 sm:p-6`} style={cardStyle}>
+      {/* Subtle background accent, matching the hero section treatment */}
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute right-0 top-0 h-40 w-40 rounded-full blur-[70px]"
+          style={{ background: `${BRAND.gold}14` }}
+        />
+      </div>
+
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 36, height: 36,
-            borderRadius: 12,
-            background: 'rgba(232,197,71,0.14)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#E8C547', flexShrink: 0,
-          }}>
-            <ChefHat size={17} />
+      <div className="relative mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}
+          >
+            <ChefHat size={16} />
           </div>
           <div>
-            <p style={{ fontSize: 14, fontWeight: 700, color: '#FAFAF7', margin: 0, letterSpacing: '-0.01em' }}>
+            <p className="text-sm font-bold" style={{ color: BRAND.ink }}>
               Today&apos;s Special
             </p>
-            <p style={{ fontSize: 11, color: 'rgba(250,250,247,0.4)', margin: '2px 0 0', fontFamily: 'var(--font-body)' }}>
+            <p className="mt-0.5 text-[11px]" style={{ color: BRAND.inkFaint }}>
               {today} · shown to guests as a featured carousel
             </p>
           </div>
         </div>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          borderRadius: 999,
-          border: '1px solid rgba(232,197,71,0.22)',
-          background: 'rgba(232,197,71,0.1)',
-          color: '#E8C547',
-          padding: '5px 11px',
-          fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-        }}>
+        <span
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider"
+          style={{ borderColor: `${BRAND.gold}4D`, background: `${BRAND.gold}1A`, color: BRAND.goldDeep }}
+        >
           <Sparkles size={9} /> {specialItems.length} selected
         </span>
       </div>
 
       {/* Error */}
       {error && (
-        <div style={{
-          marginBottom: 12,
-          borderRadius: 12,
-          border: '1px solid rgba(239,68,68,0.2)',
-          background: 'rgba(239,68,68,0.08)',
-          padding: '10px 14px',
-          fontSize: 12, color: '#fca5a5',
-        }}>
+        <div
+          className="relative mb-3 rounded-xl border px-3.5 py-2.5 text-xs"
+          style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}0F`, color: BRAND.rose }}
+        >
           {error}
         </div>
       )}
 
       {/* Selected specials chips */}
       {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', color: 'rgba(250,250,247,0.3)', fontSize: 12 }}>
-          <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Loading…
+        <div className="relative flex items-center gap-2 py-2.5 text-xs" style={{ color: BRAND.inkFaint }}>
+          <Loader2 size={14} className="animate-spin" /> Loading…
         </div>
       ) : specialItems.length > 0 ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        <div className="relative mb-3.5 flex flex-wrap gap-2">
           {specialItems.map((item) => {
             const imgUrl = getImageUrl(item.image_url)
             const isRemoving = removing === item.id
             return (
               <div
                 key={item.id}
+                className="inline-flex items-center gap-2 rounded-xl border py-1.5 pl-1.5 pr-2 transition-opacity"
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  borderRadius: 14,
-                  border: '1px solid rgba(232,197,71,0.22)',
-                  background: 'rgba(232,197,71,0.08)',
-                  padding: '7px 10px 7px 8px',
-                  transition: 'opacity 0.15s',
+                  borderColor: `${BRAND.gold}40`,
+                  background: `${BRAND.gold}0F`,
                   opacity: isRemoving ? 0.5 : 1,
                 }}
               >
@@ -244,24 +255,25 @@ export function TodaysSpecialPicker({ restaurantId, allItems }: Props) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={imgUrl} alt={item.name}
-                    style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+                    className="h-7 w-7 shrink-0 rounded-lg object-cover"
                   />
                 ) : (
-                  <div style={{
-                    width: 28, height: 28, borderRadius: 8,
-                    background: 'rgba(255,255,255,0.06)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, flexShrink: 0,
-                  }}>
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm"
+                    style={{ background: BRAND.ivorySoft }}
+                  >
                     {item.is_veg ? '🥗' : '🍖'}
                   </div>
                 )}
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: '#FAFAF7', margin: 0, whiteSpace: 'nowrap', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div className="min-w-0">
+                  <p
+                    className="max-w-[140px] truncate text-xs font-semibold"
+                    style={{ color: BRAND.ink }}
+                  >
                     {item.name}
                   </p>
                   {formatPrice(item.price) && (
-                    <p style={{ fontSize: 10, color: '#E8C547', margin: '1px 0 0', fontWeight: 600 }}>
+                    <p className="mt-0.5 text-[10px] font-semibold" style={{ color: BRAND.goldDeep }}>
                       {formatPrice(item.price)}
                     </p>
                   )}
@@ -270,52 +282,45 @@ export function TodaysSpecialPicker({ restaurantId, allItems }: Props) {
                   type="button"
                   onClick={() => void removeSpecial(item.id)}
                   disabled={isRemoving}
-                  style={{
-                    width: 20, height: 20, borderRadius: 6,
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', color: 'rgba(250,250,247,0.4)',
-                    flexShrink: 0, padding: 0,
-                    transition: 'background 0.15s, color 0.15s',
-                  }}
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border p-0 transition"
+                  style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.inkFaint }}
                   onMouseEnter={(e) => {
-                    ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.15)'
-                    ;(e.currentTarget as HTMLButtonElement).style.color = '#f87171'
+                    ;(e.currentTarget as HTMLButtonElement).style.background = `${BRAND.rose}26`
+                    ;(e.currentTarget as HTMLButtonElement).style.color = BRAND.rose
                   }}
                   onMouseLeave={(e) => {
-                    ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'
-                    ;(e.currentTarget as HTMLButtonElement).style.color = 'rgba(250,250,247,0.4)'
+                    ;(e.currentTarget as HTMLButtonElement).style.background = BRAND.ivory
+                    ;(e.currentTarget as HTMLButtonElement).style.color = BRAND.inkFaint
                   }}
                 >
-                  {isRemoving ? <Loader2 size={10} /> : <X size={10} />}
+                  {isRemoving ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
                 </button>
               </div>
             )
           })}
         </div>
       ) : (
-        <div style={{
-          borderRadius: 14, border: '1px dashed rgba(232,197,71,0.2)',
-          padding: '14px 16px', marginBottom: 14, textAlign: 'center',
-        }}>
-          <p style={{ fontSize: 12, color: 'rgba(250,250,247,0.3)', margin: 0 }}>
+        <div
+          className="relative mb-3.5 rounded-xl border border-dashed px-4 py-3.5 text-center"
+          style={{ borderColor: `${BRAND.gold}4D`, background: BRAND.ivoryDeep }}
+        >
+          <p className="text-xs" style={{ color: BRAND.inkFaint }}>
             No specials selected for today — search below to add dishes
           </p>
         </div>
       )}
 
       {/* Search input + dropdown */}
-      <div ref={dropdownRef} style={{ position: 'relative' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '11px 14px',
-          background: 'rgba(255,255,255,0.04)',
-          border: `1px solid ${open ? 'rgba(232,197,71,0.35)' : 'rgba(255,255,255,0.08)'}`,
-          borderRadius: open ? '14px 14px 0 0' : 14,
-          transition: 'border-color 0.2s',
-        }}>
-          <Search size={14} style={{ color: 'rgba(250,250,247,0.3)', flexShrink: 0 }} />
+      <div ref={dropdownRef} className="relative">
+        <div
+          className="flex items-center gap-2.5 border px-3.5 py-2.5 transition-colors"
+          style={{
+            background: BRAND.ivory,
+            borderColor: open ? `${BRAND.gold}59` : BRAND.line,
+            borderRadius: open ? '14px 14px 0 0' : 14,
+          }}
+        >
+          <Search size={14} className="shrink-0" style={{ color: BRAND.inkFaint }} />
           <input
             ref={inputRef}
             type="search"
@@ -323,28 +328,24 @@ export function TodaysSpecialPicker({ restaurantId, allItems }: Props) {
             onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
             onFocus={() => setOpen(true)}
             placeholder="Search dishes to add as today's special…"
-            style={{
-              flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              fontSize: 13, color: '#FAFAF7', fontFamily: 'var(--font-body)',
-            }}
+            className="flex-1 border-none bg-transparent text-[13px] outline-none"
+            style={{ color: BRAND.ink }}
           />
           {query && (
             <button
               type="button"
               onClick={() => { setQuery(''); inputRef.current?.focus() }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(250,250,247,0.3)', display: 'flex', padding: 0 }}
+              className="flex border-none bg-transparent p-0"
+              style={{ color: BRAND.inkFaint }}
             >
               <X size={13} />
             </button>
           )}
           {!query && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              borderRadius: 8, background: 'rgba(232,197,71,0.1)',
-              border: '1px solid rgba(232,197,71,0.18)',
-              padding: '3px 9px',
-              fontSize: 10, fontWeight: 700, color: '#E8C547', flexShrink: 0,
-            }}>
+            <div
+              className="flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-0.5 text-[10px] font-bold"
+              style={{ borderColor: `${BRAND.gold}4D`, background: `${BRAND.gold}1A`, color: BRAND.goldDeep }}
+            >
               <Plus size={9} /> Add
             </div>
           )}
@@ -352,18 +353,12 @@ export function TodaysSpecialPicker({ restaurantId, allItems }: Props) {
 
         {/* Dropdown results */}
         {open && (
-          <div style={{
-            position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 50,
-            background: '#1A1A1A',
-            border: '1px solid rgba(232,197,71,0.2)',
-            borderTop: 'none',
-            borderRadius: '0 0 14px 14px',
-            overflow: 'hidden',
-            boxShadow: '0 16px 40px rgba(0,0,0,0.5)',
-            maxHeight: 320, overflowY: 'auto',
-          }}>
+          <div
+            className="absolute left-0 right-0 top-full z-50 max-h-80 overflow-y-auto border border-t-0 shadow-[0_16px_40px_rgba(43,33,31,0.14)]"
+            style={{ background: BRAND.card, borderColor: `${BRAND.gold}33`, borderRadius: '0 0 14px 14px' }}
+          >
             {availableItems.length === 0 ? (
-              <div style={{ padding: '20px 16px', textAlign: 'center', color: 'rgba(250,250,247,0.3)', fontSize: 12 }}>
+              <div className="px-4 py-5 text-center text-xs" style={{ color: BRAND.inkFaint }}>
                 {query ? 'No matching dishes found' : 'All available dishes are already selected'}
               </div>
             ) : (
@@ -376,69 +371,67 @@ export function TodaysSpecialPicker({ restaurantId, allItems }: Props) {
                     type="button"
                     onClick={() => void addSpecial(item)}
                     disabled={isAdding}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      width: '100%', padding: '11px 14px',
-                      background: 'none', border: 'none',
-                      borderBottom: '1px solid rgba(255,255,255,0.05)',
-                      cursor: 'pointer', textAlign: 'left',
-                      transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(232,197,71,0.06)' }}
+                    className="flex w-full items-center gap-3 border-0 border-b px-3.5 py-2.5 text-left transition-colors"
+                    style={{ borderColor: BRAND.line, background: 'none' }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = BRAND.ivoryDeep }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none' }}
                   >
                     {imgUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={imgUrl} alt={item.name} style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
+                      <img src={imgUrl} alt={item.name} className="h-9 w-9 shrink-0 rounded-lg object-cover" />
                     ) : (
-                      <div style={{
-                        width: 36, height: 36, borderRadius: 10,
-                        background: 'rgba(255,255,255,0.04)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 16, flexShrink: 0,
-                      }}>
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base"
+                        style={{ background: BRAND.ivorySoft }}
+                      >
                         {item.is_veg ? '🥗' : '🍖'}
                       </div>
                     )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: '#FAFAF7', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate text-[13px] font-semibold" style={{ color: BRAND.ink }}>
                           {item.name}
                         </p>
                         {item.is_bestseller && (
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 3,
-                            borderRadius: 4, background: 'rgba(232,197,71,0.1)',
-                            border: '1px solid rgba(232,197,71,0.2)',
-                            color: '#E8C547', padding: '1px 6px',
-                            fontSize: 9, fontWeight: 700, flexShrink: 0,
-                          }}>
+                          <span
+                            className="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-bold"
+                            style={{ borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}1A`, color: BRAND.goldDeep }}
+                          >
                             <Flame size={7} /> Best
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
+                      <div className="mt-0.5 flex items-center gap-2.5">
                         {formatPrice(item.price) && (
-                          <span style={{ fontSize: 11, fontWeight: 600, color: '#FF5C35' }}>{formatPrice(item.price)}</span>
+                          <span className="text-[11px] font-semibold" style={{ color: BRAND.burgundy }}>
+                            {formatPrice(item.price)}
+                          </span>
                         )}
                         {item.prep_time_minutes && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'rgba(250,250,247,0.3)' }}>
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px]"
+                            style={{ color: BRAND.inkFaint }}
+                          >
                             <Clock size={9} /> {item.prep_time_minutes}m
                           </span>
                         )}
-                        <span style={{ fontSize: 10, color: item.is_veg ? '#4ade80' : '#f87171' }}>
+                        <span
+                          className="text-[10px]"
+                          style={{ color: item.is_veg ? BRAND.emerald : BRAND.rose }}
+                        >
                           {item.is_veg ? '● Veg' : '● Non-veg'}
                         </span>
                       </div>
                     </div>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 9, flexShrink: 0,
-                      background: isAdding ? 'rgba(232,197,71,0.15)' : 'rgba(232,197,71,0.08)',
-                      border: '1px solid rgba(232,197,71,0.2)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#E8C547',
-                    }}>
-                      {isAdding ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={13} />}
+                    <div
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
+                      style={{
+                        background: isAdding ? `${BRAND.gold}26` : `${BRAND.gold}14`,
+                        borderColor: `${BRAND.gold}33`,
+                        color: BRAND.goldDeep,
+                      }}
+                    >
+                      {isAdding ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
                     </div>
                   </button>
                 )
@@ -449,13 +442,9 @@ export function TodaysSpecialPicker({ restaurantId, allItems }: Props) {
       </div>
 
       {/* Hint */}
-      <p style={{ margin: '10px 0 0', fontSize: 10.5, color: 'rgba(250,250,247,0.25)', lineHeight: 1.5 }}>
+      <p className="relative mt-2.5 text-[10.5px] leading-relaxed" style={{ color: `${BRAND.ink}59` }}>
         Specials reset each day. Shown as a featured carousel on the customer menu — above all categories.
       </p>
-
-      <style jsx global>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   )
 }

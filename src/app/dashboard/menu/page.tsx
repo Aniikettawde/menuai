@@ -107,7 +107,8 @@ function emptyChoiceDraft(position: number): DishOptionChoiceDraft {
 
 type MenuCategoryRow = MenuCategory
 type MenuItemRow = MenuItem & { best_with?: string[] }
-type ParsedItem = { name: string; description?: string; price?: number; is_veg?: boolean; tags?: string[]; best_with?: string[] }
+type ParsedVariant = { label: string; price: number }
+type ParsedItem = { name: string; description?: string; price?: number; is_veg?: boolean; tags?: string[]; best_with?: string[]; variants?: ParsedVariant[] }
 type ParsedCategory = { name: string; items: ParsedItem[] }
 type GeminiMenuResult = { categories: ParsedCategory[] }
 
@@ -288,6 +289,83 @@ function PairingSelector({
   )
 }
 
+// ─── ImageLibraryModal ────────────────────────────────────────────────────
+// Lets the owner reuse a photo they've already uploaded to a dish or
+// category, instead of always uploading a fresh file.
+
+function ImageLibraryModal({
+  images, onClose, onSelect,
+}: {
+  images: { url: string; label: string }[]
+  onClose: () => void
+  onSelect: (url: string) => void
+}) {
+  const [search, setSearch] = useState('')
+  const filtered = images.filter(
+    (img) => !search.trim() || img.label.toLowerCase().includes(search.trim().toLowerCase())
+  )
+
+  return (
+    <BottomSheet onClose={onClose} zIndex="z-[85]" maxWidthClass="max-w-2xl">
+      <div className="flex shrink-0 items-center justify-between border-b px-4 py-3.5" style={{ borderColor: BRAND.line }}>
+        <div>
+          <div className="flex items-center gap-2 text-sm font-bold" style={{ color: BRAND.burgundy }}>
+            <ImagePlus size={16} /> Image Library
+          </div>
+          <p className="mt-0.5 text-xs" style={{ color: BRAND.inkFaint }}>Reuse a photo already on your menu</p>
+        </div>
+        <button onClick={onClose} className="rounded-xl p-2 transition hover:bg-black/[0.04]" style={{ color: BRAND.inkFaint }}><X size={16} /></button>
+      </div>
+
+      <div className="border-b px-4 py-3" style={{ borderColor: BRAND.line }}>
+        <div className="relative">
+          <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: BRAND.inkFaint }} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by dish or category name…"
+            className={`${INPUT} pl-9`}
+            style={INPUT_STYLE}
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        {filtered.length === 0 ? (
+          <div className="py-10 text-center">
+            <ImagePlus size={24} className="mx-auto mb-3" style={{ color: BRAND.inkFaint }} />
+            <p className="text-sm font-medium" style={{ color: BRAND.inkSoft }}>
+              {images.length === 0 ? 'No photos uploaded yet' : 'No matches found'}
+            </p>
+            <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>
+              {images.length === 0
+                ? "Upload a photo to a dish or category first — it'll show up here for reuse."
+                : 'Try a different search term.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+            {filtered.map((img) => (
+              <button
+                key={img.url}
+                type="button"
+                onClick={() => onSelect(img.url)}
+                className="group flex flex-col gap-1.5 text-left"
+              >
+                <div className="aspect-square overflow-hidden rounded-xl border transition group-hover:opacity-90" style={{ borderColor: BRAND.line }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={resolveMenuImageUrl(img.url)} alt={img.label} className="h-full w-full object-cover" />
+                </div>
+                <p className="truncate text-[11px]" style={{ color: BRAND.inkFaint }}>{img.label}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </BottomSheet>
+  )
+}
+
 // ─── Gemini / Import ──────────────────────────────────────────────────────────
 
 async function parseMenuWithGemini(base64Data: string, mimeType: string): Promise<GeminiMenuResult> {
@@ -362,6 +440,10 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
   }
 
   const totalItems = result?.categories?.reduce((sum, c) => sum + c.items.length, 0) ?? 0
+  const totalVariantItems = result?.categories?.reduce(
+    (sum, c) => sum + c.items.filter((i) => (i.variants?.length ?? 0) > 1).length,
+    0,
+  ) ?? 0
 
   return (
     <BottomSheet onClose={onClose}>
@@ -371,7 +453,7 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
             <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: BRAND.burgundy }}>
               <Sparkles size={16} /> AI Menu Import
             </div>
-            <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>Powered by Gemini · auto-fills pairings too</p>
+            <p className="mt-1 text-xs" style={{ color: BRAND.inkFaint }}>Powered by Gemini · auto-fills pairings and serving sizes too</p>
           </div>
           <button onClick={onClose} className="rounded-xl p-2 transition hover:bg-black/[0.04]" style={{ color: BRAND.inkFaint }}><X size={16} /></button>
         </div>
@@ -386,7 +468,7 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
 
         {step === 'choose' && (
           <div className="space-y-3">
-            <p className="text-sm" style={{ color: BRAND.inkSoft }}>Upload a photo or file of your menu — AI will extract all dishes and auto-suggest pairings.</p>
+            <p className="text-sm" style={{ color: BRAND.inkSoft }}>Upload a photo or file of your menu — AI will extract all dishes, sizes/pours, and auto-suggest pairings.</p>
             <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition hover:shadow-[0_2px_10px_rgba(122,35,51,0.08)]" style={softStyle}>
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}><Camera size={20} /></div>
               <div><p className="text-sm font-semibold" style={{ color: BRAND.ink }}>Scan Photo</p><p className="text-xs" style={{ color: BRAND.inkFaint }}>Take a photo of your menu</p></div>
@@ -412,7 +494,10 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
           <div className="space-y-4">
             <div className="rounded-2xl border p-4" style={{ borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}14` }}>
               <p className="text-sm font-semibold" style={{ color: BRAND.emerald }}>Scan complete!</p>
-              <p className="mt-1 text-xs" style={{ color: BRAND.inkSoft }}>Found {result.categories.length} categories and {totalItems} dishes. Pairings auto-filled where possible.</p>
+              <p className="mt-1 text-xs" style={{ color: BRAND.inkSoft }}>
+                Found {result.categories.length} categories and {totalItems} dishes.
+                {totalVariantItems > 0 ? ` ${totalVariantItems} of them have multiple sizes/pours — each will be added as a serving-size option.` : ' Pairings auto-filled where possible.'}
+              </p>
             </div>
             <div className="space-y-3">
               {result.categories.map((cat) => (
@@ -429,8 +514,15 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
                             <p className="truncate text-sm" style={{ color: BRAND.ink }}>{item.is_veg ? '🟢' : '🔴'} {item.name}</p>
                             {item.description && <p className="truncate text-xs" style={{ color: BRAND.inkFaint }}>{item.description}</p>}
                           </div>
-                          {typeof item.price === 'number' && <span className="shrink-0 text-sm ml-2" style={{ color: BRAND.burgundy }}>₹{item.price}</span>}
+                          {typeof item.price === 'number' && item.price > 0 && (!item.variants || item.variants.length <= 1) && (
+                            <span className="shrink-0 text-sm ml-2" style={{ color: BRAND.burgundy }}>₹{item.price}</span>
+                          )}
                         </div>
+                        {item.variants && item.variants.length > 1 && (
+                          <p className="mt-1 flex flex-wrap gap-x-2 text-[10px]" style={{ color: BRAND.goldDeep }}>
+                            📏 {item.variants.map((v) => `${v.label}: ₹${v.price}`).join(' · ')}
+                          </p>
+                        )}
                         {item.best_with && item.best_with.length > 0 && (
                           <p className="mt-1 text-[10px]" style={{ color: BRAND.goldDeep }}>
                             🔗 Pairs with: {item.best_with.join(', ')}
@@ -442,7 +534,7 @@ function ImportMenuModal({ onClose, onImport }: { onClose: () => void; onImport:
                 </div>
               ))}
             </div>
-            <p className="text-xs" style={{ color: BRAND.inkFaint }}>You can edit pairings or any dish details after importing.</p>
+            <p className="text-xs" style={{ color: BRAND.inkFaint }}>You can edit pairings, sizes, or any dish details after importing.</p>
           </div>
         )}
 
@@ -849,6 +941,9 @@ export default function MenuPage() {
   const [actionSheetItem, setActionSheetItem] = useState<MenuItemRow | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [catImageUploading, setCatImageUploading] = useState<string | null>(null)
+    const [aiGeneratingCatId, setAiGeneratingCatId] = useState<string | null>(null)
+	const [showImageLibrary, setShowImageLibrary] = useState(false)
+	  const [libraryTargetCatId, setLibraryTargetCatId] = useState<string | null>(null)
   const [descriptionGenerating, setDescriptionGenerating] = useState(false)
   const [customiseItem, setCustomiseItem] = useState<MenuItemRow | null>(null)
   const [optionsByItem, setOptionsByItem] = useState<Record<string, DishOption[]>>({})
@@ -954,6 +1049,28 @@ export default function MenuPage() {
 
   const catItems = useMemo(() => items.filter((x) => x.category_id === activeCat), [items, activeCat])
   const activeCatData = orderedCategories.find((c) => c.id === activeCat) ?? null
+  
+  // All photos already uploaded across dishes + categories, deduped by URL,
+  // so the library never needs a separate storage.list() call or extra
+  // permissions — it's just what's already on the menu.
+  const libraryImages = useMemo(() => {
+    const seen = new Set<string>()
+    const list: { url: string; label: string }[] = []
+    for (const it of items) {
+      if (it.image_url && !seen.has(it.image_url)) {
+        seen.add(it.image_url)
+        list.push({ url: it.image_url, label: it.name })
+      }
+    }
+    for (const cat of categories) {
+      const catImg = (cat as MenuCategoryRow & { image_url?: string | null }).image_url
+      if (catImg && !seen.has(catImg)) {
+        seen.add(catImg)
+        list.push({ url: catImg, label: `${cat.name} (category)` })
+      }
+    }
+    return list
+  }, [items, categories])
 
   // ── Save dish options ──────────────────────────────────────────────────────
 
@@ -1120,6 +1237,52 @@ export default function MenuPage() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to upload category image') }
     finally { setCatImageUploading(null) }
   }
+  
+  async function generateCategoryImage(cat: MenuCategoryRow) {
+    setAiGeneratingCatId(cat.id); setError('')
+    try {
+      const res = await fetch('/api/category-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryName: cat.name,
+          cuisineType: restaurant?.cuisine_type ?? '',
+          isBar: (cat.menu_type ?? 'food') === 'bar',
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error ?? 'Failed to generate image')
+      const { imageBase64, mimeType } = data as { imageBase64: string; mimeType: string }
+
+      // Decode base64 -> Blob for direct upload to Supabase storage,
+      // reusing the same bucket/path convention as manual camera uploads.
+      const byteChars = atob(imageBase64)
+      const byteNumbers = new Array(byteChars.length)
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i)
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType })
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+      const ext = mimeType.includes('png') ? 'png' : 'jpg'
+      const path = `${user.id}/categories/${Date.now()}-ai-${cat.id}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('restaurant-assets')
+        .upload(path, blob, { upsert: true, contentType: mimeType })
+      if (uploadError) throw uploadError
+
+      const { data: updated, error: updateError } = await supabase
+        .from('menu_categories')
+        .update({ image_url: path })
+        .eq('id', cat.id)
+        .select().single()
+      if (updateError) throw updateError
+      if (updated) setCategories((prev) => prev.map((c) => (c.id === cat.id ? (updated as MenuCategoryRow) : c)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate category image')
+    } finally {
+      setAiGeneratingCatId(null)
+    }
+  }
 
   async function handleGeminiImport(result: GeminiMenuResult) {
     if (!restaurant) throw new Error('No restaurant found')
@@ -1134,21 +1297,74 @@ export default function MenuPage() {
       const newCat = catData as MenuCategoryRow
       setCategories((prev) => [...prev, newCat]); setActiveCat(newCat.id)
       if (!parsedCat.items.length) continue
-      const itemPayloads = parsedCat.items.map((item, idx) => ({
-        restaurant_id: restaurant.id, category_id: newCat.id, name: item.name.trim(),
-        description: item.description ?? '', price: item.price ? Math.round(item.price * 100) : 0,
-        currency: 'INR', image_url: '', is_available: true,
-        is_bestseller: (item.tags ?? []).some((t) => t.toLowerCase().includes('best')),
-        is_veg: item.is_veg ?? true, is_special: false, tags: item.tags ?? [],
-        allergens: [], prep_time_minutes: null, calories: null, position: idx,
-        // Note: Gemini-suggested pairings are dropped here since they may not
-        // match an item name exactly. Owners can add real pairings afterward
-        // via the PairingSelector, which only allows selecting existing items.
-        best_with: [],
-      }))
-      const { data: insertedItems, error: itemsError } = await supabase.from('menu_items').insert(itemPayloads).select()
+      const itemPayloads = parsedCat.items.map((item, idx) => {
+        // Multi-size / multi-pour items (e.g. "30ml / 60ml / 90ml / Full") come
+        // back from Gemini with `variants` instead of a single price. We still
+        // need a sane base `price` for the dish card, so fall back to the
+        // cheapest variant when the item price itself is 0.
+        const cheapestVariant = item.variants && item.variants.length > 0
+          ? item.variants.reduce((min, v) => (v.price < min.price ? v : min), item.variants[0])
+          : null
+        const basePriceRupees = item.price && item.price > 0 ? item.price : (cheapestVariant?.price ?? 0)
+        return {
+          restaurant_id: restaurant.id, category_id: newCat.id, name: item.name.trim(),
+          description: item.description ?? '', price: basePriceRupees ? Math.round(basePriceRupees * 100) : 0,
+          currency: 'INR', image_url: '', is_available: true,
+          is_bestseller: (item.tags ?? []).some((t) => t.toLowerCase().includes('best')),
+          is_veg: item.is_veg ?? true, is_special: false, tags: item.tags ?? [],
+          allergens: [], prep_time_minutes: null, calories: null, position: idx,
+          // Note: Gemini-suggested pairings are dropped here since they may not
+          // match an item name exactly. Owners can add real pairings afterward
+          // via the PairingSelector, which only allows selecting existing items.
+          best_with: [],
+        }
+      })
+       const { data: insertedItems, error: itemsError } = await supabase.from('menu_items').insert(itemPayloads).select()
       if (itemsError) throw itemsError
-      if (insertedItems) setItems((prev) => [...prev, ...(insertedItems as MenuItemRow[])])
+      if (insertedItems) {
+        setItems((prev) => [...prev, ...(insertedItems as MenuItemRow[])])
+
+        // For every item that came back with 2+ price variants (30ml/60ml/90ml,
+        // Half/Full, etc.), create a matching "Serving Size" dish-option group
+        // so customers see and pick the real per-size prices instead of a
+        // single flattened number.
+        //
+        // IMPORTANT: Supabase's insert().select() does NOT guarantee the
+        // returned rows are in the same order they were inserted in. We
+        // can't zip insertedItems[vi] with parsedCat.items[vi] by array
+        // index — on larger menus this silently attaches variants to the
+        // wrong item (or drops them). Instead, match each inserted row back
+        // to its source parsed item via the `position` field we assigned on
+        // itemPayloads (0, 1, 2… in parsedCat.items order), which stays
+        // correct regardless of what order rows come back in.
+        for (const insertedItem of insertedItems as MenuItemRow[]) {
+          const parsedItem = parsedCat.items[insertedItem.position ?? -1]
+          if (!parsedItem) continue
+          const variants = parsedItem.variants ?? []
+          if (variants.length < 2) continue
+
+          const draft: DishOptionDraft = {
+            name: 'Serving Size',
+            is_required: true,
+            min_selections: 1,
+            max_selections: 1,
+            position: 0,
+            price_mode: 'override',
+            choices: variants.map((v, ci) => ({
+              name: v.label,
+              extra_price: Math.round(v.price * 100),
+              is_default: ci === 0,
+              is_available: true,
+              position: ci,
+            })),
+          }
+          try {
+            await saveDishOptions(insertedItem.id, [draft])
+          } catch (err) {
+            console.error(`Failed to save serving-size options for "${insertedItem.name}":`, err)
+          }
+        }
+      }
     }
   }
 
@@ -1269,12 +1485,31 @@ export default function MenuPage() {
                             ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-12 w-12 rounded-xl object-cover" />
                             : <div className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl" style={{ background: BRAND.ivorySoft }}>{isBarTab ? '🍸' : '🍱'}</div>
                           }
-                          <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
+                        <label className="absolute -bottom-1 -right-1" onClick={(e) => e.stopPropagation()}>
                             <div className="flex h-5 w-5 items-center justify-center rounded-full transition" style={{ background: BRAND.line, color: BRAND.inkSoft }}>
                               {catImageUploading === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Camera size={9} />}
                             </div>
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
                           </label>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); void generateCategoryImage(cat) }}
+                            disabled={aiGeneratingCatId === cat.id}
+                            className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full transition disabled:opacity-60"
+                            style={{ background: BRAND.burgundy, color: '#fff' }}
+                            title="Generate image with AI"
+                          >
+                            {aiGeneratingCatId === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Sparkles size={9} />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setLibraryTargetCatId(cat.id); setShowImageLibrary(true) }}
+                            className="absolute -bottom-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full transition"
+                            style={{ background: BRAND.gold, color: '#fff' }}
+                            title="Choose from library"
+                          >
+                            <ImagePlus size={9} />
+                          </button>
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold" style={{ color: BRAND.ink }}>{cat.name}</p>
@@ -1423,8 +1658,25 @@ export default function MenuPage() {
                         }
                         <span className="truncate text-sm">{cat.name}</span>
                       </div>
-                      <span className="flex items-center gap-2 text-xs shrink-0">
+                    <span className="flex items-center gap-2 text-xs shrink-0">
                         <span className="rounded-full px-2 py-0.5" style={{ background: BRAND.ivorySoft }}>{count}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setLibraryTargetCatId(cat.id); setShowImageLibrary(true) }}
+                          className="rounded-lg p-1 opacity-0 transition hover:opacity-100 group-hover:opacity-60"
+                          style={{ color: BRAND.goldDeep }}
+                          title="Choose from library"
+                        >
+                          <ImagePlus size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void generateCategoryImage(cat) }}
+                          disabled={aiGeneratingCatId === cat.id}
+                          className="rounded-lg p-1 opacity-0 transition hover:opacity-100 group-hover:opacity-60"
+                          style={{ color: BRAND.gold }}
+                          title="Generate image with AI"
+                        >
+                          {aiGeneratingCatId === cat.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
                           className="rounded-lg p-1 opacity-0 transition hover:opacity-100"
@@ -1574,6 +1826,14 @@ export default function MenuPage() {
                     <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadItemImage(f) }} />
                   </label>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { setLibraryTargetCatId(null); setShowImageLibrary(true) }}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border py-2.5 text-xs font-semibold transition hover:bg-black/[0.03]"
+                  style={{ borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}0D`, color: BRAND.goldDeep }}
+                >
+                  <ImagePlus size={13} /> Choose from Image Library
+                </button>
               </Field>
               <div className="space-y-2">
                 <ToggleRow label="Bestseller" description={editingIsBar ? 'Highlight as a top pour' : 'Highlight as a top dish'} checked={Boolean(editingItem.is_bestseller)} onChange={(checked) => setEditingItem((f) => (f ? { ...f, is_bestseller: checked } : f))} />
@@ -1673,7 +1933,36 @@ export default function MenuPage() {
       )}
 
       {showImport && <ImportMenuModal onClose={() => setShowImport(false)} onImport={handleGeminiImport} />}
-    </div>
+   {showImageLibrary && (
+        <ImageLibraryModal
+          images={libraryImages}
+          onClose={() => { setShowImageLibrary(false); setLibraryTargetCatId(null) }}
+          onSelect={async (url) => {
+            setShowImageLibrary(false)
+            if (libraryTargetCatId) {
+              // Reusing a photo for a category — just point image_url at the
+              // existing storage path, no re-upload needed.
+              const catId = libraryTargetCatId
+              setLibraryTargetCatId(null)
+              try {
+                const { data: updated, error } = await supabase
+                  .from('menu_categories')
+                  .update({ image_url: url })
+                  .eq('id', catId)
+                  .select().single()
+                if (error) throw error
+                if (updated) setCategories((prev) => prev.map((c) => (c.id === catId ? (updated as MenuCategoryRow) : c)))
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to set category image')
+              }
+            } else {
+              setEditingItem((f) => (f ? { ...f, image_url: url } : f))
+            }
+          }}
+        />
+      )}
+
+   </div>
   )
 }
 

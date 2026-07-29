@@ -294,6 +294,12 @@ const autoVisitFiredRef = useRef(false)
       setDishOptions(optionsByItem)
     } catch (err) { console.error('Failed to fetch dish options:', err) }
   }, [setDishOptions])
+  
+   useEffect(() => {
+    if (initialData.items.length > 0) {
+      void fetchDishOptions(initialData.items.map((i) => i.id))
+    }
+  }, [initialData.items, fetchDishOptions])
 
   // ── Refresh menu ──────────────────────────────────────────────────────────
   const refreshMenu = useCallback(async () => {
@@ -372,6 +378,10 @@ const autoVisitFiredRef = useRef(false)
   }, [searchParams, initialData.restaurant.id])
 
   // ── Realtime subscriptions ────────────────────────────────────────────────
+  const itemsRef = useRef(items)
+  useEffect(() => { itemsRef.current = items }, [items])
+
+  // ── Realtime subscriptions ────────────────────────────────────────────────
   useEffect(() => {
     const restaurantId = initialData.restaurant.id
     const channel = supabase
@@ -383,16 +393,16 @@ const autoVisitFiredRef = useRef(false)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` },
         () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120) })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dish_options' },
-        () => { if (initialData.items.length > 0) void fetchDishOptions(initialData.items.map((i) => i.id)) })
+        () => { if (itemsRef.current.length > 0) void fetchDishOptions(itemsRef.current.map((i) => i.id)) })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dish_option_choices' },
-        () => { if (initialData.items.length > 0) void fetchDishOptions(initialData.items.map((i) => i.id)) })
+        () => { if (itemsRef.current.length > 0) void fetchDishOptions(itemsRef.current.map((i) => i.id)) })
       .subscribe()
 
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
       void supabase.removeChannel(channel)
     }
-  }, [initialData.restaurant.id, initialData.items, refreshMenu, fetchDishOptions])
+  }, [initialData.restaurant.id, refreshMenu, fetchDishOptions])
 
   // ── Waiter call ───────────────────────────────────────────────────────────
  const handleCallWaiter = useCallback(

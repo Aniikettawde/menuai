@@ -2,7 +2,7 @@
 
 import { useState, type MouseEvent } from 'react'
 import { Star, Flame, Plus, Minus, Sparkles, Clock, Link2 } from 'lucide-react'
-import type { MenuItem } from '@/types'
+import type { MenuItem, DishOption } from '@/types'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
 import { useTranslation } from '@/lib/i18n/useTranslation'
@@ -25,6 +25,57 @@ const ADD_HEIGHT = 32
 const CARD_PAD = 16
 const ROW_GAP = 16
 
+function VariantsList({ options }: { options: DishOption[] }) {
+  if (options.length === 0) return null
+  return (
+    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {options.map((opt) => {
+        const isOverride = opt.price_mode === 'override'
+        const choices = opt.choices.filter((c) => c.is_available)
+        if (choices.length === 0) return null
+        return (
+          <div key={opt.id}>
+            <span style={{
+              display: 'block', marginBottom: 4,
+              fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+              color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)',
+            }}>
+              {opt.name}
+            </span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {choices.map((c) => (
+                <span
+                  key={c.id}
+                  style={{
+                    display: 'inline-flex', alignItems: 'baseline', gap: 4,
+                    padding: '4px 9px', borderRadius: 8,
+                    background: c.is_default ? 'var(--pr-gold-dim)' : 'var(--pr-black-soft)',
+                    border: `1px solid ${c.is_default ? 'rgba(138,109,31,0.25)' : 'var(--pr-border)'}`,
+                    fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  <span style={{
+                    fontSize: 11, fontWeight: 600,
+                    color: c.is_default ? 'var(--pr-gold)' : 'var(--pr-text-muted)',
+                  }}>
+                    {c.name}
+                  </span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 800,
+                    color: c.is_default ? 'var(--pr-gold)' : 'var(--pr-text)',
+                  }}>
+                    {isOverride ? '₹' : '+₹'}{Math.round(c.extra_price / 100)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function getImageUrl(imageUrl: string | null | undefined): string | null {
   if (!imageUrl) return null
   if (imageUrl.startsWith('http')) return imageUrl
@@ -34,7 +85,7 @@ function getImageUrl(imageUrl: string | null | undefined): string | null {
 }
 
 function formatPrice(paise: number): string {
-  if (!paise || paise <= 0) return ''
+  if (!paise || paise <= 0) return 'ASP'
   return `₹${Math.round(paise / 100)}`
 }
 
@@ -159,17 +210,22 @@ function ItemPhoto({
 }
 
 function AddControl({
-  qtyInCart, adding, onAdd, onInc, onDec,
+  qtyInCart, adding, onAdd, onInc, onDec, inline = false,
 }: {
-  qtyInCart: number; adding: boolean
+  qtyInCart: number; adding: boolean; inline?: boolean
   onAdd: (e: MouseEvent) => void; onInc: (e: MouseEvent) => void; onDec: (e: MouseEvent) => void
 }) {
-  const base: React.CSSProperties = {
-    position: 'absolute', left: '50%', bottom: 0,
-    transform: 'translate(-50%, 50%)',
-    width: '76%', height: ADD_HEIGHT,
-    borderRadius: 9, boxShadow: '0 3px 10px rgba(0,0,0,0.18)',
-  }
+  const base: React.CSSProperties = inline
+    ? {
+        width: 112, height: ADD_HEIGHT,
+        borderRadius: 9, boxShadow: '0 3px 10px rgba(0,0,0,0.12)',
+      }
+    : {
+        position: 'absolute', left: '50%', bottom: 0,
+        transform: 'translate(-50%, 50%)',
+        width: '76%', height: ADD_HEIGHT,
+        borderRadius: 9, boxShadow: '0 3px 10px rgba(0,0,0,0.18)',
+      }
 
   if (qtyInCart === 0) {
     return (
@@ -266,6 +322,7 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   const priceLabel = formatPrice(item.price)
   const hasOptions = (dishOptions[item.id]?.length ?? 0) > 0
   const imageUrl = getImageUrl(item.image_url)
+  const hasImage = !!imageUrl
   const cleanDescription = item.description ? trimDescription(item.description) : null
   const ordersEnabled = useAppStore((s) => (s.restaurant?.orders_enabled ?? true) && s.hasTableToken)
 
@@ -321,8 +378,7 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   const isInCart = qtyInCart > 0
   // Extra bottom room so the photo's overlapping Add button (which extends
   // below the photo by half its height) never collides with the next card.
-  const photoColBottomSpace = ordersEnabled ? ADD_HEIGHT / 2 + 4 : 0
-
+const photoColBottomSpace = hasImage && ordersEnabled ? ADD_HEIGHT / 2 + 4 : 0
   return (
     <div
       style={{
@@ -404,8 +460,12 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
             </p>
           )}
 
-          {(item.best_with?.length ?? 0) > 0 && (
+         {(item.best_with?.length ?? 0) > 0 && (
             <PairsWith names={item.best_with} onTap={onAsk ? handlePairsWithTap : undefined} />
+          )}
+
+          {!ordersEnabled && hasOptions && (
+            <VariantsList options={dishOptions[item.id] ?? []} />
           )}
 
           {socialCount !== null && (

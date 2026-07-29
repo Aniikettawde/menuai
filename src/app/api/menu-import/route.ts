@@ -16,7 +16,7 @@ const GEMINI_PROMPT = `You are a menu digitization expert for Indian restaurants
 Extract EVERY item from this menu. Output ONLY raw JSON — no markdown, no backticks, no explanation.
 
 JSON structure (strict):
-{"categories":[{"name":"Category Name","items":[{"name":"Item Name","description":"","price":0,"is_veg":true,"tags":[]}]}]}
+{"categories":[{"name":"Category Name","items":[{"name":"Item Name","description":"","price":0,"is_veg":true,"tags":[],"variants":[]}]}]}
 
 Rules:
 - name: Title Case (e.g. "Paneer Butter Masala")
@@ -32,8 +32,19 @@ Rules:
 - Items marked with spicy symbol (🌶 or J) → add tag "spicy"
 - Items marked with Jain symbol → add tag "jain"
 - Items marked with Chef special (T or 🍴) → add tag "chef-special"
-- Price variants like "160/110" or "F/H" → use the first/full price only
-- "SEASONAL" price → 0`
+
+VARIANTS (sizes / pours / portions with separate prices) — IMPORTANT:
+- Many liquor and food menus show one item with SEVERAL prices under column headers like
+  "30ML 60ML 90ML 180ML FULL", "Half / Full", "Regular / Large", "P / H / F", "S / M / L", etc.
+- When an item has more than one price like this, do NOT collapse it to a single price.
+  Instead set "price" to 0 and fill "variants" with one entry per column that has a price:
+  "variants":[{"label":"30ml","price":557},{"label":"60ml","price":1059},{"label":"90ml","price":1504},{"label":"180ml","price":2758},{"label":"Full","price":10446}]
+- "label" must reuse the exact column header text for that price (e.g. "30ml", "60ml", "90ml", "180ml", "Full", "Half", "Large").
+- The column headers usually appear once above a group of items (a mini sub-table) and apply to every item listed below them until a new header row appears — reuse those same labels for every item in that group.
+- Skip a variant entirely if that item's cell for that column is blank, "-", or unreadable — do not invent a price.
+- If an item has only ONE price in the whole row, do not use variants — just set "price" to that value and leave "variants" as an empty array [].
+- "160/110" or "F/H" with no clear column headers → treat the first number as a "Full" variant and the second as a "Half" variant, e.g. "variants":[{"label":"Full","price":160},{"label":"Half","price":110}]
+- "SEASONAL" price → 0, variants: []`
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -200,7 +211,7 @@ function extractAndRepairJson(rawText: string): string {
     // Close open item + item array + category + categories
     clean + '"}]}]}',
     // Close open string + item + arrays
-    clean + '","is_veg":true,"tags":[]}]}]}',
+    clean + '","is_veg":true,"tags":[],"variants":[]}]}]}',
   ]
 
   for (const attempt of repairAttempts) {
@@ -281,12 +292,18 @@ async function callGeminiGenerateContent(
 
 // ─── Validate + normalize parsed menu ────────────────────────────────────────
 
+type RawVariant = {
+  label?: unknown
+  price?: unknown
+}
+
 type RawItem = {
   name?: unknown
   description?: unknown
   price?: unknown
   is_veg?: unknown
   tags?: unknown
+  variants?: unknown
 }
 
 type RawCategory = {
@@ -296,6 +313,19 @@ type RawCategory = {
 
 type RawMenu = {
   categories?: unknown
+}
+
+function normalizeVariants(raw: unknown): { label: string; price: number }[] {
+  if (!Array.isArray(raw)) return []
+  return (raw as RawVariant[])
+    .filter((v) => typeof v.label === 'string' && v.label.trim())
+    .map((v) => ({
+      label: String(v.label).trim(),
+      price: typeof v.price === 'number' ? Math.round(v.price) : 0,
+    }))
+    // A variant with no readable price isn't useful — drop it rather than
+    // showing customers a "₹0" size option.
+    .filter((v) => v.price > 0)
 }
 
 function normalizeMenu(raw: RawMenu) {
@@ -309,15 +339,29 @@ function normalizeMenu(raw: RawMenu) {
       const items = Array.isArray(cat.items)
         ? (cat.items as RawItem[])
             .filter((item) => typeof item.name === 'string' && item.name.trim())
-            .map((item) => ({
-              name: String(item.name).trim(),
-              description: typeof item.description === 'string' ? item.description.trim() : '',
-              price: typeof item.price === 'number' ? Math.round(item.price) : 0,
-              is_veg: item.is_veg !== false, // default true
-              tags: Array.isArray(item.tags)
-                ? item.tags.map((t) => String(t).trim()).filter(Boolean)
-                : [],
-            }))
+            .map((item) => {
+              const variants = normalizeVariants(item.variants)
+              const parsedPrice = typeof item.price === 'number' ? Math.round(item.price) : 0
+              // If Gemini gave us variants but no single price (the expected
+              // shape for multi-size items), fall back to the cheapest
+              // variant so the base `price` field is never left at 0 when we
+              // actually know a price for this dish.
+              const price = parsedPrice > 0
+                ? parsedPrice
+                : variants.length > 0
+                  ? Math.min(...variants.map((v) => v.price))
+                  : 0
+              return {
+                name: String(item.name).trim(),
+                description: typeof item.description === 'string' ? item.description.trim() : '',
+                price,
+                is_veg: item.is_veg !== false, // default true
+                tags: Array.isArray(item.tags)
+                  ? item.tags.map((t) => String(t).trim()).filter(Boolean)
+                  : [],
+                variants,
+              }
+            })
         : []
       return { name, items }
     })
@@ -428,8 +472,12 @@ export async function POST(req: NextRequest) {
     const normalized = normalizeMenu(parsed)
 
     const totalItems = normalized.categories.reduce((sum, c) => sum + c.items.length, 0)
+    const totalVariantItems = normalized.categories.reduce(
+      (sum, c) => sum + c.items.filter((i) => i.variants.length > 0).length,
+      0,
+    )
     console.log(
-      `[menu-import] Success: ${normalized.categories.length} categories, ${totalItems} items`,
+      `[menu-import] Success: ${normalized.categories.length} categories, ${totalItems} items, ${totalVariantItems} with size variants`,
       candidate.finishReason !== 'STOP' ? `(repaired, finishReason: ${candidate.finishReason})` : '',
     )
 
