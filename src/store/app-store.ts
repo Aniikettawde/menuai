@@ -186,7 +186,7 @@ activeTab: 'menu',
         state.hasTableToken = has
       }),
 
-    setRestaurantData: ({ restaurant, categories, items }) =>
+ setRestaurantData: ({ restaurant, categories, items }) =>
       set((state) => {
         state.restaurant = restaurant
         state.categories = categories
@@ -204,7 +204,15 @@ activeTab: 'menu',
           ...(hasCorporate ? (['corporate'] as MenuType[]) : []),
         ]
 
-        if (availableTypes.length <= 1) {
+        // Only decide the menu type the FIRST time (activeMenuType is still
+        // unset). On every later call — e.g. refreshMenu() re-running this
+        // after a realtime update — keep whatever the user is already
+        // looking at, as long as it's still a valid/available type. This is
+        // what stops a mid-session bar/corporate view from silently
+        // snapping back to food whenever a realtime refresh fires.
+        if (state.activeMenuType && availableTypes.includes(state.activeMenuType)) {
+          state.showMenuTypeSelector = false
+        } else if (availableTypes.length <= 1) {
           // Only one menu type (or none) exists — no picker needed.
           state.activeMenuType = availableTypes[0] ?? 'food'
           state.showMenuTypeSelector = false

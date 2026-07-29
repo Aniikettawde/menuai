@@ -631,10 +631,10 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
             radial-gradient(circle at 88% 18%, rgba(224,135,62,0.07), transparent 40%),
             radial-gradient(circle at 50% 95%, rgba(217,162,75,0.05), transparent 50%);
         }
-        .pr-shell[data-menu='bar'] > * {
-          position: relative;
-          z-index: 1;
-        }
+       .pr-shell[data-menu='bar'] > main {
+  position: relative;
+  z-index: 1;
+}
 
         .pr-main {
           flex: 1;
