@@ -78,10 +78,17 @@ type AssignedStaff = {
   active: boolean
   table_start: number | null
   table_end: number | null
+  table_numbers: number[] | null
 }
 
 function matchesTable(staff: AssignedStaff, tableNumber: number) {
   if (!staff.active) return false
+
+  // Specific table list takes priority over range, when set
+  if (staff.table_numbers && staff.table_numbers.length > 0) {
+    return staff.table_numbers.includes(tableNumber)
+  }
+
   if (staff.table_start == null || staff.table_end == null) return true
   return tableNumber >= staff.table_start && tableNumber <= staff.table_end
 }
@@ -89,7 +96,7 @@ function matchesTable(staff: AssignedStaff, tableNumber: number) {
 async function getAssignedStaff(admin: SupabaseClient, restaurantId: string, tableNumber: number) {
   const { data, error } = await admin
     .from('restaurant_staff')
-    .select('id, restaurant_id, email, role, active, table_start, table_end')
+    .select('id, restaurant_id, email, role, active, table_start, table_end, table_numbers')
     .eq('restaurant_id', restaurantId)
     .eq('active', true)
 

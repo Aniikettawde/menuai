@@ -59,27 +59,20 @@ function validateRange(start: unknown, end: unknown) {
   return { ok: true as const, start: s, end: e }
 }
 
-async function ensureNoOverlappingRange(
-  sb: ReturnType<typeof getServiceClient>,
-  restaurantId: string,
-  tableStart: number,
-  tableEnd: number,
-  ignoreStaffId?: string,
-) {
-  let query = sb
-    .from('restaurant_staff')
-    .select('id, name, email, table_start, table_end')
-    .eq('restaurant_id', restaurantId)
-    .not('table_start', 'is', null)
-    .not('table_end', 'is', null)
-    .or(`and(table_start.lte.${tableEnd},table_end.gte.${tableStart})`)
+function validateTableNumbers(input: unknown): { ok: true; value: number[] | null } | { ok: false; error: string } {
+  if (input == null) return { ok: true, value: null }
+  if (!Array.isArray(input)) return { ok: false, error: 'table_numbers must be an array' }
 
-  if (ignoreStaffId) query = query.neq('id', ignoreStaffId)
+  const nums = input.map((n) => (typeof n === 'number' ? n : Number(n)))
+  if (nums.some((n) => !Number.isInteger(n) || n < 1)) {
+    return { ok: false, error: 'Table numbers must be whole numbers greater than 0' }
+  }
 
-  const { data, error } = await query
-  if (error) throw error
-  return data ?? []
+  const unique = Array.from(new Set(nums))
+  return { ok: true, value: unique.length > 0 ? unique : null }
 }
+
+
 
 // Enriches staff rows with device/push-notification status from device_tokens table
 async function enrichWithDeviceStatus(
@@ -129,7 +122,7 @@ export async function GET(req: NextRequest) {
     const sb = getServiceClient()
     const { data, error } = await sb
       .from('restaurant_staff')
-      .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, created_at, updated_at')
+     .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, table_numbers, created_at, updated_at')
       .eq('restaurant_id', ctx.restaurantId)
       .order('created_at', { ascending: false })
 
@@ -180,22 +173,17 @@ export async function POST(req: NextRequest) {
     if (tempPass && tempPass.length < 8)
       return NextResponse.json({ error: 'Temporary password must be at least 8 characters' }, { status: 400 })
 
-    const range = validateRange(body.table_start, body.table_end)
+     const range = validateRange(body.table_start, body.table_end)
     if (!range.ok) return NextResponse.json({ error: range.error }, { status: 400 })
 
-    const sb = getServiceClient()
+    const tableNumbersResult = validateTableNumbers(body.table_numbers)
+    if (!tableNumbersResult.ok) return NextResponse.json({ error: tableNumbersResult.error }, { status: 400 })
 
-    // Check for overlapping table ranges
-    if (range.start !== null && range.end !== null) {
-      const overlaps = await ensureNoOverlappingRange(sb, ctx.restaurantId, range.start, range.end)
-      if (overlaps.length > 0) {
-        const who = overlaps[0].name ?? overlaps[0].email
-        return NextResponse.json(
-          { error: `Table range overlaps with ${who} (${overlaps[0].table_start}–${overlaps[0].table_end})` },
-          { status: 400 },
-        )
-      }
-    }
+    // Specific table list takes priority — if provided, clear the range
+    const finalStart = tableNumbersResult.value ? null : range.start
+    const finalEnd = tableNumbersResult.value ? null : range.end
+
+    const sb = getServiceClient()
 
     // ── Create or invite the auth user ────────────────────────────────────────
     //
@@ -247,15 +235,16 @@ export async function POST(req: NextRequest) {
         email,
         name,
         phone,
-        role: role as TeamRole,
+       role: role as TeamRole,
         active: true,
-        table_start: range.start,
-        table_end: range.end,
+        table_start: finalStart,
+        table_end: finalEnd,
+        table_numbers: tableNumbersResult.value,
         created_by: user.id,
         // Store the auth UUID so we can update password later by staff row id
         auth_user_id: authUserId,
       })
-      .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, created_at, updated_at')
+       .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, table_numbers, created_at, updated_at')
       .single()
 
     if (error) throw error
@@ -330,25 +319,23 @@ export async function PATCH(req: NextRequest) {
     if (typeof body.name === 'string') patch.name = body.name.trim() || null
     if (typeof body.phone === 'string') patch.phone = body.phone.trim() || null
 
-    if ('table_start' in body || 'table_end' in body) {
+   if ('table_numbers' in body) {
+      const tableNumbersResult = validateTableNumbers(body.table_numbers)
+      if (!tableNumbersResult.ok) return NextResponse.json({ error: tableNumbersResult.error }, { status: 400 })
+
+      patch.table_numbers = tableNumbersResult.value
+      // Specific tables take priority — clear the range when setting a list
+      if (tableNumbersResult.value) {
+        patch.table_start = null
+        patch.table_end = null
+      }
+    } else if ('table_start' in body || 'table_end' in body) {
       const range = validateRange(body.table_start, body.table_end)
       if (!range.ok) return NextResponse.json({ error: range.error }, { status: 400 })
 
-      if (range.start !== null && range.end !== null) {
-        const overlaps = await ensureNoOverlappingRange(
-          sb, ctx.restaurantId, range.start, range.end, staffId,
-        )
-        if (overlaps.length > 0) {
-          const who = overlaps[0].name ?? overlaps[0].email
-          return NextResponse.json(
-            { error: `Table range overlaps with ${who} (${overlaps[0].table_start}–${overlaps[0].table_end})` },
-            { status: 400 },
-          )
-        }
-      }
-
       patch.table_start = range.start
       patch.table_end = range.end
+      patch.table_numbers = null
     }
 
     if (Object.keys(patch).length === 0)
@@ -359,7 +346,7 @@ export async function PATCH(req: NextRequest) {
       .update(patch)
       .eq('id', staffId)
       .eq('restaurant_id', ctx.restaurantId)
-      .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, created_at, updated_at')
+     .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, table_numbers, created_at, updated_at')
       .single()
 
     if (error) throw error

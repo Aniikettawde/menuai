@@ -42,6 +42,7 @@ type StaffRow = {
   active: boolean
   table_start: number | null
   table_end: number | null
+  table_numbers: number[] | null
   has_device: boolean
   last_seen_at: string | null
   created_at: string
@@ -58,6 +59,13 @@ type DashboardContext = {
 }
 
 function rangeLabel(row: StaffRow) {
+  if (row.table_numbers && row.table_numbers.length > 0) {
+    return row.table_numbers
+      .slice()
+      .sort((a, b) => a - b)
+      .map((n) => `T${n}`)
+      .join(', ')
+  }
   if (row.table_start == null || row.table_end == null) return 'All tables'
   return `T${row.table_start}–T${row.table_end}`
 }
@@ -76,32 +84,61 @@ function timeAgo(iso: string | null): string {
 // ─────────────────────────────────────────────
 // Inline table-range editor
 // ─────────────────────────────────────────────
+function parseTableList(raw: string): number[] {
+  return Array.from(
+    new Set(
+      raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => Number(s))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  )
+}
+
 function TableRangeEditor({
   row,
   onSave,
 }: {
   row: StaffRow
-  onSave: (id: string, start: number | null, end: number | null) => Promise<void>
+  onSave: (
+    id: string,
+    payload: { table_start: number | null; table_end: number | null; table_numbers: number[] | null },
+  ) => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
+  const initialMode: 'range' | 'specific' =
+    row.table_numbers && row.table_numbers.length > 0 ? 'specific' : 'range'
+  const [mode, setMode] = useState<'range' | 'specific'>(initialMode)
   const [start, setStart] = useState<number | ''>(row.table_start ?? '')
   const [end, setEnd] = useState<number | ''>(row.table_end ?? '')
+  const [tablesRaw, setTablesRaw] = useState(
+    row.table_numbers && row.table_numbers.length > 0 ? row.table_numbers.join(', ') : '',
+  )
   const [saving, setSaving] = useState(false)
 
   async function save() {
     setSaving(true)
-    await onSave(
-      row.id,
-      start === '' ? null : Number(start),
-      end === '' ? null : Number(end),
-    )
+    if (mode === 'specific') {
+      const list = parseTableList(tablesRaw)
+      await onSave(row.id, { table_start: null, table_end: null, table_numbers: list.length ? list : null })
+    } else {
+      await onSave(row.id, {
+        table_start: start === '' ? null : Number(start),
+        table_end: end === '' ? null : Number(end),
+        table_numbers: null,
+      })
+    }
     setSaving(false)
     setEditing(false)
   }
 
   function cancel() {
+    setMode(initialMode)
     setStart(row.table_start ?? '')
     setEnd(row.table_end ?? '')
+    setTablesRaw(row.table_numbers && row.table_numbers.length > 0 ? row.table_numbers.join(', ') : '')
     setEditing(false)
   }
 
@@ -120,26 +157,67 @@ function TableRangeEditor({
   }
 
   return (
-    <div className="inline-flex items-center gap-1.5">
-      <input
-        type="number"
-        min={1}
-        value={start}
-        onChange={(e) => setStart(e.target.value === '' ? '' : Number(e.target.value))}
-        placeholder="From"
-        className="w-16 rounded-xl border px-2 py-1.5 text-xs outline-none"
-        style={inputStyle}
-      />
-      <span className="text-xs" style={{ color: BRAND.inkFaint }}>–</span>
-      <input
-        type="number"
-        min={1}
-        value={end}
-        onChange={(e) => setEnd(e.target.value === '' ? '' : Number(e.target.value))}
-        placeholder="To"
-        className="w-16 rounded-xl border px-2 py-1.5 text-xs outline-none"
-        style={inputStyle}
-      />
+    <div className="inline-flex flex-wrap items-center gap-1.5">
+      <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={() => setMode('range')}
+          className="rounded-lg px-2 py-1 text-[10px] font-medium transition"
+          style={
+            mode === 'range'
+              ? { background: `${BRAND.burgundy}1F`, color: BRAND.burgundy }
+              : { background: BRAND.ivorySoft, color: BRAND.inkFaint }
+          }
+        >
+          Range
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('specific')}
+          className="rounded-lg px-2 py-1 text-[10px] font-medium transition"
+          style={
+            mode === 'specific'
+              ? { background: `${BRAND.burgundy}1F`, color: BRAND.burgundy }
+              : { background: BRAND.ivorySoft, color: BRAND.inkFaint }
+          }
+        >
+          Specific tables
+        </button>
+      </div>
+
+      {mode === 'range' ? (
+        <>
+          <input
+            type="number"
+            min={1}
+            value={start}
+            onChange={(e) => setStart(e.target.value === '' ? '' : Number(e.target.value))}
+            placeholder="From"
+            className="w-16 rounded-xl border px-2 py-1.5 text-xs outline-none"
+            style={inputStyle}
+          />
+          <span className="text-xs" style={{ color: BRAND.inkFaint }}>–</span>
+          <input
+            type="number"
+            min={1}
+            value={end}
+            onChange={(e) => setEnd(e.target.value === '' ? '' : Number(e.target.value))}
+            placeholder="To"
+            className="w-16 rounded-xl border px-2 py-1.5 text-xs outline-none"
+            style={inputStyle}
+          />
+        </>
+      ) : (
+        <input
+          type="text"
+          value={tablesRaw}
+          onChange={(e) => setTablesRaw(e.target.value)}
+          placeholder="e.g. 16, 14, 23"
+          className="w-40 rounded-xl border px-2 py-1.5 text-xs outline-none"
+          style={inputStyle}
+        />
+      )}
+
       <button
         type="button"
         onClick={() => void save()}
@@ -177,8 +255,10 @@ export default function StaffPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [role, setRole] = useState<TeamRole>('waiter')
+  const [assignMode, setAssignMode] = useState<'range' | 'specific'>('range')
   const [tableStart, setTableStart] = useState<number | ''>('')
   const [tableEnd, setTableEnd] = useState<number | ''>('')
+  const [tableListRaw, setTableListRaw] = useState('')
   const [tempPass, setTempPass] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [inviteMode, setInviteMode] = useState<'password' | 'invite'>('password')
@@ -218,8 +298,9 @@ export default function StaffPage() {
           email,
           phone: phone.trim() || null,
           role,
-          table_start: tableStart === '' ? null : Number(tableStart),
-          table_end: tableEnd === '' ? null : Number(tableEnd),
+          table_start: assignMode === 'range' && tableStart !== '' ? Number(tableStart) : null,
+          table_end: assignMode === 'range' && tableEnd !== '' ? Number(tableEnd) : null,
+          table_numbers: assignMode === 'specific' ? parseTableList(tableListRaw) : null,
           temp_password: inviteMode === 'password' ? tempPass.trim() : null,
           send_invite: inviteMode === 'invite',
         }),
@@ -254,20 +335,21 @@ export default function StaffPage() {
     }
   }
 
-  async function updateTableRange(id: string, start: number | null, end: number | null) {
+  async function updateTableRange(
+    id: string,
+    payload: { table_start: number | null; table_end: number | null; table_numbers: number[] | null },
+  ) {
     setError('')
     try {
       const res = await fetch('/api/dashboard/staff', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, table_start: start, table_end: end }),
+        body: JSON.stringify({ id, ...payload }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Failed to update table range')
       setStaff((prev) =>
-        prev.map((x) =>
-          x.id === id ? { ...x, table_start: start, table_end: end } : x,
-        ),
+        prev.map((x) => (x.id === id ? { ...x, ...payload } : x)),
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update table range')
@@ -461,7 +543,7 @@ export default function StaffPage() {
         </div>
 
         {/* Row 2: role + table range */}
-        <div className="mt-3 grid gap-3 md:grid-cols-[150px_120px_120px_1fr]">
+        <div className="mt-3 grid gap-3 md:grid-cols-[150px_1fr]">
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as TeamRole)}
@@ -471,27 +553,73 @@ export default function StaffPage() {
             <option value="waiter">Waiter</option>
             <option value="manager">Manager</option>
           </select>
-          <input
-            type="number"
-            min={1}
-            value={tableStart}
-            onChange={(e) => setTableStart(e.target.value === '' ? '' : Number(e.target.value))}
-            placeholder="Table from"
-            className={inputClass}
-            style={inputStyle}
-          />
-          <input
-            type="number"
-            min={1}
-            value={tableEnd}
-            onChange={(e) => setTableEnd(e.target.value === '' ? '' : Number(e.target.value))}
-            placeholder="Table to"
-            className={inputClass}
-            style={inputStyle}
-          />
-          <p className="flex items-center text-xs" style={{ color: BRAND.inkFaint }}>
-            e.g. Suraj handles tables 1–10, Anil 11–20
-          </p>
+
+          <div>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => setAssignMode('range')}
+                className="rounded-xl px-3 py-1.5 text-xs font-medium transition"
+                style={
+                  assignMode === 'range'
+                    ? { background: `${BRAND.burgundy}1F`, color: BRAND.burgundy }
+                    : { background: BRAND.ivorySoft, color: BRAND.inkFaint }
+                }
+              >
+                Table range
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignMode('specific')}
+                className="rounded-xl px-3 py-1.5 text-xs font-medium transition"
+                style={
+                  assignMode === 'specific'
+                    ? { background: `${BRAND.burgundy}1F`, color: BRAND.burgundy }
+                    : { background: BRAND.ivorySoft, color: BRAND.inkFaint }
+                }
+              >
+                Specific tables
+              </button>
+            </div>
+
+            {assignMode === 'range' ? (
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <input
+                  type="number"
+                  min={1}
+                  value={tableStart}
+                  onChange={(e) => setTableStart(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Table from"
+                  className={inputClass}
+                  style={inputStyle}
+                />
+                <input
+                  type="number"
+                  min={1}
+                  value={tableEnd}
+                  onChange={(e) => setTableEnd(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Table to"
+                  className={inputClass}
+                  style={inputStyle}
+                />
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={tableListRaw}
+                onChange={(e) => setTableListRaw(e.target.value)}
+                placeholder="e.g. 16, 14, 23"
+                className={`mt-2 w-full ${inputClass}`}
+                style={inputStyle}
+              />
+            )}
+
+            <p className="mt-1.5 text-xs" style={{ color: BRAND.inkFaint }}>
+              {assignMode === 'range'
+                ? 'e.g. Suraj handles tables 1–10, Anil 11–20'
+                : 'e.g. Suraj handles tables 16, 14, 23'}
+            </p>
+          </div>
         </div>
 
         {/* Row 3: login setup */}
