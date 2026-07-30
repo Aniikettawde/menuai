@@ -87,6 +87,21 @@ function ChefsPickCard({ item, onAsk, label }: { item: MenuItem; onAsk?: (t: str
   )
 }
 
+function InfoCard({ card }: { card: NonNullable<MenuCategory['info_card']> }) {
+  return (
+    <div className="mg-infocard">
+      <p className="mg-infocard-title">{card.title}</p>
+      <div className="mg-infocard-list">
+        {card.entries.map((entry) => (
+          <p key={entry.name} className="mg-infocard-entry">
+            <span className="mg-infocard-name">{entry.name}:</span> {entry.description}
+          </p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function CategoryHeaderPlaceholder({ name }: { name: string }) {
   const letter = name.trim()[0]?.toUpperCase() ?? '?'
   return <div className="mg-cat-thumb-placeholder">{letter}</div>
@@ -136,28 +151,30 @@ function BestsellerSlider({
               : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/restaurant-assets/${item.image_url}`
             : null
 
-          return (
+           return (
             <button
               type="button"
               key={item.id}
-              className="mg-bs-card"
+              className={`mg-bs-card${imageUrl ? '' : ' mg-bs-card--noimg'}`}
               onClick={() => onAsk?.(`Tell me more about ${item.name} — why is it a best seller?`)}
             >
-              <div className="mg-bs-photo">
-                {imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+              {imageUrl && (
+                <div className="mg-bs-photo">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={imageUrl} alt={item.name} loading="lazy" />
-                ) : (
-                  <div className="mg-bs-photo-placeholder"><UtensilsCrossed size={28} /></div>
-                )}
-                <div className="mg-bs-fade" />
-                {idx === 0 && (
-                  <span className="mg-bs-rank"><Flame size={10} /> #1</span>
-                )}
-                <span className="mg-bs-orders"><TrendingUp size={9} /> Most ordered</span>
-              </div>
+                  <div className="mg-bs-fade" />
+                  {idx === 0 && <span className="mg-bs-rank"><Flame size={10} /> #1</span>}
+                  <span className="mg-bs-orders"><TrendingUp size={9} /> Most ordered</span>
+                </div>
+              )}
 
-              <div className="mg-bs-info">
+              <div className={`mg-bs-info${imageUrl ? '' : ' mg-bs-info--noimg'}`}>
+                {!imageUrl && (
+                  <div className="mg-bs-noimg-tags">
+                    {idx === 0 && <span className="mg-bs-rank mg-bs-rank--inline"><Flame size={10} /> #1</span>}
+                    <span className="mg-bs-orders mg-bs-orders--inline"><TrendingUp size={9} /> Most ordered</span>
+                  </div>
+                )}
                 <p className="mg-bs-name">{item.name}</p>
                 {cleanDesc && <p className="mg-bs-desc">{cleanDesc}</p>}
                 <div className="mg-bs-price-row">
@@ -265,6 +282,11 @@ function CategorySection({
             {chefsPick && (
               <div className="mg-chefspick-wrap">
                 <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
+              </div>
+            )}
+			 {category.info_card && (
+              <div className="mg-chefspick-wrap">
+                <InfoCard card={category.info_card} />
               </div>
             )}
             {otherItems.map((item) => {
@@ -571,10 +593,8 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     width: 100%; height: 100%; object-fit: cover; display: block;
     filter: contrast(1.06) saturate(1.08);
   }
-  :global(.mg-bs-photo-placeholder) {
-    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-    color: rgba(255,255,255,0.25);
-  }
+ 
+ 
   :global(.mg-bs-fade) {
     position: absolute; inset: 0; pointer-events: none;
     background: linear-gradient(180deg, transparent 45%, rgba(12,10,8,0.9) 88%, #0c0a08 100%);
@@ -597,6 +617,18 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
 
   :global(.mg-bs-info) {
     padding: 4px 16px 18px; margin-top: -14px; position: relative; z-index: 2;
+  }
+  :global(.mg-bs-info--noimg) {
+    margin-top: 0; padding: 20px 18px 22px;
+  }
+  :global(.mg-bs-noimg-tags) {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  }
+  :global(.mg-bs-rank.mg-bs-rank--inline),
+  :global(.mg-bs-orders.mg-bs-orders--inline) {
+    position: static; top: auto; left: auto; right: auto;
+    background: rgba(233,200,116,0.14); backdrop-filter: none;
+    border: 1px solid rgba(233,200,116,0.25); color: #E9C874;
   }
   :global(.mg-bs-name) {
     font-family: var(--font-display); font-size: 17px; font-weight: 600;
@@ -692,6 +724,20 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   :global(.mg-badge--scarcity) { background: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.22); color: #fb7185; }
 
   :global(.mg-chefspick-wrap) { padding: 12px 14px; }
+  :global(.mg-infocard) {
+    border-radius: 16px; border: 1px solid var(--pr-border-hover);
+    background: var(--pr-gold-dim); padding: 14px 16px;
+  }
+  :global(.mg-infocard-title) {
+    font-family: var(--font-display); font-size: 14px; font-weight: 700;
+    color: var(--pr-gold); text-align: center; margin: 0 0 10px;
+  }
+  :global(.mg-infocard-list) { display: flex; flex-direction: column; gap: 6px; }
+  :global(.mg-infocard-entry) {
+    margin: 0; font-size: 12px; line-height: 1.55; color: var(--pr-text-muted);
+    font-family: var(--font-body);
+  }
+  :global(.mg-infocard-name) { font-weight: 700; color: var(--pr-text); }
   :global(.mg-chefspick) {
     display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
     border-radius: 16px; border: 1px solid rgba(138,109,31,0.2);

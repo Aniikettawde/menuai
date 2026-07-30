@@ -16,7 +16,7 @@ const GEMINI_PROMPT = `You are a menu digitization expert for Indian restaurants
 Extract EVERY item from this menu. Output ONLY raw JSON — no markdown, no backticks, no explanation.
 
 JSON structure (strict):
-{"categories":[{"name":"Category Name","items":[{"name":"Item Name","description":"","price":0,"is_veg":true,"tags":[],"variants":[]}]}]}
+{"categories":[{"name":"Category Name","info_card":null,"items":[{"name":"Item Name","description":"","price":0,"is_veg":true,"tags":[],"variants":[]}]}]}
 
 Rules:
 - name: Title Case (e.g. "Paneer Butter Masala")
@@ -44,7 +44,15 @@ VARIANTS (sizes / pours / portions with separate prices) — IMPORTANT:
 - Skip a variant entirely if that item's cell for that column is blank, "-", or unreadable — do not invent a price.
 - If an item has only ONE price in the whole row, do not use variants — just set "price" to that value and leave "variants" as an empty array [].
 - "160/110" or "F/H" with no clear column headers → treat the first number as a "Full" variant and the second as a "Half" variant, e.g. "variants":[{"label":"Full","price":160},{"label":"Half","price":110}]
-- "SEASONAL" price → 0, variants: []`
+- "SEASONAL" price → 0, variants: []
+
+PREPARATION-TYPE / INFO BLOCKS (IMPORTANT — do not turn these into items):
+- Some sections open with a block like "Choose a type of Preparation:" followed by named styles, each with a one-line description and NO price (e.g. "Malvani Tikhale: a spicy and tangy...", "Goan Curry: a coconut-based...").
+- This describes HOW a dish can be cooked, not a priced dish itself. Never add these as items with price 0.
+- Instead, put them on the category as: "info_card":{"title":"Choose a type of Preparation","entries":[{"name":"Malvani Tikhale","description":"A spicy and tangy Malvani-style curry..."}]}
+- The section right after it (e.g. "Choose Your choice of seafood: Pomfret ₹1079, Surmai ₹789...") lists real priced dishes — extract those normally into "items".
+- Only use info_card when entries have NO individual price. If every entry has its own price, they are items, not an info_card.
+- A category can have BOTH an info_card AND items — that's the normal case for this pattern.`
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -306,9 +314,31 @@ type RawItem = {
   variants?: unknown
 }
 
+type RawInfoCardEntry = { name?: unknown; description?: unknown }
+type RawInfoCard = { title?: unknown; entries?: unknown }
+
 type RawCategory = {
   name?: unknown
   items?: unknown
+  info_card?: unknown
+}
+
+function normalizeInfoCard(raw: unknown): { title: string; entries: { name: string; description: string }[] } | null {
+  if (!raw || typeof raw !== 'object') return null
+  const card = raw as RawInfoCard
+  const entries = Array.isArray(card.entries)
+    ? (card.entries as RawInfoCardEntry[])
+        .filter((e) => typeof e.name === 'string' && e.name.trim())
+        .map((e) => ({
+          name: String(e.name).trim(),
+          description: typeof e.description === 'string' ? e.description.trim() : '',
+        }))
+    : []
+  if (entries.length === 0) return null
+  return {
+    title: typeof card.title === 'string' && card.title.trim() ? card.title.trim() : 'Choose a type of Preparation',
+    entries,
+  }
 }
 
 type RawMenu = {
@@ -333,9 +363,10 @@ function normalizeMenu(raw: RawMenu) {
     throw new Error('Invalid menu structure: missing categories array')
   }
 
-  const categories = (raw.categories as RawCategory[])
+   const categories = (raw.categories as RawCategory[])
     .map((cat) => {
       const name = typeof cat.name === 'string' ? cat.name.trim() : 'Uncategorized'
+      const info_card = normalizeInfoCard(cat.info_card)
       const items = Array.isArray(cat.items)
         ? (cat.items as RawItem[])
             .filter((item) => typeof item.name === 'string' && item.name.trim())
@@ -362,10 +393,10 @@ function normalizeMenu(raw: RawMenu) {
                 variants,
               }
             })
-        : []
-      return { name, items }
+         : []
+      return { name, items, info_card }
     })
-    .filter((cat) => cat.items.length > 0)
+    .filter((cat) => cat.items.length > 0 || !!cat.info_card)
 
   if (categories.length === 0) {
     throw new Error('No menu items detected. Try a higher-resolution image or a clearer photo.')

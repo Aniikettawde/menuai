@@ -54,7 +54,11 @@ google_reviews_url?: string | null
 has_bar_menu?: boolean
 has_corporate_menu?: boolean
 avg_prep_time?: number
-  
+
+about_story?: string | null
+total_branches?: number | null
+established_year?: number | null
+
 }
 
 export interface DishOptionChoice {
@@ -98,6 +102,11 @@ export interface OpeningHours {
   [day: string]: { open: string; close: string; closed?: boolean }
 }
 
+export interface MenuCategoryInfoCard {
+  title: string
+  entries: { name: string; description: string }[]
+}
+
 export interface MenuCategory {
   id: string
   restaurant_id: string
@@ -106,10 +115,10 @@ export interface MenuCategory {
   position: number
   is_active: boolean
   image_url?: string | null
- menu_type: 'food' | 'bar' | 'corporate'
-
-
+  menu_type: 'food' | 'bar' | 'corporate'
+  info_card?: MenuCategoryInfoCard | null
 }
+
 export type DeliveryPreference =
   | { mode: 'all_at_once' }
   | { mode: 'one_by_one' }

@@ -27,12 +27,13 @@ type RestaurantForm = {
   google_rating: string        // kept as string in form state, parsed on save
   google_review_count: string
   opening_hours: OpeningHours
-    kot_mode: 'manual' | 'dinezy_print'
+   kot_mode: 'manual' | 'dinezy_print'
 orders_enabled: boolean
   has_bar_menu: boolean
 has_corporate_menu: boolean
-
-
+  about_story: string
+  total_branches: string    // kept as string in form state, parsed on save
+  established_year: string
 
 }
 
@@ -95,8 +96,10 @@ export default function RestaurantPage() {
   orders_enabled: true,
   has_bar_menu: false,
   has_corporate_menu: false,
+  about_story: '',
+  total_branches: '',
+  established_year: '',
 })
-
   const [logoUrl, setLogoUrl] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
 
@@ -128,10 +131,13 @@ export default function RestaurantPage() {
 					google_reviews_url: data.google_reviews_url ?? '',
 google_rating: data.google_rating != null ? String(data.google_rating) : '',
 google_review_count: data.google_review_count != null ? String(data.google_review_count) : '',	
-   kot_mode: (data.kot_mode as 'manual' | 'dinezy_print') ?? 'manual',
+    kot_mode: (data.kot_mode as 'manual' | 'dinezy_print') ?? 'manual',
 orders_enabled: data.orders_enabled ?? true,
 has_bar_menu: data.has_bar_menu ?? false,
 has_corporate_menu: data.has_corporate_menu ?? false,
+about_story: data.about_story ?? '',
+total_branches: data.total_branches != null ? String(data.total_branches) : '',
+established_year: data.established_year != null ? String(data.established_year) : '',
           })
           setLogoUrl(data.logo_url ?? '')
           setCoverUrl(data.cover_url ?? '')
@@ -218,6 +224,9 @@ has_corporate_menu: data.has_corporate_menu ?? false,
   google_rating: form.google_rating ? Number(form.google_rating) : null,
   google_review_count: form.google_review_count ? Number(form.google_review_count) : null,
   google_reviews_url: form.google_reviews_url.trim() || null,
+  about_story: form.about_story.trim() || null,
+  total_branches: form.total_branches ? Number(form.total_branches) : null,
+  established_year: form.established_year ? Number(form.established_year) : null,
 }
 
     let savedRestaurantId: string | null = null
@@ -634,6 +643,44 @@ has_corporate_menu: data.has_corporate_menu ?? false,
           </div>
         </Section>
 		
+		<Section title="About Your Restaurant">
+  <p className="mb-3 text-[11px] text-zinc-600 leading-relaxed">
+    Tell customers your story — shown on the "About" tab of your menu page, along with your branch count and founding year if you add them.
+  </p>
+
+  <Field label="Your story" hint="A short paragraph about your restaurant's history, philosophy, or what makes it special">
+    <textarea
+      value={form.about_story}
+      onChange={(e) => setForm((f) => ({ ...f, about_story: e.target.value }))}
+      placeholder="Started in 2015 with a single tandoor and a family recipe passed down three generations…"
+      rows={5}
+      className={`${INPUT} resize-none`}
+    />
+  </Field>
+
+  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <Field label="Established year" hint="e.g. 2015">
+      <input
+        type="number" min={1900} max={new Date().getFullYear()}
+        value={form.established_year}
+        onChange={(e) => setForm((f) => ({ ...f, established_year: e.target.value }))}
+        placeholder="2015"
+        className={INPUT}
+      />
+    </Field>
+
+    <Field label="Total branches / locations" hint="e.g. 3">
+      <input
+        type="number" min={1} max={999}
+        value={form.total_branches}
+        onChange={(e) => setForm((f) => ({ ...f, total_branches: e.target.value }))}
+        placeholder="1"
+        className={INPUT}
+      />
+    </Field>
+  </div>
+</Section>
+
 <Section title="Google Reviews">
   <p className="mb-3 text-[11px] text-zinc-600 leading-relaxed">
     Since we don't pull this live, enter your current Google rating and review
@@ -779,86 +826,7 @@ has_corporate_menu: data.has_corporate_menu ?? false,
   </div>
 </Section>
 
-		<Section title="KOT Printing">
-  <div className="space-y-3">
-    <p className="text-xs text-zinc-500 leading-relaxed">
-      Choose how Kitchen Order Tickets are printed when a waiter accepts an order.
-    </p>
-
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {/* Manual (PetPooja) */}
-      <button
-        type="button"
-        onClick={() => setForm(f => ({ ...f, kot_mode: 'manual' }))}
-        className={[
-          'relative flex flex-col gap-2 rounded-2xl border-2 p-4 text-left transition-all',
-          form.kot_mode === 'manual'
-            ? 'border-orange-500/60 bg-orange-500/8'
-            : 'border-zinc-700 bg-zinc-800/30 hover:border-zinc-600',
-        ].join(' ')}
-      >
-        {form.kot_mode === 'manual' && (
-          <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-orange-500">
-            <svg viewBox="0 0 10 8" className="h-3 w-3" fill="none">
-              <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-        )}
-        <span className="text-xl">📋</span>
-        <div>
-          <p className="text-sm font-bold text-white">Manual (PetPooja)</p>
-          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-            Waiter accepts in DinezyDash, then enters order manually in PetPooja to print KOT.
-          </p>
-        </div>
-        <span className="inline-flex w-fit items-center rounded-full bg-zinc-700 px-2 py-0.5 text-[10px] font-semibold text-zinc-300">
-          Current setup
-        </span>
-      </button>
-
-      {/* Dinezy Print */}
-      <button
-        type="button"
-        onClick={() => setForm(f => ({ ...f, kot_mode: 'dinezy_print' }))}
-        className={[
-          'relative flex flex-col gap-2 rounded-2xl border-2 p-4 text-left transition-all',
-          form.kot_mode === 'dinezy_print'
-            ? 'border-orange-500/60 bg-orange-500/8'
-            : 'border-zinc-700 bg-zinc-800/30 hover:border-zinc-600',
-        ].join(' ')}
-      >
-        {form.kot_mode === 'dinezy_print' && (
-          <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-orange-500">
-            <svg viewBox="0 0 10 8" className="h-3 w-3" fill="none">
-              <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-        )}
-        <span className="text-xl">🖨️</span>
-        <div>
-          <p className="text-sm font-bold text-white">Auto-print via DinezyDash</p>
-          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-            KOT prints automatically on Bluetooth printer when waiter accepts in DinezyDash. No PetPooja needed.
-          </p>
-        </div>
-        <span className="inline-flex w-fit items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-          Requires Bluetooth printer
-        </span>
-      </button>
-    </div>
-
-    {form.kot_mode === 'dinezy_print' && (
-      <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2.5">
-        <span className="mt-px text-sm">⚠️</span>
-        <p className="text-xs text-amber-300 leading-relaxed">
-          Make sure DinezyDash is connected to a Bluetooth thermal printer before enabling this.
-          Recommended: <strong>Xprinter XP-58</strong> or <strong>Rongta RPP02N</strong> (₹1,500–3,000).
-        </p>
-      </div>
-    )}
-  </div>
-</Section>
-      </form>
+	      </form>
     </div>
   )
 }

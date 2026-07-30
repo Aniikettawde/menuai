@@ -378,7 +378,7 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   const isInCart = qtyInCart > 0
   // Extra bottom room so the photo's overlapping Add button (which extends
   // below the photo by half its height) never collides with the next card.
-const photoColBottomSpace = hasImage && ordersEnabled ? ADD_HEIGHT / 2 + 4 : 0
+  const photoColBottomSpace = hasImage && ordersEnabled ? ADD_HEIGHT / 2 + 4 : 0
   return (
     <div
       style={{
@@ -407,9 +407,9 @@ const photoColBottomSpace = hasImage && ordersEnabled ? ADD_HEIGHT / 2 + 4 : 0
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && toggle()}
         aria-expanded={isExpanded}
-        style={{
+         style={{
           display: 'flex', alignItems: 'flex-start',
-          gap: ROW_GAP, padding: CARD_PAD,
+          gap: hasImage ? ROW_GAP : 0, padding: CARD_PAD,
           paddingBottom: CARD_PAD + photoColBottomSpace,
           cursor: 'pointer', userSelect: 'none',
         }}
@@ -510,34 +510,59 @@ const photoColBottomSpace = hasImage && ordersEnabled ? ADD_HEIGHT / 2 + 4 : 0
               )}
             </div>
           )}
-        </div>
 
-        {/* Right: photo with a true overlapping Add control (position:
-            absolute, pinned to the photo) — stays aligned to the top of the
-            row regardless of how tall the text column grows. */}
-        <div style={{ flexShrink: 0, width: PHOTO_COL_WIDTH }}>
-          <ItemPhoto src={imageUrl} alt={item.name} isVeg={item.is_veg} isBestseller={!!item.is_bestseller}>
-            {ordersEnabled && (
-              <div onClick={(e) => e.stopPropagation()}>
-                <AddControl
-                  qtyInCart={qtyInCart}
-                  adding={adding}
-                  onAdd={handleAdd}
-                  onInc={handleInc}
-                  onDec={handleDec}
-                />
-              </div>
-            )}
-          </ItemPhoto>
-          {hasOptions && ordersEnabled && (
-            <p style={{
-              marginTop: ADD_HEIGHT / 2 + 8, textAlign: 'center', fontSize: 9,
-              fontWeight: 500, color: 'var(--pr-text-faint)', letterSpacing: '0.04em',
-            }}>
-              customisable
-            </p>
+          {/* No photo → put Add control inline at the bottom of the text
+              column instead of reserving a photo slot for nothing. */}
+          {!hasImage && ordersEnabled && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}
+            >
+              {hasOptions && (
+                <span style={{ fontSize: 9, fontWeight: 500, color: 'var(--pr-text-faint)', letterSpacing: '0.04em' }}>
+                  customisable
+                </span>
+              )}
+              <AddControl
+                inline
+                qtyInCart={qtyInCart}
+                adding={adding}
+                onAdd={handleAdd}
+                onInc={handleInc}
+                onDec={handleDec}
+              />
+            </div>
           )}
         </div>
+
+        {/* Right: photo with a true overlapping Add control — only rendered
+            when there's actually an image, so no-image dishes never reserve
+            an empty tile. */}
+        {hasImage && (
+          <div style={{ flexShrink: 0, width: PHOTO_COL_WIDTH }}>
+            <ItemPhoto src={imageUrl} alt={item.name} isVeg={item.is_veg} isBestseller={!!item.is_bestseller}>
+              {ordersEnabled && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <AddControl
+                    qtyInCart={qtyInCart}
+                    adding={adding}
+                    onAdd={handleAdd}
+                    onInc={handleInc}
+                    onDec={handleDec}
+                  />
+                </div>
+              )}
+            </ItemPhoto>
+            {hasOptions && ordersEnabled && (
+              <p style={{
+                marginTop: ADD_HEIGHT / 2 + 8, textAlign: 'center', fontSize: 9,
+                fontWeight: 500, color: 'var(--pr-text-faint)', letterSpacing: '0.04em',
+              }}>
+                customisable
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <style jsx>{`

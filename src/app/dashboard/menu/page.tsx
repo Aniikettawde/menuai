@@ -8,7 +8,7 @@ import {
   ArrowLeft, Camera, ChevronRight, Clock, ImagePlus, Loader2,
   MoreVertical, Pencil, Plus, Sparkles, Trash2, UtensilsCrossed,
   X, ToggleLeft, ToggleRight, Flame, Leaf, Zap, Settings2, GripVertical,
-  CheckSquare, Circle, Link2, Search,
+  CheckSquare, Link2, Search,  Circle, Info,
 } from 'lucide-react'
 import { TodaysSpecialPicker } from '@/components/TodaysSpecialPicker'
 const BOTTOM_NAV_H = 72
@@ -109,7 +109,7 @@ type MenuCategoryRow = MenuCategory
 type MenuItemRow = MenuItem & { best_with?: string[] }
 type ParsedVariant = { label: string; price: number }
 type ParsedItem = { name: string; description?: string; price?: number; is_veg?: boolean; tags?: string[]; best_with?: string[]; variants?: ParsedVariant[] }
-type ParsedCategory = { name: string; items: ParsedItem[] }
+type ParsedCategory = { name: string; items: ParsedItem[]; info_card?: { title: string; entries: { name: string; description: string }[] } | null }
 type GeminiMenuResult = { categories: ParsedCategory[] }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -922,6 +922,105 @@ function CustomiseOptionsModal({
   )
 }
 
+function InfoCardModal({
+  cat, onClose, onSave,
+}: {
+  cat: MenuCategoryRow
+  onClose: () => void
+  onSave: (card: { title: string; entries: { name: string; description: string }[] } | null) => Promise<void>
+}) {
+  const existing = cat.info_card ?? null
+  const [title, setTitle] = useState(existing?.title ?? 'Choose a type of Preparation')
+  const [entries, setEntries] = useState<{ name: string; description: string }[]>(
+    existing?.entries?.length ? existing.entries : [{ name: '', description: '' }]
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function updateEntry(idx: number, patch: Partial<{ name: string; description: string }>) {
+    setEntries((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)))
+  }
+  function addEntry() { setEntries((prev) => [...prev, { name: '', description: '' }]) }
+  function removeEntry(idx: number) { setEntries((prev) => prev.filter((_, i) => i !== idx)) }
+
+  async function handleSave() {
+    setSaving(true); setError('')
+    try {
+      const clean = entries.map((e) => ({ name: e.name.trim(), description: e.description.trim() })).filter((e) => e.name)
+      await onSave(clean.length > 0 ? { title: title.trim() || 'Choose a type of Preparation', entries: clean } : null)
+      onClose()
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to save info card') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <BottomSheet onClose={onClose} zIndex="z-[80]" maxWidthClass="max-w-2xl">
+      <div className="flex shrink-0 items-center justify-between border-b px-4 py-3.5" style={{ borderColor: BRAND.line }}>
+        <div>
+          <div className="flex items-center gap-2 text-sm font-bold" style={{ color: BRAND.burgundy }}>
+            <Info size={15} /> Preparation Info Card
+          </div>
+          <p className="mt-0.5 text-xs truncate max-w-[240px]" style={{ color: BRAND.inkFaint }}>{cat.name}</p>
+        </div>
+        <button onClick={onClose} className="rounded-xl p-2 transition hover:bg-black/[0.04]" style={{ color: BRAND.inkFaint }}><X size={16} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="rounded-2xl border px-4 py-3" style={{ borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}0D` }}>
+          <p className="text-xs leading-relaxed" style={{ color: BRAND.inkSoft }}>
+            Use this for preparation styles (e.g. Malvani Tikhale, Goan Curry) shown ABOVE a priced list. It renders as a static card at the top of this category — separate from the dishes below, which keep their own prices.
+          </p>
+        </div>
+
+        <Field label="Card Title">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className={INPUT} style={INPUT_STYLE} placeholder="Choose a type of Preparation" />
+        </Field>
+
+        <div className="space-y-3">
+          {entries.map((entry, idx) => (
+            <div key={idx} className="rounded-2xl border p-3 space-y-2" style={{ borderColor: BRAND.line, background: BRAND.ivory }}>
+              <div className="flex gap-2">
+                <input
+                  value={entry.name}
+                  onChange={(e) => updateEntry(idx, { name: e.target.value })}
+                  placeholder="e.g. Malvani Tikhale"
+                  className={`${INPUT} flex-1`}
+                  style={{ ...INPUT_STYLE, background: BRAND.card }}
+                />
+                <button onClick={() => removeEntry(idx)} className="shrink-0 rounded-xl p-2 transition hover:opacity-80" style={{ color: BRAND.inkFaint }}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <textarea
+                value={entry.description}
+                onChange={(e) => updateEntry(idx, { description: e.target.value })}
+                rows={2}
+                placeholder="Short description…"
+                className={`${INPUT} resize-none`}
+                style={{ ...INPUT_STYLE, background: BRAND.card }}
+              />
+            </div>
+          ))}
+        </div>
+
+        <button onClick={addEntry} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-sm font-semibold transition hover:opacity-80" style={{ borderColor: BRAND.line, color: BRAND.inkFaint }}>
+          <Plus size={15} /> Add preparation type
+        </button>
+      </div>
+
+      <div className="shrink-0 border-t px-4 py-4" style={{ borderColor: BRAND.line, background: BRAND.card }}>
+        {error && <div className="mb-3 rounded-xl border px-3 py-2.5 text-xs" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}14`, color: BRAND.rose }}>{error}</div>}
+        <div className="flex gap-2.5">
+          <button onClick={onClose} className="flex-1 rounded-2xl border py-3.5 text-sm font-semibold transition hover:bg-black/[0.03] active:scale-[0.98]" style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}>Cancel</button>
+          <button onClick={() => void handleSave()} disabled={saving} className="flex-[2] rounded-2xl py-3.5 text-sm font-bold text-white disabled:opacity-50 active:scale-[0.98] transition" style={{ background: BRAND.burgundy }}>
+            {saving ? <span className="flex items-center justify-center gap-2"><Loader2 size={15} className="animate-spin" /> Saving…</span> : 'Save Info Card'}
+          </button>
+        </div>
+      </div>
+    </BottomSheet>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function MenuPage() {
@@ -946,6 +1045,7 @@ export default function MenuPage() {
 	  const [libraryTargetCatId, setLibraryTargetCatId] = useState<string | null>(null)
   const [descriptionGenerating, setDescriptionGenerating] = useState(false)
   const [customiseItem, setCustomiseItem] = useState<MenuItemRow | null>(null)
+    const [infoCardCat, setInfoCardCat] = useState<MenuCategoryRow | null>(null)
   const [optionsByItem, setOptionsByItem] = useState<Record<string, DishOption[]>>({})
   const { context, loading: contextLoading } = useDashboardContext()
 
@@ -1104,6 +1204,13 @@ export default function MenuPage() {
     }
     const newOpts: DishOption[] = (insertedOpts ?? []).map((opt) => ({ ...opt, choices: choicesByOpt[opt.id] ?? [] } as DishOption))
     setOptionsByItem((prev) => ({ ...prev, [itemId]: newOpts }))
+  }
+
+ async function saveInfoCard(catId: string, card: MenuCategoryRow['info_card']) {
+    const { data: updated, error } = await supabase
+      .from('menu_categories').update({ info_card: card }).eq('id', catId).select().single()
+    if (error) throw error
+    if (updated) setCategories((prev) => prev.map((c) => (c.id === catId ? (updated as MenuCategoryRow) : c)))
   }
 
   // ── Categories ─────────────────────────────────────────────────────────────
@@ -1286,17 +1393,59 @@ export default function MenuPage() {
 
   async function handleGeminiImport(result: GeminiMenuResult) {
     if (!restaurant) throw new Error('No restaurant found')
-    const basePosition = orderedCategories.length
-    for (let i = 0; i < result.categories.length; i++) {
+
+    // Match against existing categories in the CURRENT menu tab only, by
+    // trimmed/lowercased name. If the owner already has "Starters" and the
+    // AI scan also finds "Starters", we append into the existing category
+    // instead of creating a duplicate "Starters (2)".
+    const existingCatByName = new Map<string, MenuCategoryRow>()
+    for (const cat of categories) {
+      if ((cat.menu_type ?? 'food') !== menuTab) continue
+      existingCatByName.set(cat.name.trim().toLowerCase(), cat)
+    }
+
+    // Track how many items are already in each target category so newly
+    // imported items get appended after them (correct `position`) instead
+    // of overwriting position 0, 1, 2…
+    const itemCountByCatId = new Map<string, number>()
+    for (const it of items) {
+      itemCountByCatId.set(it.category_id, (itemCountByCatId.get(it.category_id) ?? 0) + 1)
+    }
+
+    let nextNewCatPosition = orderedCategories.length
+
+     for (let i = 0; i < result.categories.length; i++) {
       const parsedCat = result.categories[i]
-       const { data: catData, error: catError } = await supabase.from('menu_categories')
-        .insert({ restaurant_id: restaurant.id, name: parsedCat.name.trim(), position: basePosition + i, is_active: true, menu_type: menuTab })
-        .select().single()
-      if (catError) throw catError
-      if (!catData) continue
-      const newCat = catData as MenuCategoryRow
-      setCategories((prev) => [...prev, newCat]); setActiveCat(newCat.id)
+      const key = parsedCat.name.trim().toLowerCase()
+      let targetCat = existingCatByName.get(key) ?? null
+
+      if (!targetCat) {
+        const { data: catData, error: catError } = await supabase.from('menu_categories')
+          .insert({
+            restaurant_id: restaurant.id, name: parsedCat.name.trim(), position: nextNewCatPosition,
+            is_active: true, menu_type: menuTab, info_card: parsedCat.info_card ?? null,
+          })
+          .select().single()
+        if (catError) throw catError
+        if (!catData) continue
+        targetCat = catData as MenuCategoryRow
+        nextNewCatPosition += 1
+        existingCatByName.set(key, targetCat)
+        setCategories((prev) => [...prev, targetCat as MenuCategoryRow])
+      }
+
+       const resolvedCat = targetCat
+      setActiveCat(resolvedCat.id)
+      if (parsedCat.info_card && !resolvedCat.info_card) {
+        try {
+          await saveInfoCard(resolvedCat.id, parsedCat.info_card)
+        } catch (err) {
+          console.error(`Failed to save info card for "${resolvedCat.name}":`, err)
+        }
+      }
       if (!parsedCat.items.length) continue
+
+      const startPosition = itemCountByCatId.get(resolvedCat.id) ?? 0
       const itemPayloads = parsedCat.items.map((item, idx) => {
         // Multi-size / multi-pour items (e.g. "30ml / 60ml / 90ml / Full") come
         // back from Gemini with `variants` instead of a single price. We still
@@ -1307,19 +1456,21 @@ export default function MenuPage() {
           : null
         const basePriceRupees = item.price && item.price > 0 ? item.price : (cheapestVariant?.price ?? 0)
         return {
-          restaurant_id: restaurant.id, category_id: newCat.id, name: item.name.trim(),
+          restaurant_id: restaurant.id, category_id: resolvedCat.id, name: item.name.trim(),
           description: item.description ?? '', price: basePriceRupees ? Math.round(basePriceRupees * 100) : 0,
           currency: 'INR', image_url: '', is_available: true,
           is_bestseller: (item.tags ?? []).some((t) => t.toLowerCase().includes('best')),
           is_veg: item.is_veg ?? true, is_special: false, tags: item.tags ?? [],
-          allergens: [], prep_time_minutes: null, calories: null, position: idx,
+          allergens: [], prep_time_minutes: null, calories: null, position: startPosition + idx,
           // Note: Gemini-suggested pairings are dropped here since they may not
           // match an item name exactly. Owners can add real pairings afterward
           // via the PairingSelector, which only allows selecting existing items.
           best_with: [],
         }
       })
-       const { data: insertedItems, error: itemsError } = await supabase.from('menu_items').insert(itemPayloads).select()
+      itemCountByCatId.set(resolvedCat.id, startPosition + itemPayloads.length)
+
+      const { data: insertedItems, error: itemsError } = await supabase.from('menu_items').insert(itemPayloads).select()
       if (itemsError) throw itemsError
       if (insertedItems) {
         setItems((prev) => [...prev, ...(insertedItems as MenuItemRow[])])
@@ -1335,10 +1486,12 @@ export default function MenuPage() {
         // index — on larger menus this silently attaches variants to the
         // wrong item (or drops them). Instead, match each inserted row back
         // to its source parsed item via the `position` field we assigned on
-        // itemPayloads (0, 1, 2… in parsedCat.items order), which stays
-        // correct regardless of what order rows come back in.
+        // itemPayloads (startPosition + idx, in parsedCat.items order),
+        // which stays correct regardless of what order rows come back in —
+        // and regardless of how many items already existed in the category.
         for (const insertedItem of insertedItems as MenuItemRow[]) {
-          const parsedItem = parsedCat.items[insertedItem.position ?? -1]
+          const parsedItemIdx = (insertedItem.position ?? -1) - startPosition
+          const parsedItem = parsedCat.items[parsedItemIdx]
           if (!parsedItem) continue
           const variants = parsedItem.variants ?? []
           if (variants.length < 2) continue
@@ -1501,6 +1654,17 @@ export default function MenuPage() {
                           >
                             {aiGeneratingCatId === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Sparkles size={9} />}
                           </button>
+						  
+						                            <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setInfoCardCat(cat) }}
+                            className="absolute -top-1 -left-6 flex h-5 w-5 items-center justify-center rounded-full transition"
+                            style={{ background: catWithImage.info_card ? BRAND.burgundy : BRAND.line, color: catWithImage.info_card ? '#fff' : BRAND.inkSoft }}
+                            title="Preparation info card"
+                          >
+                            <Info size={9} />
+                          </button>
+						  
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setLibraryTargetCatId(cat.id); setShowImageLibrary(true) }}
@@ -1675,8 +1839,21 @@ export default function MenuPage() {
                           style={{ color: BRAND.gold }}
                           title="Generate image with AI"
                         >
+						
                           {aiGeneratingCatId === cat.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                         </button>
+						
+						
+						
+						<button
+                          onClick={(e) => { e.stopPropagation(); setInfoCardCat(cat) }}
+                          className="rounded-lg p-1 opacity-0 transition hover:opacity-100 group-hover:opacity-60"
+                          style={{ color: cat.info_card ? BRAND.burgundy : BRAND.inkFaint }}
+                          title="Preparation info card"
+                        >
+                          <Info size={14} />
+                        </button>
+						
                         <button
                           onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
                           className="rounded-lg p-1 opacity-0 transition hover:opacity-100"
@@ -1929,6 +2106,14 @@ export default function MenuPage() {
           onClose={() => setCustomiseItem(null)}
           existingOptions={optionsByItem[customiseItem.id] ?? []}
           onSave={(drafts) => saveDishOptions(customiseItem.id, drafts)}
+        />
+      )}
+	  
+	  {infoCardCat && (
+        <InfoCardModal
+          cat={infoCardCat}
+          onClose={() => setInfoCardCat(null)}
+          onSave={(card) => saveInfoCard(infoCardCat.id, card)}
         />
       )}
 

@@ -4,8 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import type { Restaurant } from '@/types'
 import { useAppStore } from '@/store/app-store'
-import { Star, Clock, Navigation, Heart, Share2, MapPin, Instagram } from 'lucide-react'
-
+import { Star, Clock, Navigation, Heart, Share2, MapPin, Instagram, BookOpen, Building2, CalendarDays } from 'lucide-react'
 interface Props {
   restaurant: Restaurant
 }
@@ -257,10 +256,61 @@ export function RestaurantHeader({ restaurant }: Props) {
         }
         .rh-pill:hover { transform: translateY(-1px); border-color: var(--pr-border-hover); background: var(--pr-card-hover); }
 
-        .rh-pill-google { color: #7fa8f5; border-color: rgba(127,168,245,0.22); background: rgba(127,168,245,0.08); }
+         .rh-pill-google { color: #7fa8f5; border-color: rgba(127,168,245,0.22); background: rgba(127,168,245,0.08); }
         .rh-pill-directions { color: #4ade80; border-color: rgba(74,222,128,0.22); background: rgba(74,222,128,0.08); }
         .rh-pill-instagram { color: var(--pr-orange); border-color: rgba(255,92,53,0.22); background: var(--pr-orange-dim); }
-      `}</style>
+
+        /* ── About section ── */
+        .rh-about {
+          margin-top: 18px;
+          border-radius: 22px;
+          background: var(--pr-card);
+          border: 1px solid var(--pr-border);
+          padding: 18px 18px 20px;
+        }
+        .rh-about-head {
+          display: flex; align-items: center; gap: 8px;
+          margin-bottom: 12px;
+        }
+        .rh-about-title {
+          font-family: var(--font-display);
+          font-size: 15px; font-weight: 700;
+          color: var(--pr-text); margin: 0;
+        }
+        .rh-about-story {
+          font-family: var(--font-body);
+          font-size: 13px; line-height: 1.7;
+          color: var(--pr-text-muted);
+          margin: 0;
+          white-space: pre-line;
+        }
+        .rh-about-stats {
+          display: flex; flex-wrap: wrap; gap: 10px;
+          margin-top: 16px;
+        }
+        .rh-about-stat {
+          display: flex; align-items: center; gap: 9px;
+          padding: 10px 14px; border-radius: 14px;
+          background: var(--pr-black-soft);
+          border: 1px solid var(--pr-border);
+          flex: 1; min-width: 130px;
+        }
+        .rh-about-stat-icon {
+          width: 30px; height: 30px; border-radius: 10px;
+          display: grid; place-items: center; flex-shrink: 0;
+          background: var(--pr-gold-dim); color: var(--pr-gold);
+        }
+        .rh-about-stat-value {
+          font-family: var(--font-display);
+          font-size: 15px; font-weight: 700;
+          color: var(--pr-text); line-height: 1.2;
+        }
+        .rh-about-stat-label {
+          font-family: var(--font-body);
+          font-size: 10.5px; font-weight: 500;
+          color: var(--pr-text-faint);
+        }
+        `}</style>
 
       <header className="w-full">
         <div className="rh-wrap">
@@ -364,6 +414,44 @@ export function RestaurantHeader({ restaurant }: Props) {
                 <a href={restaurant.instagram_url} target="_blank" rel="noopener noreferrer" className="rh-pill rh-pill-instagram">
                   <Instagram size={11} /> Follow us
                 </a>
+              )}
+            </div>
+          )}
+
+          {(restaurant.about_story?.trim() || restaurant.total_branches || restaurant.established_year) && (
+            <div className="rh-about">
+              <div className="rh-about-head">
+                <BookOpen size={15} color="var(--pr-gold)" />
+                <p className="rh-about-title">Our Story</p>
+              </div>
+
+              {restaurant.about_story?.trim() && (
+                <p className="rh-about-story">{restaurant.about_story}</p>
+              )}
+
+              {(restaurant.total_branches || restaurant.established_year) && (
+                <div className="rh-about-stats">
+                  {!!restaurant.established_year && (
+                    <div className="rh-about-stat">
+                      <div className="rh-about-stat-icon"><CalendarDays size={14} /></div>
+                      <div>
+                        <div className="rh-about-stat-value">{restaurant.established_year}</div>
+                        <div className="rh-about-stat-label">Since</div>
+                      </div>
+                    </div>
+                  )}
+                  {!!restaurant.total_branches && (
+                    <div className="rh-about-stat">
+                      <div className="rh-about-stat-icon"><Building2 size={14} /></div>
+                      <div>
+                        <div className="rh-about-stat-value">{restaurant.total_branches}</div>
+                        <div className="rh-about-stat-label">
+                          {restaurant.total_branches === 1 ? 'Location' : 'Locations'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
