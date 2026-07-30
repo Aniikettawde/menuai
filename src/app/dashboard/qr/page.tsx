@@ -312,7 +312,9 @@ export default function QRPage() {
   const [tokensLoading, setTokensLoading] = useState(false)
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
   const [restaurantLogoDataUrl, setRestaurantLogoDataUrl] = useState<string | null>(null)
-    const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  // Keyed by "<tableNo>-<copyIndex>" instead of just tableNo, since Double
+  // Print mode renders two cards for the same table number side by side.
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
   useEffect(() => { setBaseUrl(window.location.origin) }, [])
 
   // Load the restaurant's own logo (used beside the name + inside the QR hole)
@@ -744,8 +746,8 @@ export default function QRPage() {
           </div>
 
           <div className="border-t border-zinc-800/60 p-5">
-            <button
-               onClick={downloadTableSheet}
+             <button
+              onClick={downloadTableSheet}
               disabled={busy || isQuotaExhausted || printSlots.length === 0}
               className="group relative w-full overflow-hidden rounded-2xl py-4 text-sm font-bold text-white transition-all duration-300 hover:shadow-[0_0_30px_rgba(139,92,246,0.35)] disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 40%, #f97316 100%)' }}
