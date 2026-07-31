@@ -85,7 +85,7 @@ function getImageUrl(imageUrl: string | null | undefined): string | null {
 }
 
 function formatPrice(paise: number): string {
-  if (!paise || paise <= 0) return 'ASP'
+  if (!paise || paise <= 0) return 'APS'
   return `₹${Math.round(paise / 100)}`
 }
 

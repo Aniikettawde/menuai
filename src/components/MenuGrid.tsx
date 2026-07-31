@@ -29,7 +29,7 @@ import type { WaiterCallItem } from '@/types'
 
 
 function formatPrice(paise: number) {
-  if (!paise || paise <= 0) return 'ASP'
+  if (!paise || paise <= 0) return 'APS'
   return `₹${Math.round(paise / 100)}`
 }
 
