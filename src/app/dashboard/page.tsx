@@ -1,7 +1,7 @@
 // src/app/dashboard/page.tsx
 'use client'
 
-import { VerifyVisitCard } from '@/components/dashboard/VerifyVisitCard'
+import { VerifyCodeCard } from '@/components/dashboard/VerifyCodeCard'
 
 import { useRouter } from 'next/navigation'
 import { useDashboardContext } from '@/hooks/useDashboardContext'
@@ -848,7 +848,7 @@ export default function DashboardPage() {
 
       <OrdersSection restaurantId={context.restaurantId} />
 
-      <VerifyVisitCard restaurantId={context.restaurantId} />
+     <VerifyCodeCard restaurantId={context.restaurantId} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
         <div className={`${cardBase} p-5 sm:p-6`} style={cardStyle}>

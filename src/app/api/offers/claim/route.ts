@@ -11,18 +11,19 @@ const supabase = createClient(
 export async function GET(req: NextRequest) {
   const customerId = req.nextUrl.searchParams.get('customer_id')
   const offerId    = req.nextUrl.searchParams.get('offer_id')
-
   if (!customerId || !offerId)
     return NextResponse.json({ error: 'Missing params' }, { status: 400 })
-
   const { data } = await supabase
     .from('claimed_offers')
-    .select('id')
+    .select('status, pin, expires_at')
     .eq('customer_id', customerId)
     .eq('offer_id', offerId)
     .maybeSingle()
-
-  return NextResponse.json({ claimed: !!data })
+  return NextResponse.json({
+    status: data?.status ?? null,   // null | 'pending' | 'redeemed'
+    pin: data?.pin ?? null,
+    expires_at: data?.expires_at ?? null,
+  })
 }
 
 // POST /api/offers/claim

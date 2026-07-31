@@ -316,6 +316,7 @@ export async function PATCH(req: NextRequest) {
 
     if (body.role === 'manager' || body.role === 'waiter') patch.role = body.role
     if (typeof body.active === 'boolean') patch.active = body.active
+    if (typeof body.available === 'boolean') patch.available = body.available
     if (typeof body.name === 'string') patch.name = body.name.trim() || null
     if (typeof body.phone === 'string') patch.phone = body.phone.trim() || null
 

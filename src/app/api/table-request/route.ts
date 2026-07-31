@@ -76,6 +76,7 @@ type AssignedStaff = {
   email: string
   role: 'manager' | 'waiter'
   active: boolean
+  available: boolean
   table_start: number | null
   table_end: number | null
   table_numbers: number[] | null
@@ -96,7 +97,7 @@ function matchesTable(staff: AssignedStaff, tableNumber: number) {
 async function getAssignedStaff(admin: SupabaseClient, restaurantId: string, tableNumber: number) {
   const { data, error } = await admin
     .from('restaurant_staff')
-    .select('id, restaurant_id, email, role, active, table_start, table_end, table_numbers')
+     .select('id, restaurant_id, email, role, active, available, table_start, table_end, table_numbers')
     .eq('restaurant_id', restaurantId)
     .eq('active', true)
 
@@ -362,7 +363,9 @@ export async function POST(req: NextRequest) {
     }
 
     const assignedStaff = await getAssignedStaff(admin, restaurant.id, resolvedTableNumber)
-    const assignedStaffIds = assignedStaff.map((s) => s.id)
+    // Only staff who are on-shift/available get pushed; assignedStaff itself
+    // (returned in the response) still reflects full table ownership.
+    const assignedStaffIds = assignedStaff.filter((s) => s.available).map((s) => s.id)
     const addedSummary =
       (items as RequestItem[]).slice(0, 2).map((i) => `${i.name} ×${i.qty}`).join(', ') +
       ((items as RequestItem[]).length > 2 ? ` +${(items as RequestItem[]).length - 2} more` : '')
@@ -432,9 +435,10 @@ const { data: inserted, error: insertError } = await admin
 
      const assignedStaff = await getAssignedStaff(admin, restaurant.id, resolvedTableNumber)
     // "Call waiter" alerts should only reach waiters, not managers
-    const notifyStaff = reqType === 'assistance'
+    const notifyStaff = (reqType === 'assistance'
       ? assignedStaff.filter((s) => s.role === 'waiter')
       : assignedStaff
+    ).filter((s) => s.available)
     const assignedStaffIds = notifyStaff.map((s) => s.id)
 
     // FIX 2: proper tag per request type; FIX 3: removed dead itemSummary/moreCount

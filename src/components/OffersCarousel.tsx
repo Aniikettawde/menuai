@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Gift, Tag, Clock, Check, Loader2 } from 'lucide-react'
+import { Gift, Tag, Clock, Check, Loader2, LogIn } from 'lucide-react'
+import { CountdownTimer } from './CountdownTimer'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 
 interface Offer {
@@ -38,42 +39,25 @@ function formatExpiry(iso: string | null): string | null {
   return null
 }
 
-function LockedTeaser({ count, onLoginClick }: { count: number; onLoginClick?: () => void }) {
+// Shown on each card when the guest hasn't logged in yet.
+// Same visual weight as ClaimButton so the card layout doesn't shift on login.
+function LoginToClaimButton({ onLoginClick }: { onLoginClick?: () => void }) {
   return (
-    <div style={{
-      borderRadius: 16,
-      background: 'var(--pr-gold-dim)',
-      border: '1px solid var(--pr-border-hover)',
-      padding: '14px 16px',
-      display: 'flex', alignItems: 'center', gap: 14,
-    }}>
-      <div style={{
-        width: 38, height: 38, flexShrink: 0, borderRadius: 12,
+    <button
+      type="button"
+      onClick={onLoginClick}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '6px 14px', borderRadius: 8,
         background: 'var(--pr-gold-dim)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Gift size={17} color="var(--pr-gold)" />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)', lineHeight: 1.3 }}>
-          {count} offer{count !== 1 ? 's' : ''} available for this table
-        </p>
-        <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-          Quick verify to see your deals
-        </p>
-      </div>
-      <button
-        type="button" onClick={onLoginClick}
-        style={{
-          flexShrink: 0, padding: '7px 14px',
-          background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
-          borderRadius: 10, color: 'var(--pr-gold)', fontSize: 12, fontWeight: 600,
-          fontFamily: 'var(--font-body)', cursor: 'pointer', whiteSpace: 'nowrap',
-        }}
-      >
-        View →
-      </button>
-    </div>
+        border: '1px solid var(--pr-border-hover)',
+        fontSize: 11, fontWeight: 700, color: 'var(--pr-gold)',
+        fontFamily: 'var(--font-body)', cursor: 'pointer',
+      }}
+    >
+      <LogIn size={11} />
+      Login to claim
+    </button>
   )
 }
 
@@ -89,54 +73,78 @@ function ClaimButton({
   restaurantId: string
   restaurantName: string
 }) {
-  const [claimed,  setClaimed]  = useState(false)
-  const [checking, setChecking] = useState(true)   // check on mount
-  const [loading,  setLoading]  = useState(false)
+  const [checking, setChecking] = useState(true)
+  const [status, setStatus]     = useState<'none' | 'pending' | 'redeemed'>('none')
+  const [pin, setPin]           = useState<string | null>(null)
+  const [expiresAt, setExpiresAt] = useState<string | null>(null)
+  const [loading, setLoading]   = useState(false)
 
-  // Check if already claimed when component mounts
   useEffect(() => {
     let mounted = true
     fetch(`/api/offers/claim?customer_id=${customerId}&offer_id=${offer.id}`)
       .then((r) => r.json())
-      .then((d: { claimed?: boolean }) => { if (mounted) setClaimed(d.claimed ?? false) })
+      .then((d: { status: string | null; pin: string | null; expires_at: string | null }) => {
+        if (!mounted) return
+        setStatus((d.status as 'pending' | 'redeemed') ?? 'none')
+        setPin(d.pin)
+        setExpiresAt(d.expires_at)
+      })
       .catch(() => {})
       .finally(() => { if (mounted) setChecking(false) })
     return () => { mounted = false }
   }, [customerId, offer.id])
 
   const handleClaim = useCallback(async () => {
-    if (claimed || loading) return
+    if (loading) return
     setLoading(true)
     try {
-      const res = await fetch('/api/offers/claim', {
+      const res = await fetch('/api/offers/generate-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer_id:     customerId,
-          offer_id:        offer.id,
-          restaurant_id:   restaurantId,
-          restaurant_name: restaurantName,
+          customer_id: customerId, offer_id: offer.id,
+          restaurant_id: restaurantId, restaurant_name: restaurantName,
         }),
       })
-      if (res.ok) setClaimed(true)
+      const json = await res.json()
+      if (res.ok) {
+        setStatus('pending')
+        setPin(json.pin)
+        setExpiresAt(json.expires_at)
+      }
     } catch {}
     finally { setLoading(false) }
-  }, [claimed, loading, customerId, offer.id, restaurantId, restaurantName])
+  }, [loading, customerId, offer.id, restaurantId, restaurantName])
 
-  if (checking) return null   // don't flash button before we know state
+  if (checking) return null
 
-  if (claimed) {
+  if (status === 'redeemed') {
     return (
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: 5,
         padding: '6px 12px', borderRadius: 8,
-        background: 'rgba(34,197,94,0.12)',
-        border: '1px solid rgba(34,197,94,0.25)',
-        fontSize: 11, fontWeight: 700, color: '#16a34a',
-        fontFamily: 'var(--font-body)',
+        background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)',
+        fontSize: 11, fontWeight: 700, color: '#16a34a', fontFamily: 'var(--font-body)',
       }}>
-        <Check size={11} />
-        Claimed
+        <Check size={11} /> Redeemed
+      </div>
+    )
+  }
+
+  if (status === 'pending' && pin) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 4,
+        padding: '8px 12px', borderRadius: 8,
+        background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+      }}>
+        <span style={{ fontSize: 10, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+          Show this code to your waiter
+        </span>
+        <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '0.2em', color: 'var(--pr-gold)', fontFamily: 'var(--font-mono, monospace)' }}>
+          {pin}
+        </span>
+        {expiresAt && <CountdownTimer expiresAt={expiresAt} onExpire={() => setStatus('none')} compact />}
       </div>
     )
   }
@@ -149,17 +157,14 @@ function ClaimButton({
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5,
         padding: '6px 14px', borderRadius: 8,
-        background: 'var(--pr-gold-dim)',
-        border: '1px solid var(--pr-border-hover)',
+        background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
         fontSize: 11, fontWeight: 700, color: 'var(--pr-gold)',
         fontFamily: 'var(--font-body)', cursor: 'pointer',
         transition: 'all 0.15s', opacity: loading ? 0.7 : 1,
       }}
     >
-      {loading
-        ? <Loader2 size={11} style={{ animation: 'spin 0.8s linear infinite' }} />
-        : <Gift size={11} />}
-      {loading ? 'Claiming…' : 'Claim'}
+      {loading ? <Loader2 size={11} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Gift size={11} />}
+      {loading ? 'Generating…' : 'Claim'}
     </button>
   )
 }
@@ -169,11 +174,8 @@ export function OffersCarousel({ offers, restaurantId, restaurantName, onLoginCl
 
   if (offers.length === 0) return null
 
-  if (!isLoggedIn) return <LockedTeaser count={offers.length} onLoginClick={onLoginClick} />
-
   return (
     <>
-      {/* Spin keyframe for the loader — injected once */}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       <div style={{
@@ -226,7 +228,6 @@ export function OffersCarousel({ offers, restaurantId, restaurantName, onLoginCl
                 padding: '12px 14px',
                 position: 'relative', overflow: 'hidden',
               }}>
-                {/* Left accent bar */}
                 <div style={{
                   position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
                   background: 'linear-gradient(180deg, var(--pr-gold), var(--pr-orange))',
@@ -234,7 +235,6 @@ export function OffersCarousel({ offers, restaurantId, restaurantName, onLoginCl
                 }} />
 
                 <div style={{ paddingLeft: 10 }}>
-                  {/* Discount badge */}
                   <div style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                     background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
@@ -246,14 +246,13 @@ export function OffersCarousel({ offers, restaurantId, restaurantName, onLoginCl
                     </span>
                   </div>
 
-                  {/* Title */}
                   <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)', lineHeight: 1.3 }}>
                     {offer.title}
                   </p>
 
-                  {/* Coupon + min order */}
                   <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {offer.coupon_code && (
+                    {/* Coupon code only shown once logged in — see note below */}
+                    {isLoggedIn && offer.coupon_code && (
                       <span style={{
                         background: 'var(--pr-border)', border: '1px dashed var(--pr-border-hover)',
                         borderRadius: 6, padding: '3px 9px', fontSize: 10, fontWeight: 700,
@@ -276,14 +275,17 @@ export function OffersCarousel({ offers, restaurantId, restaurantName, onLoginCl
                     </div>
                   )}
 
-                  {/* Claim button — always rendered when logged in */}
                   <div style={{ marginTop: 10 }}>
-                    <ClaimButton
-                      offer={offer}
-                      customerId={customer!.id}
-                      restaurantId={restaurantId}
-                      restaurantName={restaurantName}
-                    />
+                    {isLoggedIn && customer ? (
+                      <ClaimButton
+                        offer={offer}
+                        customerId={customer.id}
+                        restaurantId={restaurantId}
+                        restaurantName={restaurantName}
+                      />
+                    ) : (
+                      <LoginToClaimButton onLoginClick={onLoginClick} />
+                    )}
                   </div>
                 </div>
               </div>

@@ -46,18 +46,27 @@ export async function POST(req: NextRequest) {
     }
 
     // Ensure PIN uniqueness among currently-pending PINs at this restaurant
-    let pin = randomPin()
-    for (let i = 0; i < 5; i++) {
-      const { data: clash } = await supabase
-        .from('visit_verifications')
-        .select('id')
-        .eq('restaurant_id', restaurant_id)
-        .eq('pin', pin)
-        .eq('status', 'pending')
-        .maybeSingle()
-      if (!clash) break
-      pin = randomPin()
-    }
+   let pin = randomPin()
+for (let i = 0; i < 5; i++) {
+  const { data: visitClash } = await supabase
+    .from('visit_verifications')
+    .select('id')
+    .eq('restaurant_id', restaurant_id)
+    .eq('pin', pin)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  const { data: offerClash } = await supabase
+    .from('claimed_offers')
+    .select('id')
+    .eq('restaurant_id', restaurant_id)
+    .eq('pin', pin)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  if (!visitClash && !offerClash) break
+  pin = randomPin()
+}
 
     const expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
