@@ -6,11 +6,12 @@ import GamesHub from './GamesHub';
 interface GamesModalProps {
   open: boolean;
   onClose: () => void;
+  restaurantId: string;
 }
 
 // Full-screen overlay wrapper around GamesHub, matching the app's
 // existing modal treatment (see RatingModal / rating-modal-dark).
-export function GamesModal({ open, onClose }: GamesModalProps) {
+export function GamesModal({ open, onClose, restaurantId }: GamesModalProps) {
   return (
     <AnimatePresence>
       {open && (
@@ -39,7 +40,7 @@ export function GamesModal({ open, onClose }: GamesModalProps) {
               >
                 ✕
               </button>
-              <GamesHub />
+             <GamesHub restaurantId={restaurantId} />
             </div>
           </motion.div>
         </motion.div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PLAYER_COLORS = ['#7A2333', '#2E6B4F', '#B5651D', '#4A5A9E'];
@@ -45,7 +45,13 @@ function centerOf(cellOf: Record<number, { row: number; col: number }>, num: num
   return { x: col * 10 + 5, y: row * 10 + 5 };
 }
 
-export default function SnakeLadder({ playerCount = 2 }: { playerCount?: 2 | 3 | 4 }) {
+export default function SnakeLadder({
+  playerCount = 2,
+  onGameEnd,
+}: {
+  playerCount?: 2 | 3 | 4;
+  onGameEnd?: (result: string) => void;
+}) {
   const { grid, cellOf } = useMemo(buildBoard, []);
   const [positions, setPositions] = useState<number[]>(Array(playerCount).fill(0));
   const [turn, setTurn] = useState(0);
@@ -54,6 +60,11 @@ export default function SnakeLadder({ playerCount = 2 }: { playerCount?: 2 | 3 |
   const [hasRolledOnce, setHasRolledOnce] = useState(false);
   const [message, setMessage] = useState<{ text: string; kind: 'snake' | 'ladder' | 'info' } | null>(null);
   const winner = positions.findIndex((p) => p === 100);
+
+  useEffect(() => {
+    if (winner >= 0) onGameEnd?.(`player_${winner + 1}_win`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winner]);
 
   function rollDice() {
     if (rolling || winner >= 0) return;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 // ---------- Board geometry (real 15x15 Ludo cross) ----------
 // 0-indexed rows/cols 0-14. Colors: 0 Red, 1 Green, 2 Yellow, 3 Blue.
@@ -83,7 +83,13 @@ function coordsFor(player: number, steps: number): { cell: Cell; ringIdx?: numbe
   return { cell: [7, 7] };
 }
 
-export default function Ludo({ playerCount = 4 }: { playerCount?: number }) {
+export default function Ludo({
+  playerCount = 4,
+  onGameEnd,
+}: {
+  playerCount?: number;
+  onGameEnd?: (result: string) => void;
+}) {
   const [tokens, setTokens] = useState<Token[][]>(initTokens);
   const [turn, setTurn] = useState(0);
   const [dice, setDice] = useState<number | null>(null);
@@ -96,6 +102,10 @@ export default function Ludo({ playerCount = 4 }: { playerCount?: number }) {
   const active = Array.from({ length: playerCount }, (_, i) => i);
   const winner = tokens.findIndex((pt, i) => active.includes(i) && pt.every((t) => t.steps === FINISH_STEP));
 
+  useEffect(() => {
+    if (winner >= 0) onGameEnd?.(`${PLAYERS[winner].name.toLowerCase()}_win`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winner]);
   function legalMoves(playerTokens: Token[], dieValue: number): boolean[] {
     return playerTokens.map((t) => {
       if (t.steps === -1) return dieValue === 6;

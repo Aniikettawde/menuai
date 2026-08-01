@@ -922,7 +922,7 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   </>
 )}
 
-<GamesModal open={gamesOpen} onClose={() => setGamesOpen(false)} />
+<GamesModal open={gamesOpen} onClose={() => setGamesOpen(false)} restaurantId={restaurant.id} />
 
         {(tableNumber !== null || tableToken) && !sessionExpired && (
   <CallWaiterBell

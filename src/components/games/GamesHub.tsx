@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import TicTacToe from './TicTacToe';
 import SnakeLadder from './SnakeLadder';
 import Ludo from './Ludo';
+import { track } from '@/lib/analytics';
 
 type GameKey = 'ttt' | 'snake' | 'ludo' | null;
 
@@ -17,9 +18,33 @@ const GAMES: { key: Exclude<GameKey, null>; label: string; blurb: string; player
 // Drop this component anywhere in the customer-facing menu/ordering flow,
 // e.g. as a tab in /r/[slug]/page.tsx or a modal triggered from a
 // "Play while you wait" button near the order-status banner.
-export default function GamesHub() {
+// restaurantId is required for analytics tracking (game_started/game_ended).
+export default function GamesHub({ restaurantId }: { restaurantId: string }) {
   const [active, setActive] = useState<GameKey>(null);
   const [playerCount, setPlayerCount] = useState<2 | 3 | 4>(2);
+  const sessionStartedAt = useRef<number | null>(null);
+
+  function openGame(key: Exclude<GameKey, null>) {
+    setActive(key);
+    sessionStartedAt.current = Date.now();
+    track(restaurantId, 'game_started', {
+      metadata: { game: key, player_count: key === 'ttt' ? 2 : playerCount },
+    });
+  }
+
+  function endGameSession(result?: string) {
+    if (!active || sessionStartedAt.current === null) return;
+    const duration_seconds = Math.round((Date.now() - sessionStartedAt.current) / 1000);
+    track(restaurantId, 'game_ended', {
+      metadata: { game: active, duration_seconds, result: result ?? 'exited' },
+    });
+    sessionStartedAt.current = null;
+  }
+
+  function backToMenu() {
+    endGameSession('exited');
+    setActive(null);
+  }
 
   return (
     <div
@@ -47,7 +72,7 @@ export default function GamesHub() {
             {GAMES.map((g) => (
               <button
                 key={g.key}
-                onClick={() => setActive(g.key)}
+                onClick={() => openGame(g.key)}
                 className="relative flex items-center justify-between rounded-xl px-4 py-3 text-left transition-transform active:scale-[0.98]"
                 style={{
                   backgroundColor: '#7A2333',
@@ -73,7 +98,7 @@ export default function GamesHub() {
           >
             <div className="mb-2 flex items-center justify-between">
               <button
-                onClick={() => setActive(null)}
+                onClick={backToMenu}
                 className="text-sm font-semibold"
                 style={{ color: '#7A2333' }}
               >
@@ -93,9 +118,13 @@ export default function GamesHub() {
               )}
             </div>
 
-            {active === 'ttt' && <TicTacToe />}
-            {active === 'snake' && <SnakeLadder key={playerCount} playerCount={playerCount} />}
-            {active === 'ludo' && <Ludo key={playerCount} playerCount={playerCount} />}
+            {active === 'ttt' && <TicTacToe onGameEnd={(result) => endGameSession(result)} />}
+            {active === 'snake' && (
+              <SnakeLadder key={playerCount} playerCount={playerCount} onGameEnd={(result) => endGameSession(result)} />
+            )}
+            {active === 'ludo' && (
+              <Ludo key={playerCount} playerCount={playerCount} onGameEnd={(result) => endGameSession(result)} />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

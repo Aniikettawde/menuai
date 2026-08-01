@@ -20,7 +20,7 @@ function getWinner(board: Cell[]): { winner: Cell; line: number[] | null } {
   return { winner: null, line: null };
 }
 
-export default function TicTacToe() {
+export default function TicTacToe({ onGameEnd }: { onGameEnd?: (result: string) => void }) {
   const [board, setBoard] = useState<Cell[]>(Array(9).fill(null));
   const [turn, setTurn] = useState<'X' | 'O'>('X');
   const [scores, setScores] = useState({ X: 0, O: 0 });
@@ -33,9 +33,12 @@ export default function TicTacToe() {
     const next = [...board];
     next[i] = turn;
     setBoard(next);
-    const result = getWinner(next);
+     const result = getWinner(next);
     if (result.winner) {
       setScores((s) => ({ ...s, [result.winner as 'X' | 'O']: s[result.winner as 'X' | 'O'] + 1 }));
+      onGameEnd?.(`${result.winner}_win`);
+    } else if (next.every((c) => c !== null)) {
+      onGameEnd?.('draw');
     }
     setTurn(turn === 'X' ? 'O' : 'X');
   }

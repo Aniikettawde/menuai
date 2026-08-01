@@ -245,6 +245,8 @@ export interface MealBuilderItem {
 export type EventType =
   | 'page_view'
   | 'item_view'
+  | 'game_started'
+  | 'game_ended'
   | 'item_search'
   | 'upsell_impression'
   | 'upsell_accepted'

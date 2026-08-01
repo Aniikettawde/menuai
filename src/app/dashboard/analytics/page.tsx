@@ -8,6 +8,7 @@ import {
   Droplets,
   Eye,
   Flame,
+  Gamepad2,
   MessageSquareMore,
   QrCode,
   Receipt,
@@ -59,6 +60,13 @@ interface TopItem {
 interface SearchTerm {
   term: string
   count: number
+}
+
+interface GameStat {
+  game: string
+  playCount: number
+  completedCount: number
+  avgDurationSeconds: number | null
 }
 
 type WaiterRequestType = 'assistance' | 'water' | 'bill'
@@ -118,6 +126,11 @@ const RANGE_OPTIONS = [
   { label: '30 days', days: 30 },
   { label: '90 days', days: 90 },
 ]
+const GAME_LABELS: Record<string, string> = {
+  ttt: 'Tic-Tac-Toe',
+  snake: 'Snake & Ladder',
+  ludo: 'Ludo',
+}
 
 const WAITER_TYPE_META: Record<WaiterRequestType, { label: string; icon: ReactNode; color: string }> = {
   assistance: { label: 'Call Waiter', icon: <BellRing size={12} />, color: BRAND.burgundy },
@@ -194,6 +207,7 @@ export default function AnalyticsPage() {
   const [topItems, setTopItems] = useState<TopItem[]>([])
   const [hourly, setHourly] = useState<number[]>(Array(24).fill(0))
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([])
+    const [gameStats, setGameStats] = useState<GameStat[]>([])
   const [waiterStats, setWaiterStats] = useState<WaiterStats | null>(null)
   const [qrScans, setQrScans] = useState(0)
   const [customerRows, setCustomerRows] = useState<CustomerRow[]>([])
@@ -360,11 +374,12 @@ export default function AnalyticsPage() {
           .filter((v): v is string => Boolean(v)),
       )
 
-      const itemViewEvents = events.filter((e) => e.event_type === 'item_view')
+     const itemViewEvents = events.filter((e) => e.event_type === 'item_view')
       const aiSearchEvents = events.filter((e) => e.event_type === 'item_search')
       const cartItemAddedEvents = events.filter((e) => e.event_type === 'cart_item_added')
       const waiterCalledEvents = events.filter((e) => e.event_type === 'waiter_called')
-
+      const gameStartedEvents = events.filter((e) => e.event_type === 'game_started')
+      const gameEndedEvents = events.filter((e) => e.event_type === 'game_ended')
       setTotals((t) => ({
         ...t,
         visitors: uniqueSessions.size,
@@ -445,6 +460,38 @@ export default function AnalyticsPage() {
           .sort((a, b) => b[1] - a[1])
           .slice(0, 12)
           .map(([term, count]) => ({ term, count })),
+      )
+      const gamePlayMap: Record<string, number> = {}
+      gameStartedEvents.forEach((e) => {
+        const meta = e.metadata as { game?: string } | null
+        const game = meta?.game
+        if (game) gamePlayMap[game] = (gamePlayMap[game] ?? 0) + 1
+      })
+
+      const gameEndMap: Record<string, { count: number; totalSeconds: number }> = {}
+      gameEndedEvents.forEach((e) => {
+        const meta = e.metadata as { game?: string; duration_seconds?: number } | null
+        const game = meta?.game
+        if (!game) return
+        const entry = gameEndMap[game] ?? { count: 0, totalSeconds: 0 }
+        entry.count += 1
+        if (typeof meta?.duration_seconds === 'number') entry.totalSeconds += meta.duration_seconds
+        gameEndMap[game] = entry
+      })
+
+      const allGameKeys = new Set([...Object.keys(gamePlayMap), ...Object.keys(gameEndMap)])
+      setGameStats(
+        Array.from(allGameKeys)
+          .map((game) => {
+            const ended = gameEndMap[game]
+            return {
+              game,
+              playCount: gamePlayMap[game] ?? 0,
+              completedCount: ended?.count ?? 0,
+              avgDurationSeconds: ended && ended.count > 0 ? ended.totalSeconds / ended.count : null,
+            }
+          })
+          .sort((a, b) => b.playCount - a.playCount),
       )
     } catch (err) {
       console.error('fetchAnalytics error:', err)
@@ -603,6 +650,46 @@ export default function AnalyticsPage() {
               })}
             </div>
           </>
+        )}
+      </div>
+
+      <div className={`${cardBase} p-5`} style={cardStyle}>
+        <div className="mb-1 flex items-center gap-2">
+          <Gamepad2 size={14} style={{ color: BRAND.plum }} />
+          <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Games Played</h2>
+        </div>
+        <p className="mb-4 text-xs" style={{ color: BRAND.inkFaint }}>
+          "Play while you wait" engagement — plays, completions, and average session time
+        </p>
+
+        {gameStats.length === 0 ? (
+          <p className="text-xs italic" style={{ color: BRAND.inkFaint }}>No game plays yet in this period</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {gameStats.map((g) => (
+              <div
+                key={g.game}
+                className="rounded-xl border p-3.5"
+                style={{ borderColor: `${BRAND.plum}26`, background: `${BRAND.plum}0D` }}
+              >
+                <p className="text-sm font-semibold" style={{ color: BRAND.ink }}>
+                  {GAME_LABELS[g.game] ?? g.game}
+                </p>
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span style={{ color: BRAND.inkSoft }}>Plays</span>
+                  <span className="font-bold" style={{ color: BRAND.plum }}>{g.playCount}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-xs">
+                  <span style={{ color: BRAND.inkSoft }}>Completed</span>
+                  <span className="font-bold" style={{ color: BRAND.emerald }}>{g.completedCount}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-xs">
+                  <span style={{ color: BRAND.inkSoft }}>Avg time</span>
+                  <span className="font-bold" style={{ color: BRAND.sky }}>{formatDuration(g.avgDurationSeconds)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
