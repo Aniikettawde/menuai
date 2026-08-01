@@ -9,7 +9,7 @@ type TeamRole = 'manager' | 'waiter'
 // Columns returned to the client. Kept as one constant so GET/POST/PATCH
 // always stay in sync — add new columns here once.
 const STAFF_SELECT =
-  'id, restaurant_id, name, email, phone, role, active, table_start, table_end, table_numbers, created_at, updated_at'
+  'id, restaurant_id, name, email, phone, role, active, available, table_start, table_end, table_numbers, created_at, updated_at'
 
 // ── Supabase clients ──────────────────────────────────────────────────────────
 
@@ -242,6 +242,8 @@ export async function POST(req: NextRequest) {
         phone,
        role: role as TeamRole,
         active: true,
+		        available: true,   // ← add this line
+
         table_start: finalStart,
         table_end: finalEnd,
         table_numbers: tableNumbersResult.value,
@@ -283,7 +285,13 @@ export async function PATCH(req: NextRequest) {
     if (!staffId) return NextResponse.json({ error: 'Missing staff id' }, { status: 400 })
 
     const sb = getServiceClient()
-
+	
+ if (typeof body.available === 'boolean' && ctx.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Only the owner can change notification settings.' },
+        { status: 403 },
+      )
+    }
     // ── Password reset (requires looking up auth_user_id) ─────────────────────
     if (typeof body.temp_password === 'string') {
       const newPass = body.temp_password.trim()

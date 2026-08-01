@@ -76,7 +76,7 @@ type AssignedStaff = {
   email: string
   role: 'manager' | 'waiter'
   active: boolean
-  available: boolean
+  available: boolean | null   // ← was: boolean
   table_start: number | null
   table_end: number | null
   table_numbers: number[] | null
@@ -365,7 +365,7 @@ export async function POST(req: NextRequest) {
     const assignedStaff = await getAssignedStaff(admin, restaurant.id, resolvedTableNumber)
     // Only staff who are on-shift/available get pushed; assignedStaff itself
     // (returned in the response) still reflects full table ownership.
-    const assignedStaffIds = assignedStaff.filter((s) => s.available).map((s) => s.id)
+    const assignedStaffIds = assignedStaff.filter((s) => s.available !== false).map((s) => s.id)
     const addedSummary =
       (items as RequestItem[]).slice(0, 2).map((i) => `${i.name} ×${i.qty}`).join(', ') +
       ((items as RequestItem[]).length > 2 ? ` +${(items as RequestItem[]).length - 2} more` : '')
@@ -438,7 +438,7 @@ const { data: inserted, error: insertError } = await admin
     const notifyStaff = (reqType === 'assistance'
       ? assignedStaff.filter((s) => s.role === 'waiter')
       : assignedStaff
-    ).filter((s) => s.available)
+    ).filter((s) => s.available !== false)
     const assignedStaffIds = notifyStaff.map((s) => s.id)
 
     // FIX 2: proper tag per request type; FIX 3: removed dead itemSummary/moreCount

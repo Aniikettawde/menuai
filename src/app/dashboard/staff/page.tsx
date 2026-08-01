@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import {
   Loader2, Plus, Trash2, Shield, Users, CheckCircle2, XCircle,
   Pencil, Check, X, Smartphone, SmartphoneNfc, Phone, KeyRound,
-  RefreshCw, ArrowUpCircle, ArrowDownCircle
+  RefreshCw, ArrowUpCircle, ArrowDownCircle , Bell ,BellOff
 } from 'lucide-react'
 
 // ── Brand tokens (mirrors the ivory/burgundy system used across the dashboard) ──
@@ -40,6 +40,7 @@ type StaffRow = {
   phone: string | null
   role: TeamRole
   active: boolean
+  available: boolean   // ← add this
   table_start: number | null
   table_end: number | null
   table_numbers: number[] | null
@@ -315,6 +316,24 @@ export default function StaffPage() {
       setError(err instanceof Error ? err.message : 'Failed to add staff')
     } finally {
       setSaving(false)
+    }
+  }
+
+   async function toggleNotifications(row: StaffRow) {
+    setError('')
+    try {
+      const res = await fetch('/api/dashboard/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, available: !row.available }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error ?? 'Failed to update notifications')
+      setStaff((prev) =>
+        prev.map((x) => (x.id === row.id ? { ...x, available: !x.available } : x)),
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update notifications')
     }
   }
 
@@ -810,6 +829,23 @@ export default function StaffPage() {
                   {row.active ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                   {row.active ? 'Active' : 'Inactive'}
                 </button>
+
+                   {context?.role === 'owner' && (
+                  <button
+                    type="button"
+                    onClick={() => void toggleNotifications(row)}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium transition hover:opacity-90"
+                    style={
+                      row.available
+                        ? { borderColor: `${BRAND.sky}33`, background: `${BRAND.sky}14`, color: BRAND.sky }
+                        : { borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkFaint }
+                    }
+                    title={row.available ? 'Disable order/request notifications' : 'Enable order/request notifications'}
+                  >
+                    {row.available ? <Bell size={12} /> : <BellOff size={12} />}
+                    {row.available ? 'Notifications on' : 'Notifications off'}
+                  </button>
+                )}
 
                 <button
                   type="button"
