@@ -434,11 +434,10 @@ const { data: inserted, error: insertError } = await admin
     }
 
      const assignedStaff = await getAssignedStaff(admin, restaurant.id, resolvedTableNumber)
-    // "Call waiter" alerts should only reach waiters, not managers
-    const notifyStaff = (reqType === 'assistance'
-      ? assignedStaff.filter((s) => s.role === 'waiter')
-      : assignedStaff
-    ).filter((s) => s.available !== false)
+    // Notify anyone assigned to this table who has notifications enabled —
+    // role no longer restricts which request types they see. An owner can
+    // scope this down per-person via the `available` toggle on the staff page.
+    const notifyStaff = assignedStaff.filter((s) => s.available !== false)
     const assignedStaffIds = notifyStaff.map((s) => s.id)
 
     // FIX 2: proper tag per request type; FIX 3: removed dead itemSummary/moreCount
