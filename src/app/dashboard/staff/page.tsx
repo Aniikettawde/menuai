@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import {
   Loader2, Plus, Trash2, Shield, Users, CheckCircle2, XCircle,
   Pencil, Check, X, Smartphone, SmartphoneNfc, Phone, KeyRound,
-  RefreshCw
+  RefreshCw, ArrowUpCircle, ArrowDownCircle
 } from 'lucide-react'
 
 // ── Brand tokens (mirrors the ivory/burgundy system used across the dashboard) ──
@@ -246,6 +246,7 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [roleUpdatingId, setRoleUpdatingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [staff, setStaff] = useState<StaffRow[]>([])
   const [context, setContext] = useState<DashboardContext | null>(null)
@@ -335,6 +336,31 @@ export default function StaffPage() {
     }
   }
 
+  // Promote a Captain to Manager (or demote a Manager back to Captain).
+  // Managers already have full staff/table-management access, so this is the
+  // simplest way to give a senior/shift-lead Captain that same access.
+  async function toggleRole(row: StaffRow) {
+    setError('')
+    setRoleUpdatingId(row.id)
+    const nextRole: TeamRole = row.role === 'manager' ? 'waiter' : 'manager'
+    try {
+      const res = await fetch('/api/dashboard/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, role: nextRole }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error ?? 'Failed to update role')
+      setStaff((prev) =>
+        prev.map((x) => (x.id === row.id ? { ...x, role: nextRole } : x)),
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update role')
+    } finally {
+      setRoleUpdatingId(null)
+    }
+  }
+
   async function updateTableRange(
     id: string,
     payload: { table_start: number | null; table_end: number | null; table_numbers: number[] | null },
@@ -416,6 +442,12 @@ export default function StaffPage() {
 
   const activeCount = staff.filter((s) => s.active).length
   const deviceCount = staff.filter((s) => s.has_device).length
+
+  // Is this row the currently logged-in manager/owner? Used to block
+  // self-deactivation (they'd lock themselves out of the dashboard).
+  function isSelf(row: StaffRow) {
+    return !!context?.email && row.email.toLowerCase() === context.email.toLowerCase()
+  }
 
   return (
     <div className="space-y-4">
@@ -550,7 +582,7 @@ export default function StaffPage() {
             className={inputClass}
             style={inputStyle}
           >
-            <option value="waiter">Waiter</option>
+            <option value="waiter">Captain</option>
             <option value="manager">Manager</option>
           </select>
 
@@ -747,8 +779,28 @@ export default function StaffPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => void toggleRole(row)}
+                  disabled={roleUpdatingId === row.id}
+                  className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium transition disabled:opacity-50"
+                  style={{ borderColor: `${BRAND.plum}33`, background: `${BRAND.plum}14`, color: BRAND.plum }}
+                  title={row.role === 'manager' ? 'Demote to Captain' : 'Promote to Manager'}
+                >
+                  {roleUpdatingId === row.id ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : row.role === 'manager' ? (
+                    <ArrowDownCircle size={12} />
+                  ) : (
+                    <ArrowUpCircle size={12} />
+                  )}
+                  {row.role === 'manager' ? 'Demote to Captain' : 'Promote to Manager'}
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => void toggleActive(row)}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium transition"
+                  disabled={row.active && isSelf(row)}
+                  title={row.active && isSelf(row) ? "You can't deactivate your own account" : undefined}
+                  className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
                   style={
                     row.active
                       ? { borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}14`, color: BRAND.emerald }
@@ -823,7 +875,7 @@ export default function StaffPage() {
             className="rounded-3xl border border-dashed p-10 text-center text-sm"
             style={{ borderColor: BRAND.line, background: BRAND.ivory, color: BRAND.inkFaint }}
           >
-            No staff added yet. Add your first waiter or manager above.
+            No staff added yet. Add your first Captain or manager above.
           </div>
         )}
       </div>

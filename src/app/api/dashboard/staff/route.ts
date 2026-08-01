@@ -6,6 +6,11 @@ import { resolveDashboardContext } from '@/lib/dashboard-access'
 
 type TeamRole = 'manager' | 'waiter'
 
+// Columns returned to the client. Kept as one constant so GET/POST/PATCH
+// always stay in sync — add new columns here once.
+const STAFF_SELECT =
+  'id, restaurant_id, name, email, phone, role, active, table_start, table_end, table_numbers, created_at, updated_at'
+
 // ── Supabase clients ──────────────────────────────────────────────────────────
 
 function getServiceClient() {
@@ -122,7 +127,7 @@ export async function GET(req: NextRequest) {
     const sb = getServiceClient()
     const { data, error } = await sb
       .from('restaurant_staff')
-     .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, table_numbers, created_at, updated_at')
+      .select(STAFF_SELECT)
       .eq('restaurant_id', ctx.restaurantId)
       .order('created_at', { ascending: false })
 
@@ -244,7 +249,7 @@ export async function POST(req: NextRequest) {
         // Store the auth UUID so we can update password later by staff row id
         auth_user_id: authUserId,
       })
-       .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, table_numbers, created_at, updated_at')
+       .select(STAFF_SELECT)
       .single()
 
     if (error) throw error
@@ -314,6 +319,31 @@ export async function PATCH(req: NextRequest) {
     // ── Regular field patch ───────────────────────────────────────────────────
     const patch: Record<string, unknown> = {}
 
+    // Guard: a manager can't deactivate their own staff row — if they did,
+    // they'd immediately lose dashboard access with no one else able to flip
+    // it back on (unless another manager/owner exists). Fetch the target row
+    // first so we can compare against the requesting user.
+    if (body.active === false) {
+      const { data: targetRow } = await sb
+        .from('restaurant_staff')
+        .select('auth_user_id, email')
+        .eq('id', staffId)
+        .eq('restaurant_id', ctx.restaurantId)
+        .single()
+
+      const isSelf =
+        targetRow &&
+        (targetRow.auth_user_id === user.id ||
+          (targetRow.email && user.email && targetRow.email.toLowerCase() === user.email.toLowerCase()))
+
+      if (isSelf) {
+        return NextResponse.json(
+          { error: "You can't deactivate your own account — ask another manager or the owner to do it." },
+          { status: 400 },
+        )
+      }
+    }
+
     if (body.role === 'manager' || body.role === 'waiter') patch.role = body.role
     if (typeof body.active === 'boolean') patch.active = body.active
     if (typeof body.available === 'boolean') patch.available = body.available
@@ -347,7 +377,7 @@ export async function PATCH(req: NextRequest) {
       .update(patch)
       .eq('id', staffId)
       .eq('restaurant_id', ctx.restaurantId)
-     .select('id, restaurant_id, name, email, phone, role, active, table_start, table_end, table_numbers, created_at, updated_at')
+     .select(STAFF_SELECT)
       .single()
 
     if (error) throw error
