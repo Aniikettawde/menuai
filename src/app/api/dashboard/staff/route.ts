@@ -319,10 +319,10 @@ export async function PATCH(req: NextRequest) {
     // ── Regular field patch ───────────────────────────────────────────────────
     const patch: Record<string, unknown> = {}
 
-    // Guard: a manager can't deactivate their own staff row — if they did,
-    // they'd immediately lose dashboard access with no one else able to flip
-    // it back on (unless another manager/owner exists). Fetch the target row
-    // first so we can compare against the requesting user.
+    // Guard: nobody can deactivate the restaurant owner's account, or their
+    // own account. Deactivating the owner would be catastrophic (they own
+    // the restaurant record); deactivating yourself locks you out with no
+    // one else able to flip it back on.
     if (body.active === false) {
       const { data: targetRow } = await sb
         .from('restaurant_staff')
@@ -335,6 +335,15 @@ export async function PATCH(req: NextRequest) {
         targetRow &&
         (targetRow.auth_user_id === user.id ||
           (targetRow.email && user.email && targetRow.email.toLowerCase() === user.email.toLowerCase()))
+
+      const isOwner = targetRow && targetRow.auth_user_id === ctx.ownerId
+
+      if (isOwner) {
+        return NextResponse.json(
+          { error: "You can't deactivate the restaurant owner's account." },
+          { status: 400 },
+        )
+      }
 
       if (isSelf) {
         return NextResponse.json(
@@ -408,6 +417,21 @@ export async function DELETE(req: NextRequest) {
     if (!staffId) return NextResponse.json({ error: 'Missing staff id' }, { status: 400 })
 
     const sb = getServiceClient()
+
+    // Guard: never let the owner's own staff row be removed this way.
+    const { data: targetRow } = await sb
+      .from('restaurant_staff')
+      .select('auth_user_id')
+      .eq('id', staffId)
+      .eq('restaurant_id', ctx.restaurantId)
+      .single()
+
+    if (targetRow && targetRow.auth_user_id === ctx.ownerId) {
+      return NextResponse.json(
+        { error: "You can't remove the restaurant owner's account." },
+        { status: 400 },
+      )
+    }
 
     // Cascade: delete device_tokens for this staff member too so the owner's
     // "App installed" count stays accurate.
