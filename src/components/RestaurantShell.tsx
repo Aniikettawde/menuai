@@ -895,16 +895,18 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
     />
   }
 />
-<RewardWelcomePopup
-  isOpen={showRewardPopup}
-  onClose={() => setShowRewardPopup(false)}
-  onClaim={() => {
-    setShowRewardPopup(false)
-    setLoginOpen(true) // opens your existing OTPLoginModal via CustomerAuthProvider
-  }}
-  points={50}
-  rupeeValue={50}
-/>
+{false && (
+  <RewardWelcomePopup
+    isOpen={showRewardPopup}
+    onClose={() => setShowRewardPopup(false)}
+    onClaim={() => {
+      setShowRewardPopup(false)
+      setLoginOpen(true)
+    }}
+    points={50}
+    rupeeValue={50}
+  />
+)}
   </main>
 )}
 
