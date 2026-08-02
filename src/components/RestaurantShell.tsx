@@ -146,7 +146,7 @@ const [showRewardPopup, setShowRewardPopup] = useState(false)
   const timer = setTimeout(() => {
     setShowRewardPopup(true)
     sessionStorage.setItem(key, '1')
-  }, 10000) // 10s after mount of this effect (i.e. after landing on menu)
+  }, 30000) // 30s after mount of this effect (i.e. after landing on menu)
  
   return () => clearTimeout(timer)
 }, [customer, activeTab, initialData.restaurant.id])
@@ -895,18 +895,15 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
     />
   }
 />
-{false && (
-  <RewardWelcomePopup
-    isOpen={showRewardPopup}
-    onClose={() => setShowRewardPopup(false)}
-    onClaim={() => {
-      setShowRewardPopup(false)
-      setLoginOpen(true)
-    }}
-    points={50}
-    rupeeValue={50}
-  />
-)}
+<RewardWelcomePopup
+  isOpen={showRewardPopup}
+  onClose={() => setShowRewardPopup(false)}
+  onClaim={() => {
+    setShowRewardPopup(false)
+    setLoginOpen(true) // opens your existing OTPLoginModal via CustomerAuthProvider
+  }}
+ 
+/>
   </main>
 )}
 
