@@ -17,6 +17,8 @@ import { SignupBonusPopup } from '@/components/SignupBonusPopup'
 import { OTPLoginModal } from '@/components/OTPLoginModal'
 import { CustomerAccountDrawer } from '@/components/CustomerAccountDrawer'
 import { useCustomerAuth } from '@/store/customer-auth-store'
+import { WhatsAppFloatingButton } from '@/components/WhatsAppFloatingButton'
+
 
 type ListingRow = DiscoveryRestaurant & {
   offers?: DiscoveryOffer[]
@@ -368,6 +370,7 @@ export default function DiscoveryPage() {
   onClose={() => setAccountOpen(false)}
   restaurantId={null}
 />
+<WhatsAppFloatingButton />
     </main>
   )
 }
