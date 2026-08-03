@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Script from 'next/script'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { ChefHat, ArrowUpRight, BarChart3, BadgePercent, Users } from 'lucide-react'
 import { getDiscoveryBrowser, type DiscoveryOffer, type DiscoveryRestaurant, type DishMatch } from '@/lib/discovery'
@@ -106,6 +107,24 @@ const discoveryTheme: React.CSSProperties = {
   '--pr-text-faint': '#A39C90',
 } as React.CSSProperties
 
+const discoveryJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Restaurant Offers in Pune',
+  description:
+    'Browse live restaurant offers, deals, and top-rated restaurants in Pune. Discover new places and earn loyalty rewards on every visit.',
+  url: 'https://explore.dinezy.in',
+  about: {
+    '@type': 'Place',
+    name: 'Pune',
+  },
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Dinezy',
+    url: 'https://dinezy.in',
+  },
+}
+
 export default function DiscoveryPage() {
   const supabase = useMemo(() => getDiscoveryBrowser(), [])
   const explore = useExploreState()
@@ -176,6 +195,13 @@ export default function DiscoveryPage() {
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Inter:wght@300;400;500;600;700&display=swap');
       `}</style>
+
+      <Script
+        id="discovery-jsonld"
+        type="application/ld+json"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(discoveryJsonLd) }}
+      />
 
       <DiscoveryHeader
         locationLabel={CITY}
