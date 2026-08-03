@@ -57,9 +57,9 @@ function mapRowToCard(r: ListingRow, dishMatches?: Map<string, DishMatch>): Rest
   const activeOffer = (r.offers ?? []).find((o) => o.is_active) ?? null
   const dishMatch = dishMatches?.get(r.id)
   const row = r as unknown as {
-    avg_rating?: string | number | null
-    total_ratings?: number | null
-    google_rating?: string | number | null
+    rating_avg?: number | string | null
+    rating_count?: number | null
+    google_rating?: number | string | null
     google_review_count?: number | null
   }
   return {
@@ -68,8 +68,8 @@ function mapRowToCard(r: ListingRow, dishMatches?: Map<string, DishMatch>): Rest
     name: String(r.name ?? ''),
     imageUrl: resolveUrl(r.cover_image_url ?? (r as { logo_url?: string }).logo_url),
     cuisineTags: (r.cuisine_tags ?? []).map(String).slice(0, 4),
-    appRating: row.avg_rating != null ? Number(row.avg_rating) : 0,
-    appRatingCount: Number(row.total_ratings ?? 0),
+    appRating: row.rating_avg != null ? Number(row.rating_avg) : 0,
+    appRatingCount: Number(row.rating_count ?? 0),
     googleRating: row.google_rating != null ? Number(row.google_rating) : null,
     googleReviewCount: row.google_review_count != null ? Number(row.google_review_count) : null,
     avgPriceForTwo: (r as { avg_price_for_two_paise?: number | null }).avg_price_for_two_paise ?? null,
