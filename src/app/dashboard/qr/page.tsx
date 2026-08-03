@@ -26,6 +26,11 @@ import {
   Star,
   ArrowRight,
   Shield,
+  BookOpen,
+  Tag,
+  Gift,
+  Heart,
+  UtensilsCrossed,
 } from 'lucide-react'
 
 type RestaurantRecord = {
@@ -173,6 +178,10 @@ async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
 }
 
 // ─── QR Card ────────────────────────────────────────────────────────────────
+// Redesigned to actively sell the three things a guest can do the moment
+// they scan: view the menu, call the waiter, and grab live offers. The card
+// keeps its print-safe aspect ratio (measured dynamically in the PDF export
+// below) but now carries real information instead of just a QR + logo.
 function FixedQrCard({
   tableNo,
   restaurantName,
@@ -190,64 +199,110 @@ function FixedQrCard({
 }) {
   const initial = restaurantName?.trim()?.[0]?.toUpperCase() ?? 'R'
 
+  const actions = [
+    { icon: <UtensilsCrossed size={15} strokeWidth={2.4} />, label: 'View Menu', color: '#9333ea' },
+    { icon: <BellRing size={15} strokeWidth={2.4} />, label: 'Call Waiter', color: '#f97316' },
+    { icon: <Gift size={15} strokeWidth={2.4} />, label: 'Get Offers', color: '#db2777' },
+  ]
+
   return (
     <div
       ref={cardRef}
-      className="relative w-[360px] overflow-hidden rounded-[30px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[2px] shadow-[0_0_35px_rgba(139,92,246,0.30)]"
+      className="relative w-[360px] overflow-hidden rounded-[30px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[2px] shadow-[0_10px_30px_rgba(139,92,246,0.18)]"
     >
-      <div className="relative overflow-hidden rounded-[28px] bg-[#0b0612] px-5 py-6 text-center">
-        <div className="pointer-events-none absolute -top-20 left-1/2 h-40 w-40 -translate-x-1/2 rounded-full bg-purple-600/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 right-0 h-32 w-32 rounded-full bg-orange-500/10 blur-3xl" />
+      {/* Light, ink-light body — the gradient border above stays as the one
+          bold signature element; the print surface itself stays mostly
+          cream so it holds up on uncalibrated restaurant printers/laminators
+          and doesn't drink toner the way a near-black fill would. */}
+      <div className="relative overflow-hidden rounded-[28px] bg-[#FBF4EC] px-5 pb-4 pt-5 text-center">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#8b5cf6]/[0.07] to-transparent" />
 
-        <div className="absolute right-4 top-4 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[9px] font-bold tracking-wider text-white/45">
+        <div className="absolute right-4 top-4 rounded-full border border-[#e4d3f5] bg-[#f3e9fb] px-2.5 py-1 font-mono text-[9px] font-bold tracking-wider text-[#7c3aed]">
           T{String(tableNo).padStart(2, '0')}
         </div>
 
-        {/* Restaurant name only — no logo beside it */}
-        <p className="relative z-10 text-[15px] font-black uppercase tracking-[0.18em] text-white">
+        {/* Restaurant name */}
+        <p className="relative z-10 text-[15px] font-black uppercase tracking-[0.18em] text-[#241533]">
           {restaurantName}
         </p>
 
-        <p className="relative z-10 mt-5 text-[20px] font-black uppercase leading-tight tracking-wide text-white">
-          SCAN TO VIEW
+        <p className="relative z-10 mt-3 text-[18px] font-black uppercase leading-tight tracking-wide text-[#241533]">
+          SCAN TO UNLOCK
         </p>
-        <p className="relative z-10 text-[20px] font-black uppercase leading-tight tracking-wide text-white">
-          OUR MENU
+        <p className="relative z-10 text-[18px] font-black uppercase leading-tight tracking-wide">
+          <span className="bg-gradient-to-r from-[#9333ea] to-[#ea580c] bg-clip-text text-transparent">
+            THE FULL TABLE
+          </span>
         </p>
 
-        <div className="relative z-10 mx-auto mt-6 flex w-fit items-center justify-center rounded-[22px] bg-white p-3 shadow-[0_10px_34px_rgba(0,0,0,0.45)]">
+        <div className="relative z-10 mx-auto mt-4 flex w-fit items-center justify-center rounded-[22px] bg-white p-2.5 shadow-[0_8px_24px_rgba(36,21,51,0.10)] ring-1 ring-[#f0e4d8]">
           {isLoading || !qrDataUrl ? (
-            <div className="flex h-[220px] w-[220px] items-center justify-center">
+            <div className="flex h-[188px] w-[188px] items-center justify-center">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-purple-500" />
             </div>
           ) : (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrDataUrl} alt={`Table ${tableNo} QR`} className="h-[220px] w-[220px]" />
+              <img src={qrDataUrl} alt={`Table ${tableNo} QR`} className="h-[188px] w-[188px]" />
+              {/* Logo sits inside a brand-gradient ring instead of a plain
+                  circle, so any logo color (even one that clashes with the
+                  card palette) reads as intentionally framed, not pasted on. */}
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white">
-                  {restaurantLogoDataUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={restaurantLogoDataUrl} alt="Logo" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-xl font-black text-[#f97316]">{initial}</span>
-                  )}
+                <div className="rounded-[15px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[3px] shadow-[0_2px_10px_rgba(0,0,0,0.15)]">
+                  <div className="flex h-[42px] w-[42px] items-center justify-center overflow-hidden rounded-xl bg-white">
+                    {restaurantLogoDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={restaurantLogoDataUrl} alt="Logo" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="bg-gradient-to-br from-[#9333ea] to-[#ea580c] bg-clip-text text-lg font-black text-transparent">
+                        {initial}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </>
           )}
         </div>
 
-        <div className="relative z-10 mt-7 flex items-center justify-center gap-2">
-          <span className="text-[#f97316]">D</span>
-          <span className="text-[15px] font-extrabold tracking-tight text-white">Dinezy</span>
+        {/* What scanning unlocks — solid-fill icon chips so they stay legible
+            at a glance in low restaurant lighting and reproduce cleanly on
+            a home/shop printer, unlike low-opacity tints on dark. */}
+        <div className="relative z-10 mt-4 grid grid-cols-3 gap-2">
+          {actions.map(({ icon, label, color }) => (
+            <div
+              key={label}
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-[#eee0d2] bg-white py-2.5 shadow-[0_1px_4px_rgba(36,21,51,0.05)]"
+            >
+              <span
+                className="flex h-7 w-7 items-center justify-center rounded-full text-white"
+                style={{ background: color }}
+              >
+                {icon}
+              </span>
+              <span className="text-[8.5px] font-bold uppercase leading-tight tracking-wide text-[#4a3d57]">
+                {label}
+              </span>
+            </div>
+          ))}
         </div>
 
-        <p className="relative z-10 mt-1 text-[12px] font-bold">
-          <span className="bg-gradient-to-r from-[#c084fc] to-[#fb923c] bg-clip-text text-transparent">
-            Smart Menu. Happy Guests.
-          </span>
+        <p className="relative z-10 mt-2.5 flex items-center justify-center gap-1.5 text-[9.5px] font-semibold text-[#8a7c93]">
+          <Zap size={10} className="text-emerald-600" />
+          No app needed — opens in your browser
         </p>
+
+        {/* Compact single-line footer: keeps the branding without an extra
+            tagline row, so the card stays short enough for 4-per-A4 printing */}
+        <div className="relative z-10 mt-3 flex items-center justify-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#ea580c]" />
+          <span className="text-[12px] font-semibold text-[#6b5d78]">
+            Powered by{' '}
+            <span className="bg-gradient-to-r from-[#9333ea] to-[#ea580c] bg-clip-text font-extrabold text-transparent">
+              Dinezy
+            </span>
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -668,14 +723,15 @@ export default function QRPage() {
           </span>
         </h1>
         <p className="mt-2 max-w-lg text-sm text-zinc-500">
-          Print these cards, place them on tables — guests scan and instantly get your AI-powered digital menu,
-          can call your waiter, and place orders. Zero friction.
+          Print these cards, place them on tables — guests scan and instantly view your AI-powered menu,
+          call the waiter, and grab live offers. Zero friction, zero app downloads.
         </p>
 
         <div className="mt-5 flex flex-wrap gap-2">
           {[
-            { icon: <Sparkles size={12} className="text-purple-300" />, label: 'AI Digital Menu', color: '#9333ea' },
+            { icon: <UtensilsCrossed size={12} className="text-purple-300" />, label: 'View Menu', color: '#9333ea' },
             { icon: <BellRing size={12} className="text-orange-300" />, label: 'Call Waiter', color: '#f97316' },
+            { icon: <Gift size={12} className="text-pink-300" />, label: 'Get Offers', color: '#ec4899' },
             { icon: <ChefHat size={12} className="text-teal-300" />, label: 'Live Order Tracking', color: '#14b8a6' },
             { icon: <Star size={12} className="text-yellow-300" />, label: 'Loyalty Rewards', color: '#eab308' },
           ].map(({ icon, label, color }) => (
@@ -808,9 +864,9 @@ export default function QRPage() {
             </p>
             <div className="space-y-2">
               <FeaturePill
-                icon={<Sparkles size={16} className="text-white" />}
-                label="AI Digital Menu"
-                sublabel="Smart recommendations, AI item pairing"
+                icon={<UtensilsCrossed size={16} className="text-white" />}
+                label="View Menu"
+                sublabel="Full AI-powered digital menu, instantly"
                 gradient="linear-gradient(135deg, #7c3aed, #9333ea)"
                 glowColor="#9333ea"
               />
@@ -820,6 +876,13 @@ export default function QRPage() {
                 sublabel="Instant bell notification to your staff"
                 gradient="linear-gradient(135deg, #ea580c, #f97316)"
                 glowColor="#f97316"
+              />
+              <FeaturePill
+                icon={<Gift size={16} className="text-white" />}
+                label="Get Offers"
+                sublabel="Live table-side deals and combo offers"
+                gradient="linear-gradient(135deg, #db2777, #f472b6)"
+                glowColor="#f472b6"
               />
               <FeaturePill
                 icon={<ChefHat size={16} className="text-white" />}

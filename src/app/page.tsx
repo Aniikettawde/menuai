@@ -16,6 +16,7 @@ import { FAQ } from '@/components/landing/FAQ'
 import { FinalCTA } from '@/components/landing/FinalCTA'
 import { Footer } from '@/components/landing/Footer'
 import { BookDemoModal } from '@/components/landing/BookDemoModal'
+import AboutSection from '@/components/landing/AboutSection'
 
 export default function DinezyLanding() {
   const [demoOpen, setDemoOpen] = useState(false)
@@ -30,10 +31,10 @@ export default function DinezyLanding() {
       <HowItWorks />
       <WhatsAppSection />
       <Analytics />
-      <Pricing />
+	   <AboutSection />
       <FAQ />
       <FinalCTA onBookDemo={openDemo} />
-      <Footer />
+	  <Footer />
       <BookDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
     </main>
   )

@@ -4,7 +4,6 @@ import { GeistMono } from 'geist/font/mono'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
-
 // Inter is loaded only as a fallback layer behind Geist — never rendered directly,
 // but keeps the font-family stack solid if Geist fails to load.
 const inter = Inter({
@@ -12,7 +11,6 @@ const inter = Inter({
   variable: '--font-fallback',
   display: 'swap',
 })
-
 export const metadata: Metadata = {
   metadataBase: new URL('https://dinezy.in'),
   title: {
@@ -30,6 +28,10 @@ export const metadata: Metadata = {
     'AI restaurant menu assistant',
     'restaurant analytics software',
     'restaurant software India',
+  ],
+  authors: [
+    { name: 'Aniket Tawde', url: 'https://www.linkedin.com/in/anikettawde' },
+    { name: 'Omkar Upadhey' },
   ],
   openGraph: {
     title: 'Dinezy — Restaurant Growth Platform',
@@ -54,12 +56,43 @@ export const metadata: Metadata = {
     icon: '/icon1.png',
   },
 }
-
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
   themeColor: '#FFFFFF',
+}
+
+const organizationJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Dinezy',
+  url: 'https://dinezy.in',
+  logo: 'https://dinezy.in/icon1.png',
+  description:
+    'Dinezy is a restaurant growth platform offering QR menus, WhatsApp automation, customer loyalty, AI menu assistance and analytics for independent restaurants in India.',
+  founder: [
+    {
+      '@type': 'Person',
+      name: 'Aniket Tawde',
+      jobTitle: 'Founder',
+      sameAs: [
+        'https://www.linkedin.com/in/anikettawde',
+        'https://www.instagram.com/anik3ttawde/',
+      ],
+    },
+    {
+      '@type': 'Person',
+      name: 'Omkar Upadhey',
+      jobTitle: 'Founder',
+    },
+  ],
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: 'Pune',
+    addressRegion: 'Maharashtra',
+    addressCountry: 'IN',
+  },
 }
 
 export default function RootLayout({
@@ -74,7 +107,12 @@ export default function RootLayout({
     >
       <body className="bg-white text-[#111111] antialiased">
         {children}
-
+        <Script
+          id="organization-jsonld"
+          type="application/ld+json"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-LCD36NFH1B"
           strategy="afterInteractive"
