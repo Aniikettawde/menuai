@@ -22,6 +22,12 @@
  *    dead-end menu opens, which otherwise reads as a bounce and wastes the
  *    one tap we're trying to make count.
  *
+ * Ratings: app rating (your own in-app reviews) and Google rating are two
+ * genuinely different numbers from two different populations of reviewers
+ * — shown side by side, labeled, rather than picking one and hiding the
+ * other. Either can be absent (new restaurant with no app ratings yet, or
+ * no Google listing linked) and is rendered conditionally, never as "0.0".
+ *
  * Layout note: the card is a flex column stretched to fill its grid/rail
  * cell (`h-full`), with the info block set to `flex-1` and its rows
  * anchored to the bottom (`mt-auto` on the price/meta row). That's what
@@ -38,8 +44,10 @@ export interface RestaurantCardData {
   name: string
   imageUrl: string
   cuisineTags: string[]
-  ratingAvg: number
-  ratingCount: number
+  appRating: number
+  appRatingCount: number
+  googleRating: number | null
+  googleReviewCount: number | null
   avgPriceForTwo: number | null // paise or null if unknown — never invent a placeholder number
   area: string | null
   isOpenNow: boolean | null // null = unknown (e.g. hours not configured) — render nothing, not a guess
@@ -78,6 +86,13 @@ function UtensilsIcon() {
 
 export function RestaurantCard({ restaurant: r, rank, isSaved, onToggleSave }: Props) {
   const price = formatPriceForTwo(r.avgPriceForTwo)
+  const hasAppRating = r.appRatingCount > 0
+  const hasGoogleRating = r.googleRating != null && (r.googleReviewCount ?? 0) > 0
+  const primaryRatingLabel = hasAppRating
+    ? `${r.appRating.toFixed(1)} stars in-app`
+    : hasGoogleRating
+    ? `${r.googleRating!.toFixed(1)} stars on Google`
+    : 'no ratings yet'
 
   return (
     <div className="group relative h-full">
@@ -86,7 +101,7 @@ export function RestaurantCard({ restaurant: r, rank, isSaved, onToggleSave }: P
         prefetch
         className="flex h-full flex-col overflow-hidden rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group-active:scale-[0.98] group-active:translate-y-0"
         style={{ background: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(33,30,27,0.06)' }}
-        aria-label={`${r.name}, ${r.ratingAvg.toFixed(1)} stars, ${r.isOpenNow === false ? 'closed' : 'open'}. View menu.`}
+        aria-label={`${r.name}, ${primaryRatingLabel}, ${r.isOpenNow === false ? 'closed' : 'open'}. View menu.`}
       >
         <div className="relative h-40 shrink-0 overflow-hidden sm:h-44" style={{ background: 'var(--surface)' }}>
           {r.imageUrl ? (
@@ -176,14 +191,34 @@ export function RestaurantCard({ restaurant: r, rank, isSaved, onToggleSave }: P
                 {tag}
               </span>
             ))}
-            {r.ratingCount > 0 && (
-              <span className="ml-auto inline-flex items-center gap-1 text-[12px] font-bold" style={{ color: 'var(--gold-light)' }}>
-                <Star size={10} fill="currentColor" />
-                {r.ratingAvg.toFixed(1)}
-                <span className="font-normal" style={{ color: 'var(--text-3)' }}>({r.ratingCount})</span>
-              </span>
-            )}
           </div>
+
+          {/* Dual ratings — app rating (yours) and Google rating are genuinely
+              different populations of reviewers, so both show, clearly
+              labeled, rather than picking one and hiding the other. Either
+              is omitted entirely when there's no data, never shown as 0.0. */}
+          {(hasAppRating || hasGoogleRating) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {hasAppRating && (
+                <span className="inline-flex items-center gap-1 text-[11.5px] font-bold" style={{ color: 'var(--accent)' }}>
+                  <Star size={10} fill="currentColor" />
+                  {r.appRating.toFixed(1)}
+                  <span className="text-[10px] font-semibold" style={{ color: 'var(--text-3)' }}>
+                    App ({r.appRatingCount})
+                  </span>
+                </span>
+              )}
+              {hasGoogleRating && (
+                <span className="inline-flex items-center gap-1 text-[11.5px] font-bold" style={{ color: '#4285F4' }}>
+                  <Star size={10} fill="currentColor" />
+                  {r.googleRating!.toFixed(1)}
+                  <span className="text-[10px] font-semibold" style={{ color: 'var(--text-3)' }}>
+                    Google ({r.googleReviewCount})
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
 
           {r.hasActiveOffer && r.offerTitle && (
             <p className="mt-1.5 truncate text-[11.5px] font-semibold" style={{ color: 'var(--accent)' }}>

@@ -52,17 +52,26 @@ function isOpenNow(hours: unknown): boolean | null {
 }
 
 /** TODO: verify `points_per_visit` is the real column name for loyalty enrollment on `restaurants`. */
+/** TODO: verify `points_per_visit` is the real column name for loyalty enrollment on `restaurants`. */
 function mapRowToCard(r: ListingRow, dishMatches?: Map<string, DishMatch>): RestaurantCardData {
   const activeOffer = (r.offers ?? []).find((o) => o.is_active) ?? null
   const dishMatch = dishMatches?.get(r.id)
+  const row = r as unknown as {
+    avg_rating?: string | number | null
+    total_ratings?: number | null
+    google_rating?: string | number | null
+    google_review_count?: number | null
+  }
   return {
     id: r.id,
     slug: r.slug,
     name: String(r.name ?? ''),
     imageUrl: resolveUrl(r.cover_image_url ?? (r as { logo_url?: string }).logo_url),
     cuisineTags: (r.cuisine_tags ?? []).map(String).slice(0, 4),
-    ratingAvg: Number(r.rating_avg ?? 0),
-    ratingCount: Number(r.rating_count ?? 0),
+    appRating: row.avg_rating != null ? Number(row.avg_rating) : 0,
+    appRatingCount: Number(row.total_ratings ?? 0),
+    googleRating: row.google_rating != null ? Number(row.google_rating) : null,
+    googleReviewCount: row.google_review_count != null ? Number(row.google_review_count) : null,
     avgPriceForTwo: (r as { avg_price_for_two_paise?: number | null }).avg_price_for_two_paise ?? null,
     area: r.area ? String(r.area) : null,
     isOpenNow: isOpenNow((r as { opening_hours?: unknown }).opening_hours),
@@ -153,9 +162,10 @@ export default function DiscoveryPage() {
 
   const hasActiveSearch = Boolean(explore.query)
 
-  const trending = useMemo(() => [...cards].sort((a, b) => b.ratingCount - a.ratingCount).slice(0, 10), [cards])
+  const trending = useMemo(() => [...cards].sort((a, b) => b.appRatingCount - a.appRatingCount).slice(0, 10), [cards])
+
   const bestOffers = useMemo(() => cards.filter((c) => c.hasActiveOffer).slice(0, 10), [cards])
-  const topRated = useMemo(() => [...cards].sort((a, b) => b.ratingAvg - a.ratingAvg).slice(0, 10), [cards])
+  const topRated = useMemo(() => [...cards].sort((a, b) => b.appRating - a.appRating).slice(0, 10), [cards])
   const newlyAdded = useMemo(
     () => [...rows].sort((a, b) => new Date(String(b.created_at ?? 0)).getTime() - new Date(String(a.created_at ?? 0)).getTime())
       .slice(0, 10).map((r) => mapRowToCard(r as ListingRow)),
