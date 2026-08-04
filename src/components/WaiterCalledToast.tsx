@@ -45,8 +45,8 @@ interface Props {
 
 const STEPS: { key: OrderStatus; label: string; icon: ReactNode }[] = [
   { key: 'pending', label: 'Placed', icon: <BellRing size={13} /> },
-  { key: 'accepted', label: 'Confirmed', icon: <CheckCircle2 size={13} /> },
-  { key: 'completed', label: 'Ready', icon: <PartyPopper size={13} /> },
+  { key: 'accepted', label: 'Waiter on the way', icon: <CheckCircle2 size={13} /> },
+  { key: 'completed', label: 'Confirmed', icon: <PartyPopper size={13} /> },
 ]
 
 export function WaiterCalledToast({
@@ -90,20 +90,20 @@ export function WaiterCalledToast({
   // ── "Just accepted" celebration trigger ───────────────────────────────────────
   const prevStatusRef = useRef<OrderStatus>(status)
   const [showAcceptedBurst, setShowAcceptedBurst] = useState(false)
-  
-  const prevItemCountRef = useRef(items.reduce((s, i) => s + i.qty, 0))
-const [showItemsAddedBurst, setShowItemsAddedBurst] = useState(false)
 
-useEffect(() => {
-  const count = items.reduce((s, i) => s + i.qty, 0)
-  if (count > prevItemCountRef.current) {
-    setShowItemsAddedBurst(true)
-    const t = setTimeout(() => setShowItemsAddedBurst(false), 1800)
+  const prevItemCountRef = useRef(items.reduce((s, i) => s + i.qty, 0))
+  const [showItemsAddedBurst, setShowItemsAddedBurst] = useState(false)
+
+  useEffect(() => {
+    const count = items.reduce((s, i) => s + i.qty, 0)
+    if (count > prevItemCountRef.current) {
+      setShowItemsAddedBurst(true)
+      const t = setTimeout(() => setShowItemsAddedBurst(false), 1800)
+      prevItemCountRef.current = count
+      return () => clearTimeout(t)
+    }
     prevItemCountRef.current = count
-    return () => clearTimeout(t)
-  }
-  prevItemCountRef.current = count
-}, [items])
+  }, [items])
 
   useEffect(() => {
     const prev = prevStatusRef.current
@@ -115,10 +115,12 @@ useEffect(() => {
     }
   }, [status])
 
-  // ── Start the countdown immediately on acceptance ─────────────────────────────
+  // ── Seed the kitchen clock the moment the waiter accepts ──────────────────────
   // If the server hasn't synced `accepted_at` yet (realtime delay / polling lag),
   // start counting from "now" on the client so the timer never sits static.
   // The real timestamp (if it arrives later) will overwrite this estimate.
+  // Note: this still fires on `accepted` (that's when prep really starts) even
+  // though the countdown itself is only *displayed* once status hits `completed`.
   useEffect(() => {
     if (status === 'accepted' && !acceptedAt) {
       setAcceptedAt(new Date().toISOString())
@@ -141,16 +143,6 @@ useEffect(() => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
     } catch {}
   }, [status, acceptedAt, orderId, tableNumber, restaurantSlug, items, subtotal, orderCode, STORAGE_KEY])
-
-  // Clean up storage on terminal states
-  useEffect(() => {
-    if (status === 'completed' || status === 'cancelled') {
-      const t = setTimeout(() => {
-        try { localStorage.removeItem(STORAGE_KEY) } catch {}
-      }, 5000)
-      return () => clearTimeout(t)
-    }
-  }, [status, STORAGE_KEY])
 
   function handleClose() {
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
@@ -214,9 +206,13 @@ useEffect(() => {
     return () => clearInterval(interval)
   }, [orderId, status, supabase])
 
-  // Countdown timer
+  // Countdown timer — now runs while status is `completed` ("Confirmed" step),
+  // still based on `acceptedAt` since that's when the kitchen actually started.
   useEffect(() => {
-    if (status !== 'accepted' || !acceptedAt) return
+    if (status !== 'completed' || !acceptedAt) {
+      setSecondsLeft(null)
+      return
+    }
 
     function calcSecondsLeft() {
       const elapsed = (Date.now() - new Date(acceptedAt!).getTime()) / 1000
@@ -241,6 +237,21 @@ useEffect(() => {
     return m > 0 ? `${m}m ${s}s` : `${s}s`
   }
 
+  // "Ready" = confirmed and the countdown has actually finished (or there was
+  // never a timer to run, e.g. staff jumped straight to completed).
+  const isReady = status === 'completed' && (!acceptedAt || secondsLeft === null || secondsLeft <= 0)
+  const showCountdown = status === 'completed' && !!acceptedAt && secondsLeft !== null && secondsLeft > 0
+
+  // Clean up storage once the order is actually ready, or cancelled
+  useEffect(() => {
+    if (isReady || status === 'cancelled') {
+      const t = setTimeout(() => {
+        try { localStorage.removeItem(STORAGE_KEY) } catch {}
+      }, 5000)
+      return () => clearTimeout(t)
+    }
+  }, [isReady, status, STORAGE_KEY])
+
   const totalSecs = avgPrepTime * 60
   const progress = secondsLeft !== null ? 1 - secondsLeft / totalSecs : 0
   const ringCircumference = 2 * Math.PI * 20
@@ -250,20 +261,20 @@ useEffect(() => {
     pending: {
       icon: <BellRing size={22} />,
       ringClass: 'bg-amber-500/15 text-amber-400',
-      title: 'Waiter on the way!',
-      sub: 'Your order has been sent',
+      title: 'Waiter notified',
+      sub: "We've let the staff know",
     },
     accepted: {
       icon: <CheckCircle2 size={22} />,
       ringClass: 'bg-green-500/15 text-green-500',
-      title: 'Order confirmed!',
-      sub: 'Kitchen is preparing your food',
+      title: 'Waiter is on the way!',
+      sub: "They'll be with you shortly",
     },
     completed: {
       icon: <PartyPopper size={22} />,
       ringClass: 'bg-emerald-500/15 text-emerald-400',
-      title: 'Order ready!',
-      sub: 'Enjoy your meal 🍽️',
+      title: isReady ? 'Order ready!' : 'Order confirmed!',
+      sub: isReady ? 'Enjoy your meal 🍽️' : 'Kitchen is preparing your food',
     },
     cancelled: {
       icon: <X size={22} />,
@@ -335,7 +346,7 @@ useEffect(() => {
           role="button"
           aria-label="View order status"
         >
-          {status === 'accepted' && secondsLeft !== null ? (
+          {showCountdown && secondsLeft !== null ? (
             <div className="relative h-10 w-10 flex-shrink-0">
               <svg className="-rotate-90" width="40" height="40" viewBox="0 0 44 44">
                 <circle cx="22" cy="22" r="20" fill="none" stroke="#27272a" strokeWidth="3" />
@@ -368,7 +379,7 @@ useEffect(() => {
                 </span>
               )}
               {' · '}
-              {status === 'accepted' && secondsLeft !== null
+              {showCountdown && secondsLeft !== null
                 ? secondsLeft > 0 ? `Ready in ${formatTime(secondsLeft)}` : 'Almost ready!'
                 : 'Tap to expand'}
             </p>
@@ -429,7 +440,7 @@ useEffect(() => {
               </div>
             )}
 
-            {status !== 'completed' && status !== 'cancelled' && (
+            {!isReady && status !== 'cancelled' && (
               <button
                 onClick={() => setMinimized(true)}
                 className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
@@ -452,8 +463,8 @@ useEffect(() => {
         {status !== 'cancelled' && (
           <div className="mt-4 flex items-center">
             {STEPS.map((step, i) => {
-              const isDone = i < stepIndex || (i === stepIndex && status === 'completed')
-              const isActive = i === stepIndex && status !== 'completed'
+              const isDone = i < stepIndex || (i === stepIndex && isReady)
+              const isActive = i === stepIndex && !isReady
               return (
                 <Fragment key={step.key}>
                   <div className="flex flex-col items-center gap-1">
@@ -498,8 +509,8 @@ useEffect(() => {
           </span>
         </div>
 
-        {/* Prep time / countdown */}
-        {status === 'accepted' && (
+        {/* Prep time / countdown — now shown once the order is confirmed */}
+        {showCountdown && (
           <div
             className="mt-3 rounded-2xl border border-green-500/20 bg-green-500/10 px-4 py-3"
             style={showAcceptedBurst ? { animation: 'fadeSlide 0.4s ease-out both' } : undefined}
@@ -524,7 +535,7 @@ useEffect(() => {
           </div>
         )}
 
-        {status === 'completed' && (
+        {isReady && (
           <div className="mt-3 flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
             <PartyPopper size={15} className="text-emerald-400" />
             <span className="text-sm font-semibold text-emerald-300">Your order is ready — enjoy!</span>
@@ -533,14 +544,14 @@ useEffect(() => {
 
         {/* Items */}
         <div className="mt-4 space-y-1.5 border-t border-white/5 pt-3">
-  {showItemsAddedBurst && (
-    <div
-      className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-orange-500/30 bg-orange-500/15 px-2.5 py-1 text-[11px] font-semibold text-orange-300"
-      style={{ animation: 'fadeSlide 0.3s ease-out both' }}
-    >
-      New items added
-    </div>
-  )}
+          {showItemsAddedBurst && (
+            <div
+              className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-orange-500/30 bg-orange-500/15 px-2.5 py-1 text-[11px] font-semibold text-orange-300"
+              style={{ animation: 'fadeSlide 0.3s ease-out both' }}
+            >
+              New items added
+            </div>
+          )}
           {items.map((item) => (
             <div key={item.id} className="flex justify-between text-sm">
               <span className="text-zinc-400">{item.name}</span>
@@ -553,33 +564,34 @@ useEffect(() => {
           <span>Subtotal</span>
           <span>₹{(subtotal / 100).toLocaleString('en-IN')}</span>
         </div>
-		{status === 'completed' && (
-  <div className="mt-4 rounded-3xl border border-emerald-400/15 bg-emerald-500/10 p-5">
-    <div className="flex items-center gap-3">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
-        <CheckCircle2 size={26} />
-      </div>
-      <div>
-        <p className="text-base font-bold text-white">Your order is ready</p>
-        <p className="text-xs text-emerald-100/70">Please collect it or wait for table service.</p>
-      </div>
-    </div>
 
-    <button
-  onClick={() => {
-    setMinimized(true)
-    openRatingForOrder({
-      orderId,
-      orderCode: displayCode,
-      tableNumber,
-    })
-  }}
-  className="mt-4 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition hover:-translate-y-0.5"
->
-  Rate us
-</button>
-  </div>
-)}
+        {isReady && (
+          <div className="mt-4 rounded-3xl border border-emerald-400/15 bg-emerald-500/10 p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+                <CheckCircle2 size={26} />
+              </div>
+              <div>
+                <p className="text-base font-bold text-white">Your order is ready</p>
+                <p className="text-xs text-emerald-100/70">Please collect it or wait for table service.</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setMinimized(true)
+                openRatingForOrder({
+                  orderId,
+                  orderCode: displayCode,
+                  tableNumber,
+                })
+              }}
+              className="mt-4 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition hover:-translate-y-0.5"
+            >
+              Rate us
+            </button>
+          </div>
+        )}
       </div>
 
       <style>{KEYFRAMES}</style>
