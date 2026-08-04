@@ -146,10 +146,10 @@ const subtotal = cartItems.reduce((sum, c) => {
                   margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--pr-text)',
                   fontFamily: 'var(--font-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
-                  {isWaiterLoading ? 'Notifying waiter…' : `Order summary · ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
+                  {isWaiterLoading ? 'Notifying waiter…' : `Your Selection · ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
                 </p>
                 <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-                  {isWaiterLoading ? 'Please wait a moment' : 'Tap to review cart'}
+                  {isWaiterLoading ? 'Please wait a moment' : 'Review your picks'}
                 </p>
               </div>
             </div>
@@ -162,7 +162,7 @@ const subtotal = cartItems.reduce((sum, c) => {
                 margin: '2px 0 0', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.08em',
                 textTransform: 'uppercase', color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)',
               }}>
-                Open cart
+                View Selection
               </p>
             </div>
           </div>
