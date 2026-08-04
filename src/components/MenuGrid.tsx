@@ -1,7 +1,7 @@
 'use client'
 
 // src/components/MenuGrid.tsx
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronRight,
   ChefHat,
@@ -197,16 +197,109 @@ function BestsellerSlider({
   )
 }
 
-function SearchResults({
-  results, emptyLabel, onAsk,
+/* ────────────────────────────────────────────────────────────────────────
+   ADVANCED SEARCH
+   Matches against: item name/description/tags, category names, and a set
+   of intent keywords (bestseller, most ordered, special, veg, spicy, new)
+   so typing "veg" or "bestseller" surfaces the right dishes without the
+   user needing to know exact dish names.
+──────────────────────────────────────────────────────────────────────── */
+type SearchGroup = {
+  key: string
+  label: string
+  keywords: string[]
+  filter: (item: MenuItem) => boolean
+}
+
+const SEARCH_GROUPS: SearchGroup[] = [
+  {
+    key: 'bestseller',
+    label: 'Bestsellers',
+    keywords: ['bestseller', 'best seller', 'best-seller', 'top seller'],
+    filter: (i) => !!i.is_bestseller,
+  },
+  {
+    key: 'most_ordered',
+    label: 'Most Ordered',
+    keywords: ['most ordered', 'most-ordered', 'trending', 'popular'],
+    filter: (i) => !!i.is_bestseller,
+  },
+  {
+    key: 'special',
+    label: "Chef's Specials",
+    keywords: ['special', "chef's pick", 'chefs pick', 'chef pick', 'featured'],
+    filter: (i) => !!(i as any).is_special,
+  },
+  {
+    key: 'new',
+    label: 'New Arrivals',
+    keywords: ['new', 'new arrival', 'new arrivals'],
+    filter: (i) => !!i.tags?.includes('new'),
+  },
+  {
+    key: 'spicy',
+    label: 'Spicy',
+    keywords: ['spicy', 'hot'],
+    filter: (i) => !!i.tags?.includes('spicy'),
+  },
+  {
+    key: 'veg',
+    label: 'Vegetarian',
+    keywords: ['vegetarian', 'veg'],
+    filter: (i) => !!i.is_veg,
+  },
+  {
+    key: 'nonveg',
+    label: 'Non-Vegetarian',
+    keywords: ['non veg', 'non-veg', 'nonveg', 'non vegetarian'],
+    filter: (i) => !i.is_veg,
+  },
+]
+
+const SUGGESTION_CHIPS = [
+  { label: 'Bestsellers', q: 'bestseller' },
+  { label: 'Most Ordered', q: 'most ordered' },
+  { label: 'Vegetarian', q: 'vegetarian' },
+  { label: 'Spicy', q: 'spicy' },
+]
+
+function SearchSuggestions({ onPick }: { onPick: (q: string) => void }) {
+  return (
+    <div className="mg-search-suggest">
+      {SUGGESTION_CHIPS.map((c) => (
+        <button
+          key={c.q}
+          type="button"
+          className="mg-search-suggest-chip"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onPick(c.q)}
+        >
+          <Sparkles size={10} /> {c.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function SearchResultsPanel({
+  matchedGroups,
+  categoryMatches,
+  resultsByCategory,
+  emptyLabel,
+  onAsk,
+  onJumpToCategory,
 }: {
-  results: MenuItem[]
+  matchedGroups: SearchGroup[]
+  categoryMatches: MenuCategory[]
+  resultsByCategory: { category: MenuCategory; items: MenuItem[] }[]
   emptyLabel: string
   onAsk?: (t: string) => void
+  onJumpToCategory: (id: string) => void
 }) {
-  const { t, plural } = useTranslation()
+  const { t } = useTranslation()
+  const totalCount = resultsByCategory.reduce((s, g) => s + g.items.length, 0)
 
-  if (results.length === 0) {
+  if (totalCount === 0 && categoryMatches.length === 0) {
     return (
       <div className="mg-empty-state">
         <p className="mg-empty-title">{emptyLabel}</p>
@@ -214,28 +307,66 @@ function SearchResults({
       </div>
     )
   }
+
   return (
-    <section className="mg-section">
-      <div className="mg-search-results-head">
-        <p>{plural(results.length, 'result_singular', 'result_plural')}</p>
-      </div>
-      <div className="mg-divided-list">
-        {results.map((item) => <MenuItemCard key={item.id} item={item} onAsk={onAsk} />)}
-      </div>
+    <section className="mg-search-results">
+      {matchedGroups.length > 0 && (
+        <div className="mg-search-matchpills">
+          {matchedGroups.map((g) => (
+            <span key={g.key} className="mg-search-matchpill">
+              <Sparkles size={10} /> {g.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {categoryMatches.length > 0 && (
+        <div className="mg-search-catjump">
+          <span className="mg-search-catjump-label">Categories</span>
+          <div className="mg-search-catjump-chips">
+            {categoryMatches.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className="mg-search-catjump-chip"
+                onClick={() => onJumpToCategory(c.id)}
+              >
+                {c.name}
+                <ChevronRight size={11} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {resultsByCategory.length > 0 && (
+        <div className="mg-search-groups">
+          {resultsByCategory.map(({ category, items }) => (
+            <div key={category.id} className="mg-section mg-search-group">
+              <div className="mg-search-group-head">
+                <span className="mg-search-group-name">{category.name}</span>
+                <span className="mg-count-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+              </div>
+              <div className="mg-divided-list">
+                {items.map((item) => <MenuItemCard key={item.id} item={item} onAsk={onAsk} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
 
 function CategorySection({
-  category, items, showChefsPick, onAsk, pickLabel, isOpen, onToggle,
+  category, items, showChefsPick, onAsk, pickLabel, sectionRef,
 }: {
   category: MenuCategory
   items: MenuItem[]
   showChefsPick: boolean
   onAsk?: (t: string) => void
   pickLabel: string
-  isOpen: boolean
-  onToggle: () => void
+  sectionRef?: (el: HTMLElement | null) => void
 }) {
   const chefsPick = showChefsPick ? getChefsPick(items) : null
   const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
@@ -247,8 +378,13 @@ function CategorySection({
     : null
 
   return (
-    <section id={`cat-${category.id}`} className="mg-section mg-cat-section">
-      <button type="button" className="mg-cat-header" onClick={onToggle} aria-expanded={isOpen}>
+    <section
+      id={`cat-${category.id}`}
+      data-cat-id={category.id}
+      ref={sectionRef}
+      className="mg-section mg-cat-section"
+    >
+      <div className="mg-cat-header">
         <div className="mg-cat-thumb">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -272,77 +408,141 @@ function CategorySection({
 
         <div className="mg-cat-right">
           <span className="mg-count-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
-          <ChevronRight size={16} className={`mg-chevron${isOpen ? ' mg-chevron--open' : ''}`} />
         </div>
-      </button>
+      </div>
 
-      {isOpen && (
-        <div className="mg-cat-body">
-          <div className="mg-divided-list">
-            {chefsPick && (
-              <div className="mg-chefspick-wrap">
-                <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
-              </div>
-            )}
-			 {category.info_card && (
-              <div className="mg-chefspick-wrap">
-                <InfoCard card={category.info_card} />
-              </div>
-            )}
-            {otherItems.map((item) => {
-              const badge = getBadge(item, items)
-              return (
-                <div key={item.id} className="mg-item-row">
-                  {badge.kind !== 'none' && (
-                    <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
-                  )}
-                  <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
-                    <MenuItemCard item={item} onAsk={onAsk} />
-                  </div>
+      <div className="mg-cat-body">
+        <div className="mg-divided-list">
+          {chefsPick && (
+            <div className="mg-chefspick-wrap">
+              <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
+            </div>
+          )}
+          {category.info_card && (
+            <div className="mg-chefspick-wrap">
+              <InfoCard card={category.info_card} />
+            </div>
+          )}
+          {otherItems.map((item) => {
+            const badge = getBadge(item, items)
+            return (
+              <div key={item.id} className="mg-item-row">
+                {badge.kind !== 'none' && (
+                  <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
+                )}
+                <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
+                  <MenuItemCard item={item} onAsk={onAsk} />
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )
+          })}
         </div>
-      )}
+      </div>
     </section>
   )
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+   FLOATING CATEGORY TAB RAIL — Swiggy/Zomato style
+   Sticky pill rail. Active tab is driven by scroll position (scroll-spy)
+   and tapping a tab smooth-scrolls straight to that category — no
+   expand/collapse step needed.
+──────────────────────────────────────────────────────────────────────── */
+function CategoryTabsRail({
+  categories, counts, activeId, onSelect, railWrapRef,
+}: {
+  categories: MenuCategory[]
+  counts: Map<string, number>
+  activeId: string | null
+  onSelect: (id: string) => void
+  railWrapRef: (el: HTMLDivElement | null) => void
+}) {
+  const scrollTrackRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    if (!activeId || !scrollTrackRef.current) return
+    const btn = scrollTrackRef.current.querySelector(
+      `[data-tab-id="${activeId}"]`,
+    ) as HTMLElement | null
+    btn?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [activeId])
+
+  if (categories.length === 0) return null
+
+  return (
+    <div className="mg-cattabs-sticky" ref={railWrapRef}>
+      <div
+        className="mg-cattabs-rail"
+        ref={scrollTrackRef}
+        role="tablist"
+        aria-label="Menu categories"
+      >
+        {categories.map((cat) => {
+          const isActive = activeId === cat.id
+          return (
+            <button
+              key={cat.id}
+              type="button"
+              data-tab-id={cat.id}
+              role="tab"
+              aria-selected={isActive}
+              title={cat.name}
+              className={`mg-cattab${isActive ? ' mg-cattab--active' : ''}`}
+              onClick={() => onSelect(cat.id)}
+            >
+              <span className="mg-cattab-label">{cat.name}</span>
+              <span className="mg-cattab-count">{counts.get(cat.id) ?? 0}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 function SearchBar({
-  value, onChange, onClear, placeholder,
+  value, onChange, onClear, placeholder, onFocus, onBlur,
 }: {
   value: string
   onChange: (v: string) => void
   onClear: () => void
   placeholder: string
+  onFocus?: () => void
+  onBlur?: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const isActive = value.trim().length > 0
 
   return (
-    <div className="mg-search-wrap">
-      <Search size={15} className="mg-search-icon" />
-      <input
-        ref={inputRef}
-        type="search"
-        inputMode="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="mg-search-input"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => { onClear(); inputRef.current?.focus() }}
-          className="mg-search-clear"
-          aria-label="Clear search"
-        >
-          <X size={14} />
-        </button>
-      )}
+    <div className={`mg-search-glow${isActive ? ' mg-search-glow--active' : ''}`}>
+      <div className="mg-search-wrap">
+        {isActive ? (
+          <Sparkles size={15} className="mg-search-icon mg-search-icon--active" />
+        ) : (
+          <Search size={15} className="mg-search-icon" />
+        )}
+        <input
+          ref={inputRef}
+          type="search"
+          inputMode="search"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          className="mg-search-input"
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => { onClear(); inputRef.current?.focus() }}
+            className="mg-search-clear"
+            aria-label="Clear search"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -375,13 +575,20 @@ export function MenuGrid({
   const isBarView = menuType === 'bar'
 const { t, plural } = useTranslation()
  const [query, setQuery] = useState('')
-const [openCategoryIds, setOpenCategoryIds] = useState<Set<string>>(new Set())
+const [isSearchFocused, setIsSearchFocused] = useState(false)
+const [activeCatId, setActiveCatId] = useState<string | null>(null)
+
+const sectionRefs = useRef<Map<string, HTMLElement>>(new Map())
+const cattabsWrapRef = useRef<HTMLDivElement | null>(null)
+const isProgrammaticScroll = useRef(false)
+const programmaticScrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+const pendingJumpTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 const [lastMenuType, setLastMenuType] = useState(menuType)
 if (lastMenuType !== menuType) {
   setLastMenuType(menuType)
   setQuery('')
-  setOpenCategoryIds(new Set())
+  setActiveCatId(null)
 }
 
   const categoriesForType = useMemo(
@@ -424,19 +631,63 @@ const bestSellerItems = useMemo(
   [translatedItems],
 )
 
-  const searchResults = useMemo(() => {
-  const q = query.trim().toLowerCase()
-  if (!q) return []
-  return translatedItems.filter(
-    (i) =>
-      i.is_available &&
-      (i.name.toLowerCase().includes(q) ||
-        i.description?.toLowerCase().includes(q) ||
-        i.tags?.some((t) => t.toLowerCase().includes(q))),
-  )
-}, [translatedItems, query])
+  const searchQuery = query.trim()
+  const q = searchQuery.toLowerCase()
+  const isSearching = searchQuery.length > 0
 
-  const isSearching = query.trim().length > 0
+  // Intent keywords: "bestseller", "most ordered", "veg", "spicy", etc.
+  // Only kick in once the query is long enough to be a real word, so a
+  // stray "n" doesn't match "New Arrivals".
+  const matchedGroups = useMemo(() => {
+    if (q.length < 3) return []
+    return SEARCH_GROUPS.filter((g) => g.keywords.some((k) => k.includes(q)))
+  }, [q])
+
+  const categoryMatches = useMemo(() => {
+    if (!isSearching) return []
+    return categoriesWithItems.filter((c) => c.name.toLowerCase().includes(q))
+  }, [categoriesWithItems, q, isSearching])
+
+  const textMatchedItems = useMemo(() => {
+    if (!isSearching) return []
+    return translatedItems.filter(
+      (i) =>
+        i.is_available &&
+        (i.name.toLowerCase().includes(q) ||
+          i.description?.toLowerCase().includes(q) ||
+          i.tags?.some((t) => t.toLowerCase().includes(q))),
+    )
+  }, [translatedItems, q, isSearching])
+
+  const groupMatchedItems = useMemo(() => {
+    if (matchedGroups.length === 0) return []
+    return translatedItems.filter((i) => i.is_available && matchedGroups.some((g) => g.filter(i)))
+  }, [translatedItems, matchedGroups])
+
+  const categoryMatchedItems = useMemo(() => {
+    if (categoryMatches.length === 0) return []
+    const ids = new Set(categoryMatches.map((c) => c.id))
+    return translatedItems.filter((i) => i.is_available && ids.has(i.category_id))
+  }, [translatedItems, categoryMatches])
+
+  const combinedResultItems = useMemo(() => {
+    const map = new Map<string, MenuItem>()
+    for (const i of groupMatchedItems) map.set(i.id, i)
+    for (const i of categoryMatchedItems) map.set(i.id, i)
+    for (const i of textMatchedItems) map.set(i.id, i)
+    return Array.from(map.values())
+  }, [groupMatchedItems, categoryMatchedItems, textMatchedItems])
+
+  const resultsByCategory = useMemo(() => {
+    if (combinedResultItems.length === 0) return []
+    const idSet = new Set(combinedResultItems.map((i) => i.id))
+    return translatedCategories
+      .map((cat) => ({
+        category: cat,
+        items: combinedResultItems.filter((i) => i.category_id === cat.id && idSet.has(i.id)),
+      }))
+      .filter((g) => g.items.length > 0)
+  }, [combinedResultItems, translatedCategories])
 
  const categoryCounts = useMemo(() => {
   const map = new Map<string, number>()
@@ -447,17 +698,81 @@ const bestSellerItems = useMemo(
   return map
 }, [translatedItems])
 
-// Keep the selection valid; default to the first category whenever
-// nothing is selected, or the selected one disappears (e.g. menu switch).
+  // Default active tab to the first category once categories are ready.
+  useEffect(() => {
+    if (isSearching) return
+    if (!activeCatId && categoriesWithItems.length > 0) {
+      setActiveCatId(categoriesWithItems[0].id)
+    }
+  }, [categoriesWithItems, activeCatId, isSearching])
 
-const toggleCategory = useCallback((id: string) => {
-  setOpenCategoryIds((prev) => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  })
-}, [])
+  // ── Scroll-spy: watch each category section, flip the active tab as the
+  // user scrolls past it — no tapping needed. ─────────────────────────────
+  useEffect(() => {
+    if (isSearching) return
+    const ids = categoriesWithItems.map((c) => c.id)
+    if (ids.length === 0) return
+
+    const railHeight = cattabsWrapRef.current?.getBoundingClientRect().height ?? 52
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (isProgrammaticScroll.current) return
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        if (visible.length > 0) {
+          const id = (visible[0].target as HTMLElement).dataset.catId
+          if (id) setActiveCatId(id)
+        }
+      },
+      { rootMargin: `-${Math.round(railHeight) + 12}px 0px -65% 0px`, threshold: [0, 1] },
+    )
+
+    ids.forEach((id) => {
+      const el = sectionRefs.current.get(id)
+      if (el) observer.observe(el)
+    })
+
+    return () => observer.disconnect()
+  }, [categoriesWithItems, isSearching])
+
+  const registerSectionRef = useCallback((id: string) => (el: HTMLElement | null) => {
+    if (el) sectionRefs.current.set(id, el)
+    else sectionRefs.current.delete(id)
+  }, [])
+
+  const scrollToCategory = useCallback((id: string) => {
+    const el = document.getElementById(`cat-${id}`)
+    if (!el) return
+
+    setActiveCatId(id)
+    isProgrammaticScroll.current = true
+    if (programmaticScrollTimeout.current) clearTimeout(programmaticScrollTimeout.current)
+
+    const offset = (cattabsWrapRef.current?.getBoundingClientRect().height ?? 52) + 12
+    const top = el.getBoundingClientRect().top + window.scrollY - offset
+    window.scrollTo({ top, behavior: 'smooth' })
+
+    // Re-enable scroll-spy once the smooth scroll has settled.
+    programmaticScrollTimeout.current = setTimeout(() => {
+      isProgrammaticScroll.current = false
+    }, 600)
+  }, [])
+
+  // Jumping from a search-result "category chip" clears the query first
+  // (so the category sections render again), then scrolls once the DOM
+  // has caught up.
+  const handleJumpToCategoryFromSearch = useCallback((id: string) => {
+    setQuery('')
+    if (pendingJumpTimeout.current) clearTimeout(pendingJumpTimeout.current)
+    pendingJumpTimeout.current = setTimeout(() => scrollToCategory(id), 60)
+  }, [scrollToCategory])
+
+  useEffect(() => () => {
+    if (pendingJumpTimeout.current) clearTimeout(pendingJumpTimeout.current)
+    if (programmaticScrollTimeout.current) clearTimeout(programmaticScrollTimeout.current)
+  }, [])
 
   const handleClearSearch = useCallback(() => {
     setQuery('')
@@ -511,7 +826,36 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
 }
 :global(.mg-pill--active .mg-pill-count) { background: rgba(255,255,255,0.22); }
 
+  /* ── Glowing search wrapper — animated, blurred conic gradient behind
+       the search box. Subtle by default, intensifies on focus and while
+       there's an active query. Not literal "AI", just a smart-search feel. */
+  :global(.mg-search-glow) {
+    position: relative;
+    border-radius: 16px;
+  }
+  :global(.mg-search-glow::before) {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 18px;
+    background: conic-gradient(from 0deg, var(--pr-gold), var(--pr-orange), #E9C874, var(--pr-gold));
+    filter: blur(9px);
+    opacity: 0.22;
+    z-index: 0;
+    animation: mg-glow-spin 7s linear infinite;
+    transition: opacity 0.3s ease, filter 0.3s ease;
+    pointer-events: none;
+  }
+  :global(.mg-search-glow:focus-within::before) { opacity: 0.55; filter: blur(11px); }
+  :global(.mg-search-glow--active::before) { opacity: 0.45; }
+  :global(.mg-search-glow--active:focus-within::before) { opacity: 0.65; }
+  @keyframes mg-glow-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.mg-search-glow::before) { animation: none; }
+  }
+
   :global(.mg-search-wrap) {
+    position: relative; z-index: 1;
     display: flex; align-items: center; gap: 10px;
     padding: 12px 14px;
     background: var(--pr-card);
@@ -520,10 +864,18 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     transition: border-color 0.2s, background 0.2s;
   }
   :global(.mg-search-wrap:focus-within) {
-    border-color: rgba(138,109,31,0.35);
+    border-color: rgba(138,109,31,0.4);
     background: var(--pr-card-hover);
   }
   :global(.mg-search-icon) { color: var(--pr-text-faint); flex-shrink: 0; }
+  :global(.mg-search-icon--active) {
+    color: var(--pr-gold);
+    animation: mg-icon-pulse 1.7s ease-in-out infinite;
+  }
+  @keyframes mg-icon-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.mg-search-icon--active) { animation: none; }
+  }
   :global(.mg-search-input) {
     flex: 1; background: transparent; border: none; outline: none;
     font-size: 14px; font-family: var(--font-body); color: var(--pr-text);
@@ -534,6 +886,59 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     color: var(--pr-text-faint); display: flex; transition: color 0.15s;
   }
   :global(.mg-search-clear:hover) { color: var(--pr-text); }
+
+  /* ── Quick suggestion chips shown on focus with an empty query ────── */
+  :global(.mg-search-suggest) {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 9px 2px 0;
+  }
+  :global(.mg-search-suggest-chip) {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 6px 11px; border-radius: 999px;
+    border: 1px dashed var(--pr-border-hover);
+    background: transparent; color: var(--pr-text-muted);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-family: var(--font-body); transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  :global(.mg-search-suggest-chip:hover) { border-color: var(--pr-gold); color: var(--pr-gold); }
+
+  /* ── Search results panel ──────────────────────────────────────────── */
+  :global(.mg-search-results) { display: flex; flex-direction: column; gap: 14px; }
+  :global(.mg-search-matchpills) { display: flex; flex-wrap: wrap; gap: 6px; }
+  :global(.mg-search-matchpill) {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 5px 10px; border-radius: 999px;
+    background: var(--pr-gold-dim); border: 1px solid rgba(138,109,31,0.25);
+    color: var(--pr-gold); font-size: 11px; font-weight: 700;
+    font-family: var(--font-body);
+  }
+  :global(.mg-search-catjump) { display: flex; flex-direction: column; gap: 8px; }
+  :global(.mg-search-catjump-label) {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--pr-text-faint);
+  }
+  :global(.mg-search-catjump-chips) { display: flex; flex-wrap: wrap; gap: 8px; }
+  :global(.mg-search-catjump-chip) {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 8px 12px; border-radius: 12px;
+    border: 1px solid var(--pr-border-hover);
+    background: var(--pr-card); color: var(--pr-text);
+    font-size: 12.5px; font-weight: 600; cursor: pointer;
+    font-family: var(--font-body); transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  :global(.mg-search-catjump-chip:hover) { border-color: rgba(122,31,43,0.3); color: var(--pr-orange); }
+  :global(.mg-search-groups) { display: flex; flex-direction: column; gap: 14px; }
+  :global(.mg-search-group) { }
+  :global(.mg-search-group-head) {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--pr-border);
+  }
+  :global(.mg-search-group-name) {
+    font-family: var(--font-display); font-size: 14.5px; font-weight: 700;
+    color: var(--pr-text);
+  }
 
   .mg-switch-row { display: flex; justify-content: flex-end; margin-bottom: 14px; }
   .mg-switch-btn {
@@ -546,6 +951,47 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   .mg-switch-btn:hover { border-color: rgba(138,109,31,0.3); color: var(--pr-gold); }
 
   .mg-stack { display: flex; flex-direction: column; gap: 18px; }
+
+  /* ── Floating category tab rail — Swiggy/Zomato style ────────────── */
+  :global(.mg-cattabs-sticky) {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    margin: 0 -1rem 10px;
+    padding: 8px 1rem 10px;
+    background: color-mix(in srgb, var(--surface-bg) 94%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--pr-border);
+  }
+  :global(.mg-cattabs-rail) {
+    display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  :global(.mg-cattabs-rail::-webkit-scrollbar) { display: none; }
+  :global(.mg-cattab) {
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 15px; border-radius: 999px;
+    border: 1px solid var(--pr-border-hover);
+    background: var(--pr-card);
+    color: var(--pr-text-muted);
+    font-size: 12.5px; font-weight: 600; font-family: var(--font-body);
+    cursor: pointer; white-space: nowrap; transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  :global(.mg-cattab:hover:not(.mg-cattab--active)) {
+    border-color: rgba(122,31,43,0.25); color: var(--pr-orange);
+  }
+  :global(.mg-cattab--active) {
+    background: var(--pr-orange); border-color: var(--pr-orange);
+    color: var(--pr-cta-text);
+  }
+  :global(.mg-cattab-label) { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  :global(.mg-cattab-count) {
+    font-size: 10px; font-weight: 700; opacity: 0.75;
+    padding: 1px 6px; border-radius: 999px;
+    background: rgba(0,0,0,0.08); color: inherit;
+  }
+  :global(.mg-cattab--active .mg-cattab-count) { background: rgba(255,255,255,0.22); }
 
   /* ── Bestseller hero slider — ONE dish per slide, full width ─────── */
   :global(.mg-bs) { padding: 2px 0 0; }
@@ -657,15 +1103,14 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     border: 1px solid var(--pr-border-hover);
     box-shadow: 0 2px 10px rgba(33,30,27,0.05), 0 1px 2px rgba(33,30,27,0.04);
     overflow: hidden;
+    scroll-margin-top: 140px;
   }
 
     :global(.mg-cat-header) {
     display: flex; align-items: flex-start; gap: 12px; width: 100%;
-    padding: 16px 16px; background: none; border: none; cursor: pointer;
-    text-align: left; transition: background 0.15s;
+    padding: 16px 16px; background: none; border: none;
+    text-align: left;
   }
-  :global(.mg-cat-header:hover) { background: rgba(33,30,27,0.02); }
-  :global(.mg-cat-header:active) { background: var(--pr-gold-dim); }
 
   :global(.mg-cat-thumb) {
     width: 50px; height: 50px; flex-shrink: 0; border-radius: 14px;
@@ -702,9 +1147,6 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     background: var(--pr-gold-dim); color: var(--pr-gold);
     padding: 5px 10px; font-size: 10px; font-weight: 600; white-space: nowrap;
   }
-
-  :global(.mg-chevron) { color: var(--pr-gold); opacity: 0.55; transition: transform 0.2s, opacity 0.2s; }
-  :global(.mg-chevron--open) { transform: rotate(90deg); opacity: 1; }
 
   :global(.mg-cat-body) { border-top: 1px solid var(--pr-border); }
   :global(.mg-divided-list) { display: flex; flex-direction: column; }
@@ -765,9 +1207,6 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   :global(.mg-chefspick-hint) { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--pr-text-faint); }
   :global(.mg-chefspick-chevron) { color: var(--pr-text-faint); margin-top: 2px; flex-shrink: 0; }
 
-  :global(.mg-search-results-head) { padding: 12px 16px; border-bottom: 1px solid var(--pr-border); }
-  :global(.mg-search-results-head p) { margin: 0; font-size: 12px; font-weight: 500; color: var(--pr-text-muted); }
-
   .mg-empty-state {
     border-radius: 18px; border: 1px solid var(--pr-border); background: var(--pr-card);
     padding: 44px 16px; text-align: center;
@@ -786,18 +1225,34 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
       )}
 
       <div className="mg-search-sticky">
-  <div className="mg-search-sticky-inner" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <SearchBar
-        value={query}
-        onChange={setQuery}
-        onClear={handleClearSearch}
-        placeholder={searchPlaceholder}
-      />
+  <div className="mg-search-sticky-inner" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <SearchBar
+          value={query}
+          onChange={setQuery}
+          onClear={handleClearSearch}
+          placeholder={searchPlaceholder}
+          onFocus={() => setIsSearchFocused(true)}
+          onBlur={() => setIsSearchFocused(false)}
+        />
+      </div>
+      <LanguageSwitcher />
     </div>
-    <LanguageSwitcher />
+
+    {isSearchFocused && !isSearching && <SearchSuggestions onPick={setQuery} />}
   </div>
 </div>
+
+      {!isSearching && (
+        <CategoryTabsRail
+          categories={categoriesWithItems}
+          counts={categoryCounts}
+          activeId={activeCatId}
+          onSelect={scrollToCategory}
+          railWrapRef={(el) => { cattabsWrapRef.current = el }}
+        />
+      )}
 
       <div className="mg-stack">
         {todaysSpecial && !isSearching && !isBarView && todaysSpecial}
@@ -815,7 +1270,14 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{upsellCard}</div>
         )}
 {isSearching ? (
-  <SearchResults results={searchResults} emptyLabel={emptyLabel} onAsk={onAsk} />
+  <SearchResultsPanel
+    matchedGroups={matchedGroups}
+    categoryMatches={categoryMatches}
+    resultsByCategory={resultsByCategory}
+    emptyLabel={emptyLabel}
+    onAsk={onAsk}
+    onJumpToCategory={handleJumpToCategoryFromSearch}
+  />
 ) : (
   <>
     {categoriesWithItems.map((cat) => {
@@ -829,8 +1291,7 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
           showChefsPick
           onAsk={onAsk}
           pickLabel={pickLabel}
-          isOpen={openCategoryIds.has(cat.id)}
-          onToggle={() => toggleCategory(cat.id)}
+          sectionRef={registerSectionRef(cat.id)}
         />
       )
     })}
