@@ -243,7 +243,7 @@ function AddControl({
           transition: 'background 0.15s, color 0.15s',
         }}
       >
-        {adding ? '✓ selected' : (<>Select <Plus size={11} strokeWidth={3} /></>)}
+       {adding ? '✓ added' : (<>Add <Plus size={11} strokeWidth={3} /></>)}
       </button>
     )
   }

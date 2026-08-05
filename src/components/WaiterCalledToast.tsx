@@ -44,7 +44,7 @@ interface Props {
 }
 
 const STEPS: { key: OrderStatus; label: string; icon: ReactNode }[] = [
-  { key: 'pending', label: 'Placed', icon: <BellRing size={13} /> },
+  { key: 'pending', label: 'List sent', icon: <BellRing size={13} /> },
   { key: 'accepted', label: 'Waiter on the way', icon: <CheckCircle2 size={13} /> },
   { key: 'completed', label: 'Confirmed', icon: <PartyPopper size={13} /> },
 ]
@@ -258,24 +258,24 @@ export function WaiterCalledToast({
   const stepIndex = status === 'pending' ? 0 : status === 'accepted' ? 1 : 2
 
   const stateConfig = {
-    pending: {
-      icon: <BellRing size={22} />,
-      ringClass: 'bg-amber-500/15 text-amber-400',
-      title: 'Waiter notified',
-      sub: "We've let the staff know",
-    },
+  pending: {
+  icon: <BellRing size={22} />,
+  ringClass: 'bg-amber-500/15 text-amber-400',
+  title: 'List sent!',
+  sub: "They'll come by to see what you've picked",
+},
     accepted: {
       icon: <CheckCircle2 size={22} />,
       ringClass: 'bg-green-500/15 text-green-500',
       title: 'Waiter is on the way!',
       sub: "They'll be with you shortly",
     },
-    completed: {
-      icon: <PartyPopper size={22} />,
-      ringClass: 'bg-emerald-500/15 text-emerald-400',
-      title: isReady ? 'Order ready!' : 'Order confirmed!',
-      sub: isReady ? 'Enjoy your meal 🍽️' : 'Kitchen is preparing your food',
-    },
+   completed: {
+  icon: <PartyPopper size={22} />,
+  ringClass: 'bg-emerald-500/15 text-emerald-400',
+  title: isReady ? 'Order ready!' : 'Order taken!',
+  sub: isReady ? 'Enjoy your meal 🍽️' : 'Kitchen is preparing your food',
+},
     cancelled: {
       icon: <X size={22} />,
       ringClass: 'bg-zinc-500/15 text-zinc-400',
@@ -549,7 +549,7 @@ export function WaiterCalledToast({
               className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-orange-500/30 bg-orange-500/15 px-2.5 py-1 text-[11px] font-semibold text-orange-300"
               style={{ animation: 'fadeSlide 0.3s ease-out both' }}
             >
-              New items added
+  Added to your list
             </div>
           )}
           {items.map((item) => (

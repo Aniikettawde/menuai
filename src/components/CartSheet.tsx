@@ -203,8 +203,8 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
               <ShoppingBag size={15} className="text-white" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900">Your order</p>
-              <p className="text-xs text-slate-400">{itemCount} item{itemCount !== 1 ? 's' : ''} · {formatPrice(subtotal)}</p>
+<p className="text-sm font-semibold text-slate-900">Your List</p>
+<p className="text-xs text-slate-400">{itemCount} item{itemCount !== 1 ? 's' : ''} to show the waiter</p>
             </div>
           </div>
           <button
@@ -221,13 +221,13 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
             {cartItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 gap-3">
                 <div className="text-4xl">🛒</div>
-                <p className="text-sm font-medium text-slate-400">Your cart is empty</p>
-                <p className="text-xs text-slate-300">Add dishes from the menu to get started</p>
+                <p className="text-sm font-medium text-slate-400">Your list is empty</p>
+<p className="text-xs text-slate-300">Tap any dish on the menu to add it here</p>
               </div>
             ) : (
               <>
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Added items</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">On your list</p>
                   <button type="button" onClick={handleClearCart} className="text-[11px] font-medium text-red-400 hover:text-red-500">
                     Clear all
                   </button>
@@ -266,20 +266,23 @@ export function CartSheet({ onCallWaiter, isWaiterLoading = false }: Props) {
               <span className="text-base font-bold text-slate-900">{formatPrice(subtotal)}</span>
             </div>
 
-            <button
-              type="button"
-              onClick={handleCallWaiterClick}
-              disabled={cartItems.length === 0 || isWaiterLoading}
-              className="inline-flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 transition hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isWaiterLoading ? (
-                <><Loader2 size={16} className="animate-spin" />Notifying waiter…</>
-              ) : pendingDeliveryDecision ? (
-                <><GlassWater size={17} />Choose delivery preference</>
-              ) : (
-                <><HandMetal size={17} />Call waiter · {formatPrice(subtotal)}</>
-              )}
-            </button>
+           <p className="mb-2 text-center text-[11px] text-slate-400">
+  This just shows your list to the waiter — nothing gets ordered yet.
+</p>
+<button
+  type="button"
+  onClick={handleCallWaiterClick}
+  disabled={cartItems.length === 0 || isWaiterLoading}
+  className="inline-flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/25 transition hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  {isWaiterLoading ? (
+    <><Loader2 size={16} className="animate-spin" />Letting the waiter know…</>
+  ) : pendingDeliveryDecision ? (
+    <><GlassWater size={17} />Choose delivery preference</>
+  ) : (
+    <><HandMetal size={17} />Call Waiter</>
+  )}
+</button>
           </div>
         </div>
       </div>

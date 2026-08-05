@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ShoppingBag, Loader2 } from 'lucide-react'
+import { ClipboardList, Loader2 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
 import { CartSheet } from './CartSheet'
@@ -138,7 +138,7 @@ const subtotal = cartItems.reduce((sum, c) => {
                   transition: 'transform 0.2s ease',
                 }}
               >
-                {isWaiterLoading ? <Loader2 size={18} className="animate-spin" /> : <ShoppingBag size={18} />}
+                {isWaiterLoading ? <Loader2 size={18} className="animate-spin" /> : <ClipboardList size={18} />}
               </div>
 
               <div style={{ minWidth: 0, textAlign: 'left' }}>
@@ -146,10 +146,11 @@ const subtotal = cartItems.reduce((sum, c) => {
                   margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--pr-text)',
                   fontFamily: 'var(--font-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
-                  {isWaiterLoading ? 'Notifying waiter…' : `Your Selection · ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
+                  {isWaiterLoading ? 'Letting the waiter know…' : `Your List · ${itemCount} item${itemCount !== 1 ? 's' : ''}`}
+
                 </p>
                 <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-                  {isWaiterLoading ? 'Please wait a moment' : 'Review your picks'}
+                 {isWaiterLoading ? 'Please wait a moment' : 'Tap to see the list'}
                 </p>
               </div>
             </div>
