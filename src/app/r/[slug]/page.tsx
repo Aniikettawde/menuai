@@ -10,6 +10,8 @@ import { DiscoveryRestaurantView, type DiscoveryPageData } from './discovery-vie
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getValidTableSession, sessionCookieName } from '@/lib/table-session'
+import { buildRestaurantSchema, type ReviewRow } from '@/lib/schema/restaurant-schema'
+import { ReviewsSection } from '@/components/ReviewsSection'
 
 interface PageProps {
   params: { slug: string }
@@ -36,17 +38,13 @@ function hasPaidAccess(sub: SubscriptionRow | null | undefined): boolean {
   )
 }
 
-// Validates that the ?t= token exists, belongs to this restaurant,
-// and matches the ?table= number. Returns null if anything is wrong.
 async function validateTableToken(
   restaurantId: string,
   tableNumber: string | undefined,
   token: string | undefined,
 ): Promise<{ valid: boolean; tokenExists: boolean }> {
-  // No token and no table = browse mode (discovery-style, no ordering)
   if (!token && !tableNumber) return { valid: false, tokenExists: false }
 
-  // Token provided — validate it
   if (token) {
     const supabase = getSupabaseServer()
     const { data } = await supabase
@@ -57,19 +55,13 @@ async function validateTableToken(
       .maybeSingle()
 
     if (!data) return { valid: false, tokenExists: false }
-
-    // Token exists but was deactivated (trial expired)
     if (!data.is_active) return { valid: false, tokenExists: true }
-
-    // If table number was also passed, it must match
     if (tableNumber && data.table_number !== parseInt(tableNumber, 10)) {
       return { valid: false, tokenExists: false }
     }
-
     return { valid: true, tokenExists: true }
   }
 
-  // Table number without token — old-style QR, treat as invalid
   return { valid: false, tokenExists: false }
 }
 
@@ -101,6 +93,29 @@ async function getMenuItems(restaurantId: string): Promise<Pick<MenuPageData, 'c
     supabase.from('menu_items').select('*').eq('restaurant_id', restaurantId).eq('is_available', true).order('position'),
   ])
   return { categories: categories ?? [], items: items ?? [] }
+}
+
+// NEW — pulls public ratings for the paid/subscribed path, so this branch
+// can also emit Review entries and a visible reviews list, not just
+// aggregateRating. Uses the same `ratings` table RatingModal writes to.
+async function getPublicRatings(restaurantId: string): Promise<ReviewRow[]> {
+  const supabase = getSupabaseServer()
+  const { data } = await supabase
+    .from('ratings')
+    .select('id, comment, score, created_at')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_public', true)
+    .not('comment', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    rating: r.score,
+    comment: r.comment,
+    created_at: r.created_at,
+    author_name: null, // ratings table has no name field today — schema falls back to "Diner"
+  }))
 }
 
 async function getDiscoveryData(slug: string): Promise<DiscoveryPageData | null> {
@@ -176,8 +191,6 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
   const tableParam = searchParams.table
   const tokenParam = searchParams.t
 
-  // Legacy/raw QR link with a secret token still in the URL → bounce it
-  // through activation, which mints a session and redirects to a clean URL.
   if (tokenParam) {
     const qs = new URLSearchParams({
       slug: params.slug,
@@ -195,8 +208,6 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
     const subscriptionActive = hasPaidAccess(sub)
 
     if (hasTableIntent) {
-      // Someone has a ?table= param (post-activation, or old-style link)
-
       if (!subscriptionActive) {
         notFound()
       }
@@ -207,13 +218,16 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
         ? await getValidTableSession(sessionId, restaurant.id, tableNumber)
         : null
 
-      // No valid session → this is either an expired visit or someone
-      // typed ?table=N by hand. TableGuard will show the right screen
-      // for each case; we don't 404 here since ?table= alone (no session)
-      // still needs to render browse mode gracefully.
       const menuData = await getMenuItems(restaurant.id)
+      const reviews = await getPublicRatings(restaurant.id)
+      const schema = buildRestaurantSchema(restaurant, reviews)
+
       return (
         <Suspense fallback={null}>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          />
           <TableGuard restaurant={restaurant} tableSessionValid={!!session}>
             <RestaurantShell
               initialData={{ restaurant, ...menuData }}
@@ -227,11 +241,28 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
     // No table intent — browse mode
     if (subscriptionActive) {
       const menuData = await getMenuItems(restaurant.id)
+      const reviews = await getPublicRatings(restaurant.id)
+      const schema = buildRestaurantSchema(restaurant, reviews)
+
       return (
         <Suspense fallback={null}>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          />
           <TableGuard restaurant={restaurant}>
             <RestaurantShell initialData={{ restaurant, ...menuData }} />
           </TableGuard>
+          {/*
+            Visible reviews list — required alongside the JSON-LD above.
+            Placed after the shell so it doesn't disturb the ordering UI;
+            adjust position once you see how it reads on the live page.
+          */}
+          <ReviewsSection
+            avgRating={Number(restaurant.avg_rating)}
+            totalRatings={Number(restaurant.total_ratings)}
+            reviews={reviews}
+          />
         </Suspense>
       )
     }
@@ -239,7 +270,24 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
 
   const discoveryData = await getDiscoveryData(params.slug)
   if (discoveryData) {
-    return <DiscoveryRestaurantView data={discoveryData} />
+    const discoveryReviews: ReviewRow[] = (discoveryData.reviews ?? []).map((r: any) => ({
+      id: r.id,
+      rating: r.rating ?? r.score,
+      comment: r.comment,
+      created_at: r.created_at,
+      author_name: r.author_name ?? null,
+    }))
+    const schema = buildRestaurantSchema(discoveryData.restaurant, discoveryReviews)
+
+    return (
+      <>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+        />
+        <DiscoveryRestaurantView data={discoveryData} />
+      </>
+    )
   }
 
   notFound()
