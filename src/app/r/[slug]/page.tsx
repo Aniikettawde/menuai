@@ -252,17 +252,17 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
           />
           <TableGuard restaurant={restaurant}>
             <RestaurantShell initialData={{ restaurant, ...menuData }} />
+            {/*
+              Moved inside TableGuard (was a sibling after it) so it mounts
+              together with the shell instead of painting alone first while
+              TableGuard/RestaurantShell are still resolving client-side.
+            */}
+            <ReviewsSection
+              avgRating={Number(restaurant.avg_rating)}
+              totalRatings={Number(restaurant.total_ratings)}
+              reviews={reviews}
+            />
           </TableGuard>
-          {/*
-            Visible reviews list — required alongside the JSON-LD above.
-            Placed after the shell so it doesn't disturb the ordering UI;
-            adjust position once you see how it reads on the live page.
-          */}
-          <ReviewsSection
-            avgRating={Number(restaurant.avg_rating)}
-            totalRatings={Number(restaurant.total_ratings)}
-            reviews={reviews}
-          />
         </Suspense>
       )
     }
