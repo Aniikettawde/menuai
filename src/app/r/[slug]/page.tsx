@@ -11,7 +11,6 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getValidTableSession, sessionCookieName } from '@/lib/table-session'
 import { buildRestaurantSchema, type ReviewRow } from '@/lib/schema/restaurant-schema'
-import { ReviewsSection } from '@/components/ReviewsSection'
 
 interface PageProps {
   params: { slug: string }
@@ -232,6 +231,7 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
             <RestaurantShell
               initialData={{ restaurant, ...menuData }}
               tableSessionValid={!!session}
+              reviews={reviews}
             />
           </TableGuard>
         </Suspense>
@@ -251,15 +251,8 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
             dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
           />
           <TableGuard restaurant={restaurant}>
-            <RestaurantShell initialData={{ restaurant, ...menuData }} />
-            {/*
-              Moved inside TableGuard (was a sibling after it) so it mounts
-              together with the shell instead of painting alone first while
-              TableGuard/RestaurantShell are still resolving client-side.
-            */}
-            <ReviewsSection
-              avgRating={Number(restaurant.avg_rating)}
-              totalRatings={Number(restaurant.total_ratings)}
+            <RestaurantShell
+              initialData={{ restaurant, ...menuData }}
               reviews={reviews}
             />
           </TableGuard>

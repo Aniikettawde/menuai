@@ -31,6 +31,8 @@ import { GamesModal } from './games/GamesModal'
 import { RewardWelcomePopup } from './RewardWelcomePopup'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 import { RateUsSlideDown } from './RateUsSlideDown'
+import { ReviewsSection } from './ReviewsSection'
+import type { ReviewRow } from '@/lib/schema/restaurant-schema'
 
 type OfferRow = {
   id: string; title: string
@@ -45,6 +47,7 @@ interface Props {
   tableNumber?:  number | null
   initialData: MenuPageData
   tableSessionValid?: boolean
+    reviews?: ReviewRow[]   
 }
 
 interface OrderToastData {
@@ -81,7 +84,7 @@ function writePersistedOrderIds(slug: string, tableNumber: number | null, ids: s
 }
 
 
-export function RestaurantShell({ initialData, tableSessionValid }: Props) {
+export function RestaurantShell({ initialData, tableSessionValid, reviews }: Props) {
   const searchParams = useSearchParams()
   const {
     restaurant,
@@ -948,7 +951,15 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
           />
         )}
 		<BottomTabBar onAccountClick={() => setAccountOpen(true)} />
-
+ {reviews && reviews.length > 0 && (
+          <div className="pr-main" style={{ paddingTop: 0 }}>
+            <ReviewsSection
+              avgRating={Number(restaurant.avg_rating)}
+              totalRatings={Number(restaurant.total_ratings)}
+              reviews={reviews}
+            />
+          </div>
+        )}
       </div>
     </>
   )
