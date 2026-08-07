@@ -7,6 +7,13 @@ import { createBrowserClient } from '@supabase/ssr'
 const COOLDOWN_SECONDS = 90
 const HINT_STORAGE_KEY = 'dinezy_call_waiter_hint_seen'
 
+// Delay before the idle tooltip starts cycling, and how long each
+// message stays visible before crossfading to the next one.
+const HINT_START_DELAY_MS = 10000
+const HINT_MESSAGE_DURATION_MS = 2600
+const HINT_CROSSFADE_MS = 220
+const HINT_LOOPS = 1 // cycle through all messages once, then hide for good
+
 // Vertical clearance above the bottom nav bar. The nav renders as a
 // floating rounded card with its own margin off the screen edge (not a
 // flush-to-edge bar), so the bell needs enough space to clear its top
@@ -47,6 +54,7 @@ const REQUEST_OPTIONS: {
   type: RequestType
   label: string
   sublabel: string
+  hint: string
   icon: ReactNode
   color: string
   bgColor: string
@@ -57,6 +65,7 @@ const REQUEST_OPTIONS: {
     type: 'assistance',
     label: 'Call Waiter',
     sublabel: 'Get help from staff',
+    hint: 'Call waiter',
     icon: <ChefHat size={22} />,
     color: 'var(--pr-orange)',
     bgColor: 'var(--pr-orange-dim)',
@@ -67,6 +76,7 @@ const REQUEST_OPTIONS: {
     type: 'water',
     label: 'Ask for Water',
     sublabel: "We’ll bring it right over",
+    hint: 'Ask for water',
     icon: <Droplets size={22} />,
     color: '#2B7FB8',
     bgColor: 'rgba(43,127,184,0.10)',
@@ -77,6 +87,7 @@ const REQUEST_OPTIONS: {
     type: 'bill',
     label: 'Request Bill',
     sublabel: 'Ready to pay',
+    hint: 'Request bill',
     icon: <Receipt size={22} />,
     color: 'var(--pr-gold)',
     bgColor: 'var(--pr-gold-dim)',
@@ -84,6 +95,8 @@ const REQUEST_OPTIONS: {
     emoji: '🧾',
   },
 ]
+
+const HINT_MESSAGES = REQUEST_OPTIONS.map((opt) => opt.hint)
 
 const SENT_LABEL_MAP: Record<RequestType, string> = {
   assistance: 'Waiter requested',
@@ -101,12 +114,19 @@ type SupabaseClientType = ReturnType<typeof createBrowserClient>
 
 export function CallWaiterBell({ slug, tableNumber, disabled, onCall }: Props) {
   const [sheet, setSheet] = useState<'closed' | 'open'>('closed')
-  const [showHint, setShowHint] = useState(false)
+
+  // Idle tooltip cycling state
+  const [tooltipVisible, setTooltipVisible] = useState(false)
+  const [tooltipIndex, setTooltipIndex] = useState(0)
+  const [tooltipFading, setTooltipFading] = useState(false)
+
   const [activeRequest, setActiveRequest] = useState<ActiveRequest | null>(null)
   const [loadingType, setLoadingType] = useState<RequestType | null>(null)
   const [animatingIn, setAnimatingIn] = useState(false)
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const hintStartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hintCycleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const supabaseRef = useRef<SupabaseClientType | null>(null)
   const realtimeChannelRef = useRef<ReturnType<SupabaseClientType['channel']> | null>(null)
 
@@ -124,6 +144,17 @@ export function CallWaiterBell({ slug, tableNumber, disabled, onCall }: Props) {
     if (timerRef.current) {
       clearInterval(timerRef.current)
       timerRef.current = null
+    }
+  }, [])
+
+  const clearHintTimers = useCallback(() => {
+    if (hintStartTimeoutRef.current) {
+      clearTimeout(hintStartTimeoutRef.current)
+      hintStartTimeoutRef.current = null
+    }
+    if (hintCycleTimeoutRef.current) {
+      clearTimeout(hintCycleTimeoutRef.current)
+      hintCycleTimeoutRef.current = null
     }
   }, [])
 
@@ -220,27 +251,74 @@ export function CallWaiterBell({ slug, tableNumber, disabled, onCall }: Props) {
     }
   }, [slug, tableNumber, startCooldown, clearTimer, getSupabase])
 
+  // Dynamic tooltip: after HINT_START_DELAY_MS of idling with no active
+  // request, start cycling through "Call waiter" / "Ask for water" /
+  // "Request bill" with a smooth crossfade, then hide for good.
   useEffect(() => {
-    try {
-      const seen = localStorage.getItem(HINT_STORAGE_KEY)
-      if (!seen) {
-        setShowHint(true)
-        const t = setTimeout(() => setShowHint(false), 5000)
-        return () => clearTimeout(t)
-      }
-    } catch {}
-  }, [])
+    clearHintTimers()
 
-  function dismissHint() {
-    if (!showHint) return
-    setShowHint(false)
+    let seen = false
     try {
-      localStorage.setItem(HINT_STORAGE_KEY, '1')
+      seen = !!localStorage.getItem(HINT_STORAGE_KEY)
     } catch {}
+
+    if (seen || activeRequest || disabled || sheet === 'open') {
+      setTooltipVisible(false)
+      return
+    }
+
+    hintStartTimeoutRef.current = setTimeout(() => {
+      setTooltipIndex(0)
+      setTooltipFading(false)
+      setTooltipVisible(true)
+
+      let step = 0
+      const totalSteps = HINT_MESSAGES.length * HINT_LOOPS
+
+      const scheduleNext = () => {
+        hintCycleTimeoutRef.current = setTimeout(() => {
+          step += 1
+
+          if (step >= totalSteps) {
+            // Fade out and mark as seen so it doesn't nag on future visits.
+            setTooltipFading(true)
+            setTimeout(() => {
+              setTooltipVisible(false)
+              setTooltipFading(false)
+              try {
+                localStorage.setItem(HINT_STORAGE_KEY, '1')
+              } catch {}
+            }, HINT_CROSSFADE_MS)
+            return
+          }
+
+          setTooltipFading(true)
+          setTimeout(() => {
+            setTooltipIndex(step % HINT_MESSAGES.length)
+            setTooltipFading(false)
+            scheduleNext()
+          }, HINT_CROSSFADE_MS)
+        }, HINT_MESSAGE_DURATION_MS)
+      }
+
+      scheduleNext()
+    }, HINT_START_DELAY_MS)
+
+    return clearHintTimers
+  }, [activeRequest, disabled, sheet, clearHintTimers])
+
+  function dismissTooltip(markSeen: boolean) {
+    clearHintTimers()
+    setTooltipVisible(false)
+    if (markSeen) {
+      try {
+        localStorage.setItem(HINT_STORAGE_KEY, '1')
+      } catch {}
+    }
   }
 
   function openSheet() {
-    dismissHint()
+    dismissTooltip(true)
     if (activeRequest || disabled) return
     setSheet('open')
     setAnimatingIn(true)
@@ -284,75 +362,100 @@ export function CallWaiterBell({ slug, tableNumber, disabled, onCall }: Props) {
 
   const currentType: RequestType = activeRequest?.type ?? 'assistance'
 
-const bellLabel = !activeRequest
-  ? 'Call waiter'
-  : activeRequest.status === 'sent'
-    ? SENT_LABEL_MAP[currentType]
-    : activeRequest.status === 'accepted'
-      ? ACCEPTED_LABEL_MAP[currentType]
-      : activeRequest.status === 'cooldown'
-        ? `${ACCEPTED_LABEL_MAP[currentType]} · ${activeRequest.secondsLeft}s`
-        : 'Call waiter'
+  const statusPillLabel = !activeRequest
+    ? null
+    : activeRequest.status === 'sent'
+      ? SENT_LABEL_MAP[currentType]
+      : activeRequest.status === 'accepted'
+        ? ACCEPTED_LABEL_MAP[currentType]
+        : activeRequest.status === 'cooldown'
+          ? `${ACCEPTED_LABEL_MAP[currentType]} · ${activeRequest.secondsLeft}s`
+          : null
+
+  const statusPillBg =
+    currentType === 'assistance'
+      ? 'linear-gradient(135deg,#3f9142,#2f7a33)'
+      : currentType === 'water'
+        ? 'linear-gradient(135deg,#2B7FB8,#1f6698)'
+        : 'linear-gradient(135deg,var(--pr-gold),#7a5518)'
 
   const bellStyle =
-  activeRequest?.status === 'accepted'
-    ? {
-        background: 'linear-gradient(135deg,#3f9142,#2f7a33)',
-        color: '#F8F4EC',
-        boxShadow: '0 8px 24px rgba(47,122,51,0.35)',
-      }
-    : activeRequest?.status === 'sent'
+    activeRequest?.status === 'accepted'
       ? {
-          background: 'linear-gradient(135deg,var(--pr-gold),#7a5518)',
-          color: 'var(--pr-cta-text)',
-          boxShadow: '0 8px 24px rgba(138,109,31,0.3)',
+          background: 'linear-gradient(135deg,#3f9142,#2f7a33)',
+          color: '#F8F4EC',
+          boxShadow: '0 8px 24px rgba(47,122,51,0.35)',
         }
-      : activeRequest?.status === 'cooldown'
+      : activeRequest?.status === 'sent'
         ? {
-            background: 'var(--pr-card)',
-            color: 'var(--pr-text-muted)',
-            border: '1px solid var(--pr-border)',
-            boxShadow: '0 4px 12px rgba(33,30,27,0.12)',
-          }
-        : {
-            background: 'linear-gradient(135deg,var(--pr-orange),#5c1721)',
+            background: 'linear-gradient(135deg,var(--pr-gold),#7a5518)',
             color: 'var(--pr-cta-text)',
-            boxShadow: '0 8px 24px rgba(122,31,43,0.35), 0 2px 8px rgba(33,30,27,0.15)',
+            boxShadow: '0 8px 24px rgba(138,109,31,0.3)',
           }
+        : activeRequest?.status === 'cooldown'
+          ? {
+              background: 'var(--pr-card)',
+              color: 'var(--pr-text-muted)',
+              border: '1px solid var(--pr-border)',
+              boxShadow: '0 4px 12px rgba(33,30,27,0.12)',
+            }
+          : {
+              background: 'linear-gradient(135deg,var(--pr-orange),#5c1721)',
+              color: 'var(--pr-cta-text)',
+              boxShadow: '0 8px 24px rgba(122,31,43,0.35), 0 2px 8px rgba(33,30,27,0.15)',
+            }
 
   const isBellDisabled = disabled || !!activeRequest
 
   return (
     <>
       <style>{`
-        .cwb-hint {
-          animation: cwb-fadein 0.3s ease both;
-          background: var(--pr-card);
-          color: var(--pr-text);
-          border: 1px solid var(--pr-border);
-          box-shadow: 0 4px 16px rgba(33,30,27,0.15);
+        .cwb-tooltip {
+          background: #242424;
+          color: #FAFAF7;
+          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+          border-radius: 14px;
+          padding: 7px 12px;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.01em;
+          white-space: nowrap;
+          position: relative;
+          opacity: 0;
+          transform: translateY(4px) scale(0.96);
+          transition: opacity ${HINT_CROSSFADE_MS}ms ease, transform ${HINT_CROSSFADE_MS}ms ease;
+          pointer-events: none;
         }
-        @keyframes cwb-fadein {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
+        .cwb-tooltip-shown {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+        .cwb-tooltip-arrow {
+          position: absolute;
+          bottom: -5px;
+          right: 20px;
+          width: 10px;
+          height: 10px;
+          transform: rotate(45deg);
+          background: #242424;
+          border-right: 1px solid rgba(255,255,255,0.1);
+          border-bottom: 1px solid rgba(255,255,255,0.1);
         }
 
         .cwb-bell {
+          width: 52px;
+          height: 52px;
           display: flex;
           align-items: center;
-          gap: 8px;
+          justify-content: center;
           border-radius: 999px;
-          padding: 12px 16px 12px 14px;
-          font-size: 13px;
-          font-weight: 700;
-          letter-spacing: 0.01em;
           cursor: pointer;
           border: none;
           transition: transform 0.18s, box-shadow 0.18s;
-          white-space: nowrap;
           -webkit-tap-highlight-color: transparent;
         }
-        .cwb-bell:not(:disabled):active { transform: scale(0.93); }
+        .cwb-bell:not(:disabled):active { transform: scale(0.9); }
         .cwb-bell:disabled { cursor: default; }
 
         .cwb-backdrop {
@@ -530,88 +633,59 @@ const bellLabel = !activeRequest
           display: inline-flex;
           align-items: center;
           gap: 6px;
+          white-space: nowrap;
+          animation: cwb-fadein 0.25s ease both;
+        }
+        @keyframes cwb-fadein {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
 
-     {sheet === 'closed' && (
-     <div
-  style={{
-    position: 'fixed',
-    right: 16,
-    bottom: `calc(${BELL_BOTTOM_OFFSET}px + env(safe-area-inset-bottom, 0px))`,
-    zIndex: 50,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: 8,
-  }}
->
-        {showHint && (
-          <div
-            className="cwb-hint"
-            style={{
-              maxWidth: 170,
-              borderRadius: 16,
-              padding: '8px 12px',
-              fontSize: 11,
-              fontWeight: 500,
-              lineHeight: 1.4,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-              background: '#242424',
-              color: '#FAFAF7',
-              border: '1px solid rgba(255,255,255,0.1)',
-              position: 'relative',
-            }}
-          >
-            Tap to call waiter, request water, or get your bill
-            <span
-              style={{
-                position: 'absolute',
-                bottom: -6,
-                right: 22,
-                width: 12,
-                height: 12,
-                transform: 'rotate(45deg)',
-                background: '#242424',
-                borderRight: '1px solid rgba(255,255,255,0.1)',
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
-              }}
-            />
-          </div>
-        )}
-
-        {activeRequest?.status === 'accepted' && (
-          <div
-            className="cwb-status-pill"
-            style={{
-              background:
-  activeRequest.type === 'assistance'
-    ? 'linear-gradient(135deg,#3f9142,#2f7a33)'
-    : activeRequest.type === 'water'
-      ? 'linear-gradient(135deg,#2B7FB8,#1f6698)'
-      : 'linear-gradient(135deg,var(--pr-gold),#7a5518)',
-            }}
-          >
-            <Check size={14} />
-            {ACCEPTED_LABEL_MAP[activeRequest.type]}
-          </div>
-        )}
-
-        <button
-          type="button"
-          className={`cwb-bell${activeRequest?.status === 'accepted' ? ' cwb-bell-accepted' : ''}`}
-          style={bellStyle as React.CSSProperties}
-          onClick={openSheet}
-          disabled={isBellDisabled}
-          aria-label="Waiter options"
+      {sheet === 'closed' && (
+        <div
+          style={{
+            position: 'fixed',
+            right: 16,
+            bottom: `calc(${BELL_BOTTOM_OFFSET}px + env(safe-area-inset-bottom, 0px))`,
+            zIndex: 50,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 8,
+          }}
         >
-          {activeRequest?.status ? <Check size={18} /> : <BellRing size={18} />}
-          <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: 'var(--font-body, Inter, sans-serif)' }}>
-            {bellLabel}
-          </span>
-        </button>
-      </div>
-     )}
+          {/* Idle-state dynamic tooltip: cycles "Call waiter" / "Ask for water" / "Request bill" */}
+          {!activeRequest && tooltipVisible && (
+            <div className={`cwb-tooltip${tooltipFading ? '' : ' cwb-tooltip-shown'}`}>
+              {HINT_MESSAGES[tooltipIndex]}
+              <span className="cwb-tooltip-arrow" />
+            </div>
+          )}
+
+          {/* Status pill for an in-flight request (sent / accepted / cooldown) */}
+          {statusPillLabel && (
+            <div className="cwb-status-pill" style={{ background: statusPillBg }}>
+              {activeRequest?.status === 'accepted' || activeRequest?.status === 'cooldown' ? (
+                <Check size={14} />
+              ) : null}
+              {statusPillLabel}
+            </div>
+          )}
+
+          <button
+            type="button"
+            className={`cwb-bell${activeRequest?.status === 'accepted' ? ' cwb-bell-accepted' : ''}`}
+            style={bellStyle as React.CSSProperties}
+            onClick={openSheet}
+            onFocus={() => dismissTooltip(false)}
+            disabled={isBellDisabled}
+            aria-label={statusPillLabel ?? 'Waiter options'}
+          >
+            {activeRequest?.status ? <Check size={20} /> : <BellRing size={20} />}
+          </button>
+        </div>
+      )}
 
       {sheet === 'open' && (
         <>

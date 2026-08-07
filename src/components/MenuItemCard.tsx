@@ -334,24 +334,38 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
     }
   }
 
+  // Fires on every "Add" tap AND every "+" increment tap, so add_to_cart_count
+  // in analytics reflects total add-clicks per dish, not just first-adds.
+  const trackAdd = (action: 'add' | 'increment') => {
+    if (!restaurant) return
+    void track(restaurant.id, 'cart_item_added', {
+      item_id: item.id,
+      item_name: item.name,
+      metadata: {
+        source: 'menu',
+        price: item.price,
+        is_bestseller: item.is_bestseller,
+        action, // 'add' = first tap on this dish, 'increment' = tapped + again
+      },
+    })
+  }
+
   const handleAdd = async (e: MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
     if (hasOptions) { openCustomiseSheet(item.id); return }
     setAdding(true)
     addToCart(item)
-    if (restaurant) {
-      void track(restaurant.id, 'cart_item_added', {
-        item_id: item.id, item_name: item.name,
-        metadata: { source: 'menu', price: item.price, is_bestseller: item.is_bestseller },
-      })
-    }
+    trackAdd('add')
     window.setTimeout(() => setAdding(false), 700)
   }
 
   const handleInc = (e: MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
     if (hasOptions) { openCustomiseSheet(item.id); return }
-    if (primaryEntry) increaseCartItem(primaryEntry.cartKey)
+    if (primaryEntry) {
+      increaseCartItem(primaryEntry.cartKey)
+      trackAdd('increment')
+    }
   }
 
   const handleDec = (e: MouseEvent) => {

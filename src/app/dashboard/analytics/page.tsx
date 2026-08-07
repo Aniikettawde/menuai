@@ -13,6 +13,7 @@ import {
   QrCode,
   Receipt,
   Repeat,
+  ShoppingCart,
   Sparkles,
   Star,
   Timer,
@@ -407,6 +408,9 @@ export default function AnalyticsPage() {
         itemMap[id].view_count += 1
       })
 
+      // Every "Add" tap AND every "+" increment tap on a dish lands here as
+      // its own cart_item_added event (see MenuItemCard's trackAdd), so this
+      // count reflects total add-clicks per dish, not just first-adds.
       cartItemAddedEvents.forEach((e) => {
         const id = e.item_id || e.item_name
         if (!id || !e.item_name) return
@@ -503,6 +507,19 @@ export default function AnalyticsPage() {
   const maxHour = useMemo(() => Math.max(...hourly, 1), [hourly])
   const peakHour = hourly.indexOf(Math.max(...hourly))
   const peakHourLabel = `${peakHour}:00–${peakHour + 1}:00`
+
+  // Dedicated "most added" leaderboard — same underlying add_to_cart_count
+  // as the Dish Performance table below, just re-sorted and surfaced on its
+  // own so "which dish gets tapped Add on most" doesn't require scanning a
+  // wide table.
+  const mostAddedItems = useMemo(
+    () =>
+      [...topItems]
+        .filter((i) => i.add_to_cart_count > 0)
+        .sort((a, b) => b.add_to_cart_count - a.add_to_cart_count)
+        .slice(0, 8),
+    [topItems],
+  )
 
   if (contextLoading || loading) {
     return (
@@ -650,6 +667,46 @@ export default function AnalyticsPage() {
               })}
             </div>
           </>
+        )}
+      </div>
+
+      {/* ── Most Added to Cart leaderboard ──────────────────────────────────── */}
+      <div className={`${cardBase} p-5`} style={cardStyle}>
+        <div className="mb-1 flex items-center gap-2">
+          <ShoppingCart size={14} style={{ color: BRAND.sky }} />
+          <h2 className="text-sm font-semibold" style={{ color: BRAND.ink }}>Most Added to Cart</h2>
+        </div>
+        <p className="mb-4 text-xs" style={{ color: BRAND.inkFaint }}>
+          Dishes guests tapped "Add" on the most — every Add tap and every + counts
+        </p>
+
+        {mostAddedItems.length === 0 ? (
+          <p className="text-xs italic" style={{ color: BRAND.inkFaint }}>No add-to-cart taps yet in this period</p>
+        ) : (
+          <div className="space-y-2">
+            {mostAddedItems.map((item, i) => {
+              const maxCount = mostAddedItems[0]?.add_to_cart_count ?? 1
+              return (
+                <div key={item.item_id} className="flex items-center gap-3">
+                  <span className="w-4 shrink-0 text-right text-xs" style={{ color: BRAND.inkFaint }}>{i + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-0.5 flex items-center justify-between">
+                      <span className="truncate text-xs font-medium" style={{ color: BRAND.ink }}>{item.item_name}</span>
+                      <span className="ml-2 shrink-0 text-xs font-semibold" style={{ color: BRAND.sky }}>
+                        {item.add_to_cart_count} add{item.add_to_cart_count !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full" style={{ background: BRAND.line }}>
+                      <div
+                        className="h-1.5 rounded-full"
+                        style={{ width: `${(item.add_to_cart_count / maxCount) * 100}%`, background: BRAND.sky }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
 
