@@ -119,17 +119,19 @@ export async function processCampaignBatch(campaignId: string) {
         .update({ status: 'sent', wamid: result.wamid, sent_at: new Date().toISOString() })
         .eq('id', r.id);
 
-      await supabaseAdmin.from('whatsapp_messages').insert({
-        restaurant_id: restaurantId,
-        campaign_id: campaign.id,
-        wa_id: r.wa_id,
-        wamid: result.wamid,
-        direction: 'outbound',
-        message_type: 'template',
-        body: `[Campaign: ${campaign.name}]`,
-        status: 'sent',
-        cost: restaurantId ? perMessageCost : null,
-      });
+     const { error: msgErr } = await supabaseAdmin.from('whatsapp_messages').insert({
+   restaurant_id: restaurantId,
+   campaign_id: campaign.id,
+   wa_id: r.wa_id,
+   wamid: result.wamid,
+   direction: 'outbound',
+   message_type: 'template',
+   body: `[Campaign: ${campaign.name}]`,
+   status: 'sent',
+   cost: restaurantId ? perMessageCost : 0,
+ });
+
+if (msgErr) console.error(`Failed to insert whatsapp_messages for wamid ${result.wamid}:`, msgErr);
 
       await supabaseAdmin.from('whatsapp_contacts').upsert(
         {
