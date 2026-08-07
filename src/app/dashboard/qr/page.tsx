@@ -227,11 +227,11 @@ function FixedQrCard({
         </p>
 
         <p className="relative z-10 mt-3 text-[18px] font-black uppercase leading-tight tracking-wide text-[#241533]">
-          SCAN TO UNLOCK
+          SCAN TO
         </p>
         <p className="relative z-10 text-[18px] font-black uppercase leading-tight tracking-wide">
           <span className="bg-gradient-to-r from-[#9333ea] to-[#ea580c] bg-clip-text text-transparent">
-            THE FULL TABLE
+            View Menu
           </span>
         </p>
 
