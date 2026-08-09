@@ -145,10 +145,10 @@ function BestsellerSlider({
         {items.map((item, idx) => {
           const price = formatPrice(item.price)
           const cleanDesc = item.description?.replace(/[,;:\s]+$/, '') ?? null
-          const imageUrl = item.image_url
+        const imageUrl = item.image_url
             ? item.image_url.startsWith('http')
               ? item.image_url
-              : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/restaurant-assets/${item.image_url}`
+             : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/restaurant-assets/${item.image_url}?width=700&quality=78`
             : null
 
            return (
@@ -371,10 +371,10 @@ function CategorySection({
   const chefsPick = showChefsPick ? getChefsPick(items) : null
   const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
 
-  const imageUrl = category.image_url
+   const imageUrl = category.image_url
     ? category.image_url.startsWith('http')
       ? category.image_url
-      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/restaurant-assets/${category.image_url}`
+            : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/restaurant-assets/${category.image_url}?width=200&quality=70`
     : null
 
   return (

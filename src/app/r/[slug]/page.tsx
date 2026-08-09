@@ -286,6 +286,4 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
   notFound()
 }
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
-export const fetchCache = 'force-no-store'
+export const revalidate = 30

@@ -81,8 +81,7 @@ function getImageUrl(imageUrl: string | null | undefined): string | null {
   if (imageUrl.startsWith('http')) return imageUrl
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
-  return `${base}/storage/v1/object/public/restaurant-assets/${imageUrl}`
-}
+  return `${base}/storage/v1/render/image/public/restaurant-assets/${imageUrl}?width=400&quality=75`}
 
 function formatPrice(paise: number): string {
   if (!paise || paise <= 0) return 'APS'

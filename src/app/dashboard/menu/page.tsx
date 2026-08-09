@@ -11,6 +11,8 @@ import {
   CheckSquare, Link2, Search,  Circle, Info,
 } from 'lucide-react'
 import { TodaysSpecialPicker } from '@/components/TodaysSpecialPicker'
+import imageCompression from 'browser-image-compression'
+
 const BOTTOM_NAV_H = 72
 
 // ─── Brand tokens (mirrors the ivory/burgundy system used across the dashboard) ──
@@ -129,14 +131,23 @@ function cleanStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((v) => String(v).trim()).filter(Boolean) : []
 }
 const MENU_ASSET_BUCKET = 'restaurant-assets'
-function resolveMenuImageUrl(raw: unknown): string {
+function resolveMenuImageUrl(raw: unknown, width = 400): string {
   if (typeof raw !== 'string') return ''
   const value = raw.trim()
   if (!value) return ''
   if (/^(https?:\/\/|data:|blob:)/i.test(value)) return value
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '')
   if (!supabaseUrl) return value
-  return `${supabaseUrl}/storage/v1/object/public/${MENU_ASSET_BUCKET}/${value.replace(/^\/+/, '')}`
+  return `${supabaseUrl}/storage/v1/render/image/public/${MENU_ASSET_BUCKET}/${value.replace(/^\/+/, '')}?width=${width}&quality=60`
+}
+
+async function compressMenuImage(file: File): Promise<File> {
+  return imageCompression(file, {
+    maxSizeMB: 0.08,
+    maxWidthOrHeight: 800,
+    useWebWorker: true,
+    fileType: 'image/webp',
+  })
 }
 
 // ─── BottomSheet ──────────────────────────────────────────────────────────────
@@ -1040,7 +1051,6 @@ export default function MenuPage() {
   const [actionSheetItem, setActionSheetItem] = useState<MenuItemRow | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [catImageUploading, setCatImageUploading] = useState<string | null>(null)
-    const [aiGeneratingCatId, setAiGeneratingCatId] = useState<string | null>(null)
 	const [showImageLibrary, setShowImageLibrary] = useState(false)
 	  const [libraryTargetCatId, setLibraryTargetCatId] = useState<string | null>(null)
   const [descriptionGenerating, setDescriptionGenerating] = useState(false)
@@ -1050,7 +1060,8 @@ export default function MenuPage() {
   const { context, loading: contextLoading } = useDashboardContext()
 
   const [draggedCatId, setDraggedCatId] = useState<string | null>(null)
-  const [menuTab, setMenuTab] = useState<'food' | 'bar' | 'corporate'>('food')
+  const [catMenuOpenId, setCatMenuOpenId] = useState<string | null>(null)
+  const [menuTab, setMenuTab] = useState<'food' | 'bar' | 'corporate' | 'other'>('food')
    const orderedCategories = useMemo(() => {
     return [...categories]
       .filter((c) => (c.menu_type ?? 'food') === menuTab)
@@ -1067,7 +1078,8 @@ export default function MenuPage() {
   function itemLabel(capitalized = true, plural = false) {
     const barWord = plural ? 'Drinks' : 'Drink'
     const foodWord = plural ? 'Dishes' : 'Dish'
-    const word = isBarTab ? barWord : foodWord
+    const otherWord = plural ? 'Items' : 'Item'
+    const word = isBarTab ? barWord : menuTab === 'other' ? otherWord : foodWord
     return capitalized ? word : word.toLowerCase()
   }
 
@@ -1315,14 +1327,15 @@ export default function MenuPage() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to update availability') }
   }
 
-  async function uploadItemImage(file: File) {
+ async function uploadItemImage(file: File) {
     setImageUploading(true); setError('')
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
-      const safeName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')
+      const compressed = await compressMenuImage(file)
+      const safeName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '').replace(/\.[^.]+$/, '.webp')
       const path = `${user.id}/items/${Date.now()}-${safeName}`
-      const { error: uploadError } = await supabase.storage.from('restaurant-assets').upload(path, file, { upsert: true, contentType: file.type })
+      const { error: uploadError } = await supabase.storage.from('restaurant-assets').upload(path, compressed, { upsert: true, contentType: 'image/webp', cacheControl: '31536000' })
       if (uploadError) throw uploadError
       setEditingItem((prev) => (prev ? { ...prev, image_url: path } : prev))
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to upload image') }
@@ -1334,61 +1347,16 @@ export default function MenuPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
-      const safeName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')
+      const compressed = await compressMenuImage(file)
+      const safeName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '').replace(/\.[^.]+$/, '.webp')
       const path = `${user.id}/categories/${Date.now()}-${safeName}`
-      const { error: uploadError } = await supabase.storage.from('restaurant-assets').upload(path, file, { upsert: true, contentType: file.type })
+      const { error: uploadError } = await supabase.storage.from('restaurant-assets').upload(path, compressed, { upsert: true, contentType: 'image/webp', cacheControl: '31536000' })
       if (uploadError) throw uploadError
       const { data: updated, error: updateError } = await supabase.from('menu_categories').update({ image_url: path }).eq('id', catId).select().single()
       if (updateError) throw updateError
       if (updated) setCategories((prev) => prev.map((c) => (c.id === catId ? (updated as MenuCategoryRow) : c)))
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to upload category image') }
     finally { setCatImageUploading(null) }
-  }
-  
-  async function generateCategoryImage(cat: MenuCategoryRow) {
-    setAiGeneratingCatId(cat.id); setError('')
-    try {
-      const res = await fetch('/api/category-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          categoryName: cat.name,
-          cuisineType: restaurant?.cuisine_type ?? '',
-          isBar: (cat.menu_type ?? 'food') === 'bar',
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error ?? 'Failed to generate image')
-      const { imageBase64, mimeType } = data as { imageBase64: string; mimeType: string }
-
-      // Decode base64 -> Blob for direct upload to Supabase storage,
-      // reusing the same bucket/path convention as manual camera uploads.
-      const byteChars = atob(imageBase64)
-      const byteNumbers = new Array(byteChars.length)
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i)
-      const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType })
-
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
-      const ext = mimeType.includes('png') ? 'png' : 'jpg'
-      const path = `${user.id}/categories/${Date.now()}-ai-${cat.id}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from('restaurant-assets')
-        .upload(path, blob, { upsert: true, contentType: mimeType })
-      if (uploadError) throw uploadError
-
-      const { data: updated, error: updateError } = await supabase
-        .from('menu_categories')
-        .update({ image_url: path })
-        .eq('id', cat.id)
-        .select().single()
-      if (updateError) throw updateError
-      if (updated) setCategories((prev) => prev.map((c) => (c.id === cat.id ? (updated as MenuCategoryRow) : c)))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate category image')
-    } finally {
-      setAiGeneratingCatId(null)
-    }
   }
 
   async function handleGeminiImport(result: GeminiMenuResult) {
@@ -1572,16 +1540,26 @@ export default function MenuPage() {
           </button>
         </div>
 
-       {(restaurant?.has_bar_menu || restaurant?.has_corporate_menu) && (
-          <div className="flex justify-center">
-            <MenuTabToggle
-              active={menuTab}
-              onChange={(t) => { setMenuTab(t); setActiveCat(null); setMobileView('categories') }}
-              showBar={!!restaurant?.has_bar_menu}
-              showCorporate={!!restaurant?.has_corporate_menu}
-            />
-          </div>
-        )}
+        <div className="flex justify-center">
+          <MenuTabToggle
+            active={menuTab}
+            onChange={(t) => { setMenuTab(t); setActiveCat(null); setMobileView('categories') }}
+            showBar={!!restaurant?.has_bar_menu}
+            showCorporate={!!restaurant?.has_corporate_menu}
+          />
+        </div>
+
+        <MenuSearch
+          categories={categories}
+          items={items}
+          onPickCategory={(cat) => { setMenuTab((cat.menu_type ?? 'food') as typeof menuTab); setActiveCat(cat.id); setMobileView('items') }}
+          onPickItem={(item) => {
+            const cat = categories.find((c) => c.id === item.category_id)
+            if (cat) setMenuTab((cat.menu_type ?? 'food') as typeof menuTab)
+            setActiveCat(item.category_id); setMobileView('items')
+            setEditingItem({ ...item, best_with: item.best_with ?? [] })
+          }}
+        />
 
         <div className="grid grid-cols-4 gap-2">
           <MiniStat value={totalCategories} label="Categories" icon="🗂️" />
@@ -1644,16 +1622,6 @@ export default function MenuPage() {
                             </div>
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
                           </label>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); void generateCategoryImage(cat) }}
-                            disabled={aiGeneratingCatId === cat.id}
-                            className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full transition disabled:opacity-60"
-                            style={{ background: BRAND.burgundy, color: '#fff' }}
-                            title="Generate image with AI"
-                          >
-                            {aiGeneratingCatId === cat.id ? <Loader2 size={9} className="animate-spin" /> : <Sparkles size={9} />}
-                          </button>
 						  
 						                            <button
                             type="button"
@@ -1756,14 +1724,23 @@ export default function MenuPage() {
             <p className="mt-1 text-sm" style={{ color: BRAND.inkFaint }}>{totalDishes} {itemLabel(false, true)} across {totalCategories} categories</p>
           </div>
           <div className="flex items-center gap-3">
-            {(restaurant?.has_bar_menu || restaurant?.has_corporate_menu) && (
-              <MenuTabToggle
-                active={menuTab}
-                onChange={(t) => { setMenuTab(t); setActiveCat(null) }}
-                showBar={!!restaurant?.has_bar_menu}
-                showCorporate={!!restaurant?.has_corporate_menu}
-              />
-            )}
+            <MenuSearch
+              categories={categories}
+              items={items}
+              onPickCategory={(cat) => { setMenuTab((cat.menu_type ?? 'food') as typeof menuTab); setActiveCat(cat.id) }}
+              onPickItem={(item) => {
+                const cat = categories.find((c) => c.id === item.category_id)
+                if (cat) setMenuTab((cat.menu_type ?? 'food') as typeof menuTab)
+                setActiveCat(item.category_id)
+                setEditingItem({ ...item, best_with: item.best_with ?? [] })
+              }}
+            />
+            <MenuTabToggle
+              active={menuTab}
+              onChange={(t) => { setMenuTab(t); setActiveCat(null) }}
+              showBar={!!restaurant?.has_bar_menu}
+              showCorporate={!!restaurant?.has_corporate_menu}
+            />
             <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}><Sparkles size={14} /> Import with AI</button>
             <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? categories[0]?.id ?? '' })} className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-white" style={{ background: BRAND.burgundy }}><Plus size={14} /> Add {itemLabel()}</button>
           </div>
@@ -1783,7 +1760,7 @@ export default function MenuPage() {
 )}
         {error && <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: `${BRAND.rose}33`, background: `${BRAND.rose}14`, color: BRAND.rose }}>{error}</div>}
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          <aside className="rounded-3xl border p-4" style={cardStyle}>
+          <aside className="rounded-3xl border p-4" style={cardStyle} onClick={() => setCatMenuOpenId(null)}>
             <div className="mb-4 flex items-center justify-between">
               <p className="text-sm font-semibold" style={{ color: BRAND.ink }}>Categories</p>
               <p className="text-xs" style={{ color: BRAND.inkFaint }}>{categories.length}</p>
@@ -1805,7 +1782,7 @@ export default function MenuPage() {
                   >
                     <div
                       onClick={() => setActiveCat(cat.id)}
-                      className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-3 transition"
+                      className="flex w-full cursor-pointer items-center gap-2 rounded-2xl px-3 py-3 transition"
                       style={{
                         ...(active
                           ? { background: `${BRAND.burgundy}14`, color: BRAND.burgundy, boxShadow: `inset 0 0 0 1px ${BRAND.burgundy}33` }
@@ -1813,62 +1790,59 @@ export default function MenuPage() {
                         ...(draggedCatId === cat.id ? { boxShadow: `0 0 0 2px ${BRAND.burgundy}40`, opacity: 0.85 } : {}),
                       }}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="flex items-center justify-center shrink-0" style={{ color: BRAND.inkFaint }}><GripVertical size={14} /></span>
-                        {catWithImage.image_url
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-8 w-8 rounded-xl object-cover shrink-0" />
-                          : <div className="flex h-8 w-8 items-center justify-center rounded-xl text-sm shrink-0" style={{ background: BRAND.ivorySoft }}>{isBarTab ? '🍸' : '🍱'}</div>
-                        }
-                        <span className="truncate text-sm">{cat.name}</span>
+                      <span className="flex items-center justify-center shrink-0" style={{ color: BRAND.inkFaint }}><GripVertical size={14} /></span>
+                      {catWithImage.image_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={resolveMenuImageUrl(catWithImage.image_url)} alt={cat.name} className="h-8 w-8 rounded-xl object-cover shrink-0" />
+                        : <div className="flex h-8 w-8 items-center justify-center rounded-xl text-sm shrink-0" style={{ background: BRAND.ivorySoft }}>{isBarTab ? '🍸' : '🍱'}</div>
+                      }
+                      <span className="min-w-0 flex-1 truncate text-sm" title={cat.name}>{cat.name}</span>
+                      <span className="shrink-0 rounded-full px-2 py-0.5 text-xs" style={{ background: BRAND.ivorySoft }}>{count}</span>
+                      <div className="relative shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setCatMenuOpenId((id) => (id === cat.id ? null : cat.id)) }}
+                          className="rounded-lg p-1 transition hover:bg-black/[0.05]"
+                          style={{ color: BRAND.inkFaint }}
+                          title="More options"
+                        >
+                          <MoreVertical size={14} />
+                        </button>
+                        {catMenuOpenId === cat.id && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-xl border py-1 shadow-xl"
+                            style={cardStyle}
+                          >
+                            <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-xs transition hover:bg-black/[0.03]" style={{ color: BRAND.ink }}>
+                              {catImageUploading === cat.id ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+                              Upload Photo
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f); setCatMenuOpenId(null) }} />
+                            </label>
+                            <button
+                              onClick={() => { setLibraryTargetCatId(cat.id); setShowImageLibrary(true); setCatMenuOpenId(null) }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-black/[0.03]"
+                              style={{ color: BRAND.goldDeep }}
+                            >
+                              <ImagePlus size={13} /> Choose from Library
+                            </button>
+                            <button
+                              onClick={() => { setInfoCardCat(cat); setCatMenuOpenId(null) }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-black/[0.03]"
+                              style={{ color: cat.info_card ? BRAND.burgundy : BRAND.ink }}
+                            >
+                              <Info size={13} /> Preparation Info Card
+                            </button>
+                            <button
+                              onClick={() => { setCatMenuOpenId(null); void deleteCategory(cat.id) }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-black/[0.03]"
+                              style={{ color: BRAND.rose }}
+                            >
+                              <Trash2 size={13} /> Delete Category
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    <span className="flex items-center gap-2 text-xs shrink-0">
-                        <span className="rounded-full px-2 py-0.5" style={{ background: BRAND.ivorySoft }}>{count}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setLibraryTargetCatId(cat.id); setShowImageLibrary(true) }}
-                          className="rounded-lg p-1 opacity-0 transition hover:opacity-100 group-hover:opacity-60"
-                          style={{ color: BRAND.goldDeep }}
-                          title="Choose from library"
-                        >
-                          <ImagePlus size={14} />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); void generateCategoryImage(cat) }}
-                          disabled={aiGeneratingCatId === cat.id}
-                          className="rounded-lg p-1 opacity-0 transition hover:opacity-100 group-hover:opacity-60"
-                          style={{ color: BRAND.gold }}
-                          title="Generate image with AI"
-                        >
-						
-                          {aiGeneratingCatId === cat.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                        </button>
-						
-						
-						
-						<button
-                          onClick={(e) => { e.stopPropagation(); setInfoCardCat(cat) }}
-                          className="rounded-lg p-1 opacity-0 transition hover:opacity-100 group-hover:opacity-60"
-                          style={{ color: cat.info_card ? BRAND.burgundy : BRAND.inkFaint }}
-                          title="Preparation info card"
-                        >
-                          <Info size={14} />
-                        </button>
-						
-                        <button
-                          onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id) }}
-                          className="rounded-lg p-1 opacity-0 transition hover:opacity-100"
-                          style={{ color: BRAND.rose }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </span>
                     </div>
-                    <label className="absolute left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition cursor-pointer">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-lg transition" style={{ background: `${BRAND.ink}CC`, color: '#fff' }}>
-                        {catImageUploading === cat.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
-                      </div>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f) }} />
-                    </label>
                   </div>
                 )
               })}
@@ -2191,11 +2165,104 @@ function DesktopStat({ value, label, icon, color }: { value: number; label: stri
   )
 }
 
+function MenuSearch({
+  categories, items, onPickCategory, onPickItem,
+}: {
+  categories: MenuCategoryRow[]
+  items: MenuItemRow[]
+  onPickCategory: (cat: MenuCategoryRow) => void
+  onPickItem: (item: MenuItemRow) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const q = query.trim().toLowerCase()
+  const matchedCats = q ? categories.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 5) : []
+  const matchedItems = q ? items.filter((i) => i.name.toLowerCase().includes(q)).slice(0, 8) : []
+  const hasResults = matchedCats.length > 0 || matchedItems.length > 0
+
+  function categoryLabel(catId: string) {
+    return categories.find((c) => c.id === catId)?.name ?? ''
+  }
+
+  return (
+    <div ref={wrapRef} className="relative w-full sm:w-64">
+      <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: BRAND.inkFaint }} />
+      <input
+        value={query}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+        placeholder="Search dishes or categories…"
+        className={`${INPUT} pl-9 py-2.5 text-sm`}
+        style={INPUT_STYLE}
+      />
+      {open && q && (
+        <div className="absolute z-30 mt-1.5 max-h-72 w-full overflow-y-auto rounded-2xl border shadow-xl" style={cardStyle}>
+          {!hasResults ? (
+            <div className="px-4 py-3 text-xs" style={{ color: BRAND.inkFaint }}>No matches for &quot;{query}&quot;.</div>
+          ) : (
+            <>
+              {matchedCats.length > 0 && (
+                <div>
+                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>Categories</p>
+                  {matchedCats.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => { onPickCategory(cat); setQuery(''); setOpen(false) }}
+                      className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-sm transition hover:bg-black/[0.03]"
+                      style={{ color: BRAND.ink }}
+                    >
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs" style={{ background: BRAND.ivorySoft }}>🗂️</span>
+                      <span className="min-w-0 flex-1 truncate">{cat.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {matchedItems.length > 0 && (
+                <div>
+                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>Dishes &amp; Drinks</p>
+                  {matchedItems.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => { onPickItem(item); setQuery(''); setOpen(false) }}
+                      className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-black/[0.03]"
+                    >
+                      {item.image_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={resolveMenuImageUrl(item.image_url)} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                        : <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm" style={{ background: BRAND.ivorySoft }}>🍽️</div>
+                      }
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm" style={{ color: BRAND.ink }}>{item.name}</span>
+                        <span className="block truncate text-[11px]" style={{ color: BRAND.inkFaint }}>{categoryLabel(item.category_id)}</span>
+                      </span>
+                      <Pencil size={12} className="shrink-0" style={{ color: BRAND.inkFaint }} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MenuTabToggle({
   active, onChange, showBar, showCorporate,
 }: {
-  active: 'food' | 'bar' | 'corporate'
-  onChange: (t: 'food' | 'bar' | 'corporate') => void
+  active: 'food' | 'bar' | 'corporate' | 'other'
+  onChange: (t: 'food' | 'bar' | 'corporate' | 'other') => void
   showBar: boolean
   showCorporate: boolean
 }) {
@@ -2229,6 +2296,14 @@ function MenuTabToggle({
           💼 Corporate Menu
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => onChange('other')}
+        className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition"
+        style={active === 'other' ? { background: BRAND.plum, color: '#fff' } : { color: BRAND.inkFaint }}
+      >
+        🧾 Other
+      </button>
     </div>
   )
 }

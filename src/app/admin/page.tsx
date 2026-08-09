@@ -227,11 +227,11 @@ function MarkSentModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gift_card_code: code.trim() }),
       })
-      const data = await res.json()
+      const data = await res.json()          // ← the "Replace" block starts here
       if (!res.ok) throw new Error(data.error)
       onDone()
       onClose()
-    } catch (err) {
+    } catch (err) {                            // ← and ends right before this catch
       setError(err instanceof Error ? err.message : 'Failed')
     } finally {
       setLoading(false)
