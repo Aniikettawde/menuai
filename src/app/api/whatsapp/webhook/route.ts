@@ -1,6 +1,8 @@
 // src/app/api/whatsapp/webhook/route.ts
 export const dynamic = 'force-dynamic';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { sendWhatsAppText } from '@/lib/whatsapp';
+import { signRatingToken } from '@/lib/whatsapp/rating-token';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -42,6 +44,97 @@ function messageText(message: any): string {
   return `[${message.type} message]`;
 }
 
+// ── Rating button-reply handling ──────────────────────────────────────────
+// Restaurant here is resolved differently from the rest of this file: sends
+// of `rate_us_dinezy` go out from Dinezy's own shared number, so
+// phone_number_id always resolves to null (Dinezy's own inbox) and can't
+// tell us which restaurant a given rating is for. Instead we look up the
+// specific outbound template message (by wamid, via context.id on the
+// reply) — that row carries the real restaurant_id, set at send time in
+// sendWhatsAppTemplate(..., restaurantId).
+//
+// Returns true if this message was a rating button reply and has been fully
+// handled (rating inserted / redirect sent) — caller can still log it into
+// the normal inbox on top of this, that's harmless.
+async function handleRatingButtonReply(message: any): Promise<boolean> {
+  if (message.type !== 'interactive' || message.interactive?.type !== 'button_reply') return false;
+
+  const contextId: string | undefined = message.context?.id;
+  if (!contextId) return false;
+
+  const { data: sentMsg, error: lookupErr } = await supabaseAdmin
+    .from('whatsapp_messages')
+    .select('restaurant_id')
+    .eq('wamid', contextId)
+    .maybeSingle();
+
+  if (lookupErr || !sentMsg?.restaurant_id) {
+    // Not a reply to a restaurant-attributed template (or restaurant_id
+    // wasn't set on send) — not our rating flow, let normal logging handle it.
+    return false;
+  }
+
+  const restaurantId: string = sentMsg.restaurant_id;
+  const fromPhone: string = message.from;
+  const buttonText: string = message.interactive.button_reply.title ?? '';
+  const normalized = buttonText.trim().toLowerCase();
+  const isFive = normalized.includes('excellent');
+  const isFour = normalized.includes('good');
+  const isLow = normalized.includes('improvement');
+
+  if (!isFive && !isFour && !isLow) return false; // some other button, not a rating one
+
+  if (isFive || isFour) {
+    const score = isFive ? 5 : 4;
+
+    const { error: insertErr } = await supabaseAdmin.from('ratings').insert([
+      {
+        restaurant_id: restaurantId,
+        order_id: null,
+        order_code: null,
+        table_number: null,
+        score,
+        comment: null,
+        is_public: true,
+        source: 'whatsapp',
+        customer_phone: fromPhone,
+      },
+    ]);
+
+    if (insertErr && (insertErr as any).code !== '23505') {
+      console.error('Rating insert failed:', insertErr);
+    }
+
+    try {
+      await sendWhatsAppText(
+        fromPhone,
+        score === 5
+          ? `You're amazing! 🌟 Thanks so much for the ${score}-star rating — see you again soon!`
+          : `Thanks a lot for the ${score}-star rating! 🙌 We're always working to get to 5 ⭐ next time.`,
+      );
+    } catch (err) {
+      console.error('Rating auto-reply send failed:', err);
+    }
+
+    return true;
+  }
+
+  // isLow
+  const token = signRatingToken({ restaurantId, customerPhone: fromPhone });
+  const rateUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/rate/${token}`;
+
+  try {
+    await sendWhatsAppText(
+      fromPhone,
+      `Sorry to hear that 🙏 Could you tell us what went wrong? It really helps us improve:\n${rateUrl}`,
+    );
+  } catch (err) {
+    console.error('Low-rating redirect send failed:', err);
+  }
+
+  return true;
+}
+
 /**
  * Handles an inbound message for a given restaurant_id (null = Dinezy's own
  * number, matching the legacy /admin/whatsapp schema where these columns are
@@ -78,7 +171,6 @@ async function handleInboundMessage(restaurantId: string | null, message: any, c
   });
 }
 
-/** Handles a status update (sent/delivered/read/failed) for a given restaurant_id (null = Dinezy's own number). */
 /** Handles a status update (sent/delivered/read/failed) for a given restaurant_id (null = Dinezy's own number). */
 async function handleStatusUpdate(restaurantId: string | null, phoneNumberId: string | undefined, status: any) {
   console.log(
@@ -136,8 +228,6 @@ async function handleStatusUpdate(restaurantId: string | null, phoneNumberId: st
   }
 }
 
- 
-
 export async function POST(req: Request) {
   const body = await req.json();
   try {
@@ -169,8 +259,18 @@ export async function POST(req: Request) {
 
     const message = value?.messages?.[0];
     if (message) {
+      // Rating button replies get restaurant-attributed via wamid lookup,
+      // independent of the phone_number_id resolution above — check this
+      // FIRST so a rating tap isn't just silently logged as a generic
+      // inbound message with restaurant_id: null.
+      const wasRatingReply = await handleRatingButtonReply(message);
+
       const name = value?.contacts?.[0]?.profile?.name ?? null;
       await handleInboundMessage(restaurantId, message, name);
+
+      if (wasRatingReply) {
+        console.log('Handled rating button reply from', message.from);
+      }
     }
 
     const status = value?.statuses?.[0];
