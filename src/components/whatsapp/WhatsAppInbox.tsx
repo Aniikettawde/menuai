@@ -454,6 +454,7 @@ export default function WhatsAppInbox() {
           templateName: selectedTemplate!.name,
           languageCode: selectedTemplate!.language,
           params: templateParams,
+
         }),
       });
       const sendData = await sendRes.json();

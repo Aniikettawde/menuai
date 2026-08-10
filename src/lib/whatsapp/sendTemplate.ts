@@ -14,11 +14,16 @@ export async function sendWhatsAppTemplate({
   templateName,
   languageCode = 'en',
   bodyParams = [],
+  restaurantId = null,
 }: {
   to: string;
   templateName: string;
   languageCode?: string;
   bodyParams?: string[];
+  // Pass this whenever the template is about a specific restaurant (e.g.
+  // rate_us_dinezy) — anything that reads whatsapp_messages by restaurant_id
+  // later (like the rating webhook) depends on it being set here.
+  restaurantId?: string | null;
 }): Promise<SendTemplateResult> {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -60,20 +65,19 @@ export async function sendWhatsAppTemplate({
     if (!res.ok) {
       return { ok: false, error: data?.error?.message || 'Failed to send WhatsApp template' };
     }
-
     const wamid = data?.messages?.[0]?.id ?? '';
-
     // ── Track this outbound send so the status webhook (sent/delivered/read)
-    // has a row to match against by wamid. Sent from Dinezy's own number,
-    // so restaurant_id stays null here — same convention the webhook uses
-    // for phoneNumberId === WHATSAPP_PHONE_NUMBER_ID. Best-effort: a tracking
-    // failure must never fail the send itself, since the message already went out.
+    // and the rating webhook (which resolves restaurant_id by wamid) both
+    // have a row to match against. restaurant_id is null only for sends with
+    // no restaurant context (e.g. generic Dinezy-number messages) — pass
+    // restaurantId explicitly for anything restaurant-specific, like
+    // rate_us_dinezy. Best-effort: a tracking failure must never fail the
+    // send itself, since the message already went out.
     if (wamid) {
       try {
         const preview = `[template] ${templateName}`;
-
         await supabaseAdmin.from('whatsapp_messages').insert({
-          restaurant_id: null,
+          restaurant_id: restaurantId,
           wa_id: cleaned,
           wamid,
           direction: 'outbound',
@@ -81,10 +85,9 @@ export async function sendWhatsAppTemplate({
           body: preview,
           status: 'sent',
         });
-
         await supabaseAdmin.from('whatsapp_contacts').upsert(
           {
-            restaurant_id: null,
+            restaurant_id: restaurantId,
             wa_id: cleaned,
             last_message_at: new Date().toISOString(),
             last_message_preview: preview,
@@ -95,7 +98,6 @@ export async function sendWhatsAppTemplate({
         console.error('[sendWhatsAppTemplate] tracking insert failed:', trackErr);
       }
     }
-
     return { ok: true, messageId: wamid };
   } catch (err: any) {
     return { ok: false, error: err.message || 'Network error sending WhatsApp message' };
