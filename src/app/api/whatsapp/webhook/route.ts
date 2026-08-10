@@ -86,12 +86,13 @@ async function handleRatingButtonReply(message: any): Promise<boolean> {
 
   if (!isFive && !isFour && !isLow) return false;
 
-  if (isFive || isFour) {
+if (isFive || isFour) {
     const score = isFive ? 5 : 4;
 
     const { error: insertErr } = await supabaseAdmin.from('ratings').insert([
       {
         restaurant_id: restaurantId,
+        session_id: `whatsapp_${fromPhone}_${Date.now()}`,
         order_id: null,
         order_code: null,
         table_number: null,
@@ -105,6 +106,12 @@ async function handleRatingButtonReply(message: any): Promise<boolean> {
 
     if (insertErr && (insertErr as any).code !== '23505') {
       console.error('Rating insert failed:', insertErr);
+      try {
+        await sendWhatsAppText(fromPhone, 'Thanks for your feedback! 🙏');
+      } catch (err) {
+        console.error('Fallback reply send failed:', err);
+      }
+      return true;
     }
 
     try {
@@ -120,21 +127,19 @@ async function handleRatingButtonReply(message: any): Promise<boolean> {
 
     return true;
   }
-
   // isLow
+try {
   const token = signRatingToken({ restaurantId, customerPhone: fromPhone });
   const rateUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/rate/${token}`;
+  await sendWhatsAppText(
+    fromPhone,
+    `Sorry to hear that 🙏 Could you tell us what went wrong? It really helps us improve:\n${rateUrl}`,
+  );
+} catch (err) {
+  console.error('Low-rating redirect flow failed:', err);
+}
 
-  try {
-    await sendWhatsAppText(
-      fromPhone,
-      `Sorry to hear that 🙏 Could you tell us what went wrong? It really helps us improve:\n${rateUrl}`,
-    );
-  } catch (err) {
-    console.error('Low-rating redirect send failed:', err);
-  }
-
-  return true;
+return true;
 }
 
 /**

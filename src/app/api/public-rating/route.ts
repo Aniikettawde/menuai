@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
   const { error: insertErr } = await supabase.from('ratings').insert([
     {
       restaurant_id: payload.restaurantId,
+	      session_id: `whatsapp_${payload.customerPhone ?? 'unknown'}_${Date.now()}`, // ← add this
+
       order_id: null,
       order_code: null,
       table_number: null,
