@@ -40,7 +40,7 @@ export async function sendRatingTemplate(to: string, customerName: string, resta
     to,
     type: 'template',
     template: {
-      name: 'rate_us_dinezy', // must match the approved template name exactly
+      name: 'review', // must match the approved template name exactly
       language: { code: 'en' },
       components: [
         {
