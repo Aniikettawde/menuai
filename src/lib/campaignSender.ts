@@ -42,6 +42,16 @@ export async function processCampaignBatch(campaignId: string) {
 
   const restaurantId: string | null = campaign.restaurant_id ?? null;
 
+  // The actual restaurant this campaign's audience belongs to (set via the
+  // "Audience" dropdown at creation time, stored in audience_filter). This is
+  // DIFFERENT from `restaurantId` above — `restaurantId` is the campaign
+  // owner used for credentials/billing and is always null for Dinezy-run
+  // sends, even when the audience itself is one specific restaurant's
+  // customers. whatsapp_messages needs the audience restaurant so anything
+  // reading it later (e.g. the WhatsApp rating webhook, which resolves
+  // restaurant_id by wamid) attributes correctly.
+  const audienceRestaurantId: string | null = (campaign.audience_filter as any)?.restaurantId ?? null;
+
   const creds = await resolveCredentials(restaurantId);
   if ('error' in creds) {
     await supabaseAdmin.from('whatsapp_campaigns').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', campaignId);
@@ -120,7 +130,7 @@ export async function processCampaignBatch(campaignId: string) {
         .eq('id', r.id);
 
      const { error: msgErr } = await supabaseAdmin.from('whatsapp_messages').insert({
-   restaurant_id: restaurantId,
+   restaurant_id: audienceRestaurantId, // ← the audience's restaurant, not the campaign-owner restaurantId (always null)
    campaign_id: campaign.id,
    wa_id: r.wa_id,
    wamid: result.wamid,
@@ -133,6 +143,10 @@ export async function processCampaignBatch(campaignId: string) {
 
 if (msgErr) console.error(`Failed to insert whatsapp_messages for wamid ${result.wamid}:`, msgErr);
 
+      // whatsapp_contacts intentionally stays keyed on `restaurantId` (the
+      // campaign-owner, null for Dinezy sends) — this is the shared inbox +
+      // global opt-out list, unrelated to which restaurant the audience
+      // happened to be scoped to. Do not swap this to audienceRestaurantId.
       await supabaseAdmin.from('whatsapp_contacts').upsert(
         {
           restaurant_id: restaurantId,
