@@ -1,3 +1,6 @@
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+
+
 const WHATSAPP_API_VERSION = 'v20.0'
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN!
@@ -34,13 +37,18 @@ export async function sendWhatsAppText(to: string, body: string) {
 
 /** Sends the "rate_us" template. Adjust component structure to match exactly
  *  what you submit + get approved in Meta Business Manager. */
-export async function sendRatingTemplate(to: string, customerName: string, restaurantName: string) {
-  return callGraphApi({
+export async function sendRatingTemplate(
+  to: string,
+  customerName: string,
+  restaurantName: string,
+  restaurantId: string, // now required — without it the rating webhook can't attribute the tap
+) {
+  const data = await callGraphApi({
     messaging_product: 'whatsapp',
     to,
     type: 'template',
     template: {
-      name: 'review', // must match the approved template name exactly
+      name: 'review',
       language: { code: 'en' },
       components: [
         {
@@ -50,9 +58,26 @@ export async function sendRatingTemplate(to: string, customerName: string, resta
             { type: 'text', text: restaurantName },
           ],
         },
-        // Quick Reply buttons don't take runtime parameters — their button
-        // payloads (rate_5 / rate_4 / rate_low) are fixed at template creation.
       ],
     },
   })
+
+  const wamid = data?.messages?.[0]?.id ?? null
+  if (wamid) {
+    try {
+      await supabaseAdmin.from('whatsapp_messages').insert({
+        restaurant_id: restaurantId,
+        wa_id: to.replace(/[^0-9]/g, ''),
+        wamid,
+        direction: 'outbound',
+        message_type: 'template',
+        body: '[template] review',
+        status: 'sent',
+      })
+    } catch (err) {
+      console.error('[sendRatingTemplate] tracking insert failed:', err)
+    }
+  }
+
+  return data
 }

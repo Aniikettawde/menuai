@@ -57,7 +57,9 @@ function messageText(message: any): string {
 // handled (rating inserted / redirect sent) — caller can still log it into
 // the normal inbox on top of this, that's harmless.
 async function handleRatingButtonReply(message: any): Promise<boolean> {
-  if (message.type !== 'interactive' || message.interactive?.type !== 'button_reply') return false;
+  const isTemplateButton = message.type === 'button';
+  const isInteractiveButton = message.type === 'interactive' && message.interactive?.type === 'button_reply';
+  if (!isTemplateButton && !isInteractiveButton) return false;
 
   const contextId: string | undefined = message.context?.id;
   if (!contextId) return false;
@@ -69,20 +71,20 @@ async function handleRatingButtonReply(message: any): Promise<boolean> {
     .maybeSingle();
 
   if (lookupErr || !sentMsg?.restaurant_id) {
-    // Not a reply to a restaurant-attributed template (or restaurant_id
-    // wasn't set on send) — not our rating flow, let normal logging handle it.
     return false;
   }
 
   const restaurantId: string = sentMsg.restaurant_id;
   const fromPhone: string = message.from;
-  const buttonText: string = message.interactive.button_reply.title ?? '';
+  const buttonText: string = isTemplateButton
+    ? (message.button?.text ?? '')
+    : (message.interactive.button_reply.title ?? '');
   const normalized = buttonText.trim().toLowerCase();
   const isFive = normalized.includes('excellent');
   const isFour = normalized.includes('good');
   const isLow = normalized.includes('improvement');
 
-  if (!isFive && !isFour && !isLow) return false; // some other button, not a rating one
+  if (!isFive && !isFour && !isLow) return false;
 
   if (isFive || isFour) {
     const score = isFive ? 5 : 4;

@@ -206,6 +206,8 @@ function showBrowserNotification(title: string, body: string) {
 }
 
 export default function WhatsAppInbox() {
+	const [restaurants, setRestaurants] = useState<{ id: string; name: string }[]>([]);
+const [selectedRestaurantId, setSelectedRestaurantId] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -306,6 +308,16 @@ export default function WhatsAppInbox() {
       setMessages(msgs);
     }
   }, []);
+  
+  const loadRestaurants = useCallback(async () => {
+  const res = await fetch('/api/whatsapp/campaigns/audience-options');
+  const data = await res.json();
+  if (data.restaurants) setRestaurants(data.restaurants);
+}, []);
+
+useEffect(() => {
+  if (showNewChat && restaurants.length === 0) loadRestaurants();
+}, [showNewChat, restaurants.length, loadRestaurants]);
 
   const loadTemplates = useCallback(async () => {
     setTemplatesLoading(true);
@@ -417,6 +429,8 @@ export default function WhatsAppInbox() {
     setNewName('');
     setSelectedTemplateName('');
     setTemplateParams([]);
+	  setSelectedRestaurantId(''); // add this
+
     setNewChatError('');
   }
 
@@ -454,6 +468,8 @@ export default function WhatsAppInbox() {
           templateName: selectedTemplate!.name,
           languageCode: selectedTemplate!.language,
           params: templateParams,
+		      restaurantId: selectedRestaurantId || null, // add this
+
 
         }),
       });
@@ -850,37 +866,54 @@ export default function WhatsAppInbox() {
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold block mb-1.5" style={{ color: C.textPrimary }}>
-                    Template
-                  </label>
-                  {templatesLoading ? (
-                    <p className="text-xs" style={{ color: C.textMuted }}>
-                      Loading templates...
-                    </p>
-                  ) : templates.length === 0 ? (
-                    <p
-                      className="text-xs px-3.5 py-2.5 rounded-lg font-medium"
-                      style={{ background: C.warnBg, color: C.warnText }}
-                    >
-                      No approved templates found. Create one in WhatsApp Manager → Message Templates first.
-                    </p>
-                  ) : (
-                    <select
-                      value={selectedTemplateName}
-                      onChange={(e) => setSelectedTemplateName(e.target.value)}
-                      className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none"
-                      style={{ borderColor: C.border, color: C.textPrimary }}
-                    >
-                      <option value="">Select a template</option>
-                      {templates.map((t) => (
-                        <option key={t.name} value={t.name}>
-                          {t.name} ({t.language})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+         <div>
+  <label className="text-xs font-semibold block mb-1.5" style={{ color: C.textPrimary }}>
+    Template
+  </label>
+  {templatesLoading ? (
+    <p className="text-xs" style={{ color: C.textMuted }}>
+      Loading templates...
+    </p>
+  ) : templates.length === 0 ? (
+    <p
+      className="text-xs px-3.5 py-2.5 rounded-lg font-medium"
+      style={{ background: C.warnBg, color: C.warnText }}
+    >
+      No approved templates found. Create one in WhatsApp Manager → Message Templates first.
+    </p>
+  ) : (
+    <select
+      value={selectedTemplateName}
+      onChange={(e) => setSelectedTemplateName(e.target.value)}
+      className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none"
+      style={{ borderColor: C.border, color: C.textPrimary }}
+    >
+      <option value="">Select a template</option>
+      {templates.map((t) => (
+        <option key={t.name} value={t.name}>
+          {t.name} ({t.language})
+        </option>
+      ))}
+    </select>
+  )}
+</div>
+
+<div>
+  <label className="text-xs font-semibold block mb-1.5" style={{ color: C.textPrimary }}>
+    Restaurant (required for review/rating templates)
+  </label>
+  <select
+    value={selectedRestaurantId}
+    onChange={(e) => setSelectedRestaurantId(e.target.value)}
+    className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none"
+    style={{ borderColor: C.border, color: C.textPrimary }}
+  >
+    <option value="">No restaurant (generic send)</option>
+    {restaurants.map((r) => (
+      <option key={r.id} value={r.id}>{r.name}</option>
+    ))}
+  </select>
+</div>
 
                 {selectedTemplate && (
                   <>
