@@ -57,6 +57,8 @@ function messageText(message: any): string {
 // handled (rating inserted / redirect sent) — caller can still log it into
 // the normal inbox on top of this, that's harmless.
 async function handleRatingButtonReply(message: any): Promise<boolean> {
+  console.log('RATING_DEBUG raw message:', JSON.stringify(message, null, 2)); // ← temporary
+
   const isTemplateButton = message.type === 'button';
   const isInteractiveButton = message.type === 'interactive' && message.interactive?.type === 'button_reply';
   if (!isTemplateButton && !isInteractiveButton) return false;
