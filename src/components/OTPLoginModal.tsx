@@ -417,6 +417,18 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
                 >
                   Enter your mobile
                 </h2>
+
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                margin: '0 0 14px', padding: '10px 12px',
+                borderRadius: 12,
+                background: 'rgba(34,197,94,0.08)',
+                border: '1px solid rgba(34,197,94,0.16)',
+                fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)',
+              }}>
+                <Shield size={14} color="#16a34a" />
+                Secure OTP login · Your number stays private
+              </div>
                 <p
                   style={{
                     margin: '0 0 16px',

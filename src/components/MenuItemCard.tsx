@@ -6,6 +6,7 @@ import type { MenuItem, DishOption } from '@/types'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
 import { useTranslation } from '@/lib/i18n/useTranslation'
+import { bumpPersonalOrder } from '@/lib/menu-rank'
 
 interface Props {
   item: MenuItem
@@ -347,6 +348,8 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
         action, // 'add' = first tap on this dish, 'increment' = tapped + again
       },
     })
+    // Local personalization — floats this diner's usuals to the top next visit
+    bumpPersonalOrder(restaurant.id, item.id, 1)
   }
 
   const handleAdd = async (e: MouseEvent) => {

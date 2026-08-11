@@ -27,6 +27,15 @@ import { useTranslatedMenu } from '@/lib/i18n/useTranslatedMenu'
 import { track } from '@/lib/analytics'
 
 import type { WaiterCallItem } from '@/types'
+import { usePopularItems } from '@/hooks/usePopularItems'
+import {
+  sortItemsPsychologically,
+  rankSearchResults,
+  topPopularIds,
+  pushRecentSearch,
+  readRecentSearches,
+  scoreItem,
+} from '@/lib/menu-rank'
 
 
 function formatPrice(paise: number) {
@@ -267,12 +276,25 @@ const SUGGESTION_CHIPS = [
 function SearchSuggestions({
   onPick,
   restaurantId,
+  recent,
 }: {
   onPick: (q: string) => void
   restaurantId?: string | null
+  recent?: string[]
 }) {
   return (
     <div className="mg-search-suggest">
+      {(recent ?? []).slice(0, 3).map((q) => (
+        <button
+          key={`recent-${q}`}
+          type="button"
+          className="mg-search-suggest-chip mg-search-suggest-chip--recent"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onPick(q)}
+        >
+          <Clock size={10} /> {q}
+        </button>
+      ))}
       {SUGGESTION_CHIPS.map((c) => (
         <button
           key={c.q}
@@ -373,7 +395,7 @@ function SearchResultsPanel({
 }
 
 function CategorySection({
-  category, items, showChefsPick, onAsk, pickLabel, sectionRef,
+  category, items, showChefsPick, onAsk, pickLabel, sectionRef, popularIds,
 }: {
   category: MenuCategory
   items: MenuItem[]
@@ -381,6 +403,7 @@ function CategorySection({
   onAsk?: (t: string) => void
   pickLabel: string
   sectionRef?: (el: HTMLElement | null) => void
+  popularIds?: Set<string>
 }) {
   const chefsPick = showChefsPick ? getChefsPick(items) : null
   const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
@@ -439,13 +462,14 @@ function CategorySection({
           )}
           {otherItems.map((item) => {
             const badge = getBadge(item, items)
+            const isHot = !!popularIds?.has(item.id)
             return (
               <div key={item.id} className="mg-item-row">
                 {badge.kind !== 'none' && (
                   <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
                 )}
                 <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
-                  <MenuItemCard item={item} onAsk={onAsk} />
+                  <MenuItemCard item={item} onAsk={onAsk} showMostOrdered={isHot && !item.is_bestseller} />
                 </div>
               </div>
             )
@@ -588,12 +612,23 @@ export function MenuGrid({
   const restaurantId = restaurant?.id ?? null
   const menuType = activeMenuType ?? 'food'
   const isBarView = menuType === 'bar'
-const { t, plural } = useTranslation()
- const [query, setQuery] = useState('')
-const [isSearchFocused, setIsSearchFocused] = useState(false)
-const [activeCatId, setActiveCatId] = useState<string | null>(null)
-const searchTrackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-const lastTrackedSearch = useRef('')
+  const { t, plural } = useTranslation()
+  const { restaurantPop, personalPop } = usePopularItems(restaurantId)
+  const popularIds = useMemo(
+    () => topPopularIds(restaurantPop, personalPop, 12),
+    [restaurantPop, personalPop],
+  )
+  const [query, setQuery] = useState('')
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [activeCatId, setActiveCatId] = useState<string | null>(null)
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const searchTrackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastTrackedSearch = useRef('')
+
+  useEffect(() => {
+    if (!restaurantId) return
+    setRecentSearches(readRecentSearches(restaurantId))
+  }, [restaurantId])
 
 const sectionRefs = useRef<Map<string, HTMLElement>>(new Map())
 const cattabsWrapRef = useRef<HTMLDivElement | null>(null)
@@ -627,8 +662,8 @@ if (lastMenuType !== menuType) {
   const { translateItem, translateCategory } = useTranslatedMenu(itemsForType, sortedCategories)
 
   const sortedItems = useMemo(() => {
-    return [...itemsForType].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
-  }, [itemsForType])
+    return sortItemsPsychologically(itemsForType, restaurantPop, personalPop)
+  }, [itemsForType, restaurantPop, personalPop])
 
   const translatedItems = useMemo(() => sortedItems.map(translateItem), [sortedItems, translateItem])
   const translatedCategories = useMemo(() => sortedCategories.map(translateCategory), [sortedCategories, translateCategory])
@@ -638,15 +673,28 @@ if (lastMenuType !== menuType) {
   [translatedCategories, translatedItems],
 )
 
-const bestSellerItems = useMemo(
-  () =>
-    translatedItems
-      .filter((i) => i.is_available && i.is_bestseller)
-      .slice()
-      .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
-      .slice(0, 4),
-  [translatedItems],
-)
+const bestSellerItems = useMemo(() => {
+  const available = translatedItems.filter((i) => i.is_available)
+  const byPop = [...available].sort(
+    (a, b) => scoreItem(b.id, restaurantPop, personalPop) - scoreItem(a.id, restaurantPop, personalPop),
+  )
+  const marked = available.filter((i) => i.is_bestseller)
+  const merged: MenuItem[] = []
+  const seen = new Set<string>()
+  for (const i of [...marked, ...byPop]) {
+    if (seen.has(i.id)) continue
+    // Prefer real demand or bestseller flags for the hero rail
+    if (!i.is_bestseller && scoreItem(i.id, restaurantPop, personalPop) <= 0 && marked.length > 0) continue
+    seen.add(i.id)
+    merged.push(i)
+    if (merged.length >= 5) break
+  }
+  // Fallback when no analytics yet
+  if (merged.length === 0) {
+    return available.filter((i) => i.is_bestseller || i.is_special).slice(0, 4)
+  }
+  return merged
+}, [translatedItems, restaurantPop, personalPop])
 
   const searchQuery = query.trim()
   const q = searchQuery.toLowerCase()
@@ -667,14 +715,9 @@ const bestSellerItems = useMemo(
 
   const textMatchedItems = useMemo(() => {
     if (!isSearching) return []
-    return translatedItems.filter(
-      (i) =>
-        i.is_available &&
-        (i.name.toLowerCase().includes(q) ||
-          i.description?.toLowerCase().includes(q) ||
-          i.tags?.some((t) => t.toLowerCase().includes(q))),
-    )
-  }, [translatedItems, q, isSearching])
+    const available = translatedItems.filter((i) => i.is_available)
+    return rankSearchResults(available, searchQuery, restaurantPop, personalPop)
+  }, [translatedItems, searchQuery, isSearching, restaurantPop, personalPop])
 
   const groupMatchedItems = useMemo(() => {
     if (matchedGroups.length === 0) return []
@@ -811,6 +854,8 @@ const bestSellerItems = useMemo(
     searchTrackTimer.current = setTimeout(() => {
       if (trimmed === lastTrackedSearch.current) return
       lastTrackedSearch.current = trimmed
+      pushRecentSearch(restaurantId, trimmed)
+      setRecentSearches(readRecentSearches(restaurantId))
       const resultCount = items.filter(
         (i) =>
           i.is_available &&
@@ -825,7 +870,7 @@ const bestSellerItems = useMemo(
           menu_type: menuType,
         },
       })
-    }, 700)
+    }, 450)
   }, [restaurantId, items, menuType])
 
   const handleClearSearch = useCallback(() => {
@@ -962,6 +1007,16 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     -webkit-tap-highlight-color: transparent;
   }
   :global(.mg-search-suggest-chip:hover) { border-color: var(--pr-gold); color: var(--pr-gold); }
+  :global(.mg-search-suggest-chip--recent) {
+    border-style: solid; background: var(--pr-black-soft); color: var(--pr-text-muted);
+  }
+  :global(.mg-search-sticky) {
+    position: sticky; top: 0; z-index: 45;
+    margin: 0 -0.25rem 6px; padding: 4px 0.25rem 6px;
+    background: color-mix(in srgb, var(--surface-bg) 92%, transparent);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  :global(.mg-root) { touch-action: manipulation; overscroll-behavior-y: contain; }
 
   /* ── Search results panel ──────────────────────────────────────────── */
   :global(.mg-search-results) { display: flex; flex-direction: column; gap: 14px; }
@@ -1295,7 +1350,7 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
         </div>
       )}
 
-      <div className="mg-search-sticky">
+      <div className="mg-search-sticky mg-search-sticky-fast">
   <div className="mg-search-sticky-inner" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1312,7 +1367,7 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     </div>
 
     {isSearchFocused && !isSearching && (
-      <SearchSuggestions onPick={handleSearchChange} restaurantId={restaurantId} />
+      <SearchSuggestions onPick={handleSearchChange} restaurantId={restaurantId} recent={recentSearches} />
     )}
   </div>
 </div>
@@ -1360,11 +1415,12 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
         <CategorySection
           key={cat.id}
           category={cat}
-          items={catItems}
+          items={sortItemsPsychologically(catItems, restaurantPop, personalPop)}
           showChefsPick
           onAsk={onAsk}
           pickLabel={pickLabel}
           sectionRef={registerSectionRef(cat.id)}
+          popularIds={popularIds}
         />
       )
     })}

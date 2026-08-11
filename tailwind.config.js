@@ -8,10 +8,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        // Geist first (new landing page), falls back to the existing
-        // --font-primary chain used by the rest of the app, then system UI.
-        sans: ['var(--font-geist-sans)', 'var(--font-primary)', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['var(--font-display)', 'system-ui', 'sans-serif'],
+        // Landing: Space Grotesk (display) + DM Sans (body). Geist remains for app chrome.
+        sans: ['var(--font-dm-sans)', 'var(--font-geist-sans)', 'var(--font-primary)', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['var(--font-space-grotesk)', 'var(--font-display)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-geist-mono)', 'var(--font-mono)', 'monospace'],
       },
       colors: {
@@ -35,17 +34,17 @@ module.exports = {
           border: 'rgba(255,255,255,0.08)',
         },
 
-        // ── New tokens — marketing/landing page only (white theme) ──────
-        ink: '#111111',
-        'ink-soft': '#666666',
-        'ink-faint': '#9a9a9a',
+        // ── Landing — porcelain + teal premium theme ────────────────────
+        ink: '#0B1220',
+        'ink-soft': '#5B6577',
+        'ink-faint': '#8B95A8',
         accent: {
-          DEFAULT: '#7A2333',
-          dark: '#5C1A26',
-          50: '#FBF0F2',
+          DEFAULT: '#0D9488',
+          dark: '#0F766E',
+          50: '#F0FDFA',
         },
-        line: '#ebebeb',
-        canvas: '#fafafa', // light section background for the landing page (kept separate from dark `surface.*`)
+        line: '#E2E8F0',
+        canvas: '#EEF2F6',
       },
       animation: {
         // ── Existing app animations — unchanged ──

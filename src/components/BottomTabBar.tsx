@@ -50,9 +50,9 @@ export function BottomTabBar({ onAccountClick }: Props) {
           background: var(--pr-card);
           border: 1px solid var(--pr-border);
           border-radius: 20px;
-          box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+          box-shadow: 0 12px 32px rgba(33,30,27,0.14), 0 2px 8px rgba(33,30,27,0.06);
           padding: 6px;
-          backdrop-filter: blur(14px);
+          backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
         }
         .btb-tab {
           flex: 1;
@@ -65,6 +65,7 @@ export function BottomTabBar({ onAccountClick }: Props) {
           font-size: 10.5px; font-weight: 600;
           transition: color 0.15s, background 0.15s, transform 0.15s;
         }
+        .btb-tab { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         .btb-tab:active { transform: scale(0.95); }
         .btb-tab.is-active {
           color: var(--pr-gold);

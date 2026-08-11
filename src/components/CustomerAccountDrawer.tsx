@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   X, Gift, MapPin, Clock, LogOut,
-  TrendingUp, Utensils, Tag,
+  TrendingUp, Utensils, Tag, Shield, Lock, BadgeCheck,
 } from 'lucide-react'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 import { QuestCard } from './QuestCard'
@@ -519,7 +519,7 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
                 {customer?.display_name ?? 'My Account'}
               </p>
               <p style={{ margin: 0, fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-                {customer?.phone ? customer.phone.replace(/^\+91/, '+91 ').replace(/(\d{5})(\d{5})$/, '$1 $2') : ''}
+                {customer?.phone ? customer.phone.replace(/^\+91/, '+91 ').replace(/(\d{2})(\d{4})(\d{4})$/, '$1****$3') : ''}
               </p>
             </div>
           </div>
@@ -544,6 +544,34 @@ export function CustomerAccountDrawer({ isOpen, onClose, restaurantId }: Props) 
             </p>
           ) : (
             <>
+
+              <div style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+                marginBottom: 18, padding: '12px 14px',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, rgba(34,197,94,0.08), var(--pr-gold-dim))',
+                border: '1px solid rgba(34,197,94,0.18)',
+              }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: 11, flexShrink: 0,
+                  display: 'grid', placeItems: 'center',
+                  background: 'rgba(34,197,94,0.12)', color: '#16a34a',
+                }}>
+                  <Shield size={16} />
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <BadgeCheck size={13} color="#16a34a" /> Secure account
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 11, lineHeight: 1.45, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+                    Signed in with OTP. Phone stays private — never shared with other diners.
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontSize: 10.5, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Lock size={10} /> Session encrypted · Sign out anytime
+                  </p>
+                </div>
+              </div>
+
               {/* Quest / points card — replaces old tier LoyaltyCard */}
               {restaurantId ? (
                 <QuestCard customerId={customer.id} restaurantId={restaurantId} />

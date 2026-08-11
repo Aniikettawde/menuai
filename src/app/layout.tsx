@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
-import { Inter } from 'next/font/google'
+import { Inter, Space_Grotesk, DM_Sans } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
 // Inter is loaded only as a fallback layer behind Geist — never rendered directly,
@@ -9,6 +9,16 @@ import './globals.css'
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-fallback',
+  display: 'swap',
+})
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-space-grotesk',
+  display: 'swap',
+})
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  variable: '--font-dm-sans',
   display: 'swap',
 })
 export const metadata: Metadata = {
@@ -60,7 +70,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
-  themeColor: '#FFFFFF',
+  themeColor: '#F5F7FA',
 }
 
 const organizationJsonLd = {
@@ -103,9 +113,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} scroll-smooth`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${dmSans.variable} scroll-smooth`}
     >
-      <body className="bg-white text-[#111111] antialiased">
+      <body className="bg-[#F5F7FA] text-[#0B1220] antialiased">
         {children}
         <Script
           id="organization-jsonld"
