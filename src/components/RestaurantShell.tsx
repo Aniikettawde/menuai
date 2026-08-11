@@ -912,6 +912,7 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   <CustomerAuthProvider
   restaurantId={restaurant?.id ?? null}
   tableNumber={tableNumber}
+  offerCount={activeOffers.length}
   loginOpen={loginOpen}
   onLoginOpenChange={(open) => {
     setLoginOpen(open)

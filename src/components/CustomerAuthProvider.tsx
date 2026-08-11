@@ -20,6 +20,7 @@ import { CustomerAccountDrawer } from './CustomerAccountDrawer'
 interface Props {
   restaurantId?: string | null
   tableNumber?: number | null
+  offerCount?: number
   loginOpen?: boolean
   onLoginOpenChange?: (open: boolean) => void
   accountOpen?: boolean
@@ -29,6 +30,7 @@ interface Props {
 export function CustomerAuthProvider({
   restaurantId,
   tableNumber,
+  offerCount = 0,
   loginOpen: loginOpenProp,
   onLoginOpenChange,
   accountOpen: accountOpenProp,
@@ -49,6 +51,7 @@ export function CustomerAuthProvider({
         onClose={() => setLoginOpen(false)}
         restaurantId={restaurantId}
         tableNumber={tableNumber}
+        offerCount={offerCount}
         onViewRewards={() => setAccountOpen(true)}
       />
       <CustomerAccountDrawer

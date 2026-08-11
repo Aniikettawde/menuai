@@ -73,8 +73,8 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
   const [genLoading, setGenLoading] = useState(false)
   const celebrateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // The moment the user logs in, auto-expand this bar so the reward
-  // CTA is immediately visible instead of requiring an extra tap to discover it.
+  // Auto-expand after login (and whenever offers are waiting) so claim CTAs
+  // are visible without an extra tap.
   const prevCustomerIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!prevCustomerIdRef.current && customerId) {
@@ -82,6 +82,10 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
     }
     prevCustomerIdRef.current = customerId
   }, [customerId])
+
+  useEffect(() => {
+    if (customerId && offers.length > 0) setExpanded(true)
+  }, [customerId, offers.length])
 
   const pendingPin = status?.pending_pin
   const pinActiveHere =
@@ -145,9 +149,11 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
           <div style={ROW} onClick={() => setExpanded((v) => !v)}>
             <div style={ICON_CIRCLE}>🎁</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={TITLE}>Earn Rewards</p>
+              <p style={TITLE}>{offerCount > 0 ? 'Offers available' : 'Welcome gift waiting'}</p>
               <p style={SUBTITLE}>
-                ₹50 welcome gift{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
+                {offerCount > 0
+                  ? `₹50 gift + ${offerCount} offer${offerCount > 1 ? 's' : ''} · login to claim`
+                  : '₹50 welcome gift · login to claim on this visit'}
               </p>
             </div>
             {offerBadge}
@@ -291,9 +297,15 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
               <KeyRound size={17} color="var(--pr-gold)" />
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={TITLE}>{customerName ? `Hi ${customerName}, claim your welcome gift` : 'Claim your welcome gift'}</p>
+              <p style={TITLE}>
+                {offerCount > 0
+                  ? (customerName ? `Hi ${customerName} — offers ready` : 'Offers ready to claim')
+                  : (customerName ? `Hi ${customerName}, claim your ₹50 gift` : 'Claim your ₹50 gift')}
+              </p>
               <p style={SUBTITLE}>
-                ₹50 Amazon Pay{offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''} available` : ''}
+                {offerCount > 0
+                  ? `₹50 welcome gift · ${offerCount} offer${offerCount > 1 ? 's' : ''} available`
+                  : 'Claim on this visit · show PIN to waiter'}
               </p>
             </div>
             <button
@@ -327,9 +339,10 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
     )
   }
 
-  // ── Ongoing — steady state after the welcome gift ────────────────────────
-  // No more "Verify Visit" PIN button here: visits are now counted
-  // automatically from a valid table session on any Dinezy QR scan.
+  // ── Ongoing — offer-first UX (visits still progress in the background) ───
+  // Guests care about what they can claim now, not a visit counter.
+  const hasOffers = offerCount > 0
+
   return (
     <div style={WRAP}>
       <div style={CARD}>
@@ -340,16 +353,29 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             aria-label="Open your account"
             style={{ ...ICON_CIRCLE, cursor: 'pointer' }}
           >
-            {is_legend ? <Trophy size={17} color="var(--pr-gold)" /> : <Gift size={17} color="var(--pr-gold)" />}
+            {hasOffers ? <Gift size={17} color="var(--pr-gold)" /> : (is_legend ? <Trophy size={17} color="var(--pr-gold)" /> : <Gift size={17} color="var(--pr-gold)" />)}
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={TITLE}>{customerName ? `Hi ${customerName}` : 'Your rewards'}</p>
+            <p style={TITLE}>
+              {hasOffers
+                ? (customerName ? `Hi ${customerName} — offers available` : 'Offers available')
+                : (customerName ? `Hi ${customerName}` : 'Your rewards')}
+            </p>
             <p style={SUBTITLE}>
-              {current_level ? `${current_level.emoji} ${current_level.title}` : 'First Bite'}
-              {offerCount > 0 ? ` · ${offerCount} offer${offerCount > 1 ? 's' : ''}` : ''}
+              {hasOffers
+                ? `${offerCount} offer${offerCount > 1 ? 's' : ''} · tap Claim, show code to waiter`
+                : (current_level ? `${current_level.emoji} ${current_level.title}` : 'First Bite')}
             </p>
           </div>
-          {offerCount > 0 && (
+          {hasOffers ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
+              style={{ ...CTA, height: 34 }}
+            >
+              Claim <ChevronRight size={13} />
+            </button>
+          ) : (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
@@ -363,6 +389,9 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
 
         {expanded && (
           <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {hasOffers && (
+              <OffersCarousel offers={offers} restaurantId={restaurantId} restaurantName={restaurantName} onLoginClick={onLoginClick} />
+            )}
             <RewardProgressBar
               verifiedVisits={verified_visits}
               currentLevel={current_level}
@@ -376,7 +405,7 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
             }}>
               <MapPin size={13} color="var(--pr-gold)" style={{ flexShrink: 0 }} />
               <p style={{ margin: 0, fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-                Just visit any Dinezy restaurant — we count it automatically.
+                Visits count automatically when you scan a Dinezy QR.
               </p>
             </div>
             {onExploreRewards && (
@@ -390,11 +419,8 @@ export function RewardOffersBar({ restaurantId, restaurantName, offers, onLoginC
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 }}
               >
-                <Sparkles size={13} /> View your journey
+                <Sparkles size={13} /> Open account
               </button>
-            )}
-            {offerCount > 0 && (
-              <OffersCarousel offers={offers} restaurantId={restaurantId} restaurantName={restaurantName} onLoginClick={onLoginClick} />
             )}
           </div>
         )}

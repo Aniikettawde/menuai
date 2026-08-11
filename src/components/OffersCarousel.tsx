@@ -63,15 +63,16 @@ function LoginToClaimButton({
         onLoginClick?.()
       }}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '6px 14px', borderRadius: 8,
-        background: 'var(--pr-gold-dim)',
-        border: '1px solid var(--pr-border-hover)',
-        fontSize: 11, fontWeight: 700, color: 'var(--pr-gold)',
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '8px 16px', borderRadius: 10,
+        background: 'var(--pr-gold)',
+        border: 'none',
+        fontSize: 12, fontWeight: 700, color: 'var(--pr-cta-text)',
         fontFamily: 'var(--font-body)', cursor: 'pointer',
+        width: '100%', justifyContent: 'center',
       }}
     >
-      <LogIn size={11} />
+      <LogIn size={12} />
       Login to claim
     </button>
   )
@@ -176,16 +177,17 @@ function ClaimButton({
       onClick={() => void handleClaim()}
       disabled={loading}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '6px 14px', borderRadius: 8,
-        background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
-        fontSize: 11, fontWeight: 700, color: 'var(--pr-gold)',
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '8px 16px', borderRadius: 10,
+        background: 'var(--pr-gold)', border: 'none',
+        fontSize: 12, fontWeight: 700, color: 'var(--pr-cta-text)',
         fontFamily: 'var(--font-body)', cursor: 'pointer',
         transition: 'all 0.15s', opacity: loading ? 0.7 : 1,
+        width: '100%', justifyContent: 'center',
       }}
     >
-      {loading ? <Loader2 size={11} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Gift size={11} />}
-      {loading ? 'Generating…' : 'Claim'}
+      {loading ? <Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Gift size={12} />}
+      {loading ? 'Getting code…' : 'Claim offer'}
     </button>
   )
 }
@@ -219,7 +221,7 @@ export function OffersCarousel({ offers, restaurantId, restaurantName, onLoginCl
             <Gift size={13} color="var(--pr-gold)" />
           </div>
           <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
-            Offers for you
+            Offers available — claim now
           </p>
           <span style={{
             marginLeft: 'auto', background: 'var(--pr-gold-dim)',

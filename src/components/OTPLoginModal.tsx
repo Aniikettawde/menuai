@@ -18,8 +18,9 @@ interface Props {
   onClose: () => void
   restaurantId?: string | null
   tableNumber?: number | null
-  // NEW: lets the parent page open the account drawer / rewards view
-  // the moment the user taps the CTA on the "done" screen.
+  /** Active restaurant offers count — shown on the success screen. */
+  offerCount?: number
+  // Opens account / rewards so the guest can claim ₹50 + offers immediately.
   onViewRewards?: () => void
 }
 
@@ -91,7 +92,7 @@ function SingleOTPInput({
   )
 }
 
-export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onViewRewards }: Props) {
+export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, offerCount = 0, onViewRewards }: Props) {
   const { setCustomer } = useCustomerAuth()
 
   const [screen, setScreen] = useState<Screen>('phone')
@@ -957,46 +958,121 @@ style={{
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  alignItems: 'center',
-                  textAlign: 'center',
-                  padding: '12px 0 4px',
+                  alignItems: 'stretch',
+                  textAlign: 'left',
+                  padding: '4px 0 4px',
                 }}
               >
-                <div style={{ fontSize: 46, marginBottom: 12 }}>🎊</div>
-                <h2
-                  style={{
-                    margin: '0 0 8px',
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 22,
-                    fontWeight: 600,
-                    color: 'var(--pr-text)',
-                  }}
-                >
-                  {displayName ? `Welcome, ${displayName}!` : "You're in!"}
-                </h2>
-                <p
-                  style={{
-                    margin: '0 0 20px',
-                    fontSize: 13,
-                    color: 'var(--pr-text-muted)',
-                    lineHeight: 1.5,
-                    maxWidth: 340,
-                  }}
-                >
-                  {restaurantId
-                    ? bonusAwarded > 0
-                      ? `+${bonusAwarded} points credited. Ask your waiter to verify a PIN each visit — after 3 verified visits you'll unlock a ₹50 gift card.`
-                      : "Ask your waiter to verify a PIN each visit — after 3 verified visits you'll unlock a ₹50 gift card."
-                    : bonusAwarded > 0
-                      ? `+${bonusAwarded} points credited. Visit any Dinezy restaurant and verify a PIN with your waiter to start earning toward a ₹50 gift card.`
-                      : 'Visit any Dinezy restaurant and verify a PIN with your waiter to start earning toward a ₹50 gift card.'}
-                </p>
+                <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                  <div style={{
+                    width: 52, height: 52, borderRadius: 16, margin: '0 auto 12px',
+                    background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Gift size={24} color="var(--pr-gold)" />
+                  </div>
+                  <h2
+                    style={{
+                      margin: '0 0 6px',
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 22,
+                      fontWeight: 600,
+                      color: 'var(--pr-text)',
+                    }}
+                  >
+                    {displayName ? `Nice, ${displayName}` : 'Offers unlocked'}
+                  </h2>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 13,
+                      color: 'var(--pr-text-muted)',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {bonusAwarded > 0
+                      ? `+${bonusAwarded} points added. Claim your gifts on this visit.`
+                      : 'Claim your gifts on this visit — no waiting for later visits.'}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 14px', borderRadius: 14,
+                    background: 'linear-gradient(135deg, var(--pr-gold-dim), var(--pr-orange-dim))',
+                    border: '1px solid var(--pr-border-hover)',
+                  }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                      background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 14, fontWeight: 800, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)',
+                    }}>
+                      ₹50
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+                        Welcome gift ready
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+                        Claim now · show PIN to waiter
+                      </p>
+                    </div>
+                    <span style={{
+                      flexShrink: 0, fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                      letterSpacing: '0.06em', color: '#16a34a',
+                      background: 'rgba(34,197,94,0.12)', borderRadius: 999, padding: '4px 8px',
+                      fontFamily: 'var(--font-body)',
+                    }}>
+                      Claim
+                    </span>
+                  </div>
+
+                  {offerCount > 0 && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 14px', borderRadius: 14,
+                      background: 'var(--pr-card)',
+                      border: '1px solid var(--pr-border)',
+                    }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                        background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Gift size={18} color="var(--pr-gold)" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+                          {offerCount} restaurant offer{offerCount > 1 ? 's' : ''} available
+                        </p>
+                        <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+                          Tap claim on each offer you want
+                        </p>
+                      </div>
+                      <span style={{
+                        flexShrink: 0, fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.06em', color: 'var(--pr-gold)',
+                        background: 'var(--pr-gold-dim)', borderRadius: 999, padding: '4px 8px',
+                        fontFamily: 'var(--font-body)',
+                      }}>
+                        Ready
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 <button
                   type="button"
                   onClick={() => {
-                    onViewRewards?.()
-                    onClose()
+                    // Restaurant menu already shows expanded offers + Claim Gift.
+                    // Open account only when there is no restaurant context.
+                    if (restaurantId) onClose()
+                    else {
+                      onViewRewards?.()
+                      onClose()
+                    }
                   }}
                   style={{
                     width: '100%',
@@ -1017,7 +1093,7 @@ style={{
                   } as React.CSSProperties}
                 >
                   {restaurantId ? (
-                    <><KeyRound size={16} /> Get my PIN now</>
+                    <><Gift size={16} /> Claim offers on menu</>
                   ) : (
                     <><Gift size={16} /> View my rewards</>
                   )}
@@ -1039,7 +1115,7 @@ style={{
                     touchAction: 'manipulation',
                   } as React.CSSProperties}
                 >
-                  {restaurantId ? 'Maybe later, just browse the menu' : 'Maybe later'}
+                  {restaurantId ? 'Browse menu first' : 'Maybe later'}
                 </button>
               </div>
             )}
