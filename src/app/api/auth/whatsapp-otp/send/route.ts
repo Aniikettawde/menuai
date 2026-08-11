@@ -116,8 +116,7 @@ export async function POST(req: NextRequest) {
       try {
         const preview = 'Login verification code sent'
 
-        await supabase.from('whatsapp_messages').insert({
-          restaurant_id: null,
+        await supabase.from('platform_whatsapp_messages').insert({
           wa_id: digits,
           wamid,
           direction: 'outbound',
@@ -126,14 +125,13 @@ export async function POST(req: NextRequest) {
           status: 'sent',
         })
 
-        await supabase.from('whatsapp_contacts').upsert(
+        await supabase.from('platform_whatsapp_contacts').upsert(
           {
-            restaurant_id: null,
             wa_id: digits,
             last_message_at: new Date().toISOString(),
             last_message_preview: preview,
           },
-          { onConflict: 'restaurant_id,wa_id' },
+          { onConflict: 'wa_id' },
         )
       } catch (trackErr) {
         console.error('[whatsapp-otp send] tracking insert failed:', trackErr)

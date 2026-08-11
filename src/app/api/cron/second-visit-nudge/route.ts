@@ -65,9 +65,8 @@ export async function GET(req: NextRequest) {
       .map((p) => p.replace(/[^0-9]/g, ''))
 
     const { data: optOutRows } = await supabase
-      .from('whatsapp_contacts')
+      .from('platform_whatsapp_contacts')
       .select('wa_id')
-      .is('restaurant_id', null)
       .eq('opted_out', true)
       .in('wa_id', candidatePhones)
     const optedOut = new Set((optOutRows ?? []).map((r) => r.wa_id as string))

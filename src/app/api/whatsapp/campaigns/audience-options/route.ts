@@ -13,9 +13,8 @@ export async function GET() {
 
   try {
     const { count: totalContacts } = await supabaseAdmin
-      .from('whatsapp_contacts')
+      .from('platform_whatsapp_contacts')
       .select('id', { count: 'exact', head: true })
-      .is('restaurant_id', null)
       .eq('opted_out', false);
 
     const restaurants = await getRestaurantAudienceOptions();

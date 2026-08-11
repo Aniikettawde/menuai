@@ -48,24 +48,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    // ── Look up which restaurant this rating template was about ──────────────
-    // Matches your actual whatsapp_messages schema: `wamid` is the message ID,
-    // `wa_id` is the customer's phone. No order_id/table_number columns exist
-    // on this table, so the rating is attached at the restaurant + phone level
-    // (not per-order). If you later add order tracking to whatsapp_messages,
-    // pull order_id/table_number here too and pass them through below.
-    const { data: sentMsg, error: lookupErr } = await supabase
-      .from('whatsapp_messages')
-      .select('restaurant_id')
+    // Look up restaurant attribution from platform messages (context_restaurant_id)
+    // or restaurant messages (restaurant_id).
+    const { data: platformMsg } = await supabase
+      .from('platform_whatsapp_messages')
+      .select('context_restaurant_id')
       .eq('wamid', contextMessageId)
       .maybeSingle()
 
-    if (lookupErr || !sentMsg?.restaurant_id) {
-      console.error('Could not resolve restaurant for message', contextMessageId, lookupErr)
-      return NextResponse.json({ ok: true })
+    let restaurant_id: string | null = platformMsg?.context_restaurant_id ?? null
+    if (!restaurant_id) {
+      const { data: restaurantMsg, error: lookupErr } = await supabase
+        .from('restaurant_whatsapp_messages')
+        .select('restaurant_id')
+        .eq('wamid', contextMessageId)
+        .maybeSingle()
+      if (lookupErr) {
+        console.error('Could not resolve restaurant for message', contextMessageId, lookupErr)
+        return NextResponse.json({ ok: true })
+      }
+      restaurant_id = restaurantMsg?.restaurant_id ?? null
     }
 
-    const { restaurant_id } = sentMsg
+    if (!restaurant_id) {
+      console.error('Could not resolve restaurant for message', contextMessageId)
+      return NextResponse.json({ ok: true })
+    }
 
     const normalized = buttonText.trim().toLowerCase()
     const isFive = normalized.includes('excellent')

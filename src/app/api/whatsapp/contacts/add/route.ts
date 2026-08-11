@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { DINEZY_RESTAURANT_ID } from '@/lib/whatsappConfig';
 import { requireAdminApi } from '@/lib/admin-guard';
 
 export async function POST(req: Request) {
@@ -14,16 +13,15 @@ export async function POST(req: Request) {
     if (cleanId.length < 10) {
       return NextResponse.json({ error: 'Enter number with country code, e.g. 91XXXXXXXXXX' }, { status: 400 });
     }
-    const { error } = await supabaseAdmin.from('whatsapp_contacts').upsert(
+    const { error } = await supabaseAdmin.from('platform_whatsapp_contacts').upsert(
       {
-        restaurant_id: DINEZY_RESTAURANT_ID,
         wa_id: cleanId,
         name: name || null,
         last_message_at: new Date().toISOString(),
         last_message_preview: null,
         unread_count: 0,
       },
-      { onConflict: 'restaurant_id,wa_id', ignoreDuplicates: false }
+      { onConflict: 'wa_id', ignoreDuplicates: false }
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true, wa_id: cleanId });

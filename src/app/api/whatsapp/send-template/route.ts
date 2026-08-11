@@ -16,9 +16,8 @@ export async function POST(req: Request) {
     }
     const bodyParams: string[] = Array.isArray(params) ? params : [];
 
-    // restaurantId is optional for generic sends (e.g. gift cards with no
-    // restaurant context), but REQUIRED for rate_us_dinezy — without it the
-    // rating webhook can't resolve which restaurant a 5★/4★ tap belongs to.
+    // restaurantId is optional for generic sends, but REQUIRED for rate_us_dinezy —
+    // stored as context_restaurant_id on platform_whatsapp_messages.
     const data = await sendWhatsAppTemplate(wa_id, templateName, languageCode, bodyParams, restaurantId ?? null);
 
     return NextResponse.json({ success: true, messageId: data?.messages?.[0]?.id ?? null });

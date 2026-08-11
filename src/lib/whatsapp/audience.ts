@@ -19,7 +19,7 @@ function cleanPhone(raw: string): string | null {
 /**
  * Resolves the actual recipient list for a campaign audience filter.
  *
- * - No restaurantId  => Dinezy-wide global contact list (whatsapp_contacts, restaurant_id null),
+ * - No restaurantId  => Dinezy-wide global contact list (platform_whatsapp_contacts),
  *                        same as before.
  * - restaurantId set  => customers who've visited that restaurant, sourced from
  *                        restaurant_customers (the visit-tracking table), respecting
@@ -33,9 +33,8 @@ function cleanPhone(raw: string): string | null {
 export async function getAudienceRecipients(filter: AudienceFilter): Promise<AudienceRecipient[]> {
   if (!filter.restaurantId) {
     let query = supabaseAdmin
-      .from('whatsapp_contacts')
+      .from('platform_whatsapp_contacts')
       .select('wa_id, name')
-      .is('restaurant_id', null)
       .eq('opted_out', false);
 
     if (filter.sinceDays) {
@@ -101,11 +100,10 @@ export async function getAudienceRecipients(filter: AudienceFilter): Promise<Aud
 
   if (candidates.length === 0) return [];
 
-  // Cross-check against the global opt-out list (whatsapp_contacts, restaurant_id null)
+  // Cross-check against the global opt-out list (platform_whatsapp_contacts)
   const { data: optOutRows, error: optErr } = await supabaseAdmin
-    .from('whatsapp_contacts')
+    .from('platform_whatsapp_contacts')
     .select('wa_id')
-    .is('restaurant_id', null)
     .eq('opted_out', true)
     .in(
       'wa_id',

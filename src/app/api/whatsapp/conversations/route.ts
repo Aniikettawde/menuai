@@ -9,14 +9,11 @@ export async function GET() {
   const admin = await requireAdminApi();
   if (!admin.ok) return admin.response;
 
-  console.log('[conversations] request start');
-
   try {
-   const { data, error, status, statusText } = await supabaseAdmin
-  .from('whatsapp_contacts')
-  .select('*')
-  .is('restaurant_id', null)
-  .order('last_message_at', { ascending: false });
+    const { data, error, status, statusText } = await supabaseAdmin
+      .from('platform_whatsapp_contacts')
+      .select('*')
+      .order('last_message_at', { ascending: false });
 
     console.log('[conversations] status:', status, statusText);
     console.log('[conversations] row count:', data?.length);
@@ -33,7 +30,5 @@ export async function GET() {
   } catch (err: any) {
     console.error('[conversations] THREW exception:', err?.message, err);
     return NextResponse.json({ error: err?.message || 'unknown error' }, { status: 500 });
-  } finally {
-    console.log('[conversations] request end');
   }
 }

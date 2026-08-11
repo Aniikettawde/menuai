@@ -20,9 +20,7 @@ export async function sendWhatsAppTemplate({
   templateName: string;
   languageCode?: string;
   bodyParams?: string[];
-  // Pass this whenever the template is about a specific restaurant (e.g.
-  // rate_us_dinezy) — anything that reads whatsapp_messages by restaurant_id
-  // later (like the rating webhook) depends on it being set here.
+  // Stored as context_restaurant_id on platform_whatsapp_messages for rating attribution.
   restaurantId?: string | null;
 }): Promise<SendTemplateResult> {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -66,33 +64,25 @@ export async function sendWhatsAppTemplate({
       return { ok: false, error: data?.error?.message || 'Failed to send WhatsApp template' };
     }
     const wamid = data?.messages?.[0]?.id ?? '';
-    // ── Track this outbound send so the status webhook (sent/delivered/read)
-    // and the rating webhook (which resolves restaurant_id by wamid) both
-    // have a row to match against. restaurant_id is null only for sends with
-    // no restaurant context (e.g. generic Dinezy-number messages) — pass
-    // restaurantId explicitly for anything restaurant-specific, like
-    // rate_us_dinezy. Best-effort: a tracking failure must never fail the
-    // send itself, since the message already went out.
     if (wamid) {
       try {
         const preview = `[template] ${templateName}`;
-        await supabaseAdmin.from('whatsapp_messages').insert({
-          restaurant_id: restaurantId,
+        await supabaseAdmin.from('platform_whatsapp_messages').insert({
           wa_id: cleaned,
           wamid,
           direction: 'outbound',
           message_type: 'template',
           body: preview,
           status: 'sent',
+          context_restaurant_id: restaurantId,
         });
-        await supabaseAdmin.from('whatsapp_contacts').upsert(
+        await supabaseAdmin.from('platform_whatsapp_contacts').upsert(
           {
-            restaurant_id: restaurantId,
             wa_id: cleaned,
             last_message_at: new Date().toISOString(),
             last_message_preview: preview,
           },
-          { onConflict: 'restaurant_id,wa_id' }
+          { onConflict: 'wa_id' }
         );
       } catch (trackErr) {
         console.error('[sendWhatsAppTemplate] tracking insert failed:', trackErr);

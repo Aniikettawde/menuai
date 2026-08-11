@@ -65,15 +65,23 @@ export async function sendRatingTemplate(
   const wamid = data?.messages?.[0]?.id ?? null
   if (wamid) {
     try {
-      await supabaseAdmin.from('whatsapp_messages').insert({
-        restaurant_id: restaurantId,
+      await supabaseAdmin.from('platform_whatsapp_messages').insert({
         wa_id: to.replace(/[^0-9]/g, ''),
         wamid,
         direction: 'outbound',
         message_type: 'template',
         body: '[template] review',
         status: 'sent',
+        context_restaurant_id: restaurantId,
       })
+      await supabaseAdmin.from('platform_whatsapp_contacts').upsert(
+        {
+          wa_id: to.replace(/[^0-9]/g, ''),
+          last_message_at: new Date().toISOString(),
+          last_message_preview: '[template] review',
+        },
+        { onConflict: 'wa_id' }
+      )
     } catch (err) {
       console.error('[sendRatingTemplate] tracking insert failed:', err)
     }

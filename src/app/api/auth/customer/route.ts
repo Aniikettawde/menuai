@@ -269,26 +269,24 @@ export async function POST(req: NextRequest) {
               .maybeSingle()
             restaurantName = rest?.name ?? null
           }
-          await supabase.from('whatsapp_contacts').upsert(
+          await supabase.from('platform_whatsapp_contacts').upsert(
             {
-              restaurant_id: null,
               wa_id: waId,
               name: customer.display_name ?? null,
               source: 'customer_login',
               restaurant_name: restaurantName,
             },
-            { onConflict: 'restaurant_id,wa_id' },
+            { onConflict: 'wa_id' },
           )
         } else if (customer.display_name) {
           await supabase
-            .from('whatsapp_contacts')
+            .from('platform_whatsapp_contacts')
             .update({ name: customer.display_name })
             .eq('wa_id', waId)
-            .is('restaurant_id', null)
         }
       }
     } catch (waErr) {
-      console.error('[customer -> whatsapp_contacts]', waErr)
+      console.error('[customer -> platform_whatsapp_contacts]', waErr)
     }
 
     return NextResponse.json({ customer, isNewCustomer, bonusAwarded: isNewCustomer ? SIGNUP_BONUS_POINTS : 0 })

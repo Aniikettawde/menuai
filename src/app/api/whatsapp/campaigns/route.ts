@@ -9,15 +9,14 @@ import { requireAdminApi } from '@/lib/admin-guard';
 
 const MAX_RECIPIENTS_PER_CAMPAIGN = 20000; // Dinezy-wide, not per-restaurant — much higher cap
 
-// GET — list only Dinezy's own (restaurant_id null) campaigns, never a restaurant's.
+// GET — list Dinezy platform campaigns only.
 export async function GET() {
   const admin = await requireAdminApi();
   if (!admin.ok) return admin.response;
 
   const { data, error } = await supabaseAdmin
-    .from('whatsapp_campaigns')
+    .from('platform_whatsapp_campaigns')
     .select('*')
-    .is('restaurant_id', null)
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -74,9 +73,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Every body variable must have a value, or be set to use the customer name.' }, { status: 400 });
     }
 
-    // Build the audience — restaurant-scoped (via restaurant_customers) or
-    // Dinezy-wide global list, both resolved through the same helper used
-    // by preview-count, so this number always matches what was previewed.
     let recipients;
     try {
       recipients = await getAudienceRecipients({
@@ -95,19 +91,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No contacts match this audience filter' }, { status: 400 });
     }
 
+    const contextRestaurantId = audienceFilter?.restaurantId || null;
+
     const { data: campaign, error: campaignErr } = await supabaseAdmin
-      .from('whatsapp_campaigns')
+      .from('platform_whatsapp_campaigns')
       .insert({
-        restaurant_id: null, // this is a Dinezy-run send, even when the audience is restaurant-scoped
         name: name.trim(),
         template_name: template.name,
         template_language: template.language,
         header_variable: headerFormat === 'TEXT' ? headerVariable ?? null : null,
         body_variables: providedBodyVars,
         audience_filter: audienceFilter || {},
+        context_restaurant_id: contextRestaurantId,
         status: 'queued',
         total_recipients: recipients.length,
-        estimated_cost: 0, // Dinezy's own sends aren't billed to a restaurant
+        estimated_cost: 0,
       })
       .select()
       .single();
@@ -116,12 +114,12 @@ export async function POST(req: Request) {
 
     const CHUNK = 500;
     for (let i = 0; i < recipients.length; i += CHUNK) {
-      const { error: recErr } = await supabaseAdmin.from('whatsapp_campaign_recipients').insert(
+      const { error: recErr } = await supabaseAdmin.from('platform_whatsapp_campaign_recipients').insert(
         recipients.slice(i, i + CHUNK).map((r) => ({
           campaign_id: campaign.id,
-          restaurant_id: null,
           wa_id: r.wa_id,
           name: r.name,
+          context_restaurant_id: contextRestaurantId,
         }))
       );
       if (recErr) return NextResponse.json({ error: recErr.message }, { status: 500 });

@@ -9,15 +9,14 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (!admin.ok) return admin.response;
 
   const { data: campaign, error } = await supabaseAdmin
-    .from('whatsapp_campaigns')
+    .from('platform_whatsapp_campaigns')
     .select('*')
     .eq('id', params.id)
-    .is('restaurant_id', null)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
 
   const { data: recipients, error: recErr } = await supabaseAdmin
-    .from('whatsapp_campaign_recipients')
+    .from('platform_whatsapp_campaign_recipients')
     .select('id, wa_id, name, status, error_message, sent_at')
     .eq('campaign_id', params.id)
     .order('sent_at', { ascending: false, nullsFirst: false })
@@ -32,10 +31,9 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
   if (!admin.ok) return admin.response;
 
   const { error } = await supabaseAdmin
-    .from('whatsapp_campaigns')
+    .from('platform_whatsapp_campaigns')
     .delete()
-    .eq('id', params.id)
-    .is('restaurant_id', null); // extra guard — this route can never delete a restaurant's campaign
+    .eq('id', params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }
