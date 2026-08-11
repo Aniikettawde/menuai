@@ -1,10 +1,13 @@
 // src/app/api/restaurant/whatsapp/campaigns/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const restaurantId = req.nextUrl.searchParams.get('restaurantId')
-  if (!restaurantId) return NextResponse.json({ error: 'restaurantId required' }, { status: 400 })
+  const auth = await requireRestaurantAccess(req, req.nextUrl.searchParams.get('restaurantId'))
+  if (!auth.ok) return auth.response
+
+  const restaurantId = auth.restaurantId
 
   const { data: campaign, error } = await supabaseAdmin
     .from('whatsapp_campaigns')

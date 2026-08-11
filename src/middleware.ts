@@ -13,8 +13,6 @@ const PUBLIC_PATHS = [
   '/dashboard/billing/success',
   '/api/billing/webhook',
   '/api/billing/start-trial',
-  '/admin',
-  '/api/admin',
 ]
 
 export async function middleware(request: NextRequest) {
@@ -60,7 +58,10 @@ export async function middleware(request: NextRequest) {
   )
 
   if (!user) {
-    if (pathname.startsWith('/dashboard') && !isPublic) {
+    if (
+      (pathname.startsWith('/dashboard') && !isPublic) ||
+      pathname.startsWith('/admin')
+    ) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard/login'
       return NextResponse.redirect(redirectUrl)

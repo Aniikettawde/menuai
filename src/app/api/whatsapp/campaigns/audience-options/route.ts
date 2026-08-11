@@ -5,8 +5,12 @@ export const revalidate = 0;
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getRestaurantAudienceOptions } from '@/lib/whatsapp/audience';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 export async function GET() {
+  const admin = await requireAdminApi();
+  if (!admin.ok) return admin.response;
+
   try {
     const { count: totalContacts } = await supabaseAdmin
       .from('whatsapp_contacts')

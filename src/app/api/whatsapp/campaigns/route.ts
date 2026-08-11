@@ -5,11 +5,15 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { lookupTemplate, parseMetaTemplateVariables } from '@/lib/whatsapp/metaApi';
 import { getAudienceRecipients } from '@/lib/whatsapp/audience';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 const MAX_RECIPIENTS_PER_CAMPAIGN = 20000; // Dinezy-wide, not per-restaurant — much higher cap
 
 // GET — list only Dinezy's own (restaurant_id null) campaigns, never a restaurant's.
 export async function GET() {
+  const admin = await requireAdminApi();
+  if (!admin.ok) return admin.response;
+
   const { data, error } = await supabaseAdmin
     .from('whatsapp_campaigns')
     .select('*')
@@ -22,6 +26,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const admin = await requireAdminApi();
+  if (!admin.ok) return admin.response;
+
   try {
     const {
       name,

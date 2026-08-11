@@ -1,6 +1,7 @@
 // src/app/api/restaurant/whatsapp/status/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -13,11 +14,10 @@ function getSupabaseAdmin() {
 
 export async function GET(req: NextRequest) {
   try {
-    const restaurantId = req.nextUrl.searchParams.get('restaurantId')
-    if (!restaurantId) {
-      return NextResponse.json({ error: 'restaurantId is required' }, { status: 400 })
-    }
+    const auth = await requireRestaurantAccess(req, req.nextUrl.searchParams.get('restaurantId'))
+    if (!auth.ok) return auth.response
 
+    const restaurantId = auth.restaurantId
     const supabase = getSupabaseAdmin()
     const { data, error } = await supabase
       .from('whatsapp_connections')

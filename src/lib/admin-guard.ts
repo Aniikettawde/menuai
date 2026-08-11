@@ -3,8 +3,14 @@
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
+import { NextResponse } from 'next/server'
+import type { User } from '@supabase/supabase-js'
 
 export const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? ''
+
+export type AdminAccessResult =
+  | { ok: true; user: User }
+  | { ok: false; response: NextResponse }
 
 export async function getAdminUser() {
   const cookieStore = cookies()
@@ -22,6 +28,18 @@ export async function getAdminUser() {
   if (!user) return null
   if (!ADMIN_EMAIL || user.email !== ADMIN_EMAIL) return null
   return user
+}
+
+/** API route guard — requires an authenticated Dinezy admin session. */
+export async function requireAdminApi(): Promise<AdminAccessResult> {
+  const user = await getAdminUser()
+  if (!user) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    }
+  }
+  return { ok: true, user }
 }
 
 export function getServiceClient() {

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { lookupTemplate, parseMetaTemplateVariables, renderTemplateBody, sendTemplateMessage } from '@/lib/whatsapp/metaApi'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 
 const BATCH_SIZE = 20
 const DELAY_BETWEEN_SENDS_MS = 200
@@ -12,8 +13,11 @@ function sleep(ms: number) {
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { restaurantId } = await req.json()
-    if (!restaurantId) return NextResponse.json({ error: 'restaurantId required' }, { status: 400 })
+    const body = await req.json()
+    const auth = await requireRestaurantAccess(req, body.restaurantId)
+    if (!auth.ok) return auth.response
+
+    const restaurantId = auth.restaurantId
 
     const { data: campaign, error: campaignErr } = await supabaseAdmin
       .from('whatsapp_campaigns')

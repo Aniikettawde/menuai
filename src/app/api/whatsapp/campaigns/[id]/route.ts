@@ -2,8 +2,12 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const admin = await requireAdminApi();
+  if (!admin.ok) return admin.response;
+
   const { data: campaign, error } = await supabaseAdmin
     .from('whatsapp_campaigns')
     .select('*')
@@ -24,6 +28,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  const admin = await requireAdminApi();
+  if (!admin.ok) return admin.response;
+
   const { error } = await supabaseAdmin
     .from('whatsapp_campaigns')
     .delete()

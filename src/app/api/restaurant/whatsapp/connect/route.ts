@@ -1,6 +1,7 @@
 // src/app/api/restaurant/whatsapp/connect/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 
 const GRAPH_VERSION = 'v21.0'
 
@@ -18,11 +19,16 @@ function getSupabaseAdmin() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { restaurantId, code, wabaId, phoneNumberId, businessId } = await req.json()
+    const body = await req.json()
+    const auth = await requireRestaurantAccess(req, body.restaurantId)
+    if (!auth.ok) return auth.response
 
-    if (!restaurantId || !code || !wabaId || !phoneNumberId) {
+    const restaurantId = auth.restaurantId
+    const { code, wabaId, phoneNumberId, businessId } = body
+
+    if (!code || !wabaId || !phoneNumberId) {
       return NextResponse.json(
-        { error: 'restaurantId, code, wabaId, and phoneNumberId are required' },
+        { error: 'code, wabaId, and phoneNumberId are required' },
         { status: 400 }
       )
     }

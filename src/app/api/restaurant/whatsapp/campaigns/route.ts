@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { lookupTemplate, parseMetaTemplateVariables } from '@/lib/whatsapp/metaApi'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 
 const MAX_RECIPIENTS_PER_CAMPAIGN = 500
 
@@ -11,8 +12,10 @@ function cleanPhone(raw: string): string | null {
 }
 
 export async function GET(req: NextRequest) {
-  const restaurantId = req.nextUrl.searchParams.get('restaurantId')
-  if (!restaurantId) return NextResponse.json({ error: 'restaurantId required' }, { status: 400 })
+  const auth = await requireRestaurantAccess(req, req.nextUrl.searchParams.get('restaurantId'))
+  if (!auth.ok) return auth.response
+
+  const restaurantId = auth.restaurantId
 
   const { data, error } = await supabaseAdmin
     .from('whatsapp_campaigns')
@@ -27,19 +30,23 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const body = await req.json()
+    const auth = await requireRestaurantAccess(req, body.restaurantId)
+    if (!auth.ok) return auth.response
+
+    const restaurantId = auth.restaurantId
     const {
-      restaurantId,
       name,
       templateName,
       languageCode,
       headerVariable,
       bodyVariables, // (string | "__CUSTOMER_NAME__")[]
       recipients, // { wa_id: string; name?: string }[]
-    } = await req.json()
+    } = body
 
-    if (!restaurantId || !name?.trim() || !templateName || !Array.isArray(recipients)) {
+    if (!name?.trim() || !templateName || !Array.isArray(recipients)) {
       return NextResponse.json(
-        { error: 'restaurantId, name, templateName, and recipients[] are required' },
+        { error: 'name, templateName, and recipients[] are required' },
         { status: 400 }
       )
     }

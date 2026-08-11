@@ -1,8 +1,12 @@
 // src/app/api/admin/whatsapp/restaurants/route.ts
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { requireAdminApi } from '@/lib/admin-guard'
 
 export async function GET() {
+  const admin = await requireAdminApi()
+  if (!admin.ok) return admin.response
+
   const { data, error } = await supabaseAdmin
     .from('whatsapp_connections')
     .select('restaurant_id, business_name, display_phone_number, status')

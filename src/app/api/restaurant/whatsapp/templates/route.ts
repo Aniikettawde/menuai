@@ -6,6 +6,7 @@
 // parameter count doesn't match what Meta expects.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 import { parseMetaTemplateVariables, type MetaTemplateComponent } from '@/lib/whatsapp/templateValidation'
 
 const GRAPH_VERSION = 'v21.0'
@@ -32,11 +33,10 @@ export type TemplateSummary = {
 
 export async function GET(req: NextRequest) {
   try {
-    const restaurantId = req.nextUrl.searchParams.get('restaurantId')
-    if (!restaurantId) {
-      return NextResponse.json({ error: 'restaurantId is required' }, { status: 400 })
-    }
+    const auth = await requireRestaurantAccess(req, req.nextUrl.searchParams.get('restaurantId'))
+    if (!auth.ok) return auth.response
 
+    const restaurantId = auth.restaurantId
     const supabase = getSupabaseAdmin()
     const { data: connection, error: fetchError } = await supabase
       .from('whatsapp_connections')

@@ -1,6 +1,7 @@
 // src/app/api/restaurant/whatsapp/create-template/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 import {
   buildMetaComponents,
   validateTemplateDraft,
@@ -32,6 +33,10 @@ function normalizeName(raw: string) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    const auth = await requireRestaurantAccess(req, body.restaurantId)
+    if (!auth.ok) return auth.response
+
+    const restaurantId = auth.restaurantId
     const {
       name,
       category,
@@ -42,7 +47,6 @@ export async function POST(req: NextRequest) {
       bodySamples,
       footerText,
       buttons,
-      restaurantId,
       wabaId: bodyWabaId,
     } = body as {
       name: string
@@ -54,13 +58,13 @@ export async function POST(req: NextRequest) {
       bodySamples?: string[]
       footerText?: string
       buttons?: TemplateButton[]
-      restaurantId: string
+      restaurantId?: string
       wabaId?: string
     }
 
-    if (!name || !category || !bodyText || !restaurantId) {
+    if (!name || !category || !bodyText) {
       return NextResponse.json(
-        { error: 'name, category, bodyText, and restaurantId are required' },
+        { error: 'name, category, and bodyText are required' },
         { status: 400 }
       )
     }
@@ -159,11 +163,10 @@ export async function POST(req: NextRequest) {
 // Optional: list existing templates so the page can show status (PENDING/APPROVED/REJECTED)
 export async function GET(req: NextRequest) {
   try {
-    const restaurantId = req.nextUrl.searchParams.get('restaurantId')
-    if (!restaurantId) {
-      return NextResponse.json({ error: 'restaurantId is required' }, { status: 400 })
-    }
+    const auth = await requireRestaurantAccess(req, req.nextUrl.searchParams.get('restaurantId'))
+    if (!auth.ok) return auth.response
 
+    const restaurantId = auth.restaurantId
     const supabase = getSupabaseAdmin()
     const { data: connection, error: fetchError } = await supabase
       .from('whatsapp_connections')

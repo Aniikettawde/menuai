@@ -1,6 +1,7 @@
 // src/app/api/restaurant/whatsapp/disconnect/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -13,11 +14,11 @@ function getSupabaseAdmin() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { restaurantId } = await req.json()
-    if (!restaurantId) {
-      return NextResponse.json({ error: 'restaurantId is required' }, { status: 400 })
-    }
+    const body = await req.json()
+    const auth = await requireRestaurantAccess(req, body.restaurantId)
+    if (!auth.ok) return auth.response
 
+    const restaurantId = auth.restaurantId
     const supabase = getSupabaseAdmin()
 
     // Soft disconnect: clear the access_token (so no further Graph API calls can be made

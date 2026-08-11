@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendWhatsAppText } from '@/lib/whatsapp';
 import { signRatingToken } from '@/lib/whatsapp/rating-token';
+import { verifyMetaWebhookSignature } from '@/lib/meta-webhook';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -57,8 +58,6 @@ function messageText(message: any): string {
 // handled (rating inserted / redirect sent) — caller can still log it into
 // the normal inbox on top of this, that's harmless.
 async function handleRatingButtonReply(message: any): Promise<boolean> {
-  console.log('RATING_DEBUG raw message:', JSON.stringify(message, null, 2)); // ← temporary
-
   const isTemplateButton = message.type === 'button';
   const isInteractiveButton = message.type === 'interactive' && message.interactive?.type === 'button_reply';
   if (!isTemplateButton && !isInteractiveButton) return false;
@@ -238,13 +237,39 @@ async function handleStatusUpdate(restaurantId: string | null, phoneNumberId: st
 }
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  try {
-    const entry = body?.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
+  const rawBody = await req.text();
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appSecret) {
+    console.error('META_APP_SECRET not configured — rejecting webhook POST');
+    return new Response('Forbidden', { status: 403 });
+  }
 
-    const phoneNumberId = value?.metadata?.phone_number_id as string | undefined;
+  const signature = req.headers.get('x-hub-signature-256');
+  if (!verifyMetaWebhookSignature(rawBody, signature, appSecret)) {
+    return new Response('Forbidden', { status: 403 });
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return new Response('Bad Request', { status: 400 });
+  }
+
+  try {
+    const payload = body as {
+      entry?: { changes?: { value?: Record<string, unknown> }[] }[];
+    };
+    const entry = payload?.entry?.[0];
+    const change = entry?.changes?.[0];
+    const value = change?.value as {
+      metadata?: { phone_number_id?: string };
+      messages?: unknown[];
+      contacts?: { profile?: { name?: string } }[];
+      statuses?: unknown[];
+    } | undefined;
+
+    const phoneNumberId = value?.metadata?.phone_number_id;
 
     // Dinezy's own number is never in whatsapp_connections (it isn't a
     // "connected restaurant") — treat it as restaurant_id: null instead of
@@ -266,7 +291,7 @@ export async function POST(req: Request) {
     }
     // else restaurantId stays null — this is Dinezy's own inbox
 
-    const message = value?.messages?.[0];
+    const message = value?.messages?.[0] as Record<string, unknown> | undefined;
     if (message) {
       // Rating button replies get restaurant-attributed via wamid lookup,
       // independent of the phone_number_id resolution above — check this
@@ -278,7 +303,7 @@ export async function POST(req: Request) {
       await handleInboundMessage(restaurantId, message, name);
 
       if (wasRatingReply) {
-        console.log('Handled rating button reply from', message.from);
+        console.log('Handled rating button reply from', message.from as string);
       }
     }
 

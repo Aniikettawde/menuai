@@ -1,6 +1,7 @@
 // src/app/api/restaurant/whatsapp/send-message/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireRestaurantAccess } from '@/lib/restaurant-access'
 import { parseMetaTemplateVariables, type MetaTemplateComponent } from '@/lib/whatsapp/templateValidation'
 
 const GRAPH_VERSION = 'v21.0'
@@ -82,18 +83,22 @@ function renderTemplateBody(components: MetaTemplateComponent[] | undefined, bod
 
 export async function POST(req: NextRequest) {
   try {
+    const body = await req.json()
+    const auth = await requireRestaurantAccess(req, body.restaurantId)
+    if (!auth.ok) return auth.response
+
+    const restaurantId = auth.restaurantId
     const {
       to,
       templateName,
       languageCode,
       variables,
       headerVariable,
-      restaurantId,
       phoneNumberId: bodyPhoneNumberId,
-    } = await req.json()
+    } = body
 
-    if (!to || !templateName || !restaurantId) {
-      return NextResponse.json({ error: 'to, templateName, and restaurantId are required' }, { status: 400 })
+    if (!to || !templateName) {
+      return NextResponse.json({ error: 'to and templateName are required' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()

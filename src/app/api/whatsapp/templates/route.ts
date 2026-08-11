@@ -3,8 +3,12 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 import { NextResponse } from 'next/server';
 import { listWhatsAppTemplates } from '@/lib/whatsapp';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 export async function GET() {
+  const admin = await requireAdminApi();
+  if (!admin.ok) return admin.response;
+
   try {
     const templates = await listWhatsAppTemplates();
 
