@@ -45,15 +45,40 @@ function messageText(message: any): string {
   return `[${message.type} message]`;
 }
 
+/**
+ * Resolve which restaurant a rating button reply belongs to.
+ * Outbound rating templates are sent from Dinezy's platform number, so
+ * restaurant attribution lives on platform_whatsapp_messages.context_restaurant_id
+ * (or, for restaurant-number sends, restaurant_whatsapp_messages.restaurant_id).
+ */
+async function resolveRatingRestaurantId(wamid: string): Promise<string | null> {
+  const { data: platformMsg, error: platformErr } = await supabaseAdmin
+    .from('platform_whatsapp_messages')
+    .select('context_restaurant_id')
+    .eq('wamid', wamid)
+    .maybeSingle();
+
+  if (platformErr) {
+    console.error('Rating wamid lookup (platform) failed:', platformErr);
+  } else if (platformMsg?.context_restaurant_id) {
+    return platformMsg.context_restaurant_id as string;
+  }
+
+  const { data: restaurantMsg, error: restaurantErr } = await supabaseAdmin
+    .from('restaurant_whatsapp_messages')
+    .select('restaurant_id')
+    .eq('wamid', wamid)
+    .maybeSingle();
+
+  if (restaurantErr) {
+    console.error('Rating wamid lookup (restaurant) failed:', restaurantErr);
+    return null;
+  }
+
+  return (restaurantMsg?.restaurant_id as string | undefined) ?? null;
+}
+
 // ── Rating button-reply handling ──────────────────────────────────────────
-// Restaurant here is resolved differently from the rest of this file: sends
-// of `rate_us_dinezy` go out from Dinezy's own shared number, so
-// phone_number_id always resolves to null (Dinezy's own inbox) and can't
-// tell us which restaurant a given rating is for. Instead we look up the
-// specific outbound template message (by wamid, via context.id on the
-// reply) — that row carries the real restaurant_id, set at send time in
-// sendWhatsAppTemplate(..., restaurantId).
-//
 // Returns true if this message was a rating button reply and has been fully
 // handled (rating inserted / redirect sent) — caller can still log it into
 // the normal inbox on top of this, that's harmless.
@@ -65,17 +90,9 @@ async function handleRatingButtonReply(message: any): Promise<boolean> {
   const contextId: string | undefined = message.context?.id;
   if (!contextId) return false;
 
-  const { data: sentMsg, error: lookupErr } = await supabaseAdmin
-    .from('whatsapp_messages')
-    .select('restaurant_id')
-    .eq('wamid', contextId)
-    .maybeSingle();
+  const restaurantId = await resolveRatingRestaurantId(contextId);
+  if (!restaurantId) return false;
 
-  if (lookupErr || !sentMsg?.restaurant_id) {
-    return false;
-  }
-
-  const restaurantId: string = sentMsg.restaurant_id;
   const fromPhone: string = message.from;
   const buttonText: string = isTemplateButton
     ? (message.button?.text ?? '')
@@ -87,7 +104,7 @@ async function handleRatingButtonReply(message: any): Promise<boolean> {
 
   if (!isFive && !isFour && !isLow) return false;
 
-if (isFive || isFour) {
+  if (isFive || isFour) {
     const score = isFive ? 5 : 4;
 
     const { error: insertErr } = await supabaseAdmin.from('ratings').insert([
@@ -128,35 +145,38 @@ if (isFive || isFour) {
 
     return true;
   }
+
   // isLow
-try {
-  const token = signRatingToken({ restaurantId, customerPhone: fromPhone });
-  const rateUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/rate/${token}`;
-  await sendWhatsAppText(
-    fromPhone,
-    `Sorry to hear that 🙏 Could you tell us what went wrong? It really helps us improve:\n${rateUrl}`,
-  );
-} catch (err) {
-  console.error('Low-rating redirect flow failed:', err);
+  try {
+    const token = signRatingToken({ restaurantId, customerPhone: fromPhone });
+    const rateUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/rate/${token}`;
+    await sendWhatsAppText(
+      fromPhone,
+      `Sorry to hear that 🙏 Could you tell us what went wrong? It really helps us improve:\n${rateUrl}`,
+    );
+  } catch (err) {
+    console.error('Low-rating redirect flow failed:', err);
+  }
+
+  return true;
 }
 
-return true;
-}
-
-/**
- * Handles an inbound message for a given restaurant_id (null = Dinezy's own
- * number, matching the legacy /admin/whatsapp schema where these columns are
- * simply unset rather than tied to a connected restaurant).
- */
-async function handleInboundMessage(restaurantId: string | null, message: any, contactName: string | null) {
+async function handleRestaurantInboundMessage(
+  restaurantId: string,
+  message: any,
+  contactName: string | null,
+) {
   const wa_id = message.from as string;
   const text = messageText(message);
 
-  let existingQuery = supabaseAdmin.from('whatsapp_contacts').select('unread_count').eq('wa_id', wa_id);
-  existingQuery = restaurantId ? existingQuery.eq('restaurant_id', restaurantId) : existingQuery.is('restaurant_id', null);
-  const { data: existing } = await existingQuery.maybeSingle();
+  const { data: existing } = await supabaseAdmin
+    .from('restaurant_whatsapp_contacts')
+    .select('unread_count')
+    .eq('restaurant_id', restaurantId)
+    .eq('wa_id', wa_id)
+    .maybeSingle();
 
-  await supabaseAdmin.from('whatsapp_contacts').upsert(
+  await supabaseAdmin.from('restaurant_whatsapp_contacts').upsert(
     {
       restaurant_id: restaurantId,
       wa_id,
@@ -165,10 +185,10 @@ async function handleInboundMessage(restaurantId: string | null, message: any, c
       last_message_preview: text.slice(0, 120),
       unread_count: (existing?.unread_count ?? 0) + 1,
     },
-    { onConflict: 'restaurant_id,wa_id' }
+    { onConflict: 'restaurant_id,wa_id' },
   );
 
-  await supabaseAdmin.from('whatsapp_messages').insert({
+  await supabaseAdmin.from('restaurant_whatsapp_messages').insert({
     restaurant_id: restaurantId,
     wa_id,
     wamid: message.id,
@@ -179,60 +199,155 @@ async function handleInboundMessage(restaurantId: string | null, message: any, c
   });
 }
 
-/** Handles a status update (sent/delivered/read/failed) for a given restaurant_id (null = Dinezy's own number). */
-async function handleStatusUpdate(restaurantId: string | null, phoneNumberId: string | undefined, status: any) {
-  console.log(
-    'WhatsApp status event:',
-    JSON.stringify({ restaurantId, phoneNumberId, status }, null, 2)
+async function handlePlatformInboundMessage(message: any, contactName: string | null) {
+  const wa_id = message.from as string;
+  const text = messageText(message);
+
+  const { data: existing } = await supabaseAdmin
+    .from('platform_whatsapp_contacts')
+    .select('unread_count')
+    .eq('wa_id', wa_id)
+    .maybeSingle();
+
+  await supabaseAdmin.from('platform_whatsapp_contacts').upsert(
+    {
+      wa_id,
+      name: contactName,
+      last_message_at: new Date().toISOString(),
+      last_message_preview: text.slice(0, 120),
+      unread_count: (existing?.unread_count ?? 0) + 1,
+    },
+    { onConflict: 'wa_id' },
   );
 
-  let updateQuery = supabaseAdmin
-    .from('whatsapp_messages')
-    .update({ status: status.status }, { count: 'exact' })
-    .eq('wamid', status.id);
-  updateQuery = restaurantId ? updateQuery.eq('restaurant_id', restaurantId) : updateQuery.is('restaurant_id', null);
+  await supabaseAdmin.from('platform_whatsapp_messages').insert({
+    wa_id,
+    wamid: message.id,
+    direction: 'inbound',
+    message_type: message.type,
+    body: text,
+    status: 'sent',
+  });
+}
 
-  const { error: updateError, count } = await updateQuery;
+async function handleInboundMessage(
+  restaurantId: string | null,
+  message: any,
+  contactName: string | null,
+) {
+  if (restaurantId) {
+    await handleRestaurantInboundMessage(restaurantId, message, contactName);
+  } else {
+    await handlePlatformInboundMessage(message, contactName);
+  }
+}
+
+async function rollupCampaignStatus(
+  table: 'restaurant' | 'platform',
+  wamid: string,
+  statusValue: string,
+) {
+  const recipientsTable =
+    table === 'restaurant'
+      ? 'restaurant_whatsapp_campaign_recipients'
+      : 'platform_whatsapp_campaign_recipients';
+  const campaignsTable =
+    table === 'restaurant' ? 'restaurant_whatsapp_campaigns' : 'platform_whatsapp_campaigns';
+
+  const { data: recipient } = await supabaseAdmin
+    .from(recipientsTable)
+    .select('id, campaign_id, status')
+    .eq('wamid', wamid)
+    .maybeSingle();
+
+  if (!recipient) return;
+
+  const newStatus = statusValue as 'delivered' | 'read' | 'failed';
+  if (!['delivered', 'read', 'failed'].includes(newStatus)) return;
+
+  await supabaseAdmin
+    .from(recipientsTable)
+    .update({ status: newStatus })
+    .eq('id', recipient.id);
+
+  const columnMap = { delivered: 'delivered_count', read: 'read_count', failed: 'failed_count' } as const;
+  const column = columnMap[newStatus];
+  const { data: campaign } = await supabaseAdmin
+    .from(campaignsTable)
+    .select(column)
+    .eq('id', recipient.campaign_id)
+    .single();
+
+  if (campaign) {
+    await supabaseAdmin
+      .from(campaignsTable)
+      .update({ [column]: ((campaign as any)[column] ?? 0) + 1 })
+      .eq('id', recipient.campaign_id);
+  }
+}
+
+async function handleRestaurantStatusUpdate(
+  restaurantId: string,
+  phoneNumberId: string | undefined,
+  status: any,
+) {
+  console.log(
+    'WhatsApp status event (restaurant):',
+    JSON.stringify({ restaurantId, phoneNumberId, status }, null, 2),
+  );
+
+  const { error: updateError, count } = await supabaseAdmin
+    .from('restaurant_whatsapp_messages')
+    .update({ status: status.status }, { count: 'exact' })
+    .eq('wamid', status.id)
+    .eq('restaurant_id', restaurantId);
 
   if (updateError) {
-    console.error('Failed to update whatsapp_messages status:', updateError);
+    console.error('Failed to update restaurant_whatsapp_messages status:', updateError);
   } else if (!count) {
     console.log(
-      `No whatsapp_messages row found for wamid ${status.id} (restaurant_id: ${restaurantId ?? 'null'}, phone_number_id: ${phoneNumberId}) — likely an outbound send not yet tracked in this table.`
+      `No restaurant_whatsapp_messages row for wamid ${status.id} (restaurant_id: ${restaurantId}, phone_number_id: ${phoneNumberId})`,
     );
   }
 
-  // ── Propagate to campaign_recipients + roll up campaign aggregate counts ──
   if (!updateError && count) {
-    const { data: recipient } = await supabaseAdmin
-      .from('whatsapp_campaign_recipients')
-      .select('id, campaign_id, status')
-      .eq('wamid', status.id)
-      .maybeSingle();
+    await rollupCampaignStatus('restaurant', status.id, status.status);
+  }
+}
 
-    if (recipient) {
-      const newStatus = status.status as 'delivered' | 'read' | 'failed';
-      if (['delivered', 'read', 'failed'].includes(newStatus)) {
-        await supabaseAdmin
-          .from('whatsapp_campaign_recipients')
-          .update({ status: newStatus })
-          .eq('id', recipient.id);
+async function handlePlatformStatusUpdate(phoneNumberId: string | undefined, status: any) {
+  console.log(
+    'WhatsApp status event (platform):',
+    JSON.stringify({ phoneNumberId, status }, null, 2),
+  );
 
-        const columnMap = { delivered: 'delivered_count', read: 'read_count', failed: 'failed_count' } as const;
-        const column = columnMap[newStatus];
-        const { data: campaign } = await supabaseAdmin
-          .from('whatsapp_campaigns')
-          .select(column)
-          .eq('id', recipient.campaign_id)
-          .single();
-        if (campaign) {
-          await supabaseAdmin
-            .from('whatsapp_campaigns')
-            .update({ [column]: ((campaign as any)[column] ?? 0) + 1 })
-            .eq('id', recipient.campaign_id);
-        }
-      }
-    }
+  const { error: updateError, count } = await supabaseAdmin
+    .from('platform_whatsapp_messages')
+    .update({ status: status.status }, { count: 'exact' })
+    .eq('wamid', status.id);
+
+  if (updateError) {
+    console.error('Failed to update platform_whatsapp_messages status:', updateError);
+  } else if (!count) {
+    console.log(
+      `No platform_whatsapp_messages row for wamid ${status.id} (phone_number_id: ${phoneNumberId})`,
+    );
+  }
+
+  if (!updateError && count) {
+    await rollupCampaignStatus('platform', status.id, status.status);
+  }
+}
+
+async function handleStatusUpdate(
+  restaurantId: string | null,
+  phoneNumberId: string | undefined,
+  status: any,
+) {
+  if (restaurantId) {
+    await handleRestaurantStatusUpdate(restaurantId, phoneNumberId, status);
+  } else {
+    await handlePlatformStatusUpdate(phoneNumberId, status);
   }
 }
 
@@ -283,7 +398,7 @@ export async function POST(req: Request) {
       const connection = await resolveRestaurant(phoneNumberId);
       if (!connection) {
         console.log(
-          `WhatsApp webhook event for unrecognized phone_number_id ${phoneNumberId ?? '(missing)'} — no matching restaurant connection, skipping.`
+          `WhatsApp webhook event for unrecognized phone_number_id ${phoneNumberId ?? '(missing)'} — no matching restaurant connection, skipping.`,
         );
         return new Response('OK', { status: 200 });
       }
@@ -296,7 +411,7 @@ export async function POST(req: Request) {
       // Rating button replies get restaurant-attributed via wamid lookup,
       // independent of the phone_number_id resolution above — check this
       // FIRST so a rating tap isn't just silently logged as a generic
-      // inbound message with restaurant_id: null.
+      // inbound message.
       const wasRatingReply = await handleRatingButtonReply(message);
 
       const name = value?.contacts?.[0]?.profile?.name ?? null;
