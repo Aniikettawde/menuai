@@ -7,15 +7,15 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── Color tokens — porcelain + teal premium landing ─ */
-  --color-bg: #f5f7fa;
-  --color-ink: #0b1220;
-  --color-ink-soft: #5b6577;
-  --color-ink-faint: #8b95a8;
-  --color-accent: #0d9488;
-  --color-accent-dark: #0f766e;
-  --color-line: #e2e8f0;
-  --color-canvas: #eef2f6;
+  /* ── Color tokens — Dinezy brand burgundy ───────── */
+  --color-bg: #ffffff;
+  --color-ink: #111111;
+  --color-ink-soft: #666666;
+  --color-ink-faint: #9a9a9a;
+  --color-accent: #7a2333;
+  --color-accent-dark: #5c1a26;
+  --color-line: #ebebeb;
+  --color-canvas: #fafafa;
 
   /* ── 8px spacing scale ──────────────────────────── */
   --space-1: 8px;
@@ -72,7 +72,7 @@ html {
 body {
   background: var(--color-bg);
   color: var(--color-ink);
-  font-family: var(--font-geist-sans), var(--font-fallback), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-dm-sans), var(--font-geist-sans), var(--font-fallback), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -83,7 +83,7 @@ body:has(.pr-shell) {
 }
 
 ::selection {
-  background: rgba(13, 148, 136, 0.18);
+  background: rgba(122, 35, 51, 0.14);
   color: var(--color-ink);
 }
 
@@ -1229,9 +1229,10 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  /* Keep intentional landing scroll/SVG motion; only quiet non-landing CSS loops */
+  body:not(:has(main)) *,
+  body:not(:has(main)) *::before,
+  body:not(:has(main)) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -1245,34 +1246,34 @@ input {
 }
 
 .shadow-elegant-sm {
-  box-shadow: 0 1px 2px rgba(11, 18, 32, 0.04), 0 2px 8px rgba(11, 18, 32, 0.03);
+  box-shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 2px 8px rgba(17, 17, 17, 0.03);
 }
 .shadow-elegant-md {
-  box-shadow: 0 4px 16px rgba(11, 18, 32, 0.05), 0 12px 32px rgba(11, 18, 32, 0.04);
+  box-shadow: 0 4px 16px rgba(17, 17, 17, 0.05), 0 12px 32px rgba(17, 17, 17, 0.04);
 }
 .shadow-elegant-lg {
-  box-shadow: 0 8px 30px rgba(11, 18, 32, 0.06), 0 24px 60px rgba(13, 148, 136, 0.08);
+  box-shadow: 0 8px 30px rgba(17, 17, 17, 0.06), 0 24px 60px rgba(122, 35, 51, 0.07);
 }
 
 .glass-nav {
-  background: rgba(245, 247, 250, 0.78);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
 }
 
 /* Landing page atmospheric mesh */
 .landing-mesh {
   background:
-    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(13, 148, 136, 0.14), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(15, 118, 110, 0.1), transparent 50%),
-    radial-gradient(ellipse 50% 60% at 50% 100%, rgba(13, 148, 136, 0.06), transparent 60%),
-    var(--color-bg);
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(122, 35, 51, 0.1), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(122, 35, 51, 0.07), transparent 50%),
+    radial-gradient(ellipse 50% 60% at 50% 100%, rgba(122, 35, 51, 0.05), transparent 60%),
+    #ffffff;
 }
 
 .landing-grid {
   background-image:
-    linear-gradient(rgba(11, 18, 32, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(11, 18, 32, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(17, 17, 17, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 17, 17, 0.03) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent);
 }
@@ -1379,4 +1380,11 @@ input {
   }
 }
 
-h1, h2 { font-family: var(--font-sora), sans-serif; }
+h1, h2 { font-family: var(--font-space-grotesk), system-ui, sans-serif; }
+
+/* Dinezy landing — dark section utilities */
+.dz-dark-mesh {
+  background:
+    radial-gradient(ellipse 60% 50% at 80% 0%, rgba(122, 35, 51, 0.12), transparent 55%),
+    #111111;
+}

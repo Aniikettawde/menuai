@@ -34,17 +34,17 @@ module.exports = {
           border: 'rgba(255,255,255,0.08)',
         },
 
-        // ── Landing — porcelain + teal premium theme ────────────────────
-        ink: '#0B1220',
-        'ink-soft': '#5B6577',
-        'ink-faint': '#8B95A8',
+        // ── Landing — keep Dinezy brand burgundy ────────────────────────
+        ink: '#111111',
+        'ink-soft': '#666666',
+        'ink-faint': '#9a9a9a',
         accent: {
-          DEFAULT: '#0D9488',
-          dark: '#0F766E',
-          50: '#F0FDFA',
+          DEFAULT: '#7A2333',
+          dark: '#5C1A26',
+          50: '#FBF0F2',
         },
-        line: '#E2E8F0',
-        canvas: '#EEF2F6',
+        line: '#ebebeb',
+        canvas: '#fafafa',
       },
       animation: {
         // ── Existing app animations — unchanged ──

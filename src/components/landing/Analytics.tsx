@@ -18,14 +18,16 @@ export function Analytics() {
     <section className="bg-canvas py-20 sm:py-28">
       <div className="mx-auto max-w-content px-5 sm:px-8">
         <Reveal className="mx-auto max-w-xl text-center">
-          <p className="mb-3 text-[13px] font-semibold uppercase tracking-[0.14em] text-accent">Analytics</p>
-          <h2 className="text-balance text-[1.9rem] font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
+          <p className="mb-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-accent">
+            Analytics
+          </p>
+          <h2 className="font-display text-[1.85rem] font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
             See exactly who&apos;s coming back.
           </h2>
         </Reveal>
 
-        <div className="mt-14 grid gap-5 sm:mt-16 lg:grid-cols-3">
-          <Reveal className="rounded-3xl border border-line bg-white p-6 lg:col-span-2">
+        <div className="mt-14 grid gap-5 sm:mt-16 lg:grid-cols-3" style={{ perspective: 1200 }}>
+          <Reveal className="rounded-2xl border border-line bg-white p-6 lg:col-span-2">
             <p className="text-[13px] font-semibold text-ink">Revenue &amp; visits, last 7 days</p>
             <div className="mt-6 flex h-40 items-end gap-2 sm:h-48">
               {WEEK.map((h, i) => (
@@ -34,11 +36,13 @@ export function Analytics() {
                     initial={{ height: 0 }}
                     whileInView={{ height: `${h}%` }}
                     viewport={viewportOnce}
-                    transition={{ duration: 0.6, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
-                    className="w-full rounded-t-md bg-gradient-to-t from-accent to-accent/60"
+                    transition={{ duration: 0.65, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
+                    className="w-full rounded-t-md bg-gradient-to-t from-accent to-accent/45"
                     style={{ maxHeight: '100%' }}
                   />
-                  <span className="text-[11px] text-ink-faint">{['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}</span>
+                  <span className="text-[11px] text-ink-faint">
+                    {['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}
+                  </span>
                 </div>
               ))}
             </div>
@@ -49,15 +53,20 @@ export function Analytics() {
               { l: 'Repeat customers', v: '41%' },
               { l: 'Customer retention (90d)', v: '68%' },
             ].map((k) => (
-              <div key={k.l} className="rounded-3xl border border-line bg-white p-6">
+              <motion.div
+                key={k.l}
+                whileHover={{ y: -3 }}
+                transition={{ duration: 0.25 }}
+                className="rounded-2xl border border-line bg-white p-6"
+              >
                 <p className="text-[12px] text-ink-faint">{k.l}</p>
-                <p className="mt-1 text-3xl font-semibold text-ink">{k.v}</p>
-              </div>
+                <p className="mt-1 font-display text-3xl font-semibold text-ink">{k.v}</p>
+              </motion.div>
             ))}
           </Reveal>
         </div>
 
-        <Reveal delay={0.12} className="mt-5 rounded-3xl border border-line bg-white p-6">
+        <Reveal delay={0.12} className="mt-5 rounded-2xl border border-line bg-white p-6">
           <p className="text-[13px] font-semibold text-ink">Most popular dishes</p>
           <div className="mt-5 space-y-4">
             {DISHES.map((d, i) => (

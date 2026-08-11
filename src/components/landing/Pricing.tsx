@@ -32,13 +32,15 @@ const PLANS = [
   },
 ]
 
-export function Pricing() {
+export function Pricing({ onBookDemo }: { onBookDemo: () => void }) {
   return (
     <section id="pricing" className="bg-canvas py-20 sm:py-28">
       <div className="mx-auto max-w-content px-5 sm:px-8">
         <Reveal className="mx-auto max-w-xl text-center">
-          <p className="mb-3 text-[13px] font-semibold uppercase tracking-[0.14em] text-accent">Pricing</p>
-          <h2 className="text-balance text-[1.9rem] font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
+          <p className="mb-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-accent">
+            Pricing
+          </p>
+          <h2 className="font-display text-[1.85rem] font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
             Simple pricing, no surprises.
           </h2>
         </Reveal>
@@ -49,25 +51,33 @@ export function Pricing() {
           viewport={{ once: true, margin: '-80px' }}
           variants={stagger(0.1)}
           className="mx-auto mt-12 grid max-w-4xl gap-5 sm:mt-16 sm:grid-cols-5"
+          style={{ perspective: 1200 }}
         >
           {PLANS.map((p) => (
             <motion.div
               key={p.name}
               variants={fadeUp}
-              className={`relative rounded-3xl border p-7 transition-all duration-300 sm:p-8 ${
+              whileHover={{ y: -4, rotateX: 2 }}
+              transition={{ duration: 0.3 }}
+              className={`relative rounded-2xl border p-7 sm:p-8 ${
                 p.highlighted
-                  ? 'border-ink bg-white shadow-elegant-lg hover:-translate-y-1 sm:col-span-3'
-                  : 'border-line bg-white hover:-translate-y-1 hover:shadow-elegant-md sm:col-span-2'
+                  ? 'border-ink/15 bg-white shadow-elegant-lg sm:col-span-3'
+                  : 'border-line bg-white sm:col-span-2'
               }`}
+              style={{ transformStyle: 'preserve-3d' }}
             >
               {p.highlighted && (
-                <span className="absolute -top-3 left-7 rounded-full bg-accent px-3 py-1 text-[11px] font-semibold text-white shadow-elegant-sm">
+                <span className="absolute -top-3 left-7 rounded-lg bg-accent px-3 py-1 text-[11px] font-semibold text-white shadow-elegant-sm">
                   Most popular
                 </span>
               )}
               <p className="text-[14px] font-semibold text-ink-soft">{p.name}</p>
               <div className="mt-3 flex items-baseline gap-1.5">
-                <span className={`font-semibold tracking-tight text-ink ${p.highlighted ? 'text-[2.75rem]' : 'text-[2.25rem]'}`}>
+                <span
+                  className={`font-display font-semibold tracking-tight text-ink ${
+                    p.highlighted ? 'text-[2.75rem]' : 'text-[2.25rem]'
+                  }`}
+                >
                   {p.price}
                 </span>
                 {p.period && <span className="text-[14px] text-ink-faint">{p.period}</span>}
@@ -76,23 +86,29 @@ export function Pricing() {
               <p className="mt-4 text-[14px] leading-relaxed text-ink-soft">{p.desc}</p>
               <ul className={`mt-6 space-y-2.5 ${p.highlighted ? 'sm:columns-2 sm:gap-x-6' : ''}`}>
                 {p.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 break-inside-avoid text-[14px] text-ink">
-                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                  <li
+                    key={f}
+                    className="flex items-start gap-2.5 break-inside-avoid text-[14px] text-ink"
+                  >
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                     {f}
                   </li>
                 ))}
               </ul>
               <button
-                className={`mt-7 w-full rounded-full px-6 py-3.5 text-[14px] font-semibold transition-transform hover:-translate-y-0.5 ${
-                  p.highlighted ? 'bg-accent text-white' : 'border border-line text-ink'
+                onClick={onBookDemo}
+                className={`mt-7 w-full cursor-pointer rounded-xl px-6 py-3.5 text-[14px] font-semibold transition-transform hover:-translate-y-0.5 ${
+                  p.highlighted ? 'bg-accent text-white' : 'border border-line text-ink hover:border-accent/40'
                 }`}
               >
-                {p.name === 'Starter' ? 'Book Demo' : 'Talk to us'}
+                {p.name === 'Starter' ? 'Book demo' : 'Talk to us'}
               </button>
             </motion.div>
           ))}
         </motion.div>
-        <p className="mt-8 text-center text-[13px] text-ink-faint">Prices are in INR. No long-term contract.</p>
+        <p className="mt-8 text-center text-[13px] text-ink-faint">
+          Prices are in INR. No long-term contract.
+        </p>
       </div>
     </section>
   )

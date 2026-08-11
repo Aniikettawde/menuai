@@ -6,7 +6,7 @@ import { viewportOnce } from '@/lib/motion'
 
 const NODES = [
   { label: 'Restaurant', sub: 'Your own WhatsApp Business number' },
-  { label: 'Meta Authorization', sub: 'Secure Embedded Signup, no passwords shared' },
+  { label: 'Meta Authorization', sub: 'Secure Embedded Signup — no passwords shared' },
   { label: 'Dinezy', sub: 'Sends win-back offers and review requests for you' },
   { label: 'Customer', sub: 'Gets a reason to return, on the app they already use' },
 ]
@@ -17,25 +17,25 @@ export function WhatsAppSection() {
       <div className="mx-auto max-w-content px-5 sm:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <Reveal>
-            <p className="mb-3 text-[13px] font-semibold uppercase tracking-[0.14em] text-accent">WhatsApp Business</p>
-            <h2 className="text-balance text-[1.9rem] font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
+            <p className="mb-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-accent">
+              WhatsApp Business
+            </p>
+            <h2 className="font-display text-[1.85rem] font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
               Your own WhatsApp number, automated.
             </h2>
             <p className="mt-5 max-w-md text-[15px] leading-relaxed text-ink-soft">
-              You connect your restaurant&apos;s own WhatsApp Business account through Meta&apos;s
-              official Embedded Signup — nothing shared with Dinezy except permission to send
-              messages on your behalf. Once a guest has finished their meal and headed home,
-              win-back offers and review requests go out automatically, in your restaurant&apos;s
-              name — bringing them back for another visit.
+              Connect through Meta&apos;s official Embedded Signup. Once a guest finishes their meal,
+              win-back offers and review requests go out automatically — in your restaurant&apos;s
+              name.
             </p>
             <ul className="mt-7 space-y-3">
               {[
                 'Connected through Meta, not a third-party number',
-                'Pre-approved templates bring lapsed customers back — no message-writing needed',
-                'Timed review requests help you collect more genuine reviews',
+                'Pre-approved templates bring lapsed customers back',
+                'Timed review requests grow genuine public reviews',
               ].map((t) => (
                 <li key={t} className="flex items-start gap-2.5 text-[14px] text-ink-soft">
-                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                   {t}
                 </li>
               ))}
@@ -43,16 +43,21 @@ export function WhatsAppSection() {
           </Reveal>
 
           <Reveal delay={0.1}>
-            <div className="rounded-3xl border border-line bg-canvas p-6 sm:p-8">
-              <div className="flex flex-col gap-0">
+            <div className="relative rounded-2xl border border-line bg-canvas p-6 sm:p-8">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-accent/10 blur-2xl"
+              />
+              <div className="relative flex flex-col gap-0">
                 {NODES.map((n, i) => (
                   <div key={n.label}>
                     <motion.div
-                      initial={{ opacity: 0, y: 12 }}
-                      whileInView={{ opacity: 1, y: 0 }}
+                      initial={{ opacity: 0, y: 12, rotateX: 8 }}
+                      whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
                       viewport={viewportOnce}
                       transition={{ duration: 0.45, delay: i * 0.1, ease: 'easeOut' }}
                       className="rounded-2xl border border-line bg-white p-4 shadow-elegant-sm"
+                      style={{ transformStyle: 'preserve-3d' }}
                     >
                       <p className="text-[14px] font-semibold text-ink">{n.label}</p>
                       <p className="mt-0.5 text-[12px] text-ink-soft">{n.sub}</p>
@@ -78,7 +83,7 @@ export function WhatsAppSection() {
                             initial={{ pathLength: 0 }}
                             whileInView={{ pathLength: 1 }}
                             viewport={viewportOnce}
-                            transition={{ duration: 0.5, delay: i * 0.1 + 0.3 }}
+                            transition={{ duration: 0.4, delay: i * 0.1 + 0.25 }}
                           />
                         </motion.svg>
                       </div>

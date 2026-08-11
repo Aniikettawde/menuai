@@ -70,7 +70,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
-  themeColor: '#F5F7FA',
+  themeColor: '#FFFFFF',
 }
 
 const organizationJsonLd = {
@@ -115,7 +115,7 @@ export default function RootLayout({
       lang="en"
       className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${dmSans.variable} scroll-smooth`}
     >
-      <body className="bg-[#F5F7FA] text-[#0B1220] antialiased">
+      <body className="bg-white text-[#111111] antialiased">
         {children}
         <Script
           id="organization-jsonld"
