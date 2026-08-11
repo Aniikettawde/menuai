@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Gift, Tag, Clock, Check, Loader2, LogIn } from 'lucide-react'
 import { CountdownTimer } from './CountdownTimer'
 import { useCustomerAuth } from '@/store/customer-auth-store'
+import { track } from '@/lib/analytics'
 
 interface Offer {
   id: string
@@ -41,11 +42,26 @@ function formatExpiry(iso: string | null): string | null {
 
 // Shown on each card when the guest hasn't logged in yet.
 // Same visual weight as ClaimButton so the card layout doesn't shift on login.
-function LoginToClaimButton({ onLoginClick }: { onLoginClick?: () => void }) {
+function LoginToClaimButton({
+  onLoginClick,
+  restaurantId,
+  offerId,
+  offerTitle,
+}: {
+  onLoginClick?: () => void
+  restaurantId: string
+  offerId: string
+  offerTitle: string
+}) {
   return (
     <button
       type="button"
-      onClick={onLoginClick}
+      onClick={() => {
+        void track(restaurantId, 'offer_login_prompt', {
+          metadata: { offer_id: offerId, offer_title: offerTitle },
+        })
+        onLoginClick?.()
+      }}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5,
         padding: '6px 14px', borderRadius: 8,
@@ -111,6 +127,11 @@ function ClaimButton({
         setStatus('pending')
         setPin(json.pin)
         setExpiresAt(json.expires_at)
+        void track(restaurantId, 'offer_claimed', {
+          item_id: offer.id,
+          item_name: offer.title,
+          metadata: { offer_type: offer.offer_type },
+        })
       }
     } catch {}
     finally { setLoading(false) }
@@ -284,7 +305,12 @@ export function OffersCarousel({ offers, restaurantId, restaurantName, onLoginCl
                         restaurantName={restaurantName}
                       />
                     ) : (
-                      <LoginToClaimButton onLoginClick={onLoginClick} />
+                      <LoginToClaimButton
+                        onLoginClick={onLoginClick}
+                        restaurantId={restaurantId}
+                        offerId={offer.id}
+                        offerTitle={offer.title}
+                      />
                     )}
                   </div>
                 </div>

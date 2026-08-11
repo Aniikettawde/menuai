@@ -1,10 +1,19 @@
 'use client'
 import { Wine, UtensilsCrossed, Sparkles, Briefcase } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
+import { track } from '@/lib/analytics'
+import type { MenuType } from '@/store/app-store'
 
 export function MenuTypeSelector() {
   const { showMenuTypeSelector, setActiveMenuType, restaurant, hasBarMenu, hasCorporateMenu } = useAppStore()
   if (!showMenuTypeSelector || !restaurant) return null
+
+  const pick = (type: MenuType) => {
+    void track(restaurant.id, 'menu_type_selected', {
+      metadata: { menu_type: type },
+    })
+    setActiveMenuType(type)
+  }
 
   return (
     <div className="mts-root">
@@ -182,7 +191,7 @@ export function MenuTypeSelector() {
         <button
           type="button"
           className="mts-card mts-card--food"
-          onClick={() => setActiveMenuType('food')}
+          onClick={() => pick('food')}
         >
           <span className="mts-card-shine" />
           <div className="mts-card-icon"><UtensilsCrossed size={26} /></div>
@@ -194,7 +203,7 @@ export function MenuTypeSelector() {
           <button
             type="button"
             className="mts-card mts-card--bar"
-            onClick={() => setActiveMenuType('bar')}
+            onClick={() => pick('bar')}
           >
             <span className="mts-card-shine" />
             <div className="mts-card-icon"><Wine size={26} /></div>
@@ -207,7 +216,7 @@ export function MenuTypeSelector() {
           <button
             type="button"
             className="mts-card mts-card--corporate"
-            onClick={() => setActiveMenuType('corporate')}
+            onClick={() => pick('corporate')}
           >
             <span className="mts-card-shine" />
             <div className="mts-card-icon"><Briefcase size={26} /></div>

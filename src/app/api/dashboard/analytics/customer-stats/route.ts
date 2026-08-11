@@ -66,12 +66,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const [{ count: qrScanCount, error: qrErr }, { data: customerRowsRaw, error: customerErr }] = await Promise.all([
+    const [{ count: qrScanCount, error: qrErr }, { data: sessionRows, error: sessionErr }, { data: customerRowsRaw, error: customerErr }] = await Promise.all([
       admin
         .from('table_sessions')
         .select('id', { count: 'exact', head: true })
         .eq('restaurant_id', restaurantId)
         .gte('created_at', sinceISO),
+      admin
+        .from('table_sessions')
+        .select('table_number, created_at')
+        .eq('restaurant_id', restaurantId)
+        .gte('created_at', sinceISO)
+        .limit(10000),
       admin
         .from('restaurant_customers')
         .select(`
@@ -89,10 +95,29 @@ export async function GET(req: NextRequest) {
     if (qrErr) {
       console.error('[analytics customer-stats] qr scans', qrErr)
     }
+    if (sessionErr) {
+      console.error('[analytics customer-stats] table sessions', sessionErr)
+    }
     if (customerErr) {
       console.error('[analytics customer-stats] restaurant_customers', customerErr)
       return NextResponse.json({ error: customerErr.message }, { status: 500 })
     }
+
+    const tableScanMap = new Map<number, { scans: number; last_scan_at: string }>()
+    for (const row of sessionRows ?? []) {
+      const t = row.table_number as number
+      if (t == null) continue
+      const prev = tableScanMap.get(t)
+      if (!prev) {
+        tableScanMap.set(t, { scans: 1, last_scan_at: row.created_at })
+      } else {
+        prev.scans += 1
+        if (row.created_at > prev.last_scan_at) prev.last_scan_at = row.created_at
+      }
+    }
+    const table_scans = Array.from(tableScanMap.entries())
+      .map(([table_number, v]) => ({ table_number, ...v }))
+      .sort((a, b) => b.scans - a.scans || a.table_number - b.table_number)
 
     const customers = (customerRowsRaw ?? []).map((row: any) => {
       const c = Array.isArray(row.customers) ? row.customers[0] : row.customers
@@ -108,6 +133,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       qr_scans: qrScanCount ?? 0,
+      table_scans,
       customers,
     })
   } catch (err) {

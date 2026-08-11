@@ -252,7 +252,7 @@ export type EventType =
   | 'upsell_accepted'
   | 'upsell_ignored'
   | 'ai_upsell_impression'
-  | 'upsell_shown'          // ← add this line
+  | 'upsell_shown'
   | 'ai_upsell_shown'
   | 'ai_upsell_accepted'
   | 'bestseller_shown'
@@ -272,6 +272,25 @@ export type EventType =
   // waiter flow
   | 'waiter_called'
   | 'waiter_call_failed'
+  // visit-page engagement
+  | 'menu_search'
+  | 'search_suggestion_picked'
+  | 'search_cleared'
+  | 'category_selected'
+  | 'menu_type_selected'
+  | 'language_changed'
+  | 'tab_switched'
+  | 'chat_opened'
+  | 'games_opened'
+  | 'offer_viewed'
+  | 'offer_claimed'
+  | 'offer_login_prompt'
+  | 'customise_opened'
+  | 'special_clicked'
+  | 'login_opened'
+  | 'login_completed'
+  | 'account_opened'
+  | 'scroll_depth'
 
 export interface AnalyticsEvent {
   restaurant_id: string

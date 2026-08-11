@@ -24,6 +24,7 @@ import type { ReactNode } from 'react'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { useTranslation } from '@/lib/i18n/useTranslation'
 import { useTranslatedMenu } from '@/lib/i18n/useTranslatedMenu'
+import { track } from '@/lib/analytics'
 
 import type { WaiterCallItem } from '@/types'
 
@@ -263,7 +264,13 @@ const SUGGESTION_CHIPS = [
   { label: 'Spicy', q: 'spicy' },
 ]
 
-function SearchSuggestions({ onPick }: { onPick: (q: string) => void }) {
+function SearchSuggestions({
+  onPick,
+  restaurantId,
+}: {
+  onPick: (q: string) => void
+  restaurantId?: string | null
+}) {
   return (
     <div className="mg-search-suggest">
       {SUGGESTION_CHIPS.map((c) => (
@@ -272,7 +279,14 @@ function SearchSuggestions({ onPick }: { onPick: (q: string) => void }) {
           type="button"
           className="mg-search-suggest-chip"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onPick(c.q)}
+          onClick={() => {
+            if (restaurantId) {
+              void track(restaurantId, 'search_suggestion_picked', {
+                metadata: { query: c.q, label: c.label },
+              })
+            }
+            onPick(c.q)
+          }}
         >
           <Sparkles size={10} /> {c.label}
         </button>
@@ -570,13 +584,16 @@ export function MenuGrid({
   todaysSpecial,
   upsellCard,
 }: MenuGridProps = {}) {
-  const { categories, items, activeMenuType, hasBarMenu, hasCorporateMenu, switchMenuType } = useAppStore()
+  const { categories, items, activeMenuType, hasBarMenu, hasCorporateMenu, switchMenuType, restaurant } = useAppStore()
+  const restaurantId = restaurant?.id ?? null
   const menuType = activeMenuType ?? 'food'
   const isBarView = menuType === 'bar'
 const { t, plural } = useTranslation()
  const [query, setQuery] = useState('')
 const [isSearchFocused, setIsSearchFocused] = useState(false)
 const [activeCatId, setActiveCatId] = useState<string | null>(null)
+const searchTrackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+const lastTrackedSearch = useRef('')
 
 const sectionRefs = useRef<Map<string, HTMLElement>>(new Map())
 const cattabsWrapRef = useRef<HTMLDivElement | null>(null)
@@ -747,6 +764,17 @@ const bestSellerItems = useMemo(
     if (!el) return
 
     setActiveCatId(id)
+    const cat = categories.find((c) => c.id === id)
+    if (restaurantId) {
+      void track(restaurantId, 'category_selected', {
+        metadata: {
+          category_id: id,
+          category_name: cat?.name ?? null,
+          menu_type: menuType,
+        },
+      })
+    }
+
     isProgrammaticScroll.current = true
     if (programmaticScrollTimeout.current) clearTimeout(programmaticScrollTimeout.current)
 
@@ -758,7 +786,7 @@ const bestSellerItems = useMemo(
     programmaticScrollTimeout.current = setTimeout(() => {
       isProgrammaticScroll.current = false
     }, 600)
-  }, [])
+  }, [categories, menuType, restaurantId])
 
   // Jumping from a search-result "category chip" clears the query first
   // (so the category sections render again), then scrolls once the DOM
@@ -772,11 +800,43 @@ const bestSellerItems = useMemo(
   useEffect(() => () => {
     if (pendingJumpTimeout.current) clearTimeout(pendingJumpTimeout.current)
     if (programmaticScrollTimeout.current) clearTimeout(programmaticScrollTimeout.current)
+    if (searchTrackTimer.current) clearTimeout(searchTrackTimer.current)
   }, [])
 
+  const handleSearchChange = useCallback((v: string) => {
+    setQuery(v)
+    if (searchTrackTimer.current) clearTimeout(searchTrackTimer.current)
+    const trimmed = v.trim()
+    if (!restaurantId || trimmed.length < 2) return
+    searchTrackTimer.current = setTimeout(() => {
+      if (trimmed === lastTrackedSearch.current) return
+      lastTrackedSearch.current = trimmed
+      const resultCount = items.filter(
+        (i) =>
+          i.is_available &&
+          (i.name.toLowerCase().includes(trimmed.toLowerCase()) ||
+            i.description?.toLowerCase().includes(trimmed.toLowerCase()) ||
+            i.tags?.some((t) => t.toLowerCase().includes(trimmed.toLowerCase()))),
+      ).length
+      void track(restaurantId, 'menu_search', {
+        metadata: {
+          query: trimmed,
+          result_count: resultCount,
+          menu_type: menuType,
+        },
+      })
+    }, 700)
+  }, [restaurantId, items, menuType])
+
   const handleClearSearch = useCallback(() => {
+    if (restaurantId && query.trim()) {
+      void track(restaurantId, 'search_cleared', {
+        metadata: { query: query.trim() },
+      })
+    }
+    lastTrackedSearch.current = ''
     setQuery('')
-  }, [])
+  }, [restaurantId, query])
 
   const searchPlaceholder = t(isBarView ? 'search_placeholder_bar' : 'search_placeholder_food')
 const emptyLabel = t(isBarView ? 'no_drinks_found' : 'no_dishes_found')
@@ -1217,7 +1277,18 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
 
      {(hasBarMenu || hasCorporateMenu) && (
         <div className="mg-switch-row">
-          <button type="button" className="mg-switch-btn" onClick={switchMenuType}>
+          <button
+            type="button"
+            className="mg-switch-btn"
+            onClick={() => {
+              if (restaurantId) {
+                void track(restaurantId, 'menu_type_selected', {
+                  metadata: { action: 'open_picker', from: menuType },
+                })
+              }
+              switchMenuType()
+            }}
+          >
             <Sparkles size={12} />
             Switch Menu
           </button>
@@ -1230,7 +1301,7 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
       <div style={{ flex: 1, minWidth: 0 }}>
         <SearchBar
           value={query}
-          onChange={setQuery}
+          onChange={handleSearchChange}
           onClear={handleClearSearch}
           placeholder={searchPlaceholder}
           onFocus={() => setIsSearchFocused(true)}
@@ -1240,7 +1311,9 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
       <LanguageSwitcher />
     </div>
 
-    {isSearchFocused && !isSearching && <SearchSuggestions onPick={setQuery} />}
+    {isSearchFocused && !isSearching && (
+      <SearchSuggestions onPick={handleSearchChange} restaurantId={restaurantId} />
+    )}
   </div>
 </div>
 

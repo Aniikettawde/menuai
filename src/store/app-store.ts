@@ -333,10 +333,19 @@ activeTab: 'menu',
         state.isOffline = offline
       }),
 
-    setShowChat: (show) =>
+    setShowChat: (show) => {
+      if (show) {
+        const restaurantId = get().restaurant?.id
+        if (restaurantId) {
+          void import('@/lib/analytics').then(({ track }) => {
+            void track(restaurantId, 'chat_opened', {})
+          })
+        }
+      }
       set((state) => {
         state.showChat = show
-      }),
+      })
+    },
 	  
 	  setActiveTab: (tab) =>
   set((state) => {
@@ -449,10 +458,21 @@ activeTab: 'menu',
         state.isCartOpen = !state.isCartOpen
       }),
 
-    openCustomiseSheet: (itemId) =>
+    openCustomiseSheet: (itemId) => {
+      const restaurantId = get().restaurant?.id
+      const item = get().items.find((i) => i.id === itemId)
+      if (restaurantId) {
+        void import('@/lib/analytics').then(({ track }) => {
+          void track(restaurantId, 'customise_opened', {
+            item_id: itemId,
+            item_name: item?.name,
+          })
+        })
+      }
       set((state) => {
         state.customiseItemId = itemId
-      }),
+      })
+    },
 
     closeCustomiseSheet: () =>
       set((state) => {

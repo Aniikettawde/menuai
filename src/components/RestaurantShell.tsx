@@ -6,7 +6,14 @@ import { createBrowserClient } from '@supabase/ssr'
 import { useAppStore } from '@/store/app-store'
 import type { MenuPageData, DishOption } from '@/types'
 import { setCachedMenu } from '@/lib/cache'
-import { setupConnectivityListeners, track } from '@/lib/analytics'
+import {
+  setupConnectivityListeners,
+  track,
+  setVisitContext,
+  resolveEntrySource,
+  trackSessionStart,
+  trackSessionEnd,
+} from '@/lib/analytics'
 import { usePWA } from '@/hooks/usePWA'
 import { RestaurantHeader } from './RestaurantHeader'
 import { MenuGrid } from './MenuGrid'
@@ -356,28 +363,76 @@ const autoVisitFiredRef = useRef(false)
   useEffect(() => {
     const token = searchParams.get('t')
     const rawTable = searchParams.get('table')
+    const entrySource = resolveEntrySource({ tableToken: token, tableParam: rawTable })
     let mounted = true
 
     async function trackPageView() {
+      if (!initialData.restaurant.id) return
+
       if (token) {
         const { data, error } = await supabase
           .from('qr_tokens').select('table_number')
           .eq('restaurant_id', initialData.restaurant.id).eq('token', token).maybeSingle()
         if (!mounted) return
-        if (error || !initialData.restaurant.id) return
+        if (error) return
+        const tableNum = data?.table_number ?? null
+        setVisitContext({
+          entry_source: entrySource,
+          table_number: tableNum,
+          table_token: token,
+        })
+        trackSessionStart(initialData.restaurant.id)
         void track(initialData.restaurant.id, 'page_view', {
-          metadata: { table_number: data?.table_number ?? null, table_token: token },
+          metadata: {
+            table_number: tableNum,
+            table_token: token,
+            entry_source: entrySource,
+          },
         })
         return
       }
+
       const n = rawTable ? Number(rawTable) : null
       const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
-      if (!initialData.restaurant.id) return
-      void track(initialData.restaurant.id, 'page_view', { metadata: { table_number: resolved } })
+      setVisitContext({
+        entry_source: entrySource,
+        table_number: resolved,
+        table_token: null,
+      })
+      trackSessionStart(initialData.restaurant.id)
+      void track(initialData.restaurant.id, 'page_view', {
+        metadata: { table_number: resolved, entry_source: entrySource },
+      })
     }
 
     void trackPageView()
-    return () => { mounted = false }
+
+    const onPageHide = () => trackSessionEnd(initialData.restaurant.id)
+    window.addEventListener('pagehide', onPageHide)
+
+    // Scroll depth milestones (25/50/75/100) — once each per session
+    const seen = new Set<number>()
+    const onScroll = () => {
+      const doc = document.documentElement
+      const max = doc.scrollHeight - window.innerHeight
+      if (max <= 0) return
+      const pct = Math.round((window.scrollY / max) * 100)
+      for (const mark of [25, 50, 75, 100]) {
+        if (pct >= mark && !seen.has(mark)) {
+          seen.add(mark)
+          void track(initialData.restaurant.id, 'scroll_depth', {
+            metadata: { depth_pct: mark, entry_source: entrySource },
+          })
+        }
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+
+    return () => {
+      mounted = false
+      window.removeEventListener('pagehide', onPageHide)
+      window.removeEventListener('scroll', onScroll)
+    }
   }, [searchParams, initialData.restaurant.id])
 
   // ── Realtime subscriptions ────────────────────────────────────────────────
@@ -859,10 +914,22 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   restaurantId={restaurant?.id ?? null}
   tableNumber={tableNumber}
   loginOpen={loginOpen}
-  onLoginOpenChange={setLoginOpen}
+  onLoginOpenChange={(open) => {
+    setLoginOpen(open)
+    if (open && restaurant?.id) {
+      void track(restaurant.id, 'login_opened', {
+        metadata: { table_number: tableNumber, source: 'auth_provider' },
+      })
+    }
+  }}
   accountOpen={accountOpen}
   onAccountOpenChange={(open) => {
     setAccountOpen(open)
+    if (open && restaurant?.id) {
+      void track(restaurant.id, 'account_opened', {
+        metadata: { table_number: tableNumber },
+      })
+    }
     if (!open) setActiveTab('menu')
   }}
 />
@@ -915,7 +982,15 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
 		
 		{(tableNumber !== null || tableToken) && !sessionExpired && (
   <>
-    <FloatingGameButton onClick={() => setGamesOpen(true)} bottomOffset={180} />
+    <FloatingGameButton
+      onClick={() => {
+        setGamesOpen(true)
+        void track(restaurant.id, 'games_opened', {
+          metadata: { table_number: tableNumber },
+        })
+      }}
+      bottomOffset={180}
+    />
     <CallWaiterBell
       slug={slug}
       tableNumber={tableNumber}

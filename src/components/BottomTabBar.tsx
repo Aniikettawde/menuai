@@ -3,6 +3,7 @@
 import { Info, UtensilsCrossed, User } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import type { ActiveTab } from '@/store/app-store'
+import { track } from '@/lib/analytics'
 
 interface Props {
   onAccountClick: () => void
@@ -11,8 +12,14 @@ interface Props {
 export function BottomTabBar({ onAccountClick }: Props) {
   const activeTab = useAppStore((s) => s.activeTab)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const restaurantId = useAppStore((s) => s.restaurant?.id ?? null)
 
   const handleTap = (tab: ActiveTab) => {
+    if (restaurantId && tab !== activeTab) {
+      void track(restaurantId, 'tab_switched', {
+        metadata: { from: activeTab, to: tab },
+      })
+    }
     if (tab === 'account') {
       setActiveTab('account')
       onAccountClick()

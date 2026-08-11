@@ -27,6 +27,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import type { MenuItem } from '@/types'
 import { ChefHat, Flame, Sparkles, Star, Clock } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
+import { track } from '@/lib/analytics'
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,7 +55,7 @@ function getImageUrl(raw: string | null | undefined): string | null {
 
 // ── Single card ────────────────────────────────────────────────────────────────
 
-function SpecialCard({ item }: { item: MenuItem }) {
+function SpecialCard({ item, restaurantId }: { item: MenuItem; restaurantId: string }) {
   const { addToCart, cartItems, increaseCartItem, decreaseCartItem, dishOptions, openCustomiseSheet } = useAppStore()
   const ordersEnabled = useAppStore((s) => (s.restaurant?.orders_enabled ?? true) && s.hasTableToken)
 
@@ -70,6 +71,11 @@ function SpecialCard({ item }: { item: MenuItem }) {
 
   async function handleAdd(e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
+    void track(restaurantId, 'special_clicked', {
+      item_id: item.id,
+      item_name: item.name,
+      metadata: { action: hasOptions ? 'customise' : 'add' },
+    })
     if (hasOptions) { openCustomiseSheet(item.id); return }
     setAdding(true)
     addToCart(item)
@@ -372,7 +378,7 @@ export function TodaysSpecialCarousel({ restaurantId, allItems }: Props) {
         `}</style>
         {specialItems.map((item) => (
           <div key={item.id} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
-            <SpecialCard item={item} />
+            <SpecialCard item={item} restaurantId={restaurantId} />
           </div>
         ))}
       </div>

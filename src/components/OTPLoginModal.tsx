@@ -11,6 +11,7 @@ import { type ConfirmationResult } from 'firebase/auth'
 import { sendOTP, verifyOTP, signInWithWhatsAppToken, clearRecaptcha, prepareRecaptcha } from '@/lib/firebase'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 import { X, Phone, MessageCircle, Shield, Gift, ChevronRight, Loader2, KeyRound } from 'lucide-react'
+import { track } from '@/lib/analytics'
 
 interface Props {
   isOpen: boolean
@@ -251,6 +252,16 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
       if (data.customer.display_name) {
         setCustomer(data.customer)
         setScreen('done')
+        if (restaurantId) {
+          void track(restaurantId, 'login_completed', {
+            metadata: {
+              table_number: tableNumber ?? null,
+              is_new: !data.customer.display_name ? false : Boolean(data.bonusAwarded),
+              channel,
+              had_name: true,
+            },
+          })
+        }
       } else {
         setScreen('name')
       }
@@ -294,6 +305,15 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, onVi
 
       setCustomer(data.customer)
       setScreen('done')
+      if (restaurantId) {
+        void track(restaurantId, 'login_completed', {
+          metadata: {
+            table_number: tableNumber ?? null,
+            is_new: true,
+            had_name: false,
+          },
+        })
+      }
     } catch (err: any) {
       setError(err?.message ?? 'Something went wrong')
     } finally {
