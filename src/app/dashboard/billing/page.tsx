@@ -11,31 +11,32 @@ import {
   ArrowRight,
   CreditCard,
   CalendarDays,
+  Loader2,
 } from 'lucide-react'
 import type { PaymentHistory } from '@/types/billing'
-import { BILLING_PLANS, formatRupees, type PlanId, type BillingCycle } from '@/lib/billing-plans'
+import { BILLING_PLANS, formatRupees, getPlanLabel, type PlanId, type BillingCycle } from '@/lib/billing-plans'
 
 type SubscriptionStatus = {
   plan: string
   plan_id: PlanId | null
+  plan_label?: string
   billing_cycle: BillingCycle | null
   amount_paise: number | null
   has_access: boolean
   is_paid_active?: boolean
   is_trial_active?: boolean
+  is_cancelled?: boolean
+  cancel_scheduled?: boolean
+  can_cancel?: boolean
+  has_razorpay?: boolean
   trial_days_remaining?: number | null
   current_period_end?: string | null
   trial_end?: string | null
-}
-
-function getPlanLabel(planId: PlanId | null): string {
-  if (!planId) return 'Dinezy Plan'
-  return BILLING_PLANS[planId]?.name ?? 'Dinezy Plan'
+  access_until?: string | null
 }
 
 function getPlanColor(planId: PlanId | null): string {
-  if (!planId) return 'from-blue-500 to-violet-500'
-  return BILLING_PLANS[planId]?.color ?? 'from-blue-500 to-violet-500'
+  return BILLING_PLANS.dinezy?.color ?? 'from-[#7A2333] to-[#5C1A26]'
 }
 
 function formatAmount(amountPaise: number | null, billingCycle: BillingCycle | null): string {
@@ -61,6 +62,9 @@ export default function BillingPage() {
   const [history, setHistory] = useState<PaymentHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,6 +87,26 @@ export default function BillingPage() {
     void load()
   }, [load])
 
+  async function handleCancel() {
+    setCancelling(true)
+    setError('')
+    setSuccessMsg('')
+    try {
+      const res = await fetch('/api/billing/cancel-subscription', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Could not cancel subscription')
+      }
+      setSuccessMsg(data.message ?? 'Subscription cancelled.')
+      setConfirmCancel(false)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not cancel subscription')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="mx-auto max-w-3xl animate-pulse px-4 py-6 sm:px-6 lg:px-8">
@@ -96,14 +120,22 @@ export default function BillingPage() {
 
   const isActive = Boolean(status?.is_paid_active || (status?.plan === 'active' && status.has_access))
   const isTrial = Boolean(status?.is_trial_active || (status?.plan === 'trial' && status.has_access))
+  const isCancelled = Boolean(status?.is_cancelled || status?.cancel_scheduled)
   const isExpired = Boolean(status && !status.has_access)
 
-  const planLabel = status?.plan === 'trial' ? 'Free trial' : getPlanLabel(status?.plan_id ?? null)
-  const planColor = status?.plan === 'trial' ? 'from-amber-500 to-orange-500' : getPlanColor(status?.plan_id ?? null)
-  const amountLabel =
-    status?.plan === 'trial'
-      ? 'Free'
-      : formatAmount(status?.amount_paise ?? null, status?.billing_cycle ?? null)
+  const planLabel = isTrial
+    ? `Trial · ${getPlanLabel(status?.billing_cycle)}`
+    : status?.plan_label ?? getPlanLabel(status?.billing_cycle ?? null)
+
+  const planColor = isCancelled
+    ? 'from-zinc-500 to-zinc-700'
+    : isTrial
+      ? 'from-amber-500 to-orange-500'
+      : getPlanColor(status?.plan_id ?? null)
+
+  const amountLabel = isTrial
+    ? `Free now · then ${formatAmount(status?.amount_paise ?? null, status?.billing_cycle ?? null)}`
+    : formatAmount(status?.amount_paise ?? null, status?.billing_cycle ?? null)
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
@@ -115,6 +147,7 @@ export default function BillingPage() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => void load()}
           className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
         >
@@ -129,7 +162,14 @@ export default function BillingPage() {
         </div>
       )}
 
-      {isTrial && (
+      {successMsg && (
+        <div className="mb-5 flex items-center gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-4 text-sm text-emerald-300">
+          <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+          {successMsg}
+        </div>
+      )}
+
+      {isTrial && !isCancelled && (
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-orange-500/25 bg-orange-500/8 p-4">
           <Clock size={16} className="mt-0.5 shrink-0 text-orange-400" />
           <div>
@@ -139,7 +179,21 @@ export default function BillingPage() {
                 : `${status?.trial_days_remaining ?? 0} day${(status?.trial_days_remaining ?? 0) !== 1 ? 's' : ''} left in your trial`}
             </p>
             <p className="mt-0.5 text-xs text-zinc-500">
-              Your menu will go offline when the trial ends. Choose a paid plan to keep it live.
+              You&apos;ll be charged automatically when the trial ends. Cancel below anytime before
+              then — you keep access until the trial ends.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isCancelled && status?.has_access && (
+        <div className="mb-5 flex items-start gap-3 rounded-2xl border border-zinc-600/40 bg-zinc-800/50 p-4">
+          <AlertCircle size={16} className="mt-0.5 shrink-0 text-zinc-400" />
+          <div>
+            <p className="text-sm font-semibold text-zinc-200">Cancellation scheduled</p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              No further charges. You keep full access until{' '}
+              <span className="font-medium text-zinc-300">{formatDate(status.access_until)}</span>.
             </p>
           </div>
         </div>
@@ -151,7 +205,7 @@ export default function BillingPage() {
           <div>
             <p className="text-sm font-semibold text-red-300">Access paused</p>
             <p className="mt-0.5 text-xs text-zinc-500">
-              Your trial has ended or no plan is active. Choose a plan to restore access.
+              Your trial or plan has ended. Choose a plan to restore access.
             </p>
           </div>
         </div>
@@ -167,15 +221,23 @@ export default function BillingPage() {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">
-                {isActive ? 'Active subscription' : isTrial ? 'Trial subscription' : 'No active plan'}
+                {isCancelled && status?.has_access
+                  ? 'Cancelling — access continues'
+                  : isActive
+                    ? 'Active subscription'
+                    : isTrial
+                      ? 'Trial subscription'
+                      : 'No active plan'}
               </p>
               <p className="text-xs text-zinc-500">
-                {isActive || isTrial ? planLabel : 'Upgrade to get full access'}
+                {isActive || isTrial || (isCancelled && status?.has_access)
+                  ? planLabel
+                  : 'Upgrade to get full access'}
               </p>
             </div>
           </div>
 
-          {(isActive || isTrial) && (
+          {(isActive || isTrial || (isCancelled && status?.has_access)) && (
             <div className="mb-5 grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:grid-cols-3">
               <div>
                 <p className="text-[11px] uppercase tracking-wider text-zinc-500">Plan</p>
@@ -187,10 +249,14 @@ export default function BillingPage() {
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wider text-zinc-500">
-                  {isActive ? 'Renews' : 'Trial ends'}
+                  {isCancelled ? 'Access until' : isActive ? 'Renews' : 'Trial ends'}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-zinc-200">
-                  {isActive ? formatDate(status?.current_period_end) : formatDate(status?.trial_end)}
+                  {isCancelled
+                    ? formatDate(status?.access_until)
+                    : isActive
+                      ? formatDate(status?.current_period_end)
+                      : formatDate(status?.trial_end)}
                 </p>
               </div>
             </div>
@@ -198,21 +264,69 @@ export default function BillingPage() {
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
             <p className="text-xs uppercase tracking-wider text-zinc-500">
-              {isActive ? 'Change or upgrade plan' : 'Next step'}
+              {isExpired ? 'Next step' : isCancelled ? 'Status' : 'Manage'}
             </p>
             <p className="mt-1 text-sm text-zinc-300">
-              {isActive
-                ? 'To switch plans or billing cycle, start a new subscription from the onboarding page.'
-                : 'Choose or change your plan from onboarding. Payment checkout and plan selection are handled there.'}
+              {isExpired
+                ? 'Choose a plan to restore access.'
+                : isCancelled
+                  ? 'Renewals are off. Resubscribe anytime from onboarding after access ends.'
+                  : isTrial
+                    ? 'Cancel before the trial ends to avoid the first charge. Your current trial access is not cut short.'
+                    : 'Cancel anytime — you keep access until the end of the current billing period.'}
             </p>
 
-            <Link
-              href="/dashboard/onboarding"
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
-            >
-              {isActive ? 'Change plan' : 'Choose a plan'}
-              <ArrowRight size={14} />
-            </Link>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {(isExpired || (!isActive && !isTrial && !isCancelled)) && (
+                <Link
+                  href="/dashboard/onboarding"
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
+                >
+                  Choose a plan
+                  <ArrowRight size={14} />
+                </Link>
+              )}
+
+              {status?.can_cancel && !confirmCancel && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancel(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
+                >
+                  Cancel subscription
+                </button>
+              )}
+            </div>
+
+            {confirmCancel && (
+              <div className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/5 p-4">
+                <p className="text-sm font-semibold text-red-300">Confirm cancellation?</p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  {isTrial
+                    ? 'This stops the automatic charge after your trial. You keep using Dinezy until your trial ends — nothing is cut off today.'
+                    : 'This stops future renewals. You keep access until the end of your current period.'}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={() => void handleCancel()}
+                    className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-60"
+                  >
+                    {cancelling ? <Loader2 size={14} className="animate-spin" /> : null}
+                    Yes, cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={() => setConfirmCancel(false)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 px-4 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-800"
+                  >
+                    Keep plan
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

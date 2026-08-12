@@ -123,13 +123,19 @@ export async function getOwnerSubscriptionState(
   const isTrialActive = plan === 'trial' && !!trialEnd && trialEnd > now
   const isPaidActive = plan === 'active' && (!!paidEnd ? paidEnd > now : true)
 
+  // Cancelled users keep access until their trial/period window ends
+  const cancelledButStillValid =
+    (plan === 'cancelled' || plan === 'canceled') &&
+    ((!!trialEnd && trialEnd > now) || (!!paidEnd && paidEnd > now))
+
   let status: SubscriptionState['status'] = 'expired'
   if (plan === 'pending') status = 'pending'
   else if (isTrialActive) status = 'trial'
   else if (isPaidActive) status = 'active'
+  else if (cancelledButStillValid) status = trialEnd && trialEnd > now ? 'trial' : 'active'
 
   const trialDaysRemaining =
-    status === 'trial' && trialEnd
+    (status === 'trial' || (cancelledButStillValid && trialEnd && trialEnd > now)) && trialEnd
       ? Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / 86400000))
       : null
 
@@ -139,9 +145,9 @@ export async function getOwnerSubscriptionState(
     planId: sub.plan_id ?? null,
     billingCycle: sub.billing_cycle ?? null,
     amountPaise: sub.amount_paise ?? null,
-    hasAccess: status === 'trial' || status === 'active',
-    isTrialActive,
-    isPaidActive,
+    hasAccess: status === 'trial' || status === 'active' || cancelledButStillValid,
+    isTrialActive: isTrialActive || (cancelledButStillValid && !!trialEnd && trialEnd > now && !(paidEnd && paidEnd > now)),
+    isPaidActive: isPaidActive || (cancelledButStillValid && !!paidEnd && paidEnd > now),
     trialDaysRemaining,
     currentPeriodEnd: sub.current_period_end ?? null,
     trialEnd: sub.trial_end ?? null,

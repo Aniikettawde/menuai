@@ -10,7 +10,7 @@ import {
   Star,
   UtensilsCrossed,
 } from 'lucide-react'
-import { PrimaryButton, SecondaryButton, scrollTo } from './shared'
+import { PrimaryButton, SecondaryButton } from './shared'
 
 const FLOATS = [
   {
@@ -83,9 +83,9 @@ export function Hero({ onBookDemo }: { onBookDemo: () => void }) {
             build customer relationships, and bring diners back.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <PrimaryButton onClick={onBookDemo}>Get Started</PrimaryButton>
-            <SecondaryButton dark onClick={() => scrollTo('#journey')}>
-              See how Dinezy works
+            <PrimaryButton href="/dashboard/login?mode=signup">Sign up now</PrimaryButton>
+            <SecondaryButton dark onClick={onBookDemo}>
+              Book a Demo
             </SecondaryButton>
           </div>
           <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[12px] font-medium text-white/40">

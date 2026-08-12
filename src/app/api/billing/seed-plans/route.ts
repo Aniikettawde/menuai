@@ -1,31 +1,18 @@
-// src/app/api/billing/seed-plans/route.ts
+// ONE-TIME: create the two Razorpay plans (Monthly ₹999, Yearly ₹8999).
+// Protect with x-admin-key: SEED_ADMIN_KEY in production.
 //
-// ONE-TIME SETUP — call this ONCE to create all 6 Razorpay plans.
-// After running, copy the returned plan IDs into your .env.local:
-//
-//   RAZORPAY_PLAN_SMALL_MONTHLY=plan_xxx
-//   RAZORPAY_PLAN_SMALL_YEARLY=plan_xxx
-//   RAZORPAY_PLAN_GROWTH_MONTHLY=plan_xxx
-//   RAZORPAY_PLAN_GROWTH_YEARLY=plan_xxx
-//   RAZORPAY_PLAN_LARGE_MONTHLY=plan_xxx
-//   RAZORPAY_PLAN_LARGE_YEARLY=plan_xxx
-//
-// PROTECT THIS ENDPOINT — remove or add auth before deploying to prod.
+// After running, put returned IDs in .env:
+//   RAZORPAY_PLAN_MONTHLY=plan_xxx
+//   RAZORPAY_PLAN_YEARLY=plan_xxx
+//   NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_xxx   (same as RAZORPAY_KEY_ID is fine for checkout)
 
 import { NextResponse } from 'next/server'
-
-function getRazorpayAuth() {
-  const key = process.env.RAZORPAY_KEY_ID!
-  const secret = process.env.RAZORPAY_KEY_SECRET!
-  return Buffer.from(`${key}:${secret}`).toString('base64')
-}
+import { getRazorpayAuth } from '@/lib/billing-auth'
 
 async function createPlan(params: {
   name: string
-  amount: number        // paise
-  interval: number      // 1
+  amount: number
   period: 'monthly' | 'yearly'
-  notes: Record<string, string>
 }) {
   const res = await fetch('https://api.razorpay.com/v1/plans', {
     method: 'POST',
@@ -35,13 +22,16 @@ async function createPlan(params: {
     },
     body: JSON.stringify({
       period: params.period,
-      interval: params.interval,
+      interval: 1,
       item: {
         name: params.name,
         amount: params.amount,
         currency: 'INR',
       },
-      notes: params.notes,
+      notes: {
+        plan_id: 'dinezy',
+        billing_cycle: params.period,
+      },
     }),
   })
 
@@ -51,95 +41,35 @@ async function createPlan(params: {
 }
 
 export async function GET(req: Request) {
-  // Basic protection — only allow in non-production or with a secret header
   const adminKey = req.headers.get('x-admin-key')
-  if (process.env.NODE_ENV === 'production' && adminKey !== process.env.SEED_ADMIN_KEY) {
+  if (adminKey !== process.env.SEED_ADMIN_KEY) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   try {
-    const plans = await Promise.all([
-	
-	createPlan({
-    name: 'Dinezy Test – Monthly',
-    amount: 49 * 100,       // ₹49 in paise
-    interval: 1,
-    period: 'monthly',
-    notes: { plan_id: 'test', billing_cycle: 'monthly' },
-  }),
-  createPlan({
-    name: 'Dinezy Test – Yearly',
-    amount: 49 * 100,
-    interval: 1,
-    period: 'yearly',
-    notes: { plan_id: 'test', billing_cycle: 'yearly' },
-  }),
-  
+    const [monthly, yearly] = await Promise.all([
       createPlan({
-        name: 'Dinezy Small – Monthly',
-        amount: 1999 * 100,
-        interval: 1,
+        name: 'Dinezy – Monthly',
+        amount: 999 * 100,
         period: 'monthly',
-        notes: { plan_id: 'small', billing_cycle: 'monthly' },
       }),
       createPlan({
-        name: 'Dinezy Small – Yearly',
-        amount: 11994 * 100,
-        interval: 1,
+        name: 'Dinezy – Yearly',
+        amount: 8999 * 100,
         period: 'yearly',
-        notes: { plan_id: 'small', billing_cycle: 'yearly' },
-      }),
-      createPlan({
-        name: 'Dinezy Growth – Monthly',
-        amount: 2999 * 100,
-        interval: 1,
-        period: 'monthly',
-        notes: { plan_id: 'growth', billing_cycle: 'monthly' },
-      }),
-      createPlan({
-        name: 'Dinezy Growth – Yearly',
-        amount: 17994 * 100,
-        interval: 1,
-        period: 'yearly',
-        notes: { plan_id: 'growth', billing_cycle: 'yearly' },
-      }),
-      createPlan({
-        name: 'Dinezy Large – Monthly',
-        amount: 4999 * 100,
-        interval: 1,
-        period: 'monthly',
-        notes: { plan_id: 'large', billing_cycle: 'monthly' },
-      }),
-      createPlan({
-        name: 'Dinezy Large – Yearly',
-        amount: 29994 * 100,
-        interval: 1,
-        period: 'yearly',
-        notes: { plan_id: 'large', billing_cycle: 'yearly' },
       }),
     ])
 
-    const [
-	  testMonthly, testYearly,          // ← add these
-
-      smallMonthly, smallYearly,
-      growthMonthly, growthYearly,
-      largeMonthly, largeYearly,
-    ] = plans
-
     return NextResponse.json({
-      message: 'Plans created. Copy these into your .env.local',
+      message: 'Plans created. Copy these into your .env / hosting secrets, then restart.',
       env: [
-	    `RAZORPAY_PLAN_TEST_MONTHLY=${testMonthly.id}`,   // ← add
-    `RAZORPAY_PLAN_TEST_YEARLY=${testYearly.id}`,     // ← add
-        `RAZORPAY_PLAN_SMALL_MONTHLY=${smallMonthly.id}`,
-        `RAZORPAY_PLAN_SMALL_YEARLY=${smallYearly.id}`,
-        `RAZORPAY_PLAN_GROWTH_MONTHLY=${growthMonthly.id}`,
-        `RAZORPAY_PLAN_GROWTH_YEARLY=${growthYearly.id}`,
-        `RAZORPAY_PLAN_LARGE_MONTHLY=${largeMonthly.id}`,
-        `RAZORPAY_PLAN_LARGE_YEARLY=${largeYearly.id}`,
+        `RAZORPAY_PLAN_MONTHLY=${monthly.id}`,
+        `RAZORPAY_PLAN_YEARLY=${yearly.id}`,
       ],
-      plans: plans.map((p) => ({ id: p.id, name: p.item.name })),
+      plans: [
+        { id: monthly.id, name: monthly.item.name, amount: '₹999/mo' },
+        { id: yearly.id, name: yearly.item.name, amount: '₹8999/yr' },
+      ],
     })
   } catch (err) {
     console.error('seed-plans error:', err)

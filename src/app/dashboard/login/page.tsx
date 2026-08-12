@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Eye,
@@ -42,6 +42,12 @@ export default function DashboardLoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('mode') === 'signup') setMode('signup')
+  }, [])
 
   const passwordInfo = useMemo(() => passwordStrength(password), [password])
 

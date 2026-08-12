@@ -17,7 +17,7 @@ export function FinalCTA({ onBookDemo }: { onBookDemo: () => void }) {
           Give every guest a better experience — and give them a reason to come back.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <PrimaryButton onClick={onBookDemo}>Get Started</PrimaryButton>
+          <PrimaryButton href="/dashboard/login?mode=signup">Sign up now</PrimaryButton>
           <SecondaryButton dark onClick={onBookDemo}>
             Book a Demo
           </SecondaryButton>

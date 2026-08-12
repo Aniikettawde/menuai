@@ -84,10 +84,16 @@ export function Navbar({ onBookDemo }: { onBookDemo: () => void }) {
           <button
             type="button"
             onClick={onBookDemo}
+            className="cursor-pointer rounded-xl px-3.5 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:text-ink"
+          >
+            Book a Demo
+          </button>
+          <a
+            href="/dashboard/login?mode=signup"
             className="cursor-pointer rounded-2xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-white shadow-elegant-sm transition-transform hover:-translate-y-0.5"
           >
-            Get Started
-          </button>
+            Sign up now
+          </a>
         </div>
 
         <button
@@ -131,10 +137,16 @@ export function Navbar({ onBookDemo }: { onBookDemo: () => void }) {
                   setOpen(false)
                   onBookDemo()
                 }}
-                className="mt-2 cursor-pointer rounded-2xl bg-accent px-4 py-3 text-[15px] font-semibold text-white"
+                className="cursor-pointer rounded-xl px-3 py-3 text-left text-[15px] font-medium text-ink"
               >
-                Get Started
+                Book a Demo
               </button>
+              <a
+                href="/dashboard/login?mode=signup"
+                className="mt-2 cursor-pointer rounded-2xl bg-accent px-4 py-3 text-center text-[15px] font-semibold text-white"
+              >
+                Sign up now
+              </a>
             </nav>
           </motion.div>
         )}

@@ -3,30 +3,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Sparkles,
   Check,
-  Zap,
-  Shield,
-  BarChart3,
-  UtensilsCrossed,
-  Star,
   CreditCard,
   Loader2,
   AlertCircle,
+  Shield,
+  Sparkles,
   Clock,
-  ArrowRight,
-  BadgeIndianRupee,
-  PhoneCall,
-  LockKeyhole,
-  RefreshCw,
 } from 'lucide-react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import {
-  BILLING_PLANS,
+  PLAN_FEATURES,
+  PLAN_OPTIONS,
+  TRIAL_DAYS,
   formatRupees,
   type BillingCycle,
-  type BillingPlan,
-  type PlanId,
 } from '@/lib/billing-plans'
 
 interface RazorpaySubscriptionOptions {
@@ -35,7 +26,6 @@ interface RazorpaySubscriptionOptions {
   name: string
   description: string
   theme?: { color?: string }
-  prefill?: { email?: string; contact?: string; name?: string }
   modal?: { ondismiss?: () => void }
   handler: (response: {
     razorpay_payment_id: string
@@ -50,37 +40,14 @@ declare global {
   }
 }
 
-const FEATURES = [
-  { icon: UtensilsCrossed, text: 'Unlimited menu items & categories' },
-  { icon: Sparkles, text: 'Gemini AI chatbot for your customers' },
-  { icon: BarChart3, text: 'Full analytics — traffic, items, upsells' },
-  { icon: Zap, text: 'AI upsell engine (avg +18% order value)' },
-  { icon: Star, text: 'Customer ratings & review management' },
-  { icon: Shield, text: 'QR code generator & offline menu cache' },
-]
-
-const PLAN_LIST: BillingPlan[] = [BILLING_PLANS.small, BILLING_PLANS.growth, BILLING_PLANS.large]
-
-type BillingStatus = {
-  plan: string
-  plan_id?: PlanId | null
-  has_access: boolean
-  is_paid_active?: boolean
-  is_trial_active?: boolean
-  trial_days_remaining?: number | null
-} | null
-
 export default function OnboardingPage() {
   const router = useRouter()
   const supabase = getSupabaseDashboardBrowser()
 
   const [subscribing, setSubscribing] = useState(false)
-  const [startingTrial, setStartingTrial] = useState(false)
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
+  const [selected, setSelected] = useState<BillingCycle>('yearly')
   const [error, setError] = useState('')
   const [checkingStatus, setCheckingStatus] = useState(true)
-  const [canStartTrial, setCanStartTrial] = useState(true)
-
   const accessTokenRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -97,24 +64,16 @@ export default function OnboardingPage() {
     async function checkBillingStatus() {
       try {
         const res = await fetch('/api/billing/status', { cache: 'no-store' })
-        if (!res.ok) {
-          if (mounted) setCanStartTrial(true)
-          return
-        }
-
-        const data: { status?: BillingStatus } = await res.json()
-        const status = data.status ?? null
-
+        if (!res.ok) return
+        const data = await res.json()
+        const status = data.status
         if (!mounted) return
 
-        if (status?.plan === 'active' && status?.is_paid_active) {
+        if (status?.has_access && (status.is_paid_active || status.is_trial_active)) {
           router.replace('/dashboard')
-          return
         }
-
-        setCanStartTrial(!status)
       } catch {
-        if (mounted) setCanStartTrial(true)
+        /* allow continue */
       } finally {
         if (mounted) setCheckingStatus(false)
       }
@@ -153,411 +112,215 @@ export default function OnboardingPage() {
     })
   }
 
-  const handleStartTrial = async () => {
-    setError('')
-    setStartingTrial(true)
-    try {
-      const res = await authFetch('/api/billing/start-trial', {
-        method: 'POST',
-        body: JSON.stringify({}),
-      })
-      if (!res.ok) {
-        const e = await res.json()
-        throw new Error(e.error ?? 'Failed to start trial')
-      }
-      window.location.href = '/dashboard?welcome=trial'
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
-      setStartingTrial(false)
-    }
-  }
-
-  const handleSubscribe = async (plan: BillingPlan) => {
+  const handleSubscribe = async () => {
     setError('')
     setSubscribing(true)
 
     try {
       const createRes = await authFetch('/api/billing/create-subscription', {
         method: 'POST',
-        body: JSON.stringify({ plan_id: plan.id, billing_cycle: billingCycle }),
+        body: JSON.stringify({ plan_id: 'dinezy', billing_cycle: selected }),
       })
 
       if (!createRes.ok) {
-        const e = await createRes.json()
-        throw new Error(e.error ?? 'Failed to create subscription')
+        const e = await createRes.json().catch(() => ({}))
+        throw new Error(e.error ?? 'Failed to start checkout')
       }
 
-      const { subscription_id, key, plan_id, billing_cycle } = await createRes.json()
+      const { subscription_id, key, billing_cycle } = await createRes.json()
+      if (!subscription_id || !key) {
+        throw new Error('Checkout could not start. Please try again.')
+      }
+
+      const option = PLAN_OPTIONS.find((p) => p.cycle === selected)!
 
       await new Promise<void>((resolve, reject) => {
         if (!window.Razorpay) {
-          reject(new Error('Payment SDK not loaded. Please refresh and try again.'))
+          reject(new Error('Payment SDK not loaded. Refresh and try again.'))
           return
         }
 
-        const options: RazorpaySubscriptionOptions = {
+        const rzp = new window.Razorpay({
           key,
           subscription_id,
           name: 'Dinezy',
-          description: `${plan.name} • ${billing_cycle === 'monthly' ? 'Monthly' : 'Yearly'} subscription`,
-          theme: { color: '#2563eb' },
+          description: `${option.label} · ${TRIAL_DAYS}-day free trial, then ₹${formatRupees(option.price)}`,
+          theme: { color: '#7A2333' },
           modal: {
             ondismiss: () => reject(new Error('DISMISSED')),
           },
-         handler: async (response) => {
-  try {
-    await authFetch('/api/billing/verify-subscription', {
-      method: 'POST',
-      body: JSON.stringify({
-        razorpay_payment_id: response.razorpay_payment_id,
-        razorpay_subscription_id: response.razorpay_subscription_id,
-        razorpay_signature: response.razorpay_signature,
-        plan_id,
-        billing_cycle,
-      }),
-    })
-  } catch (err) {
-    console.warn('Verify error — webhook handles it', err)
-  }
-  resolve() // ← always resolve, payment is done
-},
-        }
-
-        new window.Razorpay(options).open()
+          handler: async (response) => {
+            try {
+              await authFetch('/api/billing/verify-subscription', {
+                method: 'POST',
+                body: JSON.stringify({
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_subscription_id: response.razorpay_subscription_id,
+                  razorpay_signature: response.razorpay_signature,
+                  plan_id: 'dinezy',
+                  billing_cycle,
+                }),
+              })
+            } catch (err) {
+              console.warn('Verify error — webhook will confirm', err)
+            }
+            resolve()
+          },
+        })
+        rzp.open()
       })
 
-      router.push('/dashboard?welcome=paid')
-      router.refresh()
+      window.location.href = '/dashboard?welcome=trial'
     } catch (err: unknown) {
       if (!(err instanceof Error && err.message === 'DISMISSED')) {
-        setError(err instanceof Error ? err.message : 'Payment failed. Please try again.')
+        setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
       }
       setSubscribing(false)
     }
   }
 
-  const busy = subscribing || startingTrial
-
   if (checkingStatus) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#f8fbff] via-white to-[#f3f7ff] px-4 py-6 text-slate-900">
-        <div className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center">
-          <div className="rounded-3xl border border-slate-200 bg-white/85 px-6 py-5 shadow-sm backdrop-blur-xl">
-            <div className="flex items-center gap-3">
-              <Loader2 className="animate-spin text-blue-600" size={18} />
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Checking your plan…</p>
-                <p className="text-xs text-slate-500">Loading billing status</p>
-              </div>
-            </div>
-          </div>
+      <div className="flex min-h-screen items-center justify-center bg-[#fafafa] px-4">
+        <div className="flex items-center gap-3 rounded-2xl border border-line bg-white px-5 py-4 shadow-sm">
+          <Loader2 className="animate-spin text-accent" size={18} />
+          <p className="text-sm font-medium text-ink">Loading…</p>
         </div>
       </div>
     )
   }
 
+  const selectedOption = PLAN_OPTIONS.find((p) => p.cycle === selected)!
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f8fbff] via-white to-[#f3f7ff] text-slate-900">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-200">
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <p className="text-lg font-black tracking-tight text-slate-900">Dinezy</p>
-              <p className="text-xs text-slate-500">AI-powered QR dining</p>
-            </div>
+    <div className="min-h-screen bg-[#fafafa] text-ink">
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-ink text-[14px] font-bold text-white">
+              D
+            </span>
+            <span className="font-display text-[17px] font-semibold tracking-tight">Dinezy</span>
           </div>
-          <div className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:flex">
+          <div className="flex items-center gap-1.5 rounded-full border border-accent/15 bg-accent/5 px-3 py-1.5 text-[11px] font-semibold text-accent">
             <Shield size={12} />
-            7-day free trial
+            {TRIAL_DAYS}-day trial included
           </div>
         </div>
 
-        {!canStartTrial && (
-          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Your free trial has been used. Choose a paid plan to continue.
-          </div>
-        )}
+        <div className="mb-8 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+            Choose your plan
+          </p>
+          <h1 className="mt-3 font-display text-[clamp(1.75rem,4vw,2.5rem)] font-semibold tracking-tight">
+            Start free for {TRIAL_DAYS} days
+          </h1>
+          <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
+            Pick a plan, add your payment method, and your trial starts immediately. You&apos;re
+            charged only after {TRIAL_DAYS} days — cancel anytime before that.
+          </p>
+        </div>
 
         {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <div className="flex items-center gap-2">
-              <AlertCircle size={15} className="flex-shrink-0" />
-              {error}
-            </div>
+          <div className="mb-5 flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <AlertCircle size={15} className="shrink-0" />
+            {error}
           </div>
         )}
 
-        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
-          <div className="space-y-6">
-            <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:p-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
-                Start your Dinezy plan
-              </div>
-              <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
-                Start with a 7-day free trial, then choose a plan
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-                No UPI or credit card needed for the trial. After 7 days, choose Small, Growth, or Large to keep your restaurant live.
-              </p>
-
-              <div className="mt-6 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-                  <Clock size={12} />
-                  7-day free trial
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-                  <RefreshCw size={12} />
-                  Paid plans renew via Razorpay
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-                  <Shield size={12} />
-                  Cancel anytime
-                </span>
-              </div>
-
-              {canStartTrial && (
-                <button
-                  onClick={() => void handleStartTrial()}
-                  disabled={busy}
-                  className="mt-6 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {startingTrial ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}
-                  Start free trial
-                </button>
-              )}
-            </div>
-
-            <div className="rounded-[32px] border border-slate-200 bg-white/85 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Billing cycle</p>
-                  <p className="text-xs text-slate-500">Yearly saves you 50%</p>
-                </div>
-                <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setBillingCycle('monthly')}
-                    className={[
-                      'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:flex-none',
-                      billingCycle === 'monthly'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800',
-                    ].join(' ')}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBillingCycle('yearly')}
-                    className={[
-                      'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:flex-none',
-                      billingCycle === 'yearly'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800',
-                    ].join(' ')}
-                  >
-                    Yearly <span className="ml-1 text-xs font-bold text-emerald-600">50% off</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-5">
-              {PLAN_LIST.map((plan) => {
-                const price = billingCycle === 'monthly' ? plan.monthly : plan.yearly
-                const yearlySavings = plan.monthly * 12 - plan.yearly
-
-                return (
-                  <div
-                    key={plan.id}
-                    className={[
-                      'relative overflow-hidden rounded-[32px] border bg-white/90 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl transition hover:-translate-y-0.5',
-                      plan.popular ? 'border-violet-300 ring-1 ring-violet-100' : 'border-slate-200',
-                    ].join(' ')}
-                  >
-                    {plan.popular && (
-                      <div className="absolute right-4 top-4 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-1 text-[11px] font-bold text-white shadow-lg">
-                        Most popular
-                      </div>
-                    )}
-					
-					{plan.id === 'test' && (
-  <div className="absolute left-4 top-4 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 px-3 py-1 text-[11px] font-bold text-white shadow-lg">
-    🧪 Test only
-  </div>
-)}
-
-                    <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-start">
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex rounded-full bg-gradient-to-r ${plan.color} px-3 py-1 text-[11px] font-bold text-white shadow-sm`}
-                          >
-                            {plan.highlight}
-                          </span>
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
-                            {plan.tables}
-                          </span>
-                        </div>
-
-                        <div>
-                          <h2 className="text-2xl font-black tracking-tight text-slate-900">
-                            {plan.name}
-                          </h2>
-                          <p className="mt-1 text-sm leading-6 text-slate-500">
-                            {plan.description}
-                          </p>
-                        </div>
-
-                        <div className="flex items-end gap-2">
-                          <p className="text-4xl font-black tracking-tight text-slate-900">
-                            ₹{formatRupees(price)}
-                          </p>
-                          <span className="pb-1 text-sm font-medium text-slate-500">
-                            {billingCycle === 'monthly' ? '/month' : '/year'}
-                          </span>
-                        </div>
-
-                        {billingCycle === 'yearly' && (
-                          <p className="text-sm font-medium text-emerald-700">
-                            Save ₹{formatRupees(yearlySavings)} vs monthly
-                          </p>
-                        )}
-
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {plan.features.map((feature) => (
-                            <div key={feature} className="flex items-center gap-2 text-sm text-slate-600">
-                              <Check size={13} className="shrink-0 text-blue-600" />
-                              <span>{feature}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                        <button
-                          onClick={() => void handleSubscribe(plan)}
-                          disabled={busy}
-                          className={[
-                            'inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5',
-                            busy ? 'cursor-not-allowed opacity-50' : '',
-                          ].join(' ')}
-                        >
-                          {subscribing ? (
-                            <Loader2 size={15} className="animate-spin" />
-                          ) : (
-                            <CreditCard size={15} />
-                          )}
-                          Subscribe
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <aside className="space-y-6">
-            <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-              <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
-                <BadgeIndianRupee size={15} />
-                What you get with Dinezy
-              </div>
-              <div className="mt-5 space-y-3">
-                {FEATURES.map(({ icon: Icon, text }) => (
-                  <div
-                    key={text}
-                    className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                  >
-                    <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
-                      <Icon size={15} />
-                    </div>
-                    <p className="text-sm leading-6 text-slate-700">{text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[32px] border border-slate-200 bg-gradient-to-br from-blue-50 to-violet-50 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)]">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <LockKeyhole size={15} className="text-blue-700" />
-                How subscriptions work
-              </div>
-              <p className="mt-3 text-sm leading-7 text-slate-600">
-                Razorpay handles recurring billing for the paid plans. The 7-day trial is separate and does not need UPI or credit card details.
-              </p>
-              <div className="mt-5 grid gap-2">
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Check size={13} className="text-emerald-600" />
-                  UPI, cards, and net banking for paid plans
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Check size={13} className="text-emerald-600" />
-                  Auto-renews until cancelled
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Check size={13} className="text-emerald-600" />
-                  Trial is separate from the 3 paid plans
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[32px] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <PhoneCall size={15} className="text-violet-600" />
-                Need help?
-              </div>
-              <p className="mt-3 text-sm leading-7 text-slate-600">
-                Contact support for help with onboarding, pricing, or subscription management.
-              </p>
-              <div className="mt-4 space-y-2 text-sm">
-                <a
-                  href="mailto:anikettawdee@gmail.com"
-                  className="block rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-blue-700 transition hover:bg-white"
-                >
-                  anikettawdee@gmail.com
-                </a>
-                <a
-                  href="tel:+918605123549"
-                  className="block rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-blue-700 transition hover:bg-white"
-                >
-                  +91 86051 23549
-                </a>
-              </div>
-            </div>
-          </aside>
-        </section>
-
-        <div className="rounded-[32px] border border-slate-200 bg-white/85 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Quick start</p>
-              <p className="text-xs text-slate-500">
-                {canStartTrial
-                  ? 'Start the free trial first, then subscribe when ready.'
-                  : 'Trial already used — pick one of the paid plans above.'}
-              </p>
-            </div>
-            {canStartTrial ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {PLAN_OPTIONS.map((opt) => {
+            const active = selected === opt.cycle
+            return (
               <button
-                onClick={() => void handleStartTrial()}
-                disabled={busy}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                key={opt.cycle}
+                type="button"
+                onClick={() => setSelected(opt.cycle)}
+                className={`relative rounded-3xl border p-5 text-left transition ${
+                  active
+                    ? 'border-accent bg-white shadow-elegant-md ring-2 ring-accent/20'
+                    : 'border-line bg-white hover:border-accent/30'
+                }`}
               >
-                <ArrowRight size={15} />
-                Start free trial
+                {opt.popular && (
+                  <span className="absolute right-4 top-4 rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-bold text-white">
+                    {opt.badge}
+                  </span>
+                )}
+                <p className="text-[13px] font-semibold text-ink-soft">{opt.label}</p>
+                <p className="mt-2 font-display text-3xl font-bold tracking-tight">
+                  ₹{formatRupees(opt.price)}
+                  <span className="text-base font-medium text-ink-faint">
+                    /{opt.cycle === 'monthly' ? 'mo' : 'yr'}
+                  </span>
+                </p>
+                {opt.cycle === 'yearly' && (
+                  <p className="mt-1 text-[12px] font-medium text-accent">
+                    ≈ ₹{formatRupees(opt.perMonth)}/mo
+                  </p>
+                )}
+                <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">{opt.description}</p>
+                <div
+                  className={`mt-4 flex h-5 w-5 items-center justify-center rounded-full border ${
+                    active ? 'border-accent bg-accent text-white' : 'border-line'
+                  }`}
+                >
+                  {active && <Check size={12} />}
+                </div>
               </button>
-            ) : (
-              <span className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-5 py-3.5 text-sm font-semibold text-slate-500">
-                Trial already used
-              </span>
-            )}
+            )
+          })}
+        </div>
+
+        <div className="mt-6 rounded-3xl border border-line bg-white p-5">
+          <p className="text-[13px] font-semibold">Everything included</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {PLAN_FEATURES.map((f) => (
+              <div key={f} className="flex items-center gap-2 text-[13px] text-ink-soft">
+                <Check size={14} className="shrink-0 text-accent" />
+                {f}
+              </div>
+            ))}
           </div>
         </div>
+
+        <div className="mt-6 rounded-3xl border border-line bg-canvas/80 p-5">
+          <div className="flex items-start gap-3">
+            <Clock size={16} className="mt-0.5 shrink-0 text-accent" />
+            <div className="text-[13px] leading-relaxed text-ink-soft">
+              <p className="font-semibold text-ink">How billing works</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-4">
+                <li>You choose Monthly or Yearly and confirm on Razorpay</li>
+                <li>Your {TRIAL_DAYS}-day free trial starts right away</li>
+                <li>
+                  After {TRIAL_DAYS} days, Razorpay charges ₹
+                  {formatRupees(selectedOption.price)} automatically
+                </li>
+                <li>Cancel anytime from Billing before the trial ends — no charge</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void handleSubscribe()}
+          disabled={subscribing}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-4 text-[15px] font-semibold text-white shadow-elegant-md transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {subscribing ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <CreditCard size={16} />
+          )}
+          Start {TRIAL_DAYS}-day trial · {selectedOption.label} ₹
+          {formatRupees(selectedOption.price)}
+        </button>
+
+        <p className="mt-4 text-center text-[12px] text-ink-faint">
+          <Sparkles size={11} className="mr-1 inline" />
+          Secure checkout by Razorpay · UPI, cards & net banking
+        </p>
       </div>
     </div>
   )

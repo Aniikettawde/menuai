@@ -1,90 +1,73 @@
-// src/app/api/billing/create-subscription/route.ts
-//
-// Creates a Razorpay Subscription for the user.
-// The client opens the Razorpay checkout with subscription_id (NOT order_id).
-// No payment is taken upfront — first charge happens at the end of trial_period
-// (we set trial_period=0 since we handle our own trial in DB).
+// Creates a Razorpay Subscription with a 7-day trial.
+// First charge happens automatically when the trial ends.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
 import {
-  BILLING_PLANS,
-  getRazorpayPlanId,
+  PLAN_ID,
+  TRIAL_DAYS,
   getPlanAmountPaise,
+  getRazorpayPlanId,
+  isValidBillingCycle,
   type BillingCycle,
-  type PlanId,
 } from '@/lib/billing-plans'
-
-function getRazorpayAuth() {
-  const key = process.env.RAZORPAY_KEY_ID!
-  const secret = process.env.RAZORPAY_KEY_SECRET!
-  return Buffer.from(`${key}:${secret}`).toString('base64')
-}
+import { getRazorpayAuth, getServiceClient, requireBillingUser } from '@/lib/billing-auth'
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
-    const planId = (body?.plan_id as PlanId) ?? 'growth'
-    const billingCycle = (body?.billing_cycle as BillingCycle) ?? 'monthly'
+    const billingCycle = body?.billing_cycle as BillingCycle
 
-    const plan = BILLING_PLANS[planId]
-    if (!plan) {
-      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
+    if (!isValidBillingCycle(billingCycle)) {
+      return NextResponse.json({ error: 'Choose monthly or yearly' }, { status: 400 })
     }
 
-    const razorpayPlanId = getRazorpayPlanId(planId, billingCycle)
+    const razorpayPlanId = getRazorpayPlanId(PLAN_ID, billingCycle)
     if (!razorpayPlanId) {
       return NextResponse.json(
-        { error: 'Razorpay plan ID not configured. Run /api/billing/seed-plans first.' },
-        { status: 500 },
+        { error: 'Billing is not configured yet. Please contact support.' },
+        { status: 503 },
       )
     }
 
-    // ── Authenticate user ────────────────────────────────────────────
-    let userId: string | null = null
-    let userEmail: string | null = null
-
-    // Strategy 1: Bearer token
-    const authHeader = req.headers.get('authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7)
-      const sb = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { persistSession: false } },
-      )
-      const { data: { user } } = await sb.auth.getUser(token)
-      if (user) { userId = user.id; userEmail = user.email ?? null }
+    const auth = await requireBillingUser(req)
+    if (!auth) {
+      return NextResponse.json({ error: 'Please sign in to continue' }, { status: 401 })
     }
 
-    // Strategy 2: Cookie session
-    if (!userId) {
-      const cookieStore = cookies()
-      const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          cookies: {
-            getAll() { return cookieStore.getAll() },
-            setAll() {},
-          },
-        },
-      )
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) { userId = user.id; userEmail = user.email ?? null }
+    const { userId, email } = auth
+    const sb = getServiceClient()
+
+    // Block duplicate active / trial subscriptions
+    const { data: existing } = await sb
+      .from('subscriptions')
+      .select('plan, trial_end, current_period_end, razorpay_subscription_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (existing) {
+      const now = Date.now()
+      const trialOk =
+        existing.plan === 'trial' &&
+        existing.trial_end &&
+        new Date(existing.trial_end).getTime() > now
+      const paidOk =
+        existing.plan === 'active' &&
+        (!existing.current_period_end || new Date(existing.current_period_end).getTime() > now)
+
+      if (trialOk || paidOk) {
+        return NextResponse.json(
+          { error: 'You already have an active plan or trial.' },
+          { status: 409 },
+        )
+      }
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // ── Create Razorpay Subscription ─────────────────────────────────
-    // total_count = number of billing cycles
-    // For monthly: 120 cycles (10 years) — effectively infinite
-    // For yearly:  10 cycles (10 years)
+    // monthly: ~10 years of cycles; yearly: 10 years
     const totalCount = billingCycle === 'yearly' ? 10 : 120
+    const amountPaise = getPlanAmountPaise(PLAN_ID, billingCycle)
+
+    // This Razorpay account rejects `trial_period`. Delay first charge with start_at instead.
+    const startAt = Math.floor(Date.now() / 1000) + TRIAL_DAYS * 24 * 60 * 60
 
     const rzpRes = await fetch('https://api.razorpay.com/v1/subscriptions', {
       method: 'POST',
@@ -96,13 +79,13 @@ export async function POST(req: NextRequest) {
         plan_id: razorpayPlanId,
         total_count: totalCount,
         quantity: 1,
-        // No trial period — we handle trial separately in our DB.
-        // User has already chosen to pay when they hit this endpoint.
+        start_at: startAt,
+        customer_notify: 1,
         notes: {
           user_id: userId,
-          email: userEmail ?? '',
+          email: email ?? '',
           product: 'Dinezy',
-          plan_id: planId,
+          plan_id: PLAN_ID,
           billing_cycle: billingCycle,
         },
       }),
@@ -111,45 +94,49 @@ export async function POST(req: NextRequest) {
     const rzpText = await rzpRes.text()
     if (!rzpRes.ok) {
       console.error('Razorpay subscription create error:', rzpText)
-      return NextResponse.json(
-        { error: 'Failed to create subscription', details: rzpText },
-        { status: 502 },
-      )
+      let detail = 'Could not start checkout. Please try again.'
+      try {
+        const parsed = JSON.parse(rzpText)
+        if (parsed?.error?.description) detail = parsed.error.description
+      } catch {
+        /* ignore */
+      }
+      return NextResponse.json({ error: detail }, { status: 502 })
     }
 
-    const rzpSub = JSON.parse(rzpText) as {
-      id: string
-      status: string
-      plan_id: string
-    }
+    const rzpSub = JSON.parse(rzpText) as { id: string; status: string }
 
-    // ── Log pending subscription in our DB ───────────────────────────
-    const sb = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } },
+    const trialStart = new Date()
+    const trialEnd = new Date(trialStart)
+    trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS)
+
+    const { error: upsertError } = await sb.from('subscriptions').upsert(
+      {
+        user_id: userId,
+        plan: 'pending',
+        plan_id: PLAN_ID,
+        billing_cycle: billingCycle,
+        amount_paise: amountPaise,
+        razorpay_subscription_id: rzpSub.id,
+        trial_start: trialStart.toISOString(),
+        trial_end: trialEnd.toISOString(),
+        trial_reminder_sent: false,
+      },
+      { onConflict: 'user_id' },
     )
 
-    // Store razorpay_subscription_id on the subscription row (upsert)
-    await sb
-      .from('subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          plan: 'pending',           // will become 'active' after webhook
-          plan_id: planId,
-          billing_cycle: billingCycle,
-          amount_paise: getPlanAmountPaise(planId, billingCycle),
-          razorpay_subscription_id: rzpSub.id,
-        },
-        { onConflict: 'user_id' },
-      )
+    if (upsertError) {
+      console.error('create-subscription upsert error:', upsertError)
+      return NextResponse.json({ error: 'Could not save subscription' }, { status: 500 })
+    }
 
     return NextResponse.json({
       subscription_id: rzpSub.id,
-      plan_id: planId,
+      plan_id: PLAN_ID,
       billing_cycle: billingCycle,
-      key: process.env.RAZORPAY_KEY_ID,
+      trial_days: TRIAL_DAYS,
+      amount_paise: amountPaise,
+      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID,
     })
   } catch (err) {
     console.error('create-subscription error:', err)

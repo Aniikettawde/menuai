@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
+import { formatRupees, getPlanLabel, type BillingCycle } from '@/lib/billing-plans'
 
 export async function GET() {
   try {
@@ -35,7 +36,9 @@ export async function GET() {
 
     const { data: sub } = await sb
       .from('subscriptions')
-      .select('plan, plan_id, billing_cycle, amount_paise, trial_end, current_period_end')
+      .select(
+        'plan, plan_id, billing_cycle, amount_paise, trial_end, trial_start, current_period_end, razorpay_subscription_id',
+      )
       .eq('user_id', user.id)
       .maybeSingle()
 
@@ -51,42 +54,65 @@ export async function GET() {
     }
 
     const now = new Date()
+    const cycle = (sub.billing_cycle as BillingCycle | null) ?? null
+    const plan = String(sub.plan ?? '').toLowerCase()
+    const trialEnd = sub.trial_end ? new Date(sub.trial_end) : null
+    const paidEnd = sub.current_period_end ? new Date(sub.current_period_end) : null
 
     const isPaidActive =
-      sub.plan === 'active' && sub.current_period_end
-        ? new Date(sub.current_period_end) > now
-        : sub.plan === 'active'
-          ? true
-          : false
+      plan === 'active' && (paidEnd ? paidEnd > now : true)
 
-    const isTrialActive =
-      sub.plan === 'trial' && sub.trial_end
-        ? new Date(sub.trial_end) > now
-        : sub.plan === 'trial'
-          ? true
-          : false
+    const isTrialActive = plan === 'trial' && !!trialEnd && trialEnd > now
 
-    const hasAccess = isPaidActive || isTrialActive
+    const isCancelled = plan === 'cancelled' || plan === 'canceled'
+    const cancelledGrace =
+      isCancelled &&
+      ((!!trialEnd && trialEnd > now) || (!!paidEnd && paidEnd > now))
+
+    const hasAccess = isPaidActive || isTrialActive || cancelledGrace
 
     let trial_days_remaining: number | null = null
-    if (sub.plan === 'trial' && sub.trial_end) {
-      const trialEnd = new Date(sub.trial_end)
+    if ((isTrialActive || (isCancelled && trialEnd && trialEnd > now)) && trialEnd) {
       const msLeft = trialEnd.getTime() - now.getTime()
       trial_days_remaining = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)))
     }
 
+    const amountPaise = sub.amount_paise ?? null
+    const amountLabel =
+      amountPaise != null
+        ? `₹${formatRupees(amountPaise / 100)}${cycle === 'yearly' ? '/yr' : cycle === 'monthly' ? '/mo' : ''}`
+        : null
+
+    const accessUntil =
+      isTrialActive || (isCancelled && trialEnd && trialEnd > now)
+        ? sub.trial_end
+        : sub.current_period_end ?? sub.trial_end
+
+    const canCancel =
+      Boolean(sub.razorpay_subscription_id) &&
+      (isTrialActive || isPaidActive) &&
+      !isCancelled
+
     return NextResponse.json({
       status: {
         plan: sub.plan,
-        plan_id: sub.plan === 'trial' ? null : sub.plan_id ?? null,
-        billing_cycle: sub.plan === 'trial' ? null : sub.billing_cycle ?? null,
-        amount_paise: sub.plan === 'trial' ? 0 : sub.amount_paise ?? null,
+        plan_id: sub.plan_id ?? 'dinezy',
+        plan_label: getPlanLabel(cycle),
+        billing_cycle: cycle,
+        amount_paise: amountPaise,
+        amount_label: amountLabel,
         has_access: hasAccess,
-        is_paid_active: isPaidActive,
-        is_trial_active: isTrialActive,
+        is_paid_active: isPaidActive || (cancelledGrace && !!paidEnd && paidEnd > now),
+        is_trial_active: isTrialActive || (cancelledGrace && !!trialEnd && trialEnd > now && !(paidEnd && paidEnd > now)),
+        is_cancelled: isCancelled,
+        cancel_scheduled: isCancelled && hasAccess,
+        can_cancel: canCancel,
+        has_razorpay: Boolean(sub.razorpay_subscription_id),
         trial_days_remaining,
         current_period_end: sub.current_period_end ?? null,
         trial_end: sub.trial_end ?? null,
+        trial_start: sub.trial_start ?? null,
+        access_until: accessUntil ?? null,
       },
       history: history ?? [],
     })

@@ -1,147 +1,124 @@
+// Client-side verify after Razorpay checkout.
+// Starts the 7-day trial (payment method authenticated). First charge comes after trial.
+
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
-import { getPlanAmountPaise, type BillingCycle, type PlanId } from '@/lib/billing-plans'
 import crypto from 'crypto'
-
-function isValidPlanId(value: unknown): value is PlanId {
-  return value === 'small' || value === 'growth' || value === 'large'
-}
-
-function isValidBillingCycle(value: unknown): value is BillingCycle {
-  return value === 'monthly' || value === 'yearly'
-}
+import {
+  PLAN_ID,
+  TRIAL_DAYS,
+  getPlanAmountPaise,
+  isValidBillingCycle,
+  normalizePlanId,
+  type BillingCycle,
+} from '@/lib/billing-plans'
+import {
+  getServiceClient,
+  publishRestaurantForOwner,
+  requireBillingUser,
+} from '@/lib/billing-auth'
 
 export async function POST(req: NextRequest) {
   try {
+    const body = await req.json().catch(() => ({}))
     const {
       razorpay_payment_id,
       razorpay_subscription_id,
       razorpay_signature,
-      plan_id,
       billing_cycle,
-    } = await req.json()
+    } = body
 
     if (!razorpay_payment_id || !razorpay_subscription_id || !razorpay_signature) {
       return NextResponse.json({ error: 'Missing payment fields' }, { status: 400 })
     }
 
-    if (!isValidPlanId(plan_id) || !isValidBillingCycle(billing_cycle)) {
-      return NextResponse.json({ error: 'Invalid plan details' }, { status: 400 })
+    if (!isValidBillingCycle(billing_cycle)) {
+      return NextResponse.json({ error: 'Invalid billing cycle' }, { status: 400 })
     }
 
-    let userId: string | null = null
-
-    const authHeader = req.headers.get('authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7)
-      const sb = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { persistSession: false } },
-      )
-      const {
-        data: { user },
-      } = await sb.auth.getUser(token)
-      if (user) userId = user.id
-    }
-
-    if (!userId) {
-      const cookieStore = cookies()
-      const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          cookies: {
-            getAll() {
-              return cookieStore.getAll()
-            },
-            setAll() {},
-          },
-        },
-      )
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (user) userId = user.id
-    }
-
-    if (!userId) {
+    const auth = await requireBillingUser(req)
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const secret = process.env.RAZORPAY_KEY_SECRET!
+    const secret = process.env.RAZORPAY_KEY_SECRET
+    if (!secret) {
+      return NextResponse.json({ error: 'Billing misconfigured' }, { status: 500 })
+    }
+
+    // FAIL CLOSED — never activate without a valid signature
     const expectedSig = crypto
       .createHmac('sha256', secret)
       .update(`${razorpay_payment_id}|${razorpay_subscription_id}`)
       .digest('hex')
 
     if (expectedSig !== razorpay_signature) {
-      console.error('Subscription signature mismatch', {
-        expected: expectedSig,
-        got: razorpay_signature,
-      })
+      console.error('Subscription signature mismatch')
+      return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 })
     }
 
-    const selectedPlanId = plan_id
-    const selectedBillingCycle = billing_cycle
-    const amountPaise = getPlanAmountPaise(selectedPlanId, selectedBillingCycle)
+    const sb = getServiceClient()
 
-    const sb = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } },
-    )
+    // Trust our pending row for this user + subscription id
+    const { data: existing } = await sb
+      .from('subscriptions')
+      .select('user_id, plan, plan_id, billing_cycle, razorpay_subscription_id')
+      .eq('user_id', auth.userId)
+      .maybeSingle()
+
+    if (
+      existing?.razorpay_subscription_id &&
+      existing.razorpay_subscription_id !== razorpay_subscription_id
+    ) {
+      return NextResponse.json({ error: 'Subscription mismatch' }, { status: 400 })
+    }
+
+    const selectedCycle = (existing?.billing_cycle as BillingCycle) || billing_cycle
+    const planId = normalizePlanId(existing?.plan_id) || PLAN_ID
+    const amountPaise = getPlanAmountPaise(planId, selectedCycle)
 
     const now = new Date()
-    const end = new Date(now)
-    if (selectedBillingCycle === 'yearly') {
-      end.setFullYear(end.getFullYear() + 1)
-    } else {
-      end.setMonth(end.getMonth() + 1)
+    const trialEnd = new Date(now)
+    trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS)
+
+    // Already on trial/active — idempotent success
+    if (existing?.plan === 'trial' || existing?.plan === 'active') {
+      return NextResponse.json({ success: true, plan: existing.plan })
     }
 
-    const { error: upsertError } = await sb
-      .from('subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          plan: 'active',
-          plan_id: selectedPlanId,
-          billing_cycle: selectedBillingCycle,
-          amount_paise: amountPaise,
-          razorpay_subscription_id,
-          razorpay_payment_id,
-          current_period_start: now.toISOString(),
-          current_period_end: end.toISOString(),
-        },
-        { onConflict: 'user_id' },
-      )
+    const { error: upsertError } = await sb.from('subscriptions').upsert(
+      {
+        user_id: auth.userId,
+        plan: 'trial',
+        plan_id: planId,
+        billing_cycle: selectedCycle,
+        amount_paise: amountPaise,
+        razorpay_subscription_id,
+        razorpay_payment_id,
+        trial_start: now.toISOString(),
+        trial_end: trialEnd.toISOString(),
+        trial_reminder_sent: false,
+        current_period_start: null,
+        current_period_end: null,
+      },
+      { onConflict: 'user_id' },
+    )
 
     if (upsertError) {
       console.error('verify-subscription upsert error:', upsertError)
-      return NextResponse.json({ error: upsertError.message }, { status: 500 })
+      return NextResponse.json({ error: 'Could not activate trial' }, { status: 500 })
     }
 
-    const { data: sub } = await sb
-      .from('subscriptions')
-      .select('id')
-      .eq('user_id', userId)
-      .maybeSingle()
+    try {
+      await publishRestaurantForOwner(auth.userId)
+    } catch (e) {
+      console.warn('publishRestaurantForOwner:', e)
+    }
 
-    await sb.from('payment_history').insert({
-      user_id: userId,
-      subscription_id: sub?.id ?? null,
-      razorpay_order_id: null,
-      razorpay_payment_id,
-      razorpay_signature,
-      amount_paise: amountPaise,
-      currency: 'INR',
-      status: 'paid',
+    return NextResponse.json({
+      success: true,
+      plan: 'trial',
+      trial_end: trialEnd.toISOString(),
     })
-
-    return NextResponse.json({ success: true })
   } catch (err) {
     console.error('verify-subscription error:', err)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })

@@ -82,12 +82,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // Onboarding — redirect staff/owners who already have restaurant access
+  // Onboarding — only skip if user already has active trial/paid access
   if (pathname === '/dashboard/onboarding') {
     const context = await resolveDashboardContext(user.id, user.email ?? null)
-    if (context) {
+    const ownerId = context?.ownerId ?? user.id
+    const sub = await getOwnerSubscriptionState(ownerId)
+    if (sub?.hasAccess) {
       const redirectUrl = request.nextUrl.clone()
-      redirectUrl.pathname = getLandingPath(context.role)
+      redirectUrl.pathname = context ? getLandingPath(context.role) : '/dashboard'
       return NextResponse.redirect(redirectUrl)
     }
     return supabaseResponse

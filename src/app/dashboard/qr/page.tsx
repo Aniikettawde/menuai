@@ -46,11 +46,11 @@ type RestaurantRecord = {
   [key: string]: unknown
 }
 
-type BillingPlanKey = 'trial' | 'small' | 'growth' | 'large'
+type BillingPlanKey = 'trial' | 'dinezy' | 'small' | 'growth' | 'large'
 
 type BillingStatus = {
   plan: string
-  plan_id: BillingPlanKey | null
+  plan_id: BillingPlanKey | string | null
   billing_cycle: string | null
   amount_paise: number | null
   has_access: boolean
@@ -63,18 +63,20 @@ type BillingStatus = {
 
 type TokenMap = Map<number, string>
 
-const QR_LIMITS: Record<BillingPlanKey, number> = {
+const QR_LIMITS: Record<string, number> = {
   trial: Number.POSITIVE_INFINITY,
-  small: 20,
-  growth: 50,
-  large: 200,
+  dinezy: Number.POSITIVE_INFINITY,
+  small: Number.POSITIVE_INFINITY,
+  growth: Number.POSITIVE_INFINITY,
+  large: Number.POSITIVE_INFINITY,
 }
 
-const PLAN_LABELS: Record<BillingPlanKey, string> = {
+const PLAN_LABELS: Record<string, string> = {
   trial: 'Free trial',
-  small: 'Small Monthly',
-  growth: 'Growth Monthly',
-  large: 'Large Monthly',
+  dinezy: 'Dinezy',
+  small: 'Dinezy',
+  growth: 'Dinezy',
+  large: 'Dinezy',
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -95,15 +97,19 @@ function getUsedQrCount(record: RestaurantRecord | null): number {
   return getNumberField(record, ['qr_generated_count', 'qr_count_used', 'generated_qr_count', 'qr_count'])
 }
 
-function getEffectivePlan(status: BillingStatus): BillingPlanKey {
+function getEffectivePlan(status: BillingStatus): string {
   if (!status) return 'trial'
   if (status.plan === 'trial') return 'trial'
-  if (status.plan === 'active' && status.plan_id) return status.plan_id
+  if (status.plan === 'active') return status.plan_id || 'dinezy'
   return 'trial'
 }
 
-function getPlanLabel(status: BillingStatus): string { return PLAN_LABELS[getEffectivePlan(status)] }
-function getPlanLimit(status: BillingStatus): number { return QR_LIMITS[getEffectivePlan(status)] }
+function getPlanLabel(status: BillingStatus): string {
+  return PLAN_LABELS[getEffectivePlan(status)] ?? 'Dinezy'
+}
+function getPlanLimit(status: BillingStatus): number {
+  return QR_LIMITS[getEffectivePlan(status)] ?? Number.POSITIVE_INFINITY
+}
 
 async function generateQRWithLogoHole(url: string, size: number, holeFraction = 0.22): Promise<string> {
   const canvas = document.createElement('canvas')

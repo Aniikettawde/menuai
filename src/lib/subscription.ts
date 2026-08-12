@@ -64,6 +64,8 @@ export async function getUserSubscriptionStatus(userId: string): Promise<Subscri
 /**
  * Central helper for premium access checks.
  * Discovery visibility should NOT use this; discovery should rely on restaurants.is_published.
+ *
+ * Cancelled subscriptions still have access until trial_end / current_period_end.
  */
 export function isSubscriptionActive(status: SubscriptionLike | SubscriptionStatus | null | undefined): boolean {
   if (!status) return false
@@ -73,11 +75,19 @@ export function isSubscriptionActive(status: SubscriptionLike | SubscriptionStat
   const trialEnd = status.trial_end ? new Date(status.trial_end).getTime() : null
   const currentPeriodEnd = status.current_period_end ? new Date(status.current_period_end).getTime() : null
 
-  if (['expired', 'cancelled', 'canceled', 'inactive', 'suspended'].includes(plan)) {
+  if (['expired', 'inactive', 'suspended'].includes(plan)) {
+    return false
+  }
+
+  // Cancelled = no more renewals, but keep access for the remaining paid/trial window
+  if (plan === 'cancelled' || plan === 'canceled') {
+    if (trialEnd && trialEnd > now) return true
+    if (currentPeriodEnd && currentPeriodEnd > now) return true
     return false
   }
 
   if (['active', 'paid', 'subscription'].includes(plan)) {
+    if (currentPeriodEnd) return currentPeriodEnd > now
     return true
   }
 
@@ -100,7 +110,7 @@ export async function activateSubscription(
   const now = new Date()
   const end = new Date(now)
   const billingCycle: BillingCycle = opts.billingCycle ?? 'monthly'
-  const planId: PlanId = opts.planId ?? 'growth'
+  const planId: PlanId = opts.planId ?? 'dinezy'
   const amountPaise = opts.amountPaise ?? getPlanAmountPaise(planId, billingCycle)
 
   if (billingCycle === 'yearly') {
@@ -190,33 +200,34 @@ if (restaurantForTokens) {
 }
 
 /**
- * Only expires the subscription.
- * IMPORTANT: Do NOT touch restaurants.is_published here.
- * Discovery listing must remain visible after trial ends.
+ * Only expires legacy free trials (no Razorpay subscription).
+ * Plan-bundled trials are charged by Razorpay — do NOT expire those here.
  */
 export async function expireTrials() {
   const sb = getServiceClient()
   const nowIso = new Date().toISOString()
 
-  // 1. Find trials that are expiring
+  // 1. Find legacy trials (no Razorpay sub) that are expiring
   const { data: expiring, error: fetchError } = await sb
     .from('subscriptions')
     .select('user_id')
     .eq('plan', 'trial')
+    .is('razorpay_subscription_id', null)
     .lte('trial_end', nowIso)
 
   if (fetchError) throw fetchError
 
-  // 2. Expire the subscriptions
+  // 2. Expire those subscriptions only
   const { error } = await sb
     .from('subscriptions')
     .update({ plan: 'expired', current_period_end: nowIso })
     .eq('plan', 'trial')
+    .is('razorpay_subscription_id', null)
     .lte('trial_end', nowIso)
 
   if (error) throw error
 
-  // 3. Deactivate all QR tokens for these restaurants
+  // 3. Deactivate QR tokens for these restaurants
   if (expiring && expiring.length > 0) {
     const ownerIds = expiring.map((r) => r.user_id)
 

@@ -1,97 +1,135 @@
-export type BillingCycle = 'monthly' | 'yearly'
-export type PlanId = 'test' | 'small' | 'growth' | 'large'  // ← add 'test'
+// Single Dinezy product — choose Monthly ₹999 or Yearly ₹8999.
+// 7-day trial is attached to the Razorpay subscription (auto-charge after trial).
 
+export type BillingCycle = 'monthly' | 'yearly'
+export type PlanId = 'dinezy'
+
+/** Legacy plan ids that may still exist on older subscription rows */
+export type LegacyPlanId = 'test' | 'small' | 'growth' | 'large'
+
+export const TRIAL_DAYS = 7
+export const PLAN_ID: PlanId = 'dinezy'
+
+export type PlanOption = {
+  cycle: BillingCycle
+  price: number // INR
+  label: string
+  perMonth: number
+  badge?: string
+  popular?: boolean
+  description: string
+}
+
+export const PLAN_OPTIONS: PlanOption[] = [
+  {
+    cycle: 'monthly',
+    price: 999,
+    label: 'Monthly',
+    perMonth: 999,
+    description: 'Billed every month after your 7-day trial.',
+  },
+  {
+    cycle: 'yearly',
+    price: 8999,
+    label: 'Yearly',
+    perMonth: Math.round(8999 / 12),
+    badge: 'Best value',
+    popular: true,
+    description: 'Save vs monthly. Billed once a year after your 7-day trial.',
+  },
+]
+
+export const PLAN_FEATURES = [
+  'QR digital menu',
+  'AI food recommendations',
+  'WhatsApp campaigns',
+  'Loyalty & rewards',
+  'Guest reviews',
+  'Analytics dashboard',
+  'Call waiter',
+  'Cancel anytime',
+]
+
+export function getPlanAmountPaise(_planId: PlanId | string, billingCycle: BillingCycle): number {
+  const rupees = billingCycle === 'yearly' ? 8999 : 999
+  return rupees * 100
+}
+
+export function getRazorpayPlanId(_planId: PlanId | string, billingCycle: BillingCycle): string {
+  // Prefer new single-product plan IDs; fall back to legacy env names if present.
+  if (billingCycle === 'yearly') {
+    return (
+      process.env.RAZORPAY_PLAN_YEARLY ||
+      process.env.RAZORPAY_PLAN_GROWTH_YEARLY ||
+      process.env.RAZORPAY_PLAN_TEST_YEARLY ||
+      ''
+    )
+  }
+  return (
+    process.env.RAZORPAY_PLAN_MONTHLY ||
+    process.env.RAZORPAY_PLAN_GROWTH_MONTHLY ||
+    process.env.RAZORPAY_PLAN_TEST_MONTHLY ||
+    ''
+  )
+}
+
+export function isValidBillingCycle(value: unknown): value is BillingCycle {
+  return value === 'monthly' || value === 'yearly'
+}
+
+export function isValidPlanId(value: unknown): value is PlanId {
+  return value === 'dinezy'
+}
+
+/** Accept legacy ids from old DB rows / webhooks, normalize to dinezy */
+export function normalizePlanId(value: unknown): PlanId {
+  if (value === 'dinezy' || value === 'test' || value === 'small' || value === 'growth' || value === 'large') {
+    return 'dinezy'
+  }
+  return 'dinezy'
+}
+
+export function formatRupees(amount: number): string {
+  return new Intl.NumberFormat('en-IN').format(Math.round(amount))
+}
+
+export function getPlanLabel(billingCycle: BillingCycle | null | undefined): string {
+  if (billingCycle === 'yearly') return 'Dinezy Yearly'
+  if (billingCycle === 'monthly') return 'Dinezy Monthly'
+  return 'Dinezy'
+}
+
+/** @deprecated Use PLAN_OPTIONS — kept so older imports don't crash at build */
 export type BillingPlan = {
   id: PlanId
   name: string
   tables: string
-  monthly: number        // INR
-  yearly: number         // INR
+  monthly: number
+  yearly: number
   highlight: string
   popular?: boolean
   color: string
   shadow: string
   description: string
   features: string[]
-  // Razorpay Plan IDs — set these after running the seed script below
   razorpay_plan_id_monthly: string
   razorpay_plan_id_yearly: string
 }
 
 export const BILLING_PLANS: Record<PlanId, BillingPlan> = {
-	 test: {
-    id: 'test',
-    name: 'Test Plan',
-    tables: '1–5 tables',
-    monthly: 49,
-    yearly: 49,
-    highlight: 'For testing only',
-    color: 'from-green-500 to-emerald-600',
-    shadow: 'shadow-green-200',
-    description: 'A minimal plan to test the payment flow end to end.',
-    features: ['QR menu', 'AI assistant', 'Waiter call', 'Basic analytics'],
-    razorpay_plan_id_monthly: process.env.RAZORPAY_PLAN_TEST_MONTHLY ?? '',
-    razorpay_plan_id_yearly: process.env.RAZORPAY_PLAN_TEST_YEARLY ?? '',
-  },
-  small: {
-    id: 'small',
-    name: 'Small Dining Room',
-    tables: '10–20 tables',
-    monthly: 1999,
-    yearly: 11994,
-    highlight: 'Best for new restaurants',
-    color: 'from-sky-500 to-blue-600',
-    shadow: 'shadow-blue-200',
-    description: 'A clean starting point for small restaurants and cafés.',
-    features: ['QR menu', 'AI assistant', 'Waiter call', 'Basic analytics'],
-    // TODO: fill these after running `POST /api/billing/seed-plans`
-    razorpay_plan_id_monthly: process.env.RAZORPAY_PLAN_SMALL_MONTHLY ?? '',
-    razorpay_plan_id_yearly: process.env.RAZORPAY_PLAN_SMALL_YEARLY ?? '',
-  },
-  growth: {
-    id: 'growth',
-    name: 'Growing Restaurant',
-    tables: '20–50 tables',
-    monthly: 2999,
-    yearly: 17994,
-    highlight: 'Most popular',
+  dinezy: {
+    id: 'dinezy',
+    name: 'Dinezy',
+    tables: 'All restaurants',
+    monthly: 999,
+    yearly: 8999,
+    highlight: 'Everything included',
     popular: true,
-    color: 'from-violet-500 to-purple-600',
-    shadow: 'shadow-violet-200',
-    description: 'Best for restaurants that want smart upsells and more visibility.',
-    features: ['Everything in Small', 'AI upsells', 'Advanced analytics', 'Ratings & review insights'],
-    razorpay_plan_id_monthly: process.env.RAZORPAY_PLAN_GROWTH_MONTHLY ?? '',
-    razorpay_plan_id_yearly: process.env.RAZORPAY_PLAN_GROWTH_YEARLY ?? '',
+    color: 'from-[#7A2333] to-[#5C1A26]',
+    shadow: 'shadow-rose-200',
+    description: 'Full restaurant growth platform — menu, WhatsApp, loyalty, reviews & analytics.',
+    features: PLAN_FEATURES,
+    razorpay_plan_id_monthly: process.env.RAZORPAY_PLAN_MONTHLY ?? '',
+    razorpay_plan_id_yearly: process.env.RAZORPAY_PLAN_YEARLY ?? '',
   },
-  large: {
-    id: 'large',
-    name: 'Large Venue',
-    tables: '50+ tables',
-    monthly: 4999,
-    yearly: 29994,
-    highlight: 'For high-volume spots',
-    color: 'from-amber-500 to-orange-500',
-    shadow: 'shadow-orange-200',
-    description: 'Built for busy venues, chains, and high-footfall dining.',
-    features: ['Everything in Growth', 'Priority usage', 'Best for large teams', 'High-volume support'],
-    razorpay_plan_id_monthly: process.env.RAZORPAY_PLAN_LARGE_MONTHLY ?? '',
-    razorpay_plan_id_yearly: process.env.RAZORPAY_PLAN_LARGE_YEARLY ?? '',
-  },
-}
-
-export function getPlanAmountPaise(planId: PlanId, billingCycle: BillingCycle): number {
-  const plan = BILLING_PLANS[planId]
-  const rupees = billingCycle === 'monthly' ? plan.monthly : plan.yearly
-  return rupees * 100
-}
-
-export function getRazorpayPlanId(planId: PlanId, billingCycle: BillingCycle): string {
-  const plan = BILLING_PLANS[planId]
-  return billingCycle === 'monthly'
-    ? plan.razorpay_plan_id_monthly
-    : plan.razorpay_plan_id_yearly
-}
-
-export function formatRupees(amount: number): string {
-  return new Intl.NumberFormat('en-IN').format(Math.round(amount))
 }
