@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   ArrowLeft,
 } from 'lucide-react'
-import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 
 type Mode = 'login' | 'signup' | 'forgot'
 
@@ -23,16 +22,18 @@ function isValidEmail(email: string) {
 }
 
 function passwordStrength(password: string) {
-  if (password.length < 6) return { label: 'Too short', score: 0 }
-  if (password.length < 8) return { label: 'Weak', score: 1 }
-  if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) return { label: 'Good', score: 2 }
-  if (/[^A-Za-z0-9]/.test(password)) return { label: 'Strong', score: 3 }
-  return { label: 'Good', score: 2 }
+  if (password.length < 8) return { label: 'Too short', score: 0 }
+  const hasUpper = /[A-Z]/.test(password)
+  const hasNumber = /[0-9]/.test(password)
+  const hasSymbol = /[^A-Za-z0-9]/.test(password)
+  const score = [hasUpper, hasNumber, hasSymbol].filter(Boolean).length
+  if (score === 3) return { label: 'Strong', score: 3 }
+  if (score >= 1) return { label: 'Good', score: 2 }
+  return { label: 'Weak', score: 1 }
 }
 
 export default function DashboardLoginPage() {
   const router = useRouter()
-  const supabase = getSupabaseDashboardBrowser()
 
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
@@ -69,12 +70,10 @@ export default function DashboardLoginPage() {
       return false
     }
 
-    if (mode !== 'forgot' && password.length < 6) {
-      setError('Password must be at least 6 characters.')
+    if (mode !== 'forgot' && password.length < 8) {
+      setError('Password must be at least 8 characters.')
       return false
     }
-	
-	
 
     if (mode === 'signup' && passwordInfo.score === 0) {
       setError('Please choose a stronger password.')
@@ -85,7 +84,6 @@ export default function DashboardLoginPage() {
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-	  console.log('MODE:', mode)
     e.preventDefault()
     setLoading(true)
     setError('')
@@ -99,73 +97,73 @@ export default function DashboardLoginPage() {
 
       const cleanEmail = email.trim().toLowerCase()
 
-     if (mode === 'signup') {
-  const { data, error } = await supabase.auth.signUp({
-    email: cleanEmail,
-    password,
-    options: {
-      data: { full_name: name.trim() },
-    },
-  })
-
-  if (error) {
-    setError(error.message)
-    return
-  }
-
-  if (data.user && !data.session) {
-    setMessage('Check your email to confirm your account, then sign in.')
-    setMode('login')
-    setPassword('')
-    return
-  }
-
-  // Check if this user is a staff member
-  const res = await fetch('/api/dashboard/context', { cache: 'no-store' })
-  const json = await res.json().catch(() => ({}))
-
- if (json?.context) {
-  window.location.href = '/dashboard'
-} else {
-  window.location.href = '/dashboard/onboarding'
-}
-return
-}
-
-     
-
-      if (mode === 'forgot') {
-        const redirectTo =
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/dashboard/reset-password`
-            : '/dashboard/reset-password'
-
-        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo,
+      if (mode === 'signup') {
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password, name: name.trim() }),
         })
+        const json = await res.json().catch(() => ({}))
 
-        if (error) {
-          setError(error.message)
+        if (!res.ok) {
+          setError(json?.error || 'Something went wrong. Please try again.')
           return
         }
 
-        setMessage('Password reset email sent. Please check your inbox.')
+        if (json.needsConfirmation) {
+          setMessage('Check your email to confirm your account, then sign in.')
+          setMode('login')
+          setPassword('')
+          return
+        }
+
+        // Signed up and session established server-side — check staff context
+        const ctxRes = await fetch('/api/dashboard/context', { cache: 'no-store' })
+        const ctxJson = await ctxRes.json().catch(() => ({}))
+
+        if (ctxJson?.context) {
+          window.location.href = '/dashboard'
+        } else {
+          window.location.href = '/dashboard/onboarding'
+        }
+        return
       }
-	  
-	  if (mode === 'login') {
-  const { error } = await supabase.auth.signInWithPassword({
-    email: cleanEmail,
-    password,
-  })
 
-  if (error) {
-    setError(error.message)
-    return
-  }
+      if (mode === 'forgot') {
+        const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
-  window.location.href = '/dashboard'
-  return
-}
+        const res = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, origin }),
+        })
+        const json = await res.json().catch(() => ({}))
+
+        if (!res.ok) {
+          setError(json?.error || 'Something went wrong. Please try again.')
+          return
+        }
+
+        setMessage('If an account exists for this email, a reset link has been sent.')
+        return
+      }
+
+      if (mode === 'login') {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password }),
+        })
+        const json = await res.json().catch(() => ({}))
+
+        if (!res.ok) {
+          setError(json?.error || 'Something went wrong. Please try again.')
+          return
+        }
+
+        window.location.href = '/dashboard'
+        return
+      }
     } catch (err) {
       console.error(err)
       setError('Something went wrong. Please try again.')
@@ -269,7 +267,7 @@ return
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    minLength={6}
+                    minLength={8}
                     className="w-full rounded-2xl border border-white/10 bg-black/20 py-3 pl-10 pr-12 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10"
                   />
                   <button
@@ -385,8 +383,7 @@ return
               <div>
                 <p className="text-sm font-semibold text-white">Secure access</p>
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
-                  Your dashboard uses Supabase authentication. Password reset emails are sent securely,
-                  and the new password is set on a dedicated reset page.
+                  Secure Login
                 </p>
               </div>
             </div>
