@@ -213,6 +213,13 @@ function BestsellerSlider({
    of intent keywords (bestseller, most ordered, special, veg, spicy, new)
    so typing "veg" or "bestseller" surfaces the right dishes without the
    user needing to know exact dish names.
+
+   Keyword matching is PREFIX-based in both directions (not a loose
+   substring `includes`). A loose `includes` check meant typing "veg"
+   matched both "vegetarian" AND "non veg" (since "non veg" contains the
+   substring "veg"), and typing the plural "bestsellers" failed to match
+   "bestseller" at all (query longer than the keyword). Prefix matching
+   in both directions fixes both cases.
 ──────────────────────────────────────────────────────────────────────── */
 type SearchGroup = {
   key: string
@@ -265,6 +272,40 @@ const SEARCH_GROUPS: SearchGroup[] = [
     filter: (i) => !i.is_veg,
   },
 ]
+
+/**
+ * Prefix match in both directions, case-insensitive:
+ *  - "veg"  → matches "vegetarian" (keyword starts with query)
+ *  - "bestsellers" → matches "bestseller" (query starts with keyword,
+ *    tolerating a trailing plural/typo)
+ * Deliberately NOT a substring `includes` check — that's what let "veg"
+ * incorrectly match "non veg" too.
+ */
+function keywordMatches(query: string, keyword: string): boolean {
+  const q = query.trim().toLowerCase()
+  const kw = keyword.trim().toLowerCase()
+  if (!q || !kw) return false
+  if (kw.startsWith(q)) return true
+  if (q.length > kw.length && q.startsWith(kw)) return true
+  return false
+}
+
+/**
+ * Guaranteed literal substring match on an item's own name/description/tags.
+ * Used as a safety net alongside rankSearchResults (from @/lib/menu-rank):
+ * if that ranking function is too strict, fuzzy-matches only certain
+ * tokens, or depends on popularity data that some items lack, dish-name
+ * searches could silently return nothing even though the dish clearly
+ * matches. This keeps a plain, dependable match always in the result set.
+ */
+function matchesItemText(query: string, item: MenuItem): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return false
+  if (item.name?.toLowerCase().includes(q)) return true
+  if (item.description?.toLowerCase().includes(q)) return true
+  if (item.tags?.some((t) => t.toLowerCase().includes(q))) return true
+  return false
+}
 
 const SUGGESTION_CHIPS = [
   { label: 'Bestsellers', q: 'bestseller' },
@@ -702,10 +743,13 @@ const bestSellerItems = useMemo(() => {
 
   // Intent keywords: "bestseller", "most ordered", "veg", "spicy", etc.
   // Only kick in once the query is long enough to be a real word, so a
-  // stray "n" doesn't match "New Arrivals".
+  // stray "n" doesn't match "New Arrivals". Uses keywordMatches (prefix
+  // match, both directions) rather than a loose substring check — see the
+  // comment above keywordMatches for why that matters (e.g. "veg" vs
+  // "non veg").
   const matchedGroups = useMemo(() => {
     if (q.length < 3) return []
-    return SEARCH_GROUPS.filter((g) => g.keywords.some((k) => k.includes(q)))
+    return SEARCH_GROUPS.filter((g) => g.keywords.some((k) => keywordMatches(q, k)))
   }, [q])
 
   const categoryMatches = useMemo(() => {
@@ -715,9 +759,30 @@ const bestSellerItems = useMemo(() => {
 
   const textMatchedItems = useMemo(() => {
     if (!isSearching) return []
-    const available = translatedItems.filter((i) => i.is_available)
-    return rankSearchResults(available, searchQuery, restaurantPop, personalPop)
-  }, [translatedItems, searchQuery, isSearching, restaurantPop, personalPop])
+    // Literal matches only — name, description, tags. This is the source of
+    // truth for *membership* in the results.
+    const literalMatches = translatedItems.filter((i) => i.is_available && matchesItemText(q, i))
+    const literalIds = new Set(literalMatches.map((i) => i.id))
+
+    // rankSearchResults is used ONLY to order literal matches by relevance/
+    // popularity — never to add items that aren't literal matches. Without
+    // this guard, a "smart"/fuzzy ranker can surface unrelated dishes (e.g.
+    // a coffee whose description just mentions "goes well with a sandwich")
+    // as if they were real search results for "sandwich".
+    try {
+      const available = translatedItems.filter((i) => i.is_available)
+      const ranked = rankSearchResults(available, searchQuery, restaurantPop, personalPop)
+      const rankedLiteral = ranked.filter((i) => literalIds.has(i.id))
+      // If the ranker filtered everything out (too strict) or errored,
+      // fall back to the unordered literal match set so results never
+      // silently disappear.
+      if (rankedLiteral.length === literalMatches.length) return rankedLiteral
+      const rankedIdSet = new Set(rankedLiteral.map((i) => i.id))
+      return [...rankedLiteral, ...literalMatches.filter((i) => !rankedIdSet.has(i.id))]
+    } catch {
+      return literalMatches
+    }
+  }, [translatedItems, searchQuery, isSearching, q, restaurantPop, personalPop])
 
   const groupMatchedItems = useMemo(() => {
     if (matchedGroups.length === 0) return []

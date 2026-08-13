@@ -98,19 +98,24 @@ function trimDescription(text: string): string {
   return text.replace(/[,;:\s]+$/, '')
 }
 
+// NOTE: uses <span> (not <div>) throughout. This is rendered inside a <p>
+// in the dish-name row below — <div> is not valid HTML inside <p>, which
+// was causing a hydration mismatch (the browser silently closes the <p>
+// early to "fix" the invalid nesting, so what the browser ends up with
+// doesn't match what React rendered on the server).
 function VegDot({ isVeg }: { isVeg: boolean }) {
   return (
-    <div
+    <span
       aria-label={isVeg ? 'Vegetarian' : 'Non-vegetarian'}
       style={{
-        display: 'flex', width: 13, height: 13,
+        display: 'inline-flex', width: 13, height: 13,
         alignItems: 'center', justifyContent: 'center',
         flexShrink: 0, borderRadius: 3,
         border: `1.5px solid ${isVeg ? '#22c55e' : '#ef4444'}`,
       }}
     >
-      <div style={{ width: 5.5, height: 5.5, borderRadius: '50%', background: isVeg ? '#22c55e' : '#ef4444' }} />
-    </div>
+      <span style={{ display: 'inline-block', width: 5.5, height: 5.5, borderRadius: '50%', background: isVeg ? '#22c55e' : '#ef4444' }} />
+    </span>
   )
 }
 
