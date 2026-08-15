@@ -32,15 +32,12 @@ export async function POST(req: NextRequest) {
       console.error('[whatsapp-otp verify fetch]', fetchErr)
       return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
     }
-
     if (!otpRow) {
       return NextResponse.json({ error: 'No active code found. Request a new one.' }, { status: 400 })
     }
-
     if (new Date(otpRow.expires_at).getTime() < Date.now()) {
       return NextResponse.json({ error: 'Code expired. Request a new one.' }, { status: 400 })
     }
-
     if (otpRow.attempts >= otpRow.max_attempts) {
       return NextResponse.json(
         { error: 'Too many incorrect attempts. Request a new code.' },
@@ -70,7 +67,14 @@ export async function POST(req: NextRequest) {
     const uid = existingCustomer?.firebase_uid ?? `whatsapp:${digits}`
     const customToken = await createFirebaseCustomToken(uid)
 
-    return NextResponse.json({ ok: true, customToken, phone: displayPhone })
+    // `uid` is returned alongside `customToken` so that callers which don't
+    // run the Firebase client SDK (e.g. the Android app) can still treat OTP
+    // verification as authoritative: this value is ONLY ever produced after
+    // a real hashed-code check above, so a caller passing it straight to
+    // POST /api/auth/customer as firebase_uid is just as trustworthy as the
+    // web flow's signInWithCustomToken(customToken) -> uid. Callers that do
+    // have the Firebase SDK (web) should keep using customToken as before.
+    return NextResponse.json({ ok: true, uid, customToken, phone: displayPhone })
   } catch (err) {
     console.error('[whatsapp-otp verify]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
