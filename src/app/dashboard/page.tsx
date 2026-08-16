@@ -495,6 +495,11 @@ function LoadingSkeleton() {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [todayExtra, setTodayExtra] = useState<{
+    traffic: { qr: number; tableLink: number; direct: number }
+    tableScans: { table_number: number; scans: number; page_views: number; searches: number; cart_adds: number; orders: number }[]
+    waiter: { total: number; accepted: number }
+  } | null>(null)
   const supabase = getSupabaseDashboardBrowser()
   const { context, loading: contextLoading } = useDashboardContext()
   const router = useRouter()
@@ -640,7 +645,42 @@ export default function DashboardPage() {
       }
     }
 
+ async function loadTodayExtra() {
+      if (!context?.restaurantId) return
+      const startOfToday = new Date()
+      startOfToday.setHours(0, 0, 0, 0)
+      const sinceISO = startOfToday.toISOString()
+
+      try {
+        const [customerStatsJson, { data: waiterRows }] = await Promise.all([
+          fetch(
+            `/api/dashboard/analytics/customer-stats?restaurant_id=${context.restaurantId}&since=${encodeURIComponent(sinceISO)}`,
+          ).then((r) => r.json()),
+          supabase
+            .from('table_requests')
+            .select('id, status, created_at, accepted_at')
+            .eq('restaurant_id', context.restaurantId)
+            .gte('created_at', sinceISO)
+            .in('request_type', ['assistance', 'water', 'bill']),
+        ])
+
+        const vs = customerStatsJson?.visitor_summary ?? { qr_sessions: 0, table_link_sessions: 0, direct_sessions: 0 }
+        const accepted = (waiterRows ?? []).filter((r: { accepted_at: string | null }) => r.accepted_at).length
+
+        if (mounted) {
+          setTodayExtra({
+            traffic: { qr: vs.qr_sessions, tableLink: vs.table_link_sessions, direct: vs.direct_sessions },
+            tableScans: customerStatsJson?.table_scans ?? [],
+            waiter: { total: (waiterRows ?? []).length, accepted },
+          })
+        }
+      } catch (err) {
+        console.error('loadTodayExtra error:', err)
+      }
+    }
+
     void load()
+    void loadTodayExtra()
     return () => {
       mounted = false
     }
@@ -846,7 +886,57 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <OrdersSection restaurantId={context.restaurantId} />
+<OrdersSection restaurantId={context.restaurantId} />
+
+      {todayExtra && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className={`${cardBase} p-4`} style={cardStyle}>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.inkSoft }}>
+              Traffic source · Today
+            </p>
+            {[
+              { label: 'QR scan', value: todayExtra.traffic.qr, color: BRAND.plum },
+              { label: 'Table link', value: todayExtra.traffic.tableLink, color: BRAND.sky },
+              { label: 'Direct web', value: todayExtra.traffic.direct, color: BRAND.emerald },
+            ].map((row) => (
+              <div key={row.label} className="mb-2 flex items-center justify-between text-xs last:mb-0">
+                <span style={{ color: BRAND.inkFaint }}>{row.label}</span>
+                <span className="font-bold" style={{ color: row.color }}>{row.value}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className={`${cardBase} p-4`} style={cardStyle}>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.inkSoft }}>
+              Table activity · Today
+            </p>
+            {todayExtra.tableScans.length === 0 ? (
+              <p className="text-xs italic" style={{ color: BRAND.inkFaint }}>No table activity yet today</p>
+            ) : (
+              <div className="space-y-1.5">
+                {todayExtra.tableScans.slice(0, 4).map((t) => (
+                  <div key={t.table_number} className="flex items-center justify-between text-xs">
+                    <span style={{ color: BRAND.ink }}>Table {t.table_number}</span>
+                    <span style={{ color: BRAND.inkFaint }}>
+                      {t.scans} scans · {t.orders} orders
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className={`${cardBase} p-4`} style={cardStyle}>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: BRAND.inkSoft }}>
+              Waiter bell · Today
+            </p>
+            <p className="text-2xl font-bold" style={{ color: BRAND.burgundy }}>{todayExtra.waiter.total}</p>
+            <p className="mt-0.5 text-[11px]" style={{ color: BRAND.inkFaint }}>
+              {todayExtra.waiter.accepted} accepted
+            </p>
+          </div>
+        </div>
+      )}
 
      <VerifyCodeCard restaurantId={context.restaurantId} />
 
