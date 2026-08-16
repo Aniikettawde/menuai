@@ -479,8 +479,7 @@ export default function AnalyticsPage() {
         byType,
       })
 
-      const pageViews = events.filter((e) => e.event_type === 'page_view')
-      const uniqueSessions = new Set(pageViews.map((e) => e.session_id).filter((v): v is string => Boolean(v)))
+            const pageViews = events.filter((e) => e.event_type === 'page_view')
       const itemViewEvents = events.filter((e) => e.event_type === 'item_view')
       const aiSearchEvents = events.filter((e) => e.event_type === 'item_search')
       const menuSearchEvents = events.filter((e) => e.event_type === 'menu_search')
@@ -492,86 +491,24 @@ export default function AnalyticsPage() {
       const languageEvents = events.filter((e) => e.event_type === 'language_changed')
       const scrollEvents = events.filter((e) => e.event_type === 'scroll_depth')
 
+       const vs = customerStatsJson?.visitor_summary ?? {
+        visitors: 0, item_views: 0, qr_sessions: 0, table_link_sessions: 0, direct_sessions: 0,
+      }
       setTotals((t) => ({
         ...t,
-        visitors: uniqueSessions.size,
-        itemViews: itemViewEvents.length,
+        visitors: vs.visitors,
+        itemViews: vs.item_views,
       }))
 
       // Traffic source
-      let qr = 0
-      let tableLink = 0
-      let direct = 0
-      const sourceSessions = { qr: new Set<string>(), tableLink: new Set<string>(), direct: new Set<string>() }
-      for (const e of pageViews) {
-        const src = entrySourceOf(e)
-        const sid = e.session_id ?? ''
-        if (src === 'qr_scan') {
-          qr += 1
-          if (sid) sourceSessions.qr.add(sid)
-        } else if (src === 'table_link') {
-          tableLink += 1
-          if (sid) sourceSessions.tableLink.add(sid)
-        } else {
-          direct += 1
-          if (sid) sourceSessions.direct.add(sid)
-        }
-      }
+  // Traffic source + per-table activity now come pre-aggregated from the server
       setTraffic({
-        qr: sourceSessions.qr.size || qr,
-        tableLink: sourceSessions.tableLink.size || tableLink,
-        direct: sourceSessions.direct.size || direct,
-        sessions: uniqueSessions.size,
+        qr: vs.qr_sessions,
+        tableLink: vs.table_link_sessions,
+        direct: vs.direct_sessions,
+        sessions: vs.visitors,
       })
-
-      // Per-table from events + QR sessions
-      const tableMap = new Map<number, TableScanRow>()
-      const ensureTable = (n: number) => {
-        if (!tableMap.has(n)) {
-          tableMap.set(n, {
-            table_number: n,
-            scans: 0,
-            last_scan_at: '',
-            page_views: 0,
-            sessions: 0,
-            searches: 0,
-            cart_adds: 0,
-            orders: 0,
-          })
-        }
-        return tableMap.get(n)!
-      }
-      for (const row of (customerStatsJson?.table_scans ?? []) as { table_number: number; scans: number; last_scan_at: string }[]) {
-        const t = ensureTable(row.table_number)
-        t.scans = row.scans
-        t.last_scan_at = row.last_scan_at
-      }
-      const sessionsByTable = new Map<number, Set<string>>()
-      for (const e of events) {
-        const m = metaOf(e)
-        const tn =
-          (typeof e.table_number === 'number' ? e.table_number : null) ??
-          (typeof m.table_number === 'number' ? (m.table_number as number) : null)
-        if (tn == null || tn <= 0) continue
-        const t = ensureTable(tn)
-        if (e.event_type === 'page_view') t.page_views += 1
-        if (e.event_type === 'menu_search' || e.event_type === 'item_search') t.searches += 1
-        if (e.event_type === 'cart_item_added') t.cart_adds += 1
-        if (e.event_type === 'cart_submitted' || e.event_type === 'waiter_called') t.orders += 1
-        if (e.session_id) {
-          const set = sessionsByTable.get(tn) ?? new Set()
-          set.add(e.session_id)
-          sessionsByTable.set(tn, set)
-        }
-      }
-      for (const [tn, set] of sessionsByTable) {
-        ensureTable(tn).sessions = set.size
-      }
-      setTableScans(
-        Array.from(tableMap.values()).sort(
-          (a, b) => b.scans - a.scans || b.page_views - a.page_views || a.table_number - b.table_number,
-        ),
-      )
+      setTableScans(customerStatsJson?.table_scans ?? [])
 
       // Dish performance
       const itemMap: Record<string, TopItem> = {}

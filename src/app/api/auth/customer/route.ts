@@ -13,6 +13,11 @@ export interface CustomerUpsertPayload {
   firebase_uid:   string
   phone:          string
   display_name?:  string | null
+  // Only send this when actually setting/changing it — omitting it (or
+  // sending null) leaves whatever the customer already has untouched.
+  // Must be lowercase, 3–20 chars, [a-z0-9_] — see USERNAME_REGEX and the
+  // matching DB constraint in customers_username_migration.sql.
+  username?:      string | null
   restaurant_id?: string | null
   table_number?:  number | null
   log_visit?:     boolean   // true only on the actual login moment (OTP verify), not on the follow-up "save name" call
@@ -23,11 +28,16 @@ export interface CustomerProfile {
   firebase_uid:   string
   phone:          string
   display_name:   string | null
+  username:       string | null
   loyalty_points: number
   created_at:     string
 }
 
 const SIGNUP_BONUS_POINTS = 50
+
+// Keep in sync with the client-side check in LoginScreen.kt and the DB
+// constraint in customers_username_migration.sql.
+const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/
 
 // ─── GET: fetch account data (visits + offers) ────────────────────────────────
 
@@ -210,6 +220,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing firebase_uid or phone' }, { status: 400 })
     }
 
+    // Normalize + validate the username up front, before touching the DB.
+    // Trim/lowercase so "Foo_Bar " and "foo_bar" collide the way a user
+    // would expect, and so the value satisfies the DB's lowercase-only
+    // format constraint.
+    let username: string | null | undefined = undefined
+    if (body.username != null) {
+      const normalized = body.username.trim().toLowerCase()
+      if (!USERNAME_REGEX.test(normalized)) {
+        return NextResponse.json(
+          { error: 'Invalid username: use 3–20 lowercase letters, numbers, or underscores' },
+          { status: 400 },
+        )
+      }
+      username = normalized
+    }
+
     const { data: existing, error: lookupErr } = await supabase
       .from('customers')
       .select('id')
@@ -223,6 +249,27 @@ export async function POST(req: NextRequest) {
 
     const isNewCustomer = !existing
 
+    // Pre-check uniqueness so we can return a clean 409 in the common case.
+    // The DB's unique index on lower(username) (customers_username_migration.sql)
+    // is still the source of truth and catches the race-condition case below.
+    if (username) {
+      const { data: usernameOwner, error: usernameLookupErr } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('username', username)
+        .neq('firebase_uid', body.firebase_uid)
+        .maybeSingle()
+
+      if (usernameLookupErr) {
+        console.error('[username lookup]', usernameLookupErr)
+        return NextResponse.json({ error: usernameLookupErr.message }, { status: 500 })
+      }
+
+      if (usernameOwner) {
+        return NextResponse.json({ error: 'That username is taken' }, { status: 409 })
+      }
+    }
+
     const { data: customer, error } = await supabase
       .from('customers')
       .upsert(
@@ -230,15 +277,23 @@ export async function POST(req: NextRequest) {
           firebase_uid: body.firebase_uid,
           phone:        body.phone,
           ...(body.display_name != null && { display_name: body.display_name }),
+          ...(username != null && { username }),
           ...(isNewCustomer && { loyalty_points: SIGNUP_BONUS_POINTS }),
           updated_at:   new Date().toISOString(),
         },
         { onConflict: 'firebase_uid', ignoreDuplicates: false },
       )
-      .select('id, firebase_uid, phone, display_name, loyalty_points, created_at')
+      .select('id, firebase_uid, phone, display_name, username, loyalty_points, created_at')
       .single()
 
     if (error) {
+      // 23505 = Postgres unique_violation. Covers the race where two
+      // requests for the same username slip past the pre-check above at
+      // the same time — the partial unique index on lower(username) is
+      // the actual guarantee, this pre-check is just a nicer error path.
+      if (error.code === '23505' && error.message?.includes('username')) {
+        return NextResponse.json({ error: 'That username is taken' }, { status: 409 })
+      }
       console.error('[customer upsert]', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
