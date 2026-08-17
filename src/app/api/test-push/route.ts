@@ -2,21 +2,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  })
+function getFirebaseAdmin() {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    })
+  }
+  return admin
 }
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token')
   if (!token) return NextResponse.json({ error: 'no token' }, { status: 400 })
 
-  await admin.messaging().send({
+  const fbAdmin = getFirebaseAdmin()
+  await fbAdmin.messaging().send({
     token,
     data: {
       title: 'New Order 🍽',
@@ -26,6 +32,5 @@ export async function GET(req: NextRequest) {
     },
     android: { priority: 'high' },
   })
-
   return NextResponse.json({ ok: true })
 }

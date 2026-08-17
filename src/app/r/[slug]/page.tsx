@@ -12,9 +12,12 @@ import { redirect } from 'next/navigation'
 import { getValidTableSession, sessionCookieName } from '@/lib/table-session'
 import { buildRestaurantSchema, type ReviewRow } from '@/lib/schema/restaurant-schema'
 
+// TODO: Cache Components adoption. Refactor this route so this opt-out can be removed.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+
 interface PageProps {
-  params: { slug: string }
-  searchParams: { table?: string; t?: string }
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ table?: string; t?: string }>
 }
 
 type SubscriptionRow = {
@@ -147,7 +150,8 @@ async function getDiscoveryData(slug: string): Promise<DiscoveryPageData | null>
 
 // ─── Metadata ────────────────────────────────────────────────────────────────
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   const result = await getRestaurantWithSub(params.slug)
 
   if (result && hasPaidAccess(result.sub)) {
@@ -186,7 +190,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-export default async function RestaurantPage({ params, searchParams }: PageProps) {
+export default async function RestaurantPage(props: PageProps) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const tableParam = searchParams.table
   const tokenParam = searchParams.t
 
@@ -212,7 +218,7 @@ export default async function RestaurantPage({ params, searchParams }: PageProps
       }
 
       const tableNumber = parseInt(tableParam!, 10)
-      const sessionId = cookies().get(sessionCookieName(restaurant.id))?.value
+      const sessionId = (await cookies()).get(sessionCookieName(restaurant.id))?.value
       const session = sessionId
         ? await getValidTableSession(sessionId, restaurant.id, tableNumber)
         : null

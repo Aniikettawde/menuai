@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { requireRestaurantAccess } from '@/lib/restaurant-access'
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await requireRestaurantAccess(req, req.nextUrl.searchParams.get('restaurantId'))
   if (!auth.ok) return auth.response
 

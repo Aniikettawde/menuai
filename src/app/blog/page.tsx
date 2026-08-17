@@ -3,6 +3,9 @@ import Link from "next/link";
 import { getBlogAdminClient } from "@/lib/supabase/blog-admin-client";
 import { BlogPostListItem } from "@/lib/types/blog";
 
+// TODO: Cache Components adoption. Refactor this route so this opt-out can be removed.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+
 export const revalidate = 60; // ISR: re-fetch at most once a minute
 
 const ACCENT = "#8b2635";

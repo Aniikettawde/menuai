@@ -6,13 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv env.d.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@mux/mux-node": "^15.0.0",
+    "@opennextjs/cloudflare": "^1.20.2",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.2",
     "@tiptap/extension-image": "^3.27.3",
@@ -38,13 +42,13 @@
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.408.0",
-    "next": "14.2.5",
+    "next": "16.3.1",
     "ogl": "^1.0.11",
     "qr-code-styling": "^1.9.2",
     "qrcode": "^1.5.4",
-    "react": "^18",
+    "react": "19.2.8",
     "react-chartjs-2": "^5.3.1",
-    "react-dom": "^18",
+    "react-dom": "19.2.8",
     "resend": "^6.12.4",
     "sharp": "^0.34.5",
     "tailwind-merge": "^3.6.0",
@@ -56,12 +60,19 @@
     "@types/jspdf": "^1.3.3",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "@types/web-push": "^3.6.4",
     "autoprefixer": "^10",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.6",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.123.0"
+  },
+  "overrides": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4"
   }
 }

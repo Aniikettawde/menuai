@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { getBlogAdminClient } from "@/lib/supabase/blog-admin-client";
 import { BlogPost } from "@/lib/types/blog";
 
+// TODO: Cache Components adoption. Refactor this route so this opt-out can be removed.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+
 export const revalidate = 60;
 
 const ACCENT = "#8b2635";
@@ -24,11 +27,12 @@ async function getPost(slug: string): Promise<BlogPost | null> {
   return data as BlogPost;
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { slug: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ slug: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const post = await getPost(params.slug);
   if (!post) return { title: "Post not found | Dinezy Blog" };
 
@@ -53,11 +57,12 @@ function formatDate(dateStr: string | null) {
   });
 }
 
-export default async function BlogPostPage({
-  params,
-}: {
-  params: { slug: string };
-}) {
+export default async function BlogPostPage(
+  props: {
+    params: Promise<{ slug: string }>;
+  }
+) {
+  const params = await props.params;
   const post = await getPost(params.slug);
   if (!post) notFound();
 

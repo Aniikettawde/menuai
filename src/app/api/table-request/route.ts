@@ -302,7 +302,7 @@ export async function POST(req: NextRequest) {
     // never trusted from the request body. This is what stops someone from
     // POSTing { tableNumber: 7 } from home once their physical presence
     // at the table can no longer be confirmed server-side.
-    const sessionCookieId = cookies().get(sessionCookieName(restaurant.id))?.value
+    const sessionCookieId = (await cookies()).get(sessionCookieName(restaurant.id))?.value
 
     if (!sessionCookieId) {
       return NextResponse.json(

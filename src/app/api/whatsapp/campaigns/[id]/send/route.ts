@@ -4,7 +4,8 @@ import { NextResponse } from 'next/server';
 import { processCampaignBatch } from '@/lib/campaignSender';
 import { requireAdminApi } from '@/lib/admin-guard';
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await requireAdminApi();
   if (!admin.ok) return admin.response;
 

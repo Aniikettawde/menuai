@@ -19,7 +19,6 @@ export async function middleware(request: NextRequest) {
   const host = request.headers.get('host') || ''
   const pathname = request.nextUrl.pathname
 
-  // Route explore.dinezy.in/ -> /discovery
   if (host === 'explore.dinezy.in' || host.startsWith('explore.dinezy.in:')) {
     if (pathname === '/') {
       const url = request.nextUrl.clone()
@@ -69,7 +68,6 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  // Redirect away from login if already authenticated
   if (pathname === '/dashboard/login') {
     const context = await resolveDashboardContext(user.id, user.email ?? null)
     if (!context) return supabaseResponse
@@ -82,7 +80,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // Onboarding — only skip if user already has active trial/paid access
   if (pathname === '/dashboard/onboarding') {
     const context = await resolveDashboardContext(user.id, user.email ?? null)
     const ownerId = context?.ownerId ?? user.id

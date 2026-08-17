@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 
-function getSupabaseServer() {
-  const cookieStore = cookies()
+async function getSupabaseServer() {
+  const cookieStore = await cookies()
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing restaurant_id or since' }, { status: 400 })
     }
 
-    const supabase = getSupabaseServer()
+    const supabase = await getSupabaseServer()
     const {
       data: { user },
       error: userError,

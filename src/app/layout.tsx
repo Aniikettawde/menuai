@@ -4,6 +4,10 @@ import { GeistMono } from 'geist/font/mono'
 import { Inter, Space_Grotesk, DM_Sans } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
+
+// TODO: Cache Components adoption. Refactor this route so this opt-out can be removed.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+
 // Inter is loaded only as a fallback layer behind Geist — never rendered directly,
 // but keeps the font-family stack solid if Geist fails to load.
 const inter = Inter({

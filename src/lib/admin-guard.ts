@@ -13,7 +13,7 @@ export type AdminAccessResult =
   | { ok: false; response: NextResponse }
 
 export async function getAdminUser() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

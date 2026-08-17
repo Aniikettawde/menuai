@@ -11,6 +11,9 @@ MessageSquare,
 ArrowRight,
 } from 'lucide-react'
 
+// TODO: Cache Components adoption. Refactor this route so this opt-out can be removed.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+
 export default function ContactPage() {
 return ( <main className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-white"> <section className="mx-auto max-w-7xl px-6 py-24"> <div className="mx-auto max-w-3xl text-center"> <span className="inline-flex rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700">
 Contact Dinezy </span>

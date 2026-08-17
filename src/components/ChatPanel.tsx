@@ -127,7 +127,7 @@ function ChatInput({
   setInput: (v: string) => void
   onSubmit: (e: FormEvent) => void
   disabled: boolean
-  inputRef: RefObject<HTMLInputElement>
+  inputRef: RefObject<HTMLInputElement | null>
 }) {
   return (
     <form onSubmit={onSubmit} className="cp-input-row">

@@ -3,6 +3,9 @@ import { getBlogAdminClient } from "@/lib/supabase/blog-admin-client";
 import BlogPostForm from "@/components/admin/blog/BlogPostForm";
 import { BlogPost } from "@/lib/types/blog";
 
+// TODO: Cache Components adoption. Refactor this route so this opt-out can be removed.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+
 export const dynamic = "force-dynamic";
 
 async function getPost(id: string): Promise<BlogPost | null> {
@@ -16,11 +19,12 @@ async function getPost(id: string): Promise<BlogPost | null> {
   return data as BlogPost;
 }
 
-export default async function EditBlogPostPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function EditBlogPostPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const post = await getPost(params.id);
   if (!post) notFound();
 

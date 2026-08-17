@@ -3,11 +3,12 @@ import { getBlogAdminClient } from "@/lib/supabase/blog-admin-client";
 import { BlogPostInput, slugify, estimateReadTime } from "@/lib/types/blog";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // GET /api/admin/blog/[id]
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const supabase = getBlogAdminClient();
     const { data, error } = await supabase
@@ -25,7 +26,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 // PUT /api/admin/blog/[id] - update post (also handles publish/unpublish)
-export async function PUT(req: NextRequest, { params }: Params) {
+export async function PUT(req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const body = (await req.json()) as Partial<BlogPostInput>;
     const supabase = getBlogAdminClient();
@@ -87,7 +89,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
 }
 
 // DELETE /api/admin/blog/[id]
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(_req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const supabase = getBlogAdminClient();
     const { error } = await supabase.from("blog_posts").delete().eq("id", params.id);

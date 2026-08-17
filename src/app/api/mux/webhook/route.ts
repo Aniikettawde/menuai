@@ -29,23 +29,26 @@ export async function POST(req: NextRequest) {
 
   switch (event.type) {
     case 'video.asset.ready': {
-      const asset = event.data as any
-      const postId = asset.passthrough as string | undefined
-      const playbackId = asset.playback_ids?.[0]?.id as string | undefined
-      if (!postId || !playbackId) break
-
-      const { error } = await supabase
-        .from('posts')
-        .update({
-          mux_asset_id: asset.id,
-          mux_playback_id: playbackId,
-          video_status: 'ready',
-        })
-        .eq('id', postId)
-
-      if (error) console.error('Failed to mark post ready', postId, error)
-      break
-    }
+  const asset = event.data as any
+  const postId = asset.passthrough as string | undefined
+  const playbackId = asset.playback_ids?.[0]?.id as string | undefined
+  if (!postId || !playbackId) break
+  const { data, error } = await supabase
+    .from('posts')
+    .update({
+      mux_asset_id: asset.id,
+      mux_playback_id: playbackId,
+      video_status: 'ready',
+    })
+    .eq('id', postId)
+    .select('id')          // <-- makes Supabase return which rows were actually updated
+  if (error) {
+    console.error('Failed to mark post ready', postId, error)
+  } else if (!data || data.length === 0) {
+    console.error('Webhook fired but no matching post row found for', postId)  // <-- this is the case that was silent before
+  }
+  break
+}
 
     case 'video.asset.errored': {
       const asset = event.data as any

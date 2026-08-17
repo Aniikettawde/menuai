@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
     // 2. Fall back to cookie session (web browser)
     if (!userId) {
-      const cookieStore = cookies()
+      const cookieStore = await cookies()
       const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

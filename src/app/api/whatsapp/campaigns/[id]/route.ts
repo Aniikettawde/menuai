@@ -4,7 +4,8 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { requireAdminApi } from '@/lib/admin-guard';
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await requireAdminApi();
   if (!admin.ok) return admin.response;
 
@@ -26,7 +27,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   return NextResponse.json({ campaign, recipients: recipients ?? [] });
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await requireAdminApi();
   if (!admin.ok) return admin.response;
 
