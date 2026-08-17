@@ -362,7 +362,14 @@ const autoVisitFiredRef = useRef(false)
   useEffect(() => {
     const token = searchParams.get('t')
     const rawTable = searchParams.get('table')
-    const entrySource = resolveEntrySource({ tableToken: token, tableParam: rawTable })
+    // A verified table_sessions cookie (tableSessionValid) means this visit
+    // came from a real QR scan even though /api/table-session/activate
+    // already stripped the token from the URL before this page mounted.
+    // Without this override, every real QR scan lands on a bare ?table=N
+    // URL and gets misclassified as 'table_link'.
+    const entrySource = tableSessionValid === true
+      ? 'qr_scan'
+      : resolveEntrySource({ tableToken: token, tableParam: rawTable })
     let mounted = true
 
     async function trackPageView() {
@@ -432,7 +439,7 @@ const autoVisitFiredRef = useRef(false)
       window.removeEventListener('pagehide', onPageHide)
       window.removeEventListener('scroll', onScroll)
     }
-  }, [searchParams, initialData.restaurant.id])
+   }, [searchParams, initialData.restaurant.id, tableSessionValid])
 
   // ── Realtime subscriptions ────────────────────────────────────────────────
   const itemsRef = useRef(items)
