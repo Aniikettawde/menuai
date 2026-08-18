@@ -1,11 +1,10 @@
 'use client'
 
-import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock, MessageCircle, MapPin } from 'lucide-react'
+import { Trophy, Gift, KeyRound, Copy, Check, Loader2, Clock, MessageCircle } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { LOYALTY_LEVELS } from '@/lib/loyalty-levels'
 import { useLoyaltyStatus } from '../app/api/loyalty/status/useLoyaltyStatus'
 import { RewardProgressBar } from './RewardProgressBar'
-
 
 interface Props {
   customerId: string
@@ -38,57 +37,7 @@ function useCountdown(expiresAt: string | null) {
   return secondsLeft
 }
 
-// ─── visual stepper so the user always knows where they are ─────────────
-function GiftStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
-  const steps = [
-    { n: 1 as const, label: 'Get PIN' },
-    { n: 2 as const, label: 'Show waiter' },
-    { n: 3 as const, label: 'Processing' },
-    { n: 4 as const, label: 'Received' },
-  ]
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 16, padding: '0 2px' }}>
-      {steps.map((s, i) => {
-        const done = step > s.n
-        const active = step === s.n
-        return (
-          <div key={s.n} style={{ display: 'contents' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flex: '0 0 auto', width: 54 }}>
-              <div style={{
-                width: 22, height: 22, borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: done ? 'var(--pr-gold)' : active ? 'var(--pr-gold-dim)' : 'var(--pr-border)',
-                border: active ? '2px solid var(--pr-gold)' : '2px solid transparent',
-                color: done ? 'var(--pr-cta-text)' : active ? 'var(--pr-gold)' : 'var(--pr-text-faint)',
-                fontSize: 11, fontWeight: 700, flexShrink: 0,
-                transition: 'all 0.2s',
-              }}>
-                {done ? <Check size={12} /> : s.n}
-              </div>
-              <span style={{
-                fontSize: 9, fontWeight: active ? 700 : 600, textAlign: 'center', lineHeight: 1.2,
-                color: active ? 'var(--pr-gold)' : done ? 'var(--pr-text-muted)' : 'var(--pr-text-faint)',
-                fontFamily: 'var(--font-body)',
-              }}>
-                {s.label}
-              </span>
-            </div>
-            {i < steps.length - 1 && (
-              <div style={{
-                flex: 1, height: 2, marginTop: 10, marginLeft: -8, marginRight: -8,
-                background: done ? 'var(--pr-gold)' : 'var(--pr-border)',
-                transition: 'background 0.3s',
-              }} />
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ─── celebration banner reused inside the drawer ─────────────────────────
-function CelebrationBanner({ kind, level }: { kind: 'welcome' | 'levelup'; level?: { emoji: string; title: string } }) {
+function CelebrationBanner({ level }: { level: { emoji: string; title: string } }) {
   return (
     <div style={{
       background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-orange-dim) 100%)',
@@ -96,15 +45,13 @@ function CelebrationBanner({ kind, level }: { kind: 'welcome' | 'levelup'; level
       padding: '16px 16px', marginBottom: 12,
       display: 'flex', alignItems: 'center', gap: 10,
     }}>
-      <span style={{ fontSize: 26 }}>{kind === 'welcome' ? '✅' : level?.emoji ?? '🏅'}</span>
+      <span style={{ fontSize: 26 }}>{level.emoji}</span>
       <div>
         <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-          {kind === 'welcome' ? 'Visit verified!' : `Badge unlocked: ${level?.title ?? ''}!`}
+          Badge unlocked: {level.title}!
         </p>
         <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-          {kind === 'welcome'
-            ? 'Your ₹50 Amazon Pay gift is being processed — usually ready within 24 hours.'
-            : 'Keep visiting to unlock the next level.'}
+          Keep visiting to unlock the next level.
         </p>
       </div>
     </div>
@@ -112,9 +59,11 @@ function CelebrationBanner({ kind, level }: { kind: 'welcome' | 'levelup'; level
 }
 
 export function QuestCard({ customerId, restaurantId }: Props) {
-  const { status, loading, refresh, justClaimedWelcome, justLeveledUp, clearCelebration } = useLoyaltyStatus(customerId)
+  const { status, loading, refresh, justLeveledUp, clearCelebration } = useLoyaltyStatus(customerId)
   const [genLoading, setGenLoading] = useState(false)
+  const [redeemLoading, setRedeemLoading] = useState(false)
   const [error, setError] = useState('')
+  const [redeemError, setRedeemError] = useState('')
   const [resendLoading, setResendLoading] = useState(false)
   const [resendMsg, setResendMsg] = useState('')
   const [copied, setCopied] = useState(false)
@@ -132,14 +81,13 @@ export function QuestCard({ customerId, restaurantId }: Props) {
     return () => clearInterval(id)
   }, [showPinForThisRestaurant, pendingRedemption, refresh])
 
-  // auto-clear celebration banners after a few seconds, same pattern as RewardOffersBar
   useEffect(() => {
-    if (justClaimedWelcome || justLeveledUp) {
+    if (justLeveledUp) {
       if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current)
-      celebrateTimeoutRef.current = setTimeout(() => clearCelebration(), justClaimedWelcome ? 7000 : 5000)
+      celebrateTimeoutRef.current = setTimeout(() => clearCelebration(), 5000)
     }
     return () => { if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current) }
-  }, [justClaimedWelcome, justLeveledUp, clearCelebration])
+  }, [justLeveledUp, clearCelebration])
 
   const handleGeneratePin = useCallback(async () => {
     setGenLoading(true)
@@ -159,6 +107,25 @@ export function QuestCard({ customerId, restaurantId }: Props) {
       setGenLoading(false)
     }
   }, [customerId, restaurantId, refresh])
+
+  const handleRedeem = useCallback(async () => {
+    setRedeemLoading(true)
+    setRedeemError('')
+    try {
+      const res = await fetch('/api/loyalty/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customerId, reward_type: 'amazon_pay' }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      await refresh()
+    } catch (err: any) {
+      setRedeemError(err?.message ?? 'Could not redeem')
+    } finally {
+      setRedeemLoading(false)
+    }
+  }, [customerId, refresh])
 
   const handleResend = useCallback(async () => {
     setResendLoading(true)
@@ -188,28 +155,19 @@ export function QuestCard({ customerId, restaurantId }: Props) {
     )
   }
 
-  const { verified_visits, current_level, next_level, progress_pct, pending_pin, redemptions, is_legend } = status
-  const hasClaimedWelcome = verified_visits > 0
-
-  // Figure out which step of the welcome-gift journey the user is on.
-  // This entire stepper/PIN flow only applies BEFORE the welcome gift is
-  // claimed — after that, visits are counted automatically from QR scans
-  // and no PIN generation happens anymore.
-  const showGiftStepper = !hasClaimedWelcome || !!pendingRedemption || !!justClaimedWelcome
-  let giftStep: 1 | 2 | 3 | 4 = 1
-  if (justClaimedWelcome) giftStep = 4
-  else if (pendingRedemption) giftStep = 3
-  else if (showPinForThisRestaurant) giftStep = 2
+  const {
+    verified_visits, current_level, next_level, progress_pct, is_legend,
+    points_balance, points_to_redeem, can_redeem,
+  } = status
+  const pointsPct = Math.min(100, Math.round((points_balance / points_to_redeem) * 100))
 
   return (
     <div style={{ marginBottom: 20 }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* celebration banners */}
-      {justClaimedWelcome && <CelebrationBanner kind="welcome" />}
-      {justLeveledUp && <CelebrationBanner kind="levelup" level={justLeveledUp} />}
+      {justLeveledUp && <CelebrationBanner level={justLeveledUp} />}
 
-      {/* Header card */}
+      {/* Points card */}
       <div style={{
         background: 'linear-gradient(135deg, var(--pr-gold-dim) 0%, var(--pr-orange-dim) 100%)',
         border: '1px solid var(--pr-border-hover)',
@@ -217,41 +175,51 @@ export function QuestCard({ customerId, restaurantId }: Props) {
         padding: '20px 20px 18px',
         marginBottom: 12,
       }}>
-        {hasClaimedWelcome ? (
-          <>
-            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-              Your Status
-            </p>
-            <p style={{ margin: '4px 0 14px', fontSize: 30, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-              {current_level ? `${current_level.emoji} ${current_level.title}` : '🍽️ First Bite'}
-            </p>
-            <RewardProgressBar
-              verifiedVisits={verified_visits}
-              currentLevel={current_level}
-              nextLevel={next_level}
-              progressPct={progress_pct}
-            />
-          </>
-        ) : (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <Gift size={15} color="var(--pr-gold)" />
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-                ₹50 Amazon Pay gift card waiting for you
-              </p>
-            </div>
-            <p style={{ margin: 0, fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-              3 quick steps: get a PIN, show it to your waiter, and we'll send your gift card here.
-            </p>
-          </>
-        )}
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+          Your Points
+        </p>
+        <p style={{ margin: '4px 0 10px', fontSize: 30, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+          {points_balance} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--pr-text-muted)' }}>/ {points_to_redeem}</span>
+        </p>
+        <div style={{ height: 6, borderRadius: 999, background: 'rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pointsPct}%`, background: 'var(--pr-gold)', borderRadius: 999, transition: 'width 0.4s ease' }} />
+        </div>
+        <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
+          Earn 50 points per verified visit — one per restaurant per day.
+        </p>
       </div>
 
-      {/* Stepper only shows for the pre-welcome-gift journey */}
-      {showGiftStepper && !justClaimedWelcome && <GiftStepper step={giftStep} />}
+      {/* Redeem button — only when eligible and nothing pending */}
+      {can_redeem && !pendingRedemption && (
+        <div style={{
+          background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
+          borderRadius: 14, padding: '14px 16px', marginBottom: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Gift size={14} color="var(--pr-gold)" />
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+              ₹250 Amazon Pay gift card unlocked
+            </p>
+          </div>
+          <button
+            type="button" onClick={() => void handleRedeem()} disabled={redeemLoading}
+            style={{
+              width: '100%', height: 42, borderRadius: 10,
+              background: 'var(--pr-gold)', border: 'none',
+              color: 'var(--pr-cta-text)', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-body)',
+              cursor: redeemLoading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            {redeemLoading ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Gift size={14} />}
+            Redeem for ₹250 GC
+          </button>
+          {redeemError && <p style={{ margin: '8px 0 0', fontSize: 11, color: '#dc2626', fontFamily: 'var(--font-body)' }}>{redeemError}</p>}
+        </div>
+      )}
 
-      {/* PIN generation box — pre-welcome-gift only */}
-      {!hasClaimedWelcome && !pendingRedemption && (
+      {/* PIN box — recurring, works every visit (subject to server-side cooldown) */}
+      {!pendingRedemption && (
         <div style={{
           background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
           borderRadius: 14, padding: '14px 16px', marginBottom: 12,
@@ -263,14 +231,14 @@ export function QuestCard({ customerId, restaurantId }: Props) {
               </p>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 32, fontWeight: 800, letterSpacing: '0.15em', color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
-                  {pending_pin!.pin}
+                  {status.pending_pin!.pin}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
                   <Clock size={12} /> {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
                 </span>
               </div>
               <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
-                Once your waiter enters this code, we'll start processing your gift card automatically.
+                Once your waiter enters this code, 50 points land in your account.
               </p>
             </>
           ) : (
@@ -278,11 +246,11 @@ export function QuestCard({ customerId, restaurantId }: Props) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <KeyRound size={14} color="var(--pr-gold)" />
                 <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-                  Verify your visit
+                  Verify this visit
                 </p>
               </div>
               <p style={{ margin: '0 0 10px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-                Get a PIN and show it to your waiter to claim your welcome gift.
+                Get a PIN and show it to your waiter to earn 50 points.
               </p>
               <button
                 type="button" onClick={() => void handleGeneratePin()} disabled={genLoading}
@@ -303,32 +271,7 @@ export function QuestCard({ customerId, restaurantId }: Props) {
         </div>
       )}
 
-      {/* Post-welcome-gift: no PIN, no button — visits count automatically */}
-      {hasClaimedWelcome && !pendingRedemption && (
-        <div style={{
-          background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
-          borderRadius: 14, padding: '14px 16px', marginBottom: 12,
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <div style={{
-            width: 34, height: 34, flexShrink: 0, borderRadius: 10,
-            background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <MapPin size={15} color="var(--pr-gold)" />
-          </div>
-          <div>
-            <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-              No PIN needed anymore
-            </p>
-            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
-              Just visit any Dinezy restaurant — we count it automatically toward your next badge.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Welcome gift status */}
+      {/* Redemption status */}
       {pendingRedemption && (
         <div style={{
           background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.16)',
@@ -337,7 +280,7 @@ export function QuestCard({ customerId, restaurantId }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <Check size={15} color="#16a34a" />
             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#16a34a', fontFamily: 'var(--font-body)' }}>
-              Visit verified — {REWARD_LABELS[pendingRedemption.reward_type]} on the way
+              {REWARD_LABELS[pendingRedemption.reward_type]} on the way
             </p>
           </div>
           <p style={{ margin: '2px 0 12px', fontSize: 11.5, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>
@@ -367,7 +310,7 @@ export function QuestCard({ customerId, restaurantId }: Props) {
         </div>
       )}
 
-      {redemptions.filter((r) => r.status === 'fulfilled').map((r) => (
+      {status.redemptions.filter((r) => r.status === 'fulfilled').map((r) => (
         <div key={r.id} style={{
           background: 'var(--pr-gold-dim)', border: '1px solid var(--pr-border-hover)',
           borderRadius: 14, padding: '12px 14px', marginBottom: 8,
@@ -409,39 +352,43 @@ export function QuestCard({ customerId, restaurantId }: Props) {
         </div>
       ))}
 
-      {/* Level ladder */}
-      {hasClaimedWelcome && (
-        <div style={{
-          background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
-          borderRadius: 14, padding: '14px 16px',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Trophy size={13} color="var(--pr-gold)" />
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-              Your Journey
-            </p>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {LOYALTY_LEVELS.map((lvl) => {
-              const unlocked = lvl.visitsRequired !== null ? verified_visits >= lvl.visitsRequired : is_legend
-              return (
-                <div key={lvl.level} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: unlocked ? 1 : 0.45 }}>
-                  <span style={{ fontSize: 16 }}>{lvl.emoji}</span>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
-                      {lvl.title}
-                    </p>
-                    <p style={{ margin: 0, fontSize: 10, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
-                      {lvl.visitsRequired !== null ? `${lvl.visitsRequired} visits` : 'Invite only'}
-                    </p>
-                  </div>
-                  {unlocked && <Check size={14} color="var(--pr-gold)" />}
-                </div>
-              )
-            })}
-          </div>
+      {/* Badge ladder — unrelated to points, still based on verified_visits */}
+      <div style={{
+        background: 'var(--pr-card)', border: '1px solid var(--pr-border)',
+        borderRadius: 14, padding: '14px 16px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <Trophy size={13} color="var(--pr-gold)" />
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+            Your Journey
+          </p>
         </div>
-      )}
+        <RewardProgressBar
+          verifiedVisits={verified_visits}
+          currentLevel={current_level}
+          nextLevel={next_level}
+          progressPct={progress_pct}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          {LOYALTY_LEVELS.map((lvl) => {
+            const unlocked = lvl.visitsRequired !== null ? verified_visits >= lvl.visitsRequired : is_legend
+            return (
+              <div key={lvl.level} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: unlocked ? 1 : 0.45 }}>
+                <span style={{ fontSize: 16 }}>{lvl.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--pr-text)', fontFamily: 'var(--font-body)' }}>
+                    {lvl.title}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 10, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
+                    {lvl.visitsRequired !== null ? `${lvl.visitsRequired} visits` : 'Invite only'}
+                  </p>
+                </div>
+                {unlocked && <Check size={14} color="var(--pr-gold)" />}
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

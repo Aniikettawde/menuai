@@ -17,19 +17,22 @@ export interface LoyaltyStatus {
   levels: LoyaltyLevel[]
   pending_pin: PendingPin | null
   redemptions: { id: string; reward_type: string; status: string; gift_card_code: string | null }[]
+  points_balance: number
+  points_to_redeem: number
+  can_redeem: boolean
 }
 
 /**
- * Fetches /api/loyalty/status and detects two celebration moments:
- *  - justClaimedWelcome: verified_visits went 0 → 1 (welcome gift auto-issued)
- *  - justLeveledUp: current_level advanced to a higher level
+ * Fetches /api/loyalty/status and detects one celebration moment:
+ *  - justLeveledUp: current_level advanced to a higher badge level
+ * (Points no longer auto-issue a one-time welcome gift — every verified
+ * visit just adds 50 points, so there's nothing "first visit" special
+ * to detect anymore.)
  */
 export function useLoyaltyStatus(customerId: string | null) {
   const [status, setStatus] = useState<LoyaltyStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [justClaimedWelcome, setJustClaimedWelcome] = useState(false)
   const [justLeveledUp, setJustLeveledUp] = useState<LoyaltyLevel | null>(null)
-  const prevVisitsRef = useRef<number | null>(null)
   const prevLevelRef = useRef<number>(0)
 
   const fetchStatus = useCallback(async () => {
@@ -41,19 +44,11 @@ export function useLoyaltyStatus(customerId: string | null) {
       const res = await fetch(`/api/loyalty/status?customer_id=${customerId}`)
       const json = await res.json()
       if (res.ok) {
-        const prevVisits = prevVisitsRef.current
         const prevLevel = prevLevelRef.current
         const newLevelNum = json.current_level?.level ?? 0
-
-        if (prevVisits !== null && json.verified_visits > prevVisits) {
-          if (prevVisits === 0 && json.verified_visits === 1) {
-            setJustClaimedWelcome(true)
-          } else if (newLevelNum > prevLevel) {
-            setJustLeveledUp(json.current_level)
-          }
+        if (newLevelNum > prevLevel && prevLevel !== 0) {
+          setJustLeveledUp(json.current_level)
         }
-
-        prevVisitsRef.current = json.verified_visits
         prevLevelRef.current = newLevelNum
         setStatus(json)
       }
@@ -72,8 +67,7 @@ export function useLoyaltyStatus(customerId: string | null) {
     status,
     loading,
     refresh: fetchStatus,
-    justClaimedWelcome,
     justLeveledUp,
-    clearCelebration: () => { setJustClaimedWelcome(false); setJustLeveledUp(null) },
+    clearCelebration: () => setJustLeveledUp(null),
   }
 }

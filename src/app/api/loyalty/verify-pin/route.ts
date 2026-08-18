@@ -126,57 +126,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Best-effort: notify owner + guest if this visit auto-issued the welcome gift ──
-    if (data.welcome_redemption_id) {
-      let customerForNotify: { display_name: string | null; phone: string | null } | null = null
-
-      try {
-        const { data: customer } = await admin
-          .from('customers')
-          .select('display_name, phone')
-          .eq('id', data.customer_id)
-          .maybeSingle()
-
-        customerForNotify = customer ?? null
-
-        if (process.env.RESEND_API_KEY && process.env.LOYALTY_NOTIFY_EMAIL && process.env.LOYALTY_FROM_EMAIL) {
-          await resend.emails.send({
-            from: process.env.LOYALTY_FROM_EMAIL,
-            to: process.env.LOYALTY_NOTIFY_EMAIL,
-            subject: `🎁 New welcome gift redemption — ${REWARD_LABELS.amazon_pay}`,
-            html: `
-              <div style="font-family: sans-serif; max-width: 480px;">
-                <h2 style="margin-bottom: 4px;">New guest welcome gift</h2>
-                <p style="color:#555; margin-top:0;">A guest's first verified visit auto-issued their ₹50 welcome gift. Action needed: issue the gift card and mark it fulfilled.</p>
-                <table style="width:100%; border-collapse: collapse; margin-top: 16px;">
-                  <tr><td style="padding:6px 0; color:#888;">Reward</td><td style="padding:6px 0; font-weight:600;">${REWARD_LABELS.amazon_pay}</td></tr>
-                  <tr><td style="padding:6px 0; color:#888;">Customer</td><td style="padding:6px 0; font-weight:600;">${customer?.display_name ?? 'N/A'}</td></tr>
-                  <tr><td style="padding:6px 0; color:#888;">Phone</td><td style="padding:6px 0; font-weight:600;">${customer?.phone ?? 'N/A'}</td></tr>
-                  <tr><td style="padding:6px 0; color:#888;">Restaurant</td><td style="padding:6px 0; font-weight:600;">${restaurant.name}</td></tr>
-                  <tr><td style="padding:6px 0; color:#888;">Redemption ID</td><td style="padding:6px 0; font-family:monospace;">${data.welcome_redemption_id}</td></tr>
-                </table>
-                <p style="margin-top:20px; color:#888; font-size:12px;">Enter the gift card code in your <code>redemptions</code> table and set status to <code>fulfilled</code> once sent.</p>
-              </div>
-            `,
-          })
-        }
-      } catch (emailErr) {
-        console.error('[verify-pin welcome email]', emailErr)
-      }
-
-      try {
-        if (customerForNotify?.phone) {
-          const result = await sendWhatsAppTemplate({
-            to: customerForNotify.phone,
-            templateName: 'gift_card_request_received',
-            languageCode: 'en',
-            bodyParams: [restaurant.name],
-          })
-          if (!result.ok) console.error('[verify-pin whatsapp confirm]', result.error)
-        }
-      } catch (waErr) {
-        console.error('[verify-pin whatsapp confirm]', waErr)
-      }
-    }
+    
 
     return NextResponse.json(data)
   } catch (err) {

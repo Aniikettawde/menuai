@@ -12,18 +12,22 @@ interface Props {
 /**
  * RewardWelcomePopup
  * ───────────────────
- * Shown once per session, ~10s after a logged-out user lands on the menu.
+ * Shown once per session, ~30s after a logged-out user lands on the menu.
  *
  * Copy principles:
- *  - CURIOSITY over specifics. We never state a number up front — "see what's
- *    waiting" pulls people in without setting an anchor that can feel small
- *    or gimmicky once revealed.
+ *  - CLEAR NUMBERS. Unlike the old one-time ₹50 welcome gift, this is a
+ *    repeatable points system — stating "50 points" and "500 = ₹250 GC"
+ *    up front sets the right expectation instead of implying a single
+ *    mystery reward.
  *  - LOW COMMITMENT framing. This is a small banner-style box, not a
  *    full-screen interruption — it should feel like a passing nudge, not a
  *    wall the user has to deal with.
  *  - HONEST EXIT. "Maybe later" is plain and judgment-free. A genuinely
  *    optional offer should look optional.
  */
+const POINTS_PER_VISIT = 50
+const POINTS_TO_REDEEM = 500
+
 export function RewardWelcomePopup({ isOpen, onClose, onClaim }: Props) {
   const [mounted, setMounted] = useState(false)
 
@@ -128,7 +132,7 @@ export function RewardWelcomePopup({ isOpen, onClose, onClaim }: Props) {
                 letterSpacing: '-0.01em',
               }}
             >
-              There's an offer waiting for you
+              Earn {POINTS_PER_VISIT} points on this visit
             </h2>
             <p
               style={{
@@ -138,7 +142,7 @@ export function RewardWelcomePopup({ isOpen, onClose, onClaim }: Props) {
                 color: 'var(--pr-text-muted)',
               }}
             >
-              Sign up in 10 seconds to see it — plus first access to future deals from us.
+              Login in 10 seconds — get {POINTS_PER_VISIT} points every verified visit, and redeem {POINTS_TO_REDEEM} points for a ₹250 Amazon Pay gift card.
             </p>
           </div>
         </div>
@@ -164,7 +168,7 @@ export function RewardWelcomePopup({ isOpen, onClose, onClaim }: Props) {
               gap: 4,
             }}
           >
-            See my offer <ChevronRight size={15} />
+            Start earning points <ChevronRight size={15} />
           </button>
 
           <button

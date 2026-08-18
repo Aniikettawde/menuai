@@ -7,13 +7,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
+const POINTS_TO_REDEEM = 500
+
 export async function GET(req: NextRequest) {
   const customerId = req.nextUrl.searchParams.get('customer_id')
   if (!customerId) return NextResponse.json({ error: 'Missing customer_id' }, { status: 400 })
 
   const { data: customer, error: custErr } = await supabase
     .from('customers')
-    .select('id, is_dinezy_legend')
+    .select('id, is_dinezy_legend, loyalty_points')
     .eq('id', customerId)
     .maybeSingle()
 
@@ -27,9 +29,6 @@ export async function GET(req: NextRequest) {
     .eq('customer_id', customerId)
     .eq('status', 'verified')
 
-  // Auto-counted visits only start accumulating once the welcome gift PIN
-  // has been verified at least once — enforced server-side in log_auto_visit,
-  // this is just for display math.
   const { count: autoVisitCount } = await supabase
     .from('customer_visits')
     .select('id', { count: 'exact', head: true })
@@ -60,6 +59,8 @@ export async function GET(req: NextRequest) {
   const span = nextLevel?.visitsRequired ? nextLevel.visitsRequired - base : 0
   const progressPct = !nextLevel ? 100 : span <= 0 ? 100 : Math.min(100, Math.round(((verifiedVisits - base) / span) * 100))
 
+  const pointsBalance = customer.loyalty_points ?? 0
+
   return NextResponse.json({
     verified_visits: verifiedVisits,
     is_legend: isLegend,
@@ -69,5 +70,8 @@ export async function GET(req: NextRequest) {
     levels: LOYALTY_LEVELS,
     pending_pin: pendingPin ?? null,
     redemptions: redemptions ?? [],
+    points_balance: pointsBalance,
+    points_to_redeem: POINTS_TO_REDEEM,
+    can_redeem: pointsBalance >= POINTS_TO_REDEEM,
   })
 }

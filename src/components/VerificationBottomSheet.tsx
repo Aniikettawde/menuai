@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Copy, Check, Gift, Trophy } from 'lucide-react'
+import { X, Copy, Check, Gift } from 'lucide-react'
 import { CountdownTimer } from './CountdownTimer'
 import { PINDisplay } from './PINDisplay'
 
@@ -10,11 +10,13 @@ interface Props {
   onClose: () => void
   pin: string
   expiresAt: string
-  isFirstVisit: boolean
   onExpire?: () => void
 }
 
-export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, isFirstVisit, onExpire }: Props) {
+const POINTS_PER_VISIT = 50
+const POINTS_TO_REDEEM = 500
+
+export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, onExpire }: Props) {
   const [copied, setCopied] = useState(false)
 
   if (!isOpen) return null
@@ -148,21 +150,10 @@ export function VerificationBottomSheet({ isOpen, onClose, pin, expiresAt, isFir
               gap: 8,
             }}
           >
-            {isFirstVisit ? (
-              <>
-                <Gift size={14} color="var(--pr-gold)" />
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
-                  Verification instantly unlocks your ₹50 welcome gift
-                </span>
-              </>
-            ) : (
-              <>
-                <Trophy size={14} color="var(--pr-gold)" />
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
-                  This visit counts toward your next badge
-                </span>
-              </>
-            )}
+            <Gift size={14} color="var(--pr-gold)" />
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--pr-gold)', fontFamily: 'var(--font-body)' }}>
+              Verification adds {POINTS_PER_VISIT} points — reach {POINTS_TO_REDEEM} for a ₹250 Amazon Pay gift card
+            </span>
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>

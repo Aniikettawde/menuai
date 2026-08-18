@@ -5,6 +5,7 @@ const nextConfig = {
   
   // Image optimization
  images: {
+  unoptimized: true,
   formats: ['image/avif', 'image/webp'],
   minimumCacheTTL: 86400,
   remotePatterns: [
@@ -15,7 +16,6 @@ const nextConfig = {
     },
   ],
 },
-
   // HTTP headers for caching & security
 async headers() {
   return [
@@ -38,11 +38,5 @@ async headers() {
     },
   ]
 },
-
-  // Reduce bundle size
-  experimental: {
-    optimizeCss: true,
-  },
 }
-
 module.exports = nextConfig
