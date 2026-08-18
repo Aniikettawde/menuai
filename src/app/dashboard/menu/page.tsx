@@ -305,9 +305,10 @@ function PairingSelector({
 // category, instead of always uploading a fresh file.
 
 function ImageLibraryModal({
-  images, onClose, onSelect,
+  images, loading, onClose, onSelect,
 }: {
   images: { url: string; label: string }[]
+  loading?: boolean
   onClose: () => void
   onSelect: (url: string) => void
 }) {
@@ -341,8 +342,13 @@ function ImageLibraryModal({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        {filtered.length === 0 ? (
+       <div className="flex-1 overflow-y-auto p-4">
+        {loading ? (
+          <div className="py-10 text-center">
+            <Loader2 className="mx-auto animate-spin" style={{ color: BRAND.burgundy }} size={24} />
+            <p className="mt-3 text-sm" style={{ color: BRAND.inkFaint }}>Loading image library…</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="py-10 text-center">
             <ImagePlus size={24} className="mx-auto mb-3" style={{ color: BRAND.inkFaint }} />
             <p className="text-sm font-medium" style={{ color: BRAND.inkSoft }}>
@@ -1165,24 +1171,28 @@ export default function MenuPage() {
   // All photos already uploaded across dishes + categories, deduped by URL,
   // so the library never needs a separate storage.list() call or extra
   // permissions — it's just what's already on the menu.
-  const libraryImages = useMemo(() => {
-    const seen = new Set<string>()
-    const list: { url: string; label: string }[] = []
-    for (const it of items) {
-      if (it.image_url && !seen.has(it.image_url)) {
-        seen.add(it.image_url)
-        list.push({ url: it.image_url, label: it.name })
+const [libraryImages, setLibraryImages] = useState<{ url: string; label: string }[]>([])
+  const [libraryLoading, setLibraryLoading] = useState(false)
+  const [libraryLoaded, setLibraryLoaded] = useState(false)
+
+  async function loadImageLibrary() {
+    if (libraryLoaded || libraryLoading) return
+    setLibraryLoading(true)
+    try {
+      const res = await fetch('/api/menu-images/library', { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && Array.isArray(data.images)) {
+        setLibraryImages(data.images)
+        setLibraryLoaded(true)
+      } else {
+        setError(data?.error ?? 'Failed to load image library')
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load image library')
+    } finally {
+      setLibraryLoading(false)
     }
-    for (const cat of categories) {
-      const catImg = (cat as MenuCategoryRow & { image_url?: string | null }).image_url
-      if (catImg && !seen.has(catImg)) {
-        seen.add(catImg)
-        list.push({ url: catImg, label: `${cat.name} (category)` })
-      }
-    }
-    return list
-  }, [items, categories])
+  }
 
   // ── Save dish options ──────────────────────────────────────────────────────
 
@@ -1635,7 +1645,7 @@ export default function MenuPage() {
 						  
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setLibraryTargetCatId(cat.id); setShowImageLibrary(true) }}
+                                                        onClick={(e) => { e.stopPropagation(); setLibraryTargetCatId(cat.id); setShowImageLibrary(true); void loadImageLibrary() }}
                             className="absolute -bottom-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full transition"
                             style={{ background: BRAND.gold, color: '#fff' }}
                             title="Choose from library"
@@ -1819,7 +1829,7 @@ export default function MenuPage() {
                               <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCategoryImage(cat.id, f); setCatMenuOpenId(null) }} />
                             </label>
                             <button
-                              onClick={() => { setLibraryTargetCatId(cat.id); setShowImageLibrary(true); setCatMenuOpenId(null) }}
+                              onClick={() => { setLibraryTargetCatId(cat.id); setShowImageLibrary(true); setCatMenuOpenId(null); void loadImageLibrary() }}
                               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-black/[0.03]"
                               style={{ color: BRAND.goldDeep }}
                             >
@@ -1979,7 +1989,7 @@ export default function MenuPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => { setLibraryTargetCatId(null); setShowImageLibrary(true) }}
+                  onClick={() => { setLibraryTargetCatId(null); setShowImageLibrary(true); void loadImageLibrary() }}
                   className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border py-2.5 text-xs font-semibold transition hover:bg-black/[0.03]"
                   style={{ borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}0D`, color: BRAND.goldDeep }}
                 >
@@ -2092,9 +2102,10 @@ export default function MenuPage() {
       )}
 
       {showImport && <ImportMenuModal onClose={() => setShowImport(false)} onImport={handleGeminiImport} />}
-   {showImageLibrary && (
+  {showImageLibrary && (
         <ImageLibraryModal
           images={libraryImages}
+          loading={libraryLoading}
           onClose={() => { setShowImageLibrary(false); setLibraryTargetCatId(null) }}
           onSelect={async (url) => {
             setShowImageLibrary(false)
