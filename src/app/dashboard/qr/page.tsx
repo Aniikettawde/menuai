@@ -192,6 +192,7 @@ function FixedQrCard({
   tableNo,
   restaurantName,
   restaurantLogoDataUrl,
+  backgroundImageUrl,
   qrDataUrl,
   isLoading,
   cardRef,
@@ -199,6 +200,7 @@ function FixedQrCard({
   tableNo: number
   restaurantName: string
   restaurantLogoDataUrl?: string | null
+  backgroundImageUrl?: string | null
   qrDataUrl?: string
   isLoading?: boolean
   cardRef?: (el: HTMLDivElement | null) => void
@@ -220,9 +222,20 @@ function FixedQrCard({
           bold signature element; the print surface itself stays mostly
           cream so it holds up on uncalibrated restaurant printers/laminators
           and doesn't drink toner the way a near-black fill would. */}
-      <div className="relative overflow-hidden rounded-[28px] bg-[#FBF4EC] px-5 pb-4 pt-5 text-center">
+                <div
+        className={`relative overflow-hidden rounded-[28px] px-5 pb-4 pt-5 text-center ${
+          backgroundImageUrl ? '' : 'bg-[#FBF4EC]'
+        }`}
+      >
+        {backgroundImageUrl && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={backgroundImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            {/* legibility scrim only — image itself stays fully visible in the middle */}
+            <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-transparent to-white/70" />
+          </>
+        )}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#8b5cf6]/[0.07] to-transparent" />
-
         <div className="absolute right-4 top-4 rounded-full border border-[#e4d3f5] bg-[#f3e9fb] px-2.5 py-1 font-mono text-[9px] font-bold tracking-wider text-[#7c3aed]">
           T{String(tableNo).padStart(2, '0')}
         </div>
@@ -373,6 +386,17 @@ export default function QRPage() {
   const [tokensLoading, setTokensLoading] = useState(false)
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
   const [restaurantLogoDataUrl, setRestaurantLogoDataUrl] = useState<string | null>(null)
+  
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null)
+
+  function handleBackgroundUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setBackgroundImageUrl(String(reader.result))
+    reader.readAsDataURL(file)
+  }
+  
   // Keyed by "<tableNo>-<copyIndex>" instead of just tableNo, since Double
   // Print mode renders two cards for the same table number side by side.
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -584,7 +608,7 @@ export default function QRPage() {
     }
   }
 
-  async function downloadTableSheet() {
+ async function downloadTableSheet() {
   if (!restaurant) return
   if (remainingQrLimit <= 0) { alert('Your QR limit is exhausted.'); return }
   if (printSlots.length === 0) { alert('Please choose at least one table.'); return }
@@ -599,26 +623,10 @@ export default function QRPage() {
     const margin = 22
     const gap = 12
     const cols = 2
-
-    // Measure the FIRST card's real aspect ratio once, then derive how many
-    // rows actually fit on a page for that ratio — instead of assuming rows=2.
-    const firstNode = cardRefs.current[printSlots[0].key]
-    if (!firstNode) throw new Error('No card ready to measure')
-    const aspect = firstNode.offsetWidth / firstNode.offsetHeight // w/h
-
-    const cellW = (pageW - margin * 2 - gap * (cols - 1)) / cols
-    // Height a card would take up if drawn at full cellW, preserving aspect ratio
-    const cardHAtCellW = cellW / aspect
-
-    // How many rows of that height actually fit vertically on the page?
-    const rows = Math.max(
-      1,
-      Math.floor((pageH - margin * 2 + gap) / (cardHAtCellW + gap)),
-    )
+    const rows = 2
     const cardsPerPage = cols * rows
 
-    // Recompute the cell height based on the rows that actually fit,
-    // so cards are centered nicely rather than crammed to one edge.
+    const cellW = (pageW - margin * 2 - gap * (cols - 1)) / cols
     const cellH = (pageH - margin * 2 - gap * (rows - 1)) / rows
 
     for (let i = 0; i < printSlots.length; i++) {
@@ -799,6 +807,8 @@ export default function QRPage() {
                     tableNo={slot.tableNo}
                     restaurantName={restaurant.name}
                     restaurantLogoDataUrl={restaurantLogoDataUrl}
+					                    backgroundImageUrl={backgroundImageUrl}
+
                     qrDataUrl={tablePreviewMap[slot.tableNo]}
                     isLoading={tokensLoading || !tokenMap.has(slot.tableNo)}
                   />
@@ -978,6 +988,22 @@ export default function QRPage() {
                 </div>
               ))}
             </div>
+          </div>
+		  
+		   <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+            <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Card Background</p>
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700/60 bg-zinc-950 py-3 text-xs font-semibold text-zinc-400 hover:border-purple-500/50">
+              <input type="file" accept="image/*" className="hidden" onChange={handleBackgroundUpload} />
+              Upload background image
+            </label>
+            {backgroundImageUrl && (
+              <div className="mt-2 flex items-center justify-between rounded-xl bg-zinc-950 px-3 py-2">
+                <span className="text-[11px] text-zinc-400">Custom background applied</span>
+                <button onClick={() => setBackgroundImageUrl(null)} className="text-[11px] font-semibold text-rose-400 hover:text-rose-300">
+                  Remove
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
