@@ -31,6 +31,12 @@ import {
   Gift,
   Heart,
   UtensilsCrossed,
+  ImageIcon,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  RotateCcw,
+  Move,
 } from 'lucide-react'
 
 type RestaurantRecord = {
@@ -78,6 +84,19 @@ const PLAN_LABELS: Record<string, string> = {
   growth: 'Dinezy',
   large: 'Dinezy',
 }
+
+// Default/base display size (px) that the QR + logo-hole overlay markup
+// below is authored against. The user-facing size slider scales this whole
+// block up/down via a CSS transform instead of recomputing every inner
+// pixel value, so the logo overlay always stays perfectly centered in the
+// hole regardless of chosen size.
+const BASE_QR_PX = 188
+
+// Minimal-mode card is 360×510. These bound how far the QR can be dragged/
+// nudged from center so it can't be pushed fully off the printable card.
+const QR_OFFSET_X_LIMIT = 150
+const QR_OFFSET_Y_LIMIT = 220
+const NUDGE_STEP = 8
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n))
@@ -143,22 +162,6 @@ async function generateQRWithLogoHole(url: string, size: number, holeFraction = 
   return canvas.toDataURL('image/png')
 }
 
-async function loadImageDataUrl(src: string): Promise<string | null> {
-  try {
-    const res = await fetch(src)
-    if (!res.ok) return null
-    const blob = await res.blob()
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(new Error('Failed to read image'))
-      reader.readAsDataURL(blob)
-    })
-  } catch {
-    return null
-  }
-}
-
 async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
   try {
     const mod = await import('jspdf')
@@ -188,24 +191,103 @@ async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
 // they scan: view the menu, call the waiter, and grab live offers. The card
 // keeps its print-safe aspect ratio (measured dynamically in the PDF export
 // below) but now carries real information instead of just a QR + logo.
+//
+// `minimal` strips everything except the QR (with its logo hole intact) on
+// top of the background image — no name, no table badge, no feature chips,
+// no footer. `qrSize` controls how big that QR renders inside the card.
 function FixedQrCard({
   tableNo,
   restaurantName,
-  restaurantLogoDataUrl,
   backgroundImageUrl,
   qrDataUrl,
   isLoading,
   cardRef,
+  minimal = false,
+  qrSize = BASE_QR_PX,
+  qrOffset = { x: 0, y: 0 },
+  onDragStart,
 }: {
   tableNo: number
   restaurantName: string
-  restaurantLogoDataUrl?: string | null
   backgroundImageUrl?: string | null
   qrDataUrl?: string
   isLoading?: boolean
   cardRef?: (el: HTMLDivElement | null) => void
+  minimal?: boolean
+  qrSize?: number
+  qrOffset?: { x: number; y: number }
+  onDragStart?: (e: React.PointerEvent<HTMLDivElement>) => void
 }) {
-  const initial = restaurantName?.trim()?.[0]?.toUpperCase() ?? 'R'
+  // ── Minimal mode: just the QR (+ table number) floating on the background ──
+  if (minimal) {
+    const scale = qrSize / BASE_QR_PX
+    return (
+      <div
+        ref={cardRef}
+        className="relative w-[360px] h-[510px] overflow-hidden rounded-[30px] shadow-[0_10px_30px_rgba(139,92,246,0.14)]"
+        style={{ background: backgroundImageUrl ? '#ffffff' : '#ffffff' }}
+      >
+        {backgroundImageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={backgroundImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        )}
+
+        {/* Draggable QR block — position comes from qrOffset (dragged on
+            this preview or nudged via the D-pad control), not dead center.
+            touch-none stops the browser from scrolling the page while
+            dragging on mobile. */}
+        <div
+          className="absolute cursor-move touch-none select-none"
+          style={{
+            left: `calc(50% + ${qrOffset.x}px)`,
+            top: `calc(50% + ${qrOffset.y}px)`,
+            transform: 'translate(-50%, -50%)',
+            width: qrSize,
+            height: qrSize,
+          }}
+          onPointerDown={onDragStart}
+        >
+          <div
+            style={{
+              width: BASE_QR_PX,
+              height: BASE_QR_PX,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            {isLoading || !qrDataUrl ? (
+              <div className="flex h-[188px] w-[188px] items-center justify-center rounded-[22px] bg-white shadow-[0_8px_24px_rgba(36,21,51,0.10)] ring-1 ring-[#f0e4d8]">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-purple-500" />
+              </div>
+            ) : (
+              <div className="relative rounded-[22px] bg-white p-2.5 shadow-[0_8px_24px_rgba(36,21,51,0.10)] ring-1 ring-[#f0e4d8]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrDataUrl}
+                  alt={`Table ${tableNo} QR`}
+                  className="h-[188px] w-[188px] pointer-events-none"
+                  draggable={false}
+                />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="rounded-[15px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[3px] shadow-[0_2px_10px_rgba(0,0,0,0.15)]">
+                    <div className="flex h-[42px] w-[42px] items-center justify-center overflow-hidden rounded-xl bg-white">
+                      <span
+                        className={`font-black tracking-tight bg-gradient-to-br from-[#9333ea] to-[#ea580c] bg-clip-text text-transparent ${
+                          String(tableNo).length > 1 ? 'text-sm' : 'text-lg'
+                        }`}
+                      >
+                        T{tableNo}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const actions = [
     { icon: <UtensilsCrossed size={15} strokeWidth={2.4} />, label: 'View Menu', color: '#9333ea' },
@@ -269,14 +351,13 @@ function FixedQrCard({
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="rounded-[15px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[3px] shadow-[0_2px_10px_rgba(0,0,0,0.15)]">
                   <div className="flex h-[42px] w-[42px] items-center justify-center overflow-hidden rounded-xl bg-white">
-                    {restaurantLogoDataUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={restaurantLogoDataUrl} alt="Logo" className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="bg-gradient-to-br from-[#9333ea] to-[#ea580c] bg-clip-text text-lg font-black text-transparent">
-                        {initial}
-                      </span>
-                    )}
+                    <span
+                      className={`font-black tracking-tight bg-gradient-to-br from-[#9333ea] to-[#ea580c] bg-clip-text text-transparent ${
+                        String(tableNo).length > 1 ? 'text-sm' : 'text-lg'
+                      }`}
+                    >
+                      T{tableNo}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -385,9 +466,59 @@ export default function QRPage() {
   const [tokenMap, setTokenMap] = useState<TokenMap>(new Map())
   const [tokensLoading, setTokensLoading] = useState(false)
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
-  const [restaurantLogoDataUrl, setRestaurantLogoDataUrl] = useState<string | null>(null)
-  
+
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null)
+
+  // Minimal mode: strips all text/branding off the card, leaving just the
+  // QR (with its logo hole) sitting on top of the background image. qrSize
+  // is the on-screen/print size (px, at the card's 360px reference width)
+  // of that QR block.
+  const [minimalMode, setMinimalMode] = useState(false)
+  const [qrSize, setQrSize] = useState(BASE_QR_PX)
+
+  // Where the QR sits inside the minimal card, as a pixel offset from
+  // center. Settable by dragging it directly on the preview, or via the
+  // up/down/left/right nudge buttons.
+  const [qrOffset, setQrOffset] = useState({ x: 0, y: 0 })
+  const [isDraggingQr, setIsDraggingQr] = useState(false)
+  const dragLastPoint = useRef<{ x: number; y: number } | null>(null)
+
+  function handleQrDragStart(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault()
+    dragLastPoint.current = { x: e.clientX, y: e.clientY }
+    setIsDraggingQr(true)
+  }
+
+  useEffect(() => {
+    if (!isDraggingQr) return
+    function onMove(e: PointerEvent) {
+      if (!dragLastPoint.current) return
+      const dx = e.clientX - dragLastPoint.current.x
+      const dy = e.clientY - dragLastPoint.current.y
+      dragLastPoint.current = { x: e.clientX, y: e.clientY }
+      setQrOffset((prev) => ({
+        x: clamp(prev.x + dx, -QR_OFFSET_X_LIMIT, QR_OFFSET_X_LIMIT),
+        y: clamp(prev.y + dy, -QR_OFFSET_Y_LIMIT, QR_OFFSET_Y_LIMIT),
+      }))
+    }
+    function onUp() {
+      setIsDraggingQr(false)
+      dragLastPoint.current = null
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [isDraggingQr])
+
+  function nudgeQr(dx: number, dy: number) {
+    setQrOffset((prev) => ({
+      x: clamp(prev.x + dx, -QR_OFFSET_X_LIMIT, QR_OFFSET_X_LIMIT),
+      y: clamp(prev.y + dy, -QR_OFFSET_Y_LIMIT, QR_OFFSET_Y_LIMIT),
+    }))
+  }
 
   function handleBackgroundUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -396,24 +527,11 @@ export default function QRPage() {
     reader.onload = () => setBackgroundImageUrl(String(reader.result))
     reader.readAsDataURL(file)
   }
-  
+
   // Keyed by "<tableNo>-<copyIndex>" instead of just tableNo, since Double
   // Print mode renders two cards for the same table number side by side.
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
   useEffect(() => { setBaseUrl(window.location.origin) }, [])
-
-  // Load the restaurant's own logo (used beside the name + inside the QR hole)
-  useEffect(() => {
-    let mounted = true
-    if (!restaurant?.logo_url) {
-      setRestaurantLogoDataUrl(null)
-      return
-    }
-    void loadImageDataUrl(restaurant.logo_url).then((data) => {
-      if (mounted) setRestaurantLogoDataUrl(data)
-    })
-    return () => { mounted = false }
-  }, [restaurant?.logo_url])
 
   const menuUrl = useMemo(() => {
     if (!baseUrl || !restaurant?.slug) return ''
@@ -771,7 +889,7 @@ export default function QRPage() {
               <div>
                 <p className="text-sm font-bold text-white">Print Preview</p>
                 <p className="mt-0.5 text-[11px] text-zinc-600">
-                  Premium neon card · A4 · 4 cards/page · Print-ready
+                  {minimalMode ? 'Minimal QR card' : 'Premium neon card'} · A4 · 4 cards/page · Print-ready
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -806,11 +924,14 @@ export default function QRPage() {
                     cardRef={(el) => { cardRefs.current[slot.key] = el }}
                     tableNo={slot.tableNo}
                     restaurantName={restaurant.name}
-                    restaurantLogoDataUrl={restaurantLogoDataUrl}
 					                    backgroundImageUrl={backgroundImageUrl}
 
                     qrDataUrl={tablePreviewMap[slot.tableNo]}
                     isLoading={tokensLoading || !tokenMap.has(slot.tableNo)}
+                    minimal={minimalMode}
+                    qrSize={qrSize}
+                    qrOffset={qrOffset}
+                    onDragStart={handleQrDragStart}
                   />
                 ))
               )}
@@ -951,7 +1072,117 @@ export default function QRPage() {
             </label>
           </div>
 
-          
+          {/* Minimal (image-only) card toggle + QR size control */}
+          <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+            <div className="mb-2.5 flex items-center gap-2">
+              <QrCode size={12} className="text-zinc-500" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Card Style</p>
+            </div>
+
+            <label className="flex cursor-pointer items-center justify-between rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-2.5">
+              <div>
+                <p className="text-xs font-semibold text-zinc-200">Minimal (QR only)</p>
+                <p className="mt-0.5 text-[10.5px] text-zinc-600">
+                  Removes all text/branding — just the QR + logo over your background image
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={minimalMode}
+                onChange={(e) => setMinimalMode(e.target.checked)}
+                className="h-4 w-4 shrink-0 accent-purple-500"
+              />
+            </label>
+
+            {minimalMode && !backgroundImageUrl && (
+              <p className="mt-2 text-[10.5px] text-amber-400/90">
+                No background uploaded yet — the card will print as a plain white square with just the QR. Add one below.
+              </p>
+            )}
+
+            <div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-zinc-200">QR Size</p>
+                <span className="font-mono text-[11px] font-bold text-purple-400">{qrSize}px</span>
+              </div>
+              <input
+                type="range"
+                min={100}
+                max={320}
+                step={4}
+                value={qrSize}
+                onChange={(e) => setQrSize(Number(e.target.value))}
+                className="mt-2 w-full accent-purple-500"
+              />
+              <p className="mt-1.5 text-[10.5px] text-zinc-600">
+                {minimalMode
+                  ? 'Bigger QR, less background showing around it.'
+                  : 'Only applies in Minimal mode — the standard card keeps a fixed layout.'}
+              </p>
+            </div>
+
+            {minimalMode && (
+              <div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Move size={12} className="text-zinc-500" />
+                    <p className="text-xs font-semibold text-zinc-200">Position</p>
+                  </div>
+                  <span className="font-mono text-[10px] text-zinc-500">
+                    x {qrOffset.x >= 0 ? '+' : ''}{qrOffset.x}, y {qrOffset.y >= 0 ? '+' : ''}{qrOffset.y}
+                  </span>
+                </div>
+                <p className="mb-2.5 text-[10.5px] text-zinc-600">
+                  Drag the QR directly on the preview, or nudge it here.
+                </p>
+                <div className="mx-auto grid w-fit grid-cols-3 gap-1">
+                  <span />
+                  <button
+                    onClick={() => nudgeQr(0, -NUDGE_STEP)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-400 transition hover:border-purple-500/50 hover:text-purple-300"
+                    aria-label="Move QR up"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <span />
+
+                  <button
+                    onClick={() => nudgeQr(-NUDGE_STEP, 0)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-400 transition hover:border-purple-500/50 hover:text-purple-300"
+                    aria-label="Move QR left"
+                  >
+                    <ArrowLeft size={14} />
+                  </button>
+                  <button
+                    onClick={() => setQrOffset({ x: 0, y: 0 })}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-500 transition hover:border-amber-500/50 hover:text-amber-300"
+                    aria-label="Reset QR position"
+                    title="Reset to center"
+                  >
+                    <RotateCcw size={13} />
+                  </button>
+                  <button
+                    onClick={() => nudgeQr(NUDGE_STEP, 0)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-400 transition hover:border-purple-500/50 hover:text-purple-300"
+                    aria-label="Move QR right"
+                  >
+                    <ArrowRight size={14} />
+                  </button>
+
+                  <span />
+                  <button
+                    onClick={() => nudgeQr(0, NUDGE_STEP)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-400 transition hover:border-purple-500/50 hover:text-purple-300"
+                    aria-label="Move QR down"
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                  <span />
+                </div>
+              </div>
+            )}
+          </div>
+
            <a href={`https://wa.me/?text=${encodeURIComponent(`Hey! Scan this QR at our table to see the menu, call waiter & order 🍽️\n${menuUrl}`)}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -991,7 +1222,10 @@ export default function QRPage() {
           </div>
 		  
 		   <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
-            <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Card Background</p>
+            <div className="mb-2.5 flex items-center gap-2">
+              <ImageIcon size={12} className="text-zinc-500" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Card Background</p>
+            </div>
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700/60 bg-zinc-950 py-3 text-xs font-semibold text-zinc-400 hover:border-purple-500/50">
               <input type="file" accept="image/*" className="hidden" onChange={handleBackgroundUpload} />
               Upload background image

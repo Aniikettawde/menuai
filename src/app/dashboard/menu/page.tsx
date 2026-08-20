@@ -141,6 +141,66 @@ function resolveMenuImageUrl(raw: unknown, width = 400): string {
   return `${supabaseUrl}/storage/v1/render/image/public/${MENU_ASSET_BUCKET}/${value.replace(/^\/+/, '')}?width=${width}&quality=60`
 }
 
+// ─── Auto-match dish photos from the existing image library ─────────────────
+// During AI import, instead of leaving every new dish with no photo, we try
+// to reuse a photo the owner already uploaded for a same/similar-named dish
+// elsewhere on the menu. We NEVER generate a new image — if nothing in the
+// library is a confident match, image_url is simply left empty.
+
+function normalizeDishName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')   // strip punctuation/emoji
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function findBestImageMatch(
+  dishName: string,
+  libraryImages: { url: string; label: string }[],
+): string | null {
+  const target = normalizeDishName(dishName)
+  if (!target) return null
+  const targetTokens = new Set(target.split(' ').filter(Boolean))
+  if (targetTokens.size === 0) return null
+
+  let bestUrl: string | null = null
+  let bestScore = 0
+
+  for (const img of libraryImages) {
+    const label = normalizeDishName(img.label)
+    if (!label) continue
+
+    // Exact name match — take it immediately.
+    if (label === target) return img.url
+
+    let score = 0
+
+    // One name contains the other (e.g. "Paneer Tikka" vs "Paneer Tikka Masala").
+    if (label.includes(target) || target.includes(label)) {
+      score = Math.max(score, 0.75)
+    }
+
+    // Token overlap (Jaccard similarity) catches reordered/partial matches
+    // like "Chicken Butter Masala" vs "Butter Chicken".
+    const labelTokens = new Set(label.split(' ').filter(Boolean))
+    const intersection = [...targetTokens].filter((t) => labelTokens.has(t))
+    const union = new Set([...targetTokens, ...labelTokens])
+    if (union.size > 0) {
+      score = Math.max(score, intersection.length / union.size)
+    }
+
+    if (score > bestScore) {
+      bestScore = score
+      bestUrl = img.url
+    }
+  }
+
+  // Require a reasonably confident match so we don't attach a random photo
+  // to an unrelated dish — better to leave it empty than guess wrong.
+  return bestScore >= 0.5 ? bestUrl : null
+}
+
 async function compressMenuImage(file: File): Promise<File> {
   return imageCompression(file, {
     maxSizeMB: 0.08,
@@ -1174,8 +1234,10 @@ export default function MenuPage() {
 const [libraryImages, setLibraryImages] = useState<{ url: string; label: string }[]>([])
   const [libraryLoading, setLibraryLoading] = useState(false)
   const [libraryLoaded, setLibraryLoaded] = useState(false)
+  const [autoMatching, setAutoMatching] = useState(false)
+  const [autoMatchResult, setAutoMatchResult] = useState('')
 
-  async function loadImageLibrary() {
+   async function loadImageLibrary() {
     if (libraryLoaded || libraryLoading) return
     setLibraryLoading(true)
     try {
@@ -1191,6 +1253,70 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
       setError(err instanceof Error ? err.message : 'Failed to load image library')
     } finally {
       setLibraryLoading(false)
+    }
+  }
+
+  // Scans every dish/drink currently WITHOUT a photo and tries to reuse a
+  // photo already in the library by matching dish names. Never generates a
+  // new image — items with no confident match are simply left untouched.
+  async function autoMatchExistingPhotos() {
+    setAutoMatching(true); setError(''); setAutoMatchResult('')
+    try {
+      // Make sure we have a fresh copy of the library to match against,
+      // rather than relying on possibly-stale state.
+      let library = libraryImages
+      if (!libraryLoaded) {
+        const res = await fetch('/api/menu-images/library', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && Array.isArray(data.images)) {
+          library = data.images
+          setLibraryImages(data.images)
+          setLibraryLoaded(true)
+        } else {
+          throw new Error(data?.error ?? 'Failed to load image library')
+        }
+      }
+
+      if (library.length === 0) {
+        setAutoMatchResult('No photos in your library yet — upload a few to dishes or categories first.')
+        return
+      }
+
+      const itemsMissingPhoto = items.filter((it) => !it.image_url?.trim())
+      if (itemsMissingPhoto.length === 0) {
+        setAutoMatchResult('Every dish already has a photo!')
+        return
+      }
+
+      const matches: { id: string; image_url: string }[] = []
+      for (const it of itemsMissingPhoto) {
+        const matchedUrl = findBestImageMatch(it.name, library)
+        if (matchedUrl) matches.push({ id: it.id, image_url: matchedUrl })
+      }
+
+      if (matches.length === 0) {
+        setAutoMatchResult(`Checked ${itemsMissingPhoto.length} dish(es) without photos — no confident matches found in your library.`)
+        return
+      }
+
+      const updates = matches.map((m) =>
+        supabase.from('menu_items').update({ image_url: m.image_url }).eq('id', m.id)
+      )
+      const results = await Promise.all(updates)
+      const failed = results.find((r) => r.error)?.error
+      if (failed) throw failed
+
+      const matchedIds = new Set(matches.map((m) => m.id))
+      setItems((prev) => prev.map((it) => {
+        const match = matches.find((m) => m.id === it.id)
+        return matchedIds.has(it.id) && match ? { ...it, image_url: match.image_url } : it
+      }))
+
+      setAutoMatchResult(`Matched ${matches.length} of ${itemsMissingPhoto.length} dish(es) without photos.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-match photos')
+    } finally {
+      setAutoMatching(false)
     }
   }
 
@@ -1267,6 +1393,19 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
       setCategories((prev) => { const next = prev.filter((x) => x.id !== id); if (activeCat === id) setActiveCat(next[0]?.id ?? null); return next })
       setItems((prev) => prev.filter((x) => x.category_id !== id))
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete category') }
+  }
+
+  async function renameCategory(id: string, currentName: string) {
+    const input = window.prompt('Rename category', currentName)
+    if (input === null) return
+    const trimmed = input.trim()
+    if (!trimmed || trimmed === currentName) return
+    setError('')
+    try {
+      const { data, error } = await supabase.from('menu_categories').update({ name: trimmed }).eq('id', id).select().single()
+      if (error) throw error
+      if (data) setCategories((prev) => prev.map((c) => (c.id === id ? (data as MenuCategoryRow) : c)))
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to rename category') }
   }
 
   // ── Items ──────────────────────────────────────────────────────────────────
@@ -1369,8 +1508,27 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
     finally { setCatImageUploading(null) }
   }
 
-  async function handleGeminiImport(result: GeminiMenuResult) {
+ async function handleGeminiImport(result: GeminiMenuResult) {
     if (!restaurant) throw new Error('No restaurant found')
+
+    // Load the photo library once (if not already loaded) so we can
+    // auto-match dish photos by name below. We use a local variable rather
+    // than relying on the `libraryImages` state, since state updates from
+    // setLibraryImages() won't be visible until the next render.
+    let matchLibrary = libraryImages
+    if (!libraryLoaded) {
+      try {
+        const res = await fetch('/api/menu-images/library', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && Array.isArray(data.images)) {
+          matchLibrary = data.images
+          setLibraryImages(data.images)
+          setLibraryLoaded(true)
+        }
+      } catch (err) {
+        console.error('Failed to load image library for auto-matching:', err)
+      }
+    }
 
     // Match against existing categories in the CURRENT menu tab only, by
     // trimmed/lowercased name. If the owner already has "Starters" and the
@@ -1432,11 +1590,14 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
         const cheapestVariant = item.variants && item.variants.length > 0
           ? item.variants.reduce((min, v) => (v.price < min.price ? v : min), item.variants[0])
           : null
-        const basePriceRupees = item.price && item.price > 0 ? item.price : (cheapestVariant?.price ?? 0)
+       const basePriceRupees = item.price && item.price > 0 ? item.price : (cheapestVariant?.price ?? 0)
+        // Reuse an existing library photo if the dish name matches closely
+        // enough; otherwise leave image_url empty (no AI generation).
+        const matchedImageUrl = findBestImageMatch(item.name, matchLibrary) ?? ''
         return {
           restaurant_id: restaurant.id, category_id: resolvedCat.id, name: item.name.trim(),
           description: item.description ?? '', price: basePriceRupees ? Math.round(basePriceRupees * 100) : 0,
-          currency: 'INR', image_url: '', is_available: true,
+          currency: 'INR', image_url: matchedImageUrl, is_available: true,
           is_bestseller: (item.tags ?? []).some((t) => t.toLowerCase().includes('best')),
           is_veg: item.is_veg ?? true, is_special: false, tags: item.tags ?? [],
           allergens: [], prep_time_minutes: null, calories: null, position: startPosition + idx,
@@ -1545,7 +1706,7 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
             <p className="text-base font-bold" style={{ color: BRAND.ink }}>Menu</p>
             <p className="text-xs" style={{ color: BRAND.inkFaint }}>{totalCategories} categories · {totalDishes} {itemLabel(false, true)}</p>
           </div>
-          <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>
+ <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}>
             <Sparkles size={12} /> AI Import
           </button>
         </div>
@@ -1558,6 +1719,21 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
             showCorporate={!!restaurant?.has_corporate_menu}
           />
         </div>
+
+        <button
+          onClick={() => void autoMatchExistingPhotos()}
+          disabled={autoMatching}
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold disabled:opacity-60"
+          style={{ borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}14`, color: BRAND.goldDeep }}
+        >
+          {autoMatching ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+          {autoMatching ? 'Matching photos…' : 'Auto-match Photos from Library'}
+        </button>
+        {autoMatchResult && (
+          <div className="rounded-2xl border px-4 py-3 text-xs" style={{ borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}14`, color: BRAND.emerald }}>
+            {autoMatchResult}
+          </div>
+        )}
 
         <MenuSearch
           categories={categories}
@@ -1657,6 +1833,15 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
                           <p className="truncate text-sm font-semibold" style={{ color: BRAND.ink }}>{cat.name}</p>
                           <p className="text-xs" style={{ color: BRAND.inkFaint }}>{count} {itemLabel(false, true)} · {avail} available</p>
                         </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); void renameCategory(cat.id, cat.name) }}
+                          className="shrink-0 rounded-lg p-1.5 transition hover:bg-black/[0.04]"
+                          style={{ color: BRAND.inkFaint }}
+                          title="Rename category"
+                        >
+                          <Pencil size={13} />
+                        </button>
                         <ChevronRight size={16} className="shrink-0" style={{ color: BRAND.inkFaint }} />
                       </button>
                     </div>
@@ -1752,9 +1937,23 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
               showCorporate={!!restaurant?.has_corporate_menu}
             />
             <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: `${BRAND.burgundy}33`, background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}><Sparkles size={14} /> Import with AI</button>
+            <button
+              onClick={() => void autoMatchExistingPhotos()}
+              disabled={autoMatching}
+              className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+              style={{ borderColor: `${BRAND.gold}33`, background: `${BRAND.gold}14`, color: BRAND.goldDeep }}
+            >
+              {autoMatching ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+              {autoMatching ? 'Matching…' : 'Auto-match Photos'}
+            </button>
             <button onClick={() => setEditingItem({ ...EMPTY_ITEM, category_id: activeCat ?? categories[0]?.id ?? '' })} className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-white" style={{ background: BRAND.burgundy }}><Plus size={14} /> Add {itemLabel()}</button>
           </div>
         </div>
+        {autoMatchResult && (
+          <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: `${BRAND.emerald}33`, background: `${BRAND.emerald}14`, color: BRAND.emerald }}>
+            {autoMatchResult}
+          </div>
+        )}
         <div className="grid grid-cols-4 gap-2.5">
           <DesktopStat value={totalCategories} label="Categories" icon={<UtensilsCrossed size={16} />} color={BRAND.sky} />
           <DesktopStat value={totalDishes} label={itemLabel(false, true)} icon={<Plus size={16} />} color={BRAND.emerald} />
@@ -1835,12 +2034,19 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
                             >
                               <ImagePlus size={13} /> Choose from Library
                             </button>
-                            <button
+                           <button
                               onClick={() => { setInfoCardCat(cat); setCatMenuOpenId(null) }}
                               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-black/[0.03]"
                               style={{ color: cat.info_card ? BRAND.burgundy : BRAND.ink }}
                             >
                               <Info size={13} /> Preparation Info Card
+                            </button>
+                            <button
+                              onClick={() => { setCatMenuOpenId(null); void renameCategory(cat.id, cat.name) }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-black/[0.03]"
+                              style={{ color: BRAND.ink }}
+                            >
+                              <Pencil size={13} /> Rename Category
                             </button>
                             <button
                               onClick={() => { setCatMenuOpenId(null); void deleteCategory(cat.id) }}
