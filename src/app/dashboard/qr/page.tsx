@@ -734,43 +734,34 @@ export default function QRPage() {
   setBusy(true)
   try {
     const JsPDF = await loadJsPDF()
-    const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
+    // 8in x 6in page, one QR card per page.
+    const doc = new JsPDF({ unit: 'in', format: [8, 6], orientation: 'portrait' })
 
     const pageW = doc.internal.pageSize.getWidth()
     const pageH = doc.internal.pageSize.getHeight()
-    const margin = 22
-    const gap = 12
-    const cols = 2
-    const rows = 2
-    const cardsPerPage = cols * rows
+    const margin = 0.25
 
-    const cellW = (pageW - margin * 2 - gap * (cols - 1)) / cols
-    const cellH = (pageH - margin * 2 - gap * (rows - 1)) / rows
+    const cellW = pageW - margin * 2
+    const cellH = pageH - margin * 2
 
     for (let i = 0; i < printSlots.length; i++) {
       const slot = printSlots[i]
       const node = cardRefs.current[slot.key]
       if (!node) throw new Error(`Card not ready for Table ${slot.tableNo}`)
-      if (i > 0 && i % cardsPerPage === 0) doc.addPage()
-
-      const posInPage = i % cardsPerPage
-      const col = posInPage % cols
-      const row = Math.floor(posInPage / cols)
-      const cellX = margin + col * (cellW + gap)
-      const cellY = margin + row * (cellH + gap)
+      if (i > 0) doc.addPage([8, 6], 'portrait')
 
       const png = await toPng(node, { cacheBust: true, pixelRatio: 3, backgroundColor: '#ffffff' })
 
       const nodeAspect = node.offsetWidth / node.offsetHeight
-      let drawW = cellW
+let drawW = cellW
       let drawH = drawW / nodeAspect
       if (drawH > cellH) {
         drawH = cellH
         drawW = drawH * nodeAspect
       }
 
-      const x = cellX + (cellW - drawW) / 2
-      const y = cellY + (cellH - drawH) / 2
+      const x = margin + (cellW - drawW) / 2
+      const y = margin + (cellH - drawH) / 2
 
       doc.addImage(png, 'PNG', x, y, drawW, drawH)
     }
