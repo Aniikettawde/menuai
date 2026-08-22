@@ -459,23 +459,20 @@ function SearchResultsPanel({
 }
 
 function CategorySection({
-  category, items, showChefsPick, onAsk, pickLabel, sectionRef, popularIds,
+  category, items, onAsk, sectionRef, popularIds,
 }: {
   category: MenuCategory
   items: MenuItem[]
-  showChefsPick: boolean
   onAsk?: (t: string) => void
-  pickLabel: string
   sectionRef?: (el: HTMLElement | null) => void
   popularIds?: Set<string>
 }) {
-  const chefsPick = showChefsPick ? getChefsPick(items) : null
-  const otherItems = chefsPick ? items.filter((i) => i.id !== chefsPick.id) : items
+  const otherItems = items
 
-   const imageUrl = category.image_url
+  const imageUrl = category.image_url
     ? category.image_url.startsWith('http')
       ? category.image_url
-            : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/restaurant-assets/${category.image_url}?width=200&quality=70`
+      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/restaurant-assets/${category.image_url}?width=200&quality=70`
     : null
 
   return (
@@ -498,7 +495,6 @@ function CategorySection({
         <div className="mg-cat-info">
           <div className="mg-cat-name-row">
             <h2 className="mg-cat-name">{category.name}</h2>
-            {chefsPick && <span className="mg-featured-pill">Featured</span>}
           </div>
           <p className="mg-cat-desc">
             {category.description
@@ -514,11 +510,6 @@ function CategorySection({
 
       <div className="mg-cat-body">
         <div className="mg-divided-list">
-          {chefsPick && (
-            <div className="mg-chefspick-wrap">
-              <ChefsPickCard item={chefsPick} onAsk={onAsk} label={pickLabel} />
-            </div>
-          )}
           {category.info_card && (
             <div className="mg-chefspick-wrap">
               <InfoCard card={category.info_card} />
@@ -1510,16 +1501,14 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
       const catItems = translatedItems.filter((i) => i.category_id === cat.id && i.is_available)
       if (catItems.length === 0) return null
       return (
-        <CategorySection
-          key={cat.id}
-          category={cat}
-          items={sortItemsPsychologically(catItems, restaurantPop, personalPop)}
-          showChefsPick
-          onAsk={onAsk}
-          pickLabel={pickLabel}
-          sectionRef={registerSectionRef(cat.id)}
-          popularIds={popularIds}
-        />
+<CategorySection
+  key={cat.id}
+  category={cat}
+  items={sortItemsPsychologically(catItems, restaurantPop, personalPop)}
+  onAsk={onAsk}
+  sectionRef={registerSectionRef(cat.id)}
+  popularIds={popularIds}
+/>
       )
     })}
   </>

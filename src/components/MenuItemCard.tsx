@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type MouseEvent } from 'react'
-import { Star, Flame, Plus, Minus, Sparkles, Clock, Link2 } from 'lucide-react'
+import { Star, Flame, Plus, Minus, Clock, Link2 } from 'lucide-react'
 import type { MenuItem, DishOption } from '@/types'
 import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
@@ -89,10 +89,7 @@ function formatPrice(paise: number): string {
   return `₹${Math.round(paise / 100)}`
 }
 
-function getSocialCount(id: string): number {
-  const n = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-  return 12 + (n % 41)
-}
+
 
 function trimDescription(text: string): string {
   return text.replace(/[,;:\s]+$/, '')
@@ -323,7 +320,6 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   const cartEntries = cartItems.filter((c) => c.item.id === item.id)
   const qtyInCart = cartEntries.reduce((s, c) => s + c.quantity, 0)
   const primaryEntry = cartEntries[0] ?? null
-  const socialCount = item.is_bestseller ? getSocialCount(item.id) : null
   const priceLabel = formatPrice(item.price)
   const hasOptions = (dishOptions[item.id]?.length ?? 0) > 0
   const imageUrl = getImageUrl(item.image_url)
@@ -489,12 +485,7 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   <VariantsList options={dishOptions[item.id] ?? []} />
 )}
 
-          {socialCount !== null && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 7, fontSize: 10, fontWeight: 500, color: '#34d399', fontFamily: 'var(--font-body)' }}>
-              <Sparkles size={9} />
-              {socialCount} orders this hour
-            </span>
-          )}
+         
 
           {isExpanded && hasDetails && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
