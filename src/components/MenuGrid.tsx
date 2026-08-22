@@ -18,9 +18,8 @@ import {
 import { useAppStore } from '@/store/app-store'
 import { MenuItemCard } from './MenuItemCard'
 import { FloatingCartBar } from './FloatingCartBar'
-import type { MenuItem, MenuCategory } from '@/types'
 import type { ReactNode } from 'react'
-
+import type { MenuItem, MenuCategory, DishOption } from '@/types'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { useTranslation } from '@/lib/i18n/useTranslation'
 import { useTranslatedMenu } from '@/lib/i18n/useTranslatedMenu'
@@ -125,6 +124,16 @@ function CategoryHeaderPlaceholder({ name }: { name: string }) {
    Deliberately breaks from the ivory theme — the contrast is what makes
    this section read as "featured" rather than "just another list".
 ──────────────────────────────────────────────────────────────────────── */
+
+function getPriceVariants(options: DishOption[] | undefined) {
+  if (!options || options.length === 0) return []
+  const portionGroup = options.find((o) => o.price_mode === 'override')
+  if (!portionGroup) return []
+  return portionGroup.choices
+    .filter((c) => c.is_available)
+    .map((c) => ({ id: c.id, name: c.name, price: c.extra_price }))
+}
+
 function BestsellerSlider({
   items,
   label,
@@ -136,6 +145,7 @@ function BestsellerSlider({
   sublabel: string
   onAsk?: (t: string) => void
 }) {
+  const dishOptions = useAppStore((s) => s.dishOptions)
   if (items.length === 0) return null
 
   return (
@@ -153,8 +163,10 @@ function BestsellerSlider({
 
       <div className="mg-bs-track">
         {items.map((item, idx) => {
-          const price = formatPrice(item.price)
-          const cleanDesc = item.description?.replace(/[,;:\s]+$/, '') ?? null
+         const price = formatPrice(item.price)
+const cleanDesc = item.description?.replace(/[,;:\s]+$/, '') ?? null
+const rawVariants = getPriceVariants(dishOptions[item.id])
+const variants = rawVariants.length > 1 ? rawVariants : []  // only show when there's an actual choice
         const imageUrl = item.image_url
             ? item.image_url.startsWith('http')
               ? item.image_url
@@ -188,8 +200,19 @@ function BestsellerSlider({
                 <p className="mg-bs-name">{item.name}</p>
                 {cleanDesc && <p className="mg-bs-desc">{cleanDesc}</p>}
                 <div className="mg-bs-price-row">
-                  {price && <span className="mg-bs-price">{price}</span>}
-                </div>
+  {variants.length > 0 ? (
+    <div className="mg-bs-variants">
+      {variants.map((v) => (
+        <span className="mg-bs-variant" key={v.id}>
+          <span className="mg-bs-variant-name">{v.name}</span>
+          <span className="mg-bs-variant-price">₹{Math.round(v.price / 100)}</span>
+        </span>
+      ))}
+    </div>
+  ) : (
+    price && <span className="mg-bs-price">{price}</span>
+  )}
+</div>
               </div>
             </button>
           )
@@ -1267,6 +1290,16 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   }
   :global(.mg-bs-price-row) { display: flex; align-items: center; gap: 8px; }
   :global(.mg-bs-price) { color: #E9C874; font-weight: 700; font-size: 16px; font-family: var(--font-body); }
+  
+  :global(.mg-bs-variants) { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+:global(.mg-bs-variant) { display: inline-flex; align-items: baseline; gap: 5px; }
+:global(.mg-bs-variant-name) {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: rgba(240,230,210,0.55); font-family: var(--font-body);
+}
+:global(.mg-bs-variant-price) {
+  font-size: 15px; font-weight: 800; color: #E9C874; font-family: var(--font-body);
+}
 
   :global(.mg-bs-dots) {
     display: flex; justify-content: center; gap: 6px; margin-top: 8px;

@@ -485,9 +485,9 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
             <PairsWith names={item.best_with} onTap={onAsk ? handlePairsWithTap : undefined} />
           )}
 
-          {!ordersEnabled && hasOptions && (
-            <VariantsList options={dishOptions[item.id] ?? []} />
-          )}
+         {hasOptions && (
+  <VariantsList options={dishOptions[item.id] ?? []} />
+)}
 
           {socialCount !== null && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 7, fontSize: 10, fontWeight: 500, color: '#34d399', fontFamily: 'var(--font-body)' }}>
