@@ -676,7 +676,7 @@ export default function OrdersPage() {
       </div>
 
       <div className={`${cardBase} p-5`} style={cardStyle}>
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
@@ -694,17 +694,30 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          
-           <a href={process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? '#'}
-            download="dinezy-dash.apk"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:shadow-[0_2px_10px_rgba(47,122,92,0.1)]"
-            style={{ borderColor: `${BRAND.emerald}40`, background: `${BRAND.emerald}1A`, color: BRAND.emerald }}
-          >
-            <Download size={13} />
-            Download APK
-          </a>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <a
+              href="https://play.google.com/store/apps/details?id=com.namaste.dinezydash"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:shadow-[0_2px_10px_rgba(62,111,166,0.1)]"
+              style={{ borderColor: `${BRAND.sky}40`, background: `${BRAND.sky}1A`, color: BRAND.skyDeep }}
+            >
+              <Download size={13} />
+              Get it on Play Store
+            </a>
+
+            <a
+              href={process.env.NEXT_PUBLIC_ANDROID_APP_URL ?? '#'}
+              download="dinezy-dash.apk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:shadow-[0_2px_10px_rgba(47,122,92,0.1)]"
+              style={{ borderColor: `${BRAND.emerald}40`, background: `${BRAND.emerald}1A`, color: BRAND.emerald }}
+            >
+              <Download size={13} />
+              Download APK
+            </a>
+          </div>
         </div>
       </div>
 
