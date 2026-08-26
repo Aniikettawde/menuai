@@ -3,20 +3,8 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  Search,
-  Send,
-  Check,
-  CheckCheck,
-  Clock,
-  MessageCircleWarning,
-  Plus,
-  X,
-  Phone,
-  ArrowLeft,
-  Lock,
-  MessageSquarePlus,
-  Bell,
-  BellOff,
+  Search, Send, Check, CheckCheck, Clock, MessageCircleWarning, Plus, X,
+  Phone, ArrowLeft, Lock, MessageSquarePlus, Bell, BellOff, IndianRupee,
 } from 'lucide-react';
 
 type Contact = {
@@ -227,6 +215,12 @@ const [selectedRestaurantId, setSelectedRestaurantId] = useState('');
   const [templateParams, setTemplateParams] = useState<string[]>([]);
   const [newChatSending, setNewChatSending] = useState(false);
   const [newChatError, setNewChatError] = useState('');
+  
+  const [showPayModal, setShowPayModal] = useState(false);
+const [payAmount, setPayAmount] = useState('');
+const [payDescription, setPayDescription] = useState('');
+const [paySending, setPaySending] = useState(false);
+const [payError, setPayError] = useState('');
 
   // Keep a ref mirror of `muted` so polling callbacks (captured once via useCallback)
   // always read the latest value instead of a stale closure.
@@ -423,6 +417,45 @@ useEffect(() => {
       setSending(false);
     }
   }
+  
+  async function handleSendPayment() {
+  setPayError('');
+  const amountNum = Number(payAmount);
+  if (!amountNum || amountNum <= 0) {
+    setPayError('Enter a valid amount');
+    return;
+  }
+  if (!payDescription.trim()) {
+    setPayError('Enter what this payment is for');
+    return;
+  }
+  if (!selected) return;
+
+  setPaySending(true);
+  try {
+    const res = await fetch('/api/whatsapp/send-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        wa_id: selected,
+        amount: amountNum,
+        description: payDescription.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to send payment request');
+
+    setShowPayModal(false);
+    setPayAmount('');
+    setPayDescription('');
+    await loadMessages(selected);
+    await loadContacts();
+  } catch (err: any) {
+    setPayError(err.message || 'Something went wrong');
+  } finally {
+    setPaySending(false);
+  }
+}
 
   function resetNewChatForm() {
     setNewNumber('');
@@ -774,31 +807,118 @@ useEffect(() => {
                   </span>
                 </div>
               )}
-              <div className="flex gap-2 items-center">
-                <input
-                  ref={inputRef}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder={windowOpen ? 'Type a message' : 'Send a template to reopen this chat'}
-                  disabled={sending || !windowOpen}
-                  className="flex-1 rounded-full px-4 py-2.5 text-[15px] outline-none disabled:opacity-60"
-                  style={{ color: C.textPrimary, background: '#FFFFFF' }}
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={sending || !draft.trim() || !windowOpen}
-                  className="w-11 h-11 rounded-full flex items-center justify-center disabled:opacity-40 shrink-0 transition-transform hover:scale-105"
-                  style={{ background: C.accentBright }}
-                  aria-label="Send message"
-                >
-                  <Send size={18} color="#fff" />
-                </button>
-              </div>
+<div className="flex gap-2 items-center">
+  <button
+    onClick={() => setShowPayModal(true)}
+    disabled={!windowOpen}
+    className="w-11 h-11 rounded-full flex items-center justify-center disabled:opacity-40 shrink-0 transition-transform hover:scale-105"
+    style={{ background: '#FFFFFF', border: `1px solid ${C.border}` }}
+    title="Request payment"
+    aria-label="Request payment"
+  >
+    <IndianRupee size={18} color={C.accentBright} />
+  </button>
+  <input
+    ref={inputRef}
+    value={draft}
+    onChange={(e) => setDraft(e.target.value)}
+    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+    placeholder={windowOpen ? 'Type a message' : 'Send a template to reopen this chat'}
+    disabled={sending || !windowOpen}
+    className="flex-1 rounded-full px-4 py-2.5 text-[15px] outline-none disabled:opacity-60"
+    style={{ color: C.textPrimary, background: '#FFFFFF' }}
+  />
+  <button
+    onClick={handleSend}
+    disabled={sending || !draft.trim() || !windowOpen}
+    className="w-11 h-11 rounded-full flex items-center justify-center disabled:opacity-40 shrink-0 transition-transform hover:scale-105"
+    style={{ background: C.accentBright }}
+    aria-label="Send message"
+  >
+    <Send size={18} color="#fff" />
+  </button>
+</div>
             </div>
           </>
         )}
       </div>
+	  
+	  
+	  {showPayModal && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    style={{ background: 'rgba(11,20,26,0.6)' }}
+    onClick={() => { setShowPayModal(false); setPayError(''); }}
+  >
+    <div
+      className="w-full max-w-sm rounded-xl shadow-2xl overflow-hidden"
+      style={{ background: '#fff' }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="px-5 py-4 flex items-center justify-between" style={{ background: C.headerBg }}>
+        <h2 className="font-semibold text-[16px] text-white">Request payment</h2>
+        <button
+          onClick={() => { setShowPayModal(false); setPayError(''); }}
+          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10"
+          aria-label="Close"
+        >
+          <X size={18} color="#fff" />
+        </button>
+      </div>
+
+      <div className="px-5 py-5 space-y-4">
+        <p className="text-[13px]" style={{ color: C.textSecondary }}>
+          Sends a secure "Review and Pay" card to {selectedContact?.name || (selected && formatPhone(selected))} via Razorpay.
+        </p>
+
+        <div>
+          <label className="text-xs font-semibold block mb-1.5" style={{ color: C.textPrimary }}>
+            Amount (₹)
+          </label>
+          <input
+            value={payAmount}
+            onChange={(e) => setPayAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+            placeholder="450"
+            inputMode="decimal"
+            className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none"
+            style={{ borderColor: C.border, color: C.textPrimary }}
+            autoFocus
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold block mb-1.5" style={{ color: C.textPrimary }}>
+            Description
+          </label>
+          <input
+            value={payDescription}
+            onChange={(e) => setPayDescription(e.target.value)}
+            placeholder="e.g. Table 4 bill"
+            className="w-full border rounded-lg px-3.5 py-2.5 text-sm outline-none"
+            style={{ borderColor: C.border, color: C.textPrimary }}
+          />
+        </div>
+
+        {payError && (
+          <p className="text-xs px-3.5 py-2.5 rounded-lg font-medium" style={{ background: C.errBg, color: C.errText }}>
+            {payError}
+          </p>
+        )}
+      </div>
+
+      <div className="px-5 py-4 border-t" style={{ borderColor: C.border }}>
+        <button
+          onClick={handleSendPayment}
+          disabled={paySending || !payAmount || !payDescription.trim()}
+          className="w-full py-3 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-transform hover:scale-[1.01]"
+          style={{ background: C.accentBright }}
+        >
+          {paySending ? 'Sending…' : `Send payment request${payAmount ? ` for ₹${payAmount}` : ''}`}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* New Conversation Modal */}
       {showNewChat && (

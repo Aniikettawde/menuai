@@ -47,14 +47,15 @@ export function RewardWelcomePopup({ isOpen, onClose, onClaim }: Props) {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 1200,
+        zIndex: 2000, // raised above BottomTabBar's stacking context
         background: 'rgba(33,30,27,0.5)',
         backdropFilter: 'blur(4px)',
         WebkitBackdropFilter: 'blur(4px)',
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        padding: 16,
+        // extra bottom clearance so the card sits above BottomTabBar, plus iOS safe area
+        padding: '16px 16px calc(88px + env(safe-area-inset-bottom, 0px))',
         opacity: mounted ? 1 : 0,
         transition: 'opacity 0.2s ease',
       }}
@@ -121,55 +122,55 @@ export function RewardWelcomePopup({ isOpen, onClose, onClaim }: Props) {
           </div>
 
           <div style={{ paddingRight: 18 }}>
-<h2
-  id="reward-popup-title"
-  style={{
-    margin: 0,
-    fontSize: 15.5,
-    fontWeight: 700,
-    color: 'var(--pr-text)',
-    lineHeight: 1.3,
-    letterSpacing: '-0.01em',
-  }}
->
-  🎁 Something special is waiting for you
-</h2>
-<p
-  style={{
-    margin: '4px 0 0',
-    fontSize: 13,
-    lineHeight: 1.45,
-    color: 'var(--pr-text-muted)',
-  }}
->
-  Login to unlock your offers and claim them on your visits.
-</p>
+            <h2
+              id="reward-popup-title"
+              style={{
+                margin: 0,
+                fontSize: 15.5,
+                fontWeight: 700,
+                color: 'var(--pr-text)',
+                lineHeight: 1.3,
+                letterSpacing: '-0.01em',
+              }}
+            >
+              🎁 Something special is waiting for you
+            </h2>
+            <p
+              style={{
+                margin: '4px 0 0',
+                fontSize: 13,
+                lineHeight: 1.45,
+                color: 'var(--pr-text-muted)',
+              }}
+            >
+              Login to unlock your offers and claim them on your visits.
+            </p>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-<button
-  type="button"
-  onClick={onClaim}
-  style={{
-    flex: 1,
-    height: 42,
-    borderRadius: 12,
-    border: 'none',
-    background: 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
-    color: 'var(--pr-cta-text)',
-    fontSize: 13.5,
-    fontWeight: 700,
-    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  }}
->
-  Reveal my reward <ChevronRight size={15} />
-</button>
+          <button
+            type="button"
+            onClick={onClaim}
+            style={{
+              flex: 1,
+              height: 42,
+              borderRadius: 12,
+              border: 'none',
+              background: 'linear-gradient(135deg, var(--pr-gold) 0%, #6E5518 100%)',
+              color: 'var(--pr-cta-text)',
+              fontSize: 13.5,
+              fontWeight: 700,
+              fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+            }}
+          >
+            Reveal my reward <ChevronRight size={15} />
+          </button>
 
           <button
             type="button"
