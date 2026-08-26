@@ -38,6 +38,7 @@ export async function sendWhatsAppOrderPayment(
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
   const configurationName = process.env.RAZORPAY_WA_CONFIG_NAME!;
   const { referenceId, description, amountPaise } = opts;
+  const itemName = description.slice(0, 60); // WhatsApp caps item name at 60 chars
 
   const res = await fetch(apiUrl(`${phoneNumberId}/messages`), {
     method: 'POST',
@@ -57,9 +58,7 @@ export async function sendWhatsAppOrderPayment(
           name: 'review_and_pay',
           parameters: {
             reference_id: referenceId,
-            type: 'physical-goods',
-            currency: 'INR',
-            payment_type: 'razorpay',
+            type: 'digital-goods', // avoids needing country_of_origin/importer fields
             payment_settings: [
               {
                 type: 'payment_gateway',
@@ -69,17 +68,20 @@ export async function sendWhatsAppOrderPayment(
                 },
               },
             ],
+            currency: 'INR',
             total_amount: { value: amountPaise, offset: 100 },
             order: {
+              status: 'pending', // required field — this was missing before
               items: [
                 {
                   retailer_id: referenceId,
-                  name: description,
+                  name: itemName,
                   amount: { value: amountPaise, offset: 100 },
                   quantity: 1,
                 },
               ],
               subtotal: { value: amountPaise, offset: 100 },
+              tax: { value: 0, offset: 100, description: 'No additional tax' }, // required for India, was missing
             },
           },
         },
