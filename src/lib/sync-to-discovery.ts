@@ -41,7 +41,7 @@ type MainRestaurant = {
   updated_at: string
   published_at: string | null
   show_in_discovery: boolean | null   // ← add this
-
+show_in_app: boolean | null 
 }
 
 type MainCategory = {
@@ -109,7 +109,7 @@ function normalizeRestaurant(r: MainRestaurant) {
     cuisine_tags: r.cuisine_tags ?? [],
     is_published: true,
 	    show_in_discovery: r.show_in_discovery ?? true,   // ← add this
-
+show_in_app: r.show_in_app ?? true, 
 	is_partner: r.is_partner ?? false,
 
     is_claimed: r.is_claimed ?? true,

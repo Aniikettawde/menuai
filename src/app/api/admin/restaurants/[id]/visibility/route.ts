@@ -48,17 +48,17 @@ export async function PATCH(req: Request, { params }: Params) {
 
   // Only show_in_discovery drives the discovery sync — show_in_app is a
   // separate, app-only visibility flag with no discovery-side effect.
-  if (field === 'show_in_discovery') {
-    try {
-      await syncRestaurantToDiscovery(id)
-    } catch (syncErr) {
-      console.error('discovery sync failed after toggle:', syncErr)
-      return NextResponse.json(
-        { error: 'Restaurant updated but discovery sync failed', restaurant: data },
-        { status: 500 },
-      )
-    }
+ if (field === 'show_in_discovery' || field === 'show_in_app') {
+  try {
+    await syncRestaurantToDiscovery(id)
+  } catch (syncErr) {
+    console.error('discovery sync failed after toggle:', syncErr)
+    return NextResponse.json(
+      { error: 'Restaurant updated but discovery sync failed', restaurant: data },
+      { status: 500 },
+    )
   }
+}
 
   return NextResponse.json({ ok: true, restaurant: data })
 }
