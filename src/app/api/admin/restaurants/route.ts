@@ -66,7 +66,7 @@ export async function GET() {
 
   const { data: restaurants, error: restaurantError } = await sb
     .from('restaurants')
-    .select('id, name, slug, owner_id, is_active, is_published,show_in_discovery, avg_rating, total_ratings, created_at, cuisine_type')
+    .select('id, name, slug, owner_id, is_active, is_published, show_in_discovery, show_in_app, avg_rating, total_ratings, created_at, cuisine_type')
     .order('created_at', { ascending: false })
 
   if (restaurantError) {

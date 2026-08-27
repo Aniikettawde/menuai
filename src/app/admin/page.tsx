@@ -48,6 +48,7 @@ type Restaurant = {
   is_active: boolean
   is_published: boolean
   show_in_discovery: boolean
+  show_in_app: boolean // NEW
   avg_rating: number
   total_ratings: number
   created_at: string
@@ -406,10 +407,12 @@ function RestaurantRow({
   restaurant,
   onManage,
   onToggleDiscovery,
+  onToggleApp, // NEW
 }: {
   restaurant: Restaurant
   onManage: () => void
   onToggleDiscovery: () => void
+  onToggleApp: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const badge = planBadge(restaurant)
@@ -475,6 +478,17 @@ function RestaurantRow({
               ? 'Hide from discovery'
               : 'Show in discovery'}
           </button>
+		  
+		   <button
+    onClick={onToggleApp}
+    className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+      restaurant.show_in_app
+        ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+        : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+    }`}
+  >
+    {restaurant.show_in_app ? 'Hide from app' : 'Show in app'}
+  </button>
 
           <a
             href={`/r/${restaurant.slug}`}
@@ -615,36 +629,36 @@ export default function AdminPage() {
     }
   }, [])
 
-  const toggleDiscovery = useCallback(
-    async (restaurant: Restaurant) => {
-      const nextValue = !restaurant.show_in_discovery
+const toggleVisibility = useCallback(
+  async (restaurant: Restaurant, field: 'show_in_discovery' | 'show_in_app') => {
+    const nextValue = !restaurant[field]
+    const surface = field === 'show_in_app' ? 'the app' : 'discovery'
+    const confirmText = nextValue
+      ? `Show ${restaurant.name} in ${surface}?`
+      : `Hide ${restaurant.name} from ${surface}?`
 
-      const confirmText = nextValue
-        ? `Publish ${restaurant.name} to discovery?`
-        : `Hide ${restaurant.name} from discovery?`
+    if (!window.confirm(confirmText)) return
 
-      if (!window.confirm(confirmText)) return
+    try {
+      const res = await fetch(`/api/admin/restaurants/${restaurant.id}/visibility`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field, value: nextValue }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to update visibility')
+      await loadAll()
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Failed to update visibility')
+    }
+  },
+  [loadAll],
+)
 
-      try {
-        const res = await fetch(`/api/admin/restaurants/${restaurant.id}/discovery`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            show_in_discovery: nextValue,
-          }),
-        })
-
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || 'Failed to update discovery status')
-
-        await loadAll()
-      } catch (err) {
-        console.error(err)
-        alert(err instanceof Error ? err.message : 'Failed to update discovery status')
-      }
-    },
-    [loadAll],
-  )
+// keep old name working for the existing discovery button
+const toggleDiscovery = (r: Restaurant) => toggleVisibility(r, 'show_in_discovery')
+const toggleApp = (r: Restaurant) => toggleVisibility(r, 'show_in_app')
 
   useEffect(() => {
     void loadAll()
@@ -1049,12 +1063,13 @@ export default function AdminPage() {
 
               <div className="space-y-2">
                 {filtered.map((r) => (
-                  <RestaurantRow
-                    key={r.id}
-                    restaurant={r}
-                    onManage={() => setManagingRestaurant(r)}
-                    onToggleDiscovery={() => toggleDiscovery(r)}
-                  />
+                 <RestaurantRow
+  key={r.id}
+  restaurant={r}
+  onManage={() => setManagingRestaurant(r)}
+  onToggleDiscovery={() => toggleDiscovery(r)}
+  onToggleApp={() => toggleApp(r)}
+/>
                 ))}
                 {filtered.length === 0 && (
                   <div className="rounded-2xl border border-white/[0.06] bg-[#111111] py-12 text-center text-sm text-zinc-600">
