@@ -56,6 +56,17 @@ const cardBase = 'rounded-2xl border shadow-[0_1px_2px_rgba(43,33,31,0.04)]'
 const cardStyle = { borderColor: BRAND.line, background: BRAND.card }
 const skeletonStyle = { borderColor: BRAND.line, background: BRAND.ivorySoft }
 
+interface RatingRow {
+  id: string
+  score: number
+  comment: string | null
+  table_number: number | null
+  order_code: string | null
+  order_id: string | null
+  is_public: boolean
+  created_at: string
+}
+
 interface TopItem {
   item_id: string
   item_name: string
@@ -317,7 +328,7 @@ export default function AnalyticsPage() {
 
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState(7)
-
+const [ratingRows, setRatingRows] = useState<RatingRow[]>([])
   const [topItems, setTopItems] = useState<TopItem[]>([])
   const [hourly, setHourly] = useState<number[]>(Array(24).fill(0))
   const [dowCounts, setDowCounts] = useState<number[]>(Array(7).fill(0))
@@ -395,11 +406,11 @@ export default function AnalyticsPage() {
       const since = new Date()
       since.setDate(since.getDate() - range)
       const sinceISO = since.toISOString()
-
-      const [
+	   const [
         { data: eventsRaw, error },
         { data: waiterRowsRaw, error: waiterErr },
         customerStatsJson,
+        { data: ratingsRaw, error: ratingsErr },
       ] = await Promise.all([
         supabase
           .from('analytics_events')
@@ -420,7 +431,17 @@ export default function AnalyticsPage() {
             console.error('Customer stats fetch error:', err)
             return { qr_scans: 0, table_scans: [], customers: [] }
           }),
+        supabase
+          .from('ratings')
+          .select('id, score, comment, table_number, order_code, order_id, is_public, created_at')
+          .eq('restaurant_id', restaurantId)
+          .gte('created_at', sinceISO)
+          .order('created_at', { ascending: false })
+          .limit(500),
       ])
+
+      if (ratingsErr) console.error('Ratings fetch error:', ratingsErr)
+      setRatingRows((ratingsRaw ?? []) as RatingRow[])
 
       if (error) console.error('Analytics fetch error:', error)
       if (waiterErr) console.error('Waiter requests fetch error:', waiterErr)
@@ -1436,6 +1457,73 @@ export default function AnalyticsPage() {
           </div>
         )}
       </div>
+	  
+	  {/* Ratings & Comments */}
+<div className={`${cardBase} p-5`} style={cardStyle}>
+  <ReportHeader
+    title="Ratings & Comments"
+    subtitle="Individual guest ratings and feedback for this period"
+    icon={<Star size={14} />}
+    iconColor={BRAND.gold}
+    onDownload={() =>
+      downloadCsv(
+        reportFilename('ratings-comments', range),
+        ['Date', 'Score', 'Table', 'Order', 'Comment', 'Public'],
+        ratingRows.map((r) => [
+          formatDate(r.created_at),
+          r.score,
+          r.table_number ?? '',
+          r.order_code ?? (r.order_id ? r.order_id.slice(0, 8) : ''),
+          r.comment ?? '',
+          r.is_public ? 'Yes' : 'No',
+        ]),
+      )
+    }
+  />
+  {ratingRows.length === 0 ? (
+    <EmptyNote text="No ratings yet in this period" />
+  ) : (
+    <div className="space-y-2">
+      {ratingRows.slice(0, 50).map((r) => (
+        <div
+          key={r.id}
+          className="rounded-xl border px-3.5 py-3"
+          style={{ borderColor: BRAND.line, background: r.score <= 3 ? `${BRAND.rose}0D` : BRAND.ivory }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-0.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star
+                  key={i}
+                  size={13}
+                  className={i < r.score ? 'fill-amber-400 text-amber-400' : ''}
+                  style={i >= r.score ? { color: BRAND.line } : undefined}
+                />
+              ))}
+            </div>
+            <span className="text-[11px]" style={{ color: BRAND.inkFaint }}>
+              {r.table_number != null ? `Table ${r.table_number} · ` : ''}
+              {r.order_code ?? (r.order_id ? r.order_id.slice(0, 8) : '')} · {formatDate(r.created_at)}
+              {!r.is_public && ' · Private'}
+            </span>
+          </div>
+          {r.comment ? (
+            <p className="mt-2 text-sm leading-relaxed" style={{ color: BRAND.ink }}>
+              “{r.comment}”
+            </p>
+          ) : (
+            <p className="mt-2 text-xs italic" style={{ color: BRAND.inkFaint }}>No comment left</p>
+          )}
+        </div>
+      ))}
+      {ratingRows.length > 50 && (
+        <p className="pt-1 text-center text-[10px]" style={{ color: BRAND.inkFaint }}>
+          Showing 50 of {ratingRows.length} ratings — download CSV for the full list
+        </p>
+      )}
+    </div>
+  )}
+</div>
 
       <div className={`${cardBase} p-5`} style={cardStyle}>
         <div className="mb-4 flex items-center gap-2">
