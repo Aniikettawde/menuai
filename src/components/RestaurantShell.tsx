@@ -34,7 +34,6 @@ import { TranslationLoadingOverlay } from './TranslationLoadingOverlay'
 import { WelcomeSplash } from './WelcomeSplash'
 import { RewardWelcomePopup } from './RewardWelcomePopup'
 import { useCustomerAuth } from '@/store/customer-auth-store'
-import { RateUsSlideDown } from './RateUsSlideDown'
 import { AboutTab } from './AboutTab'
 import type { ReviewRow } from '@/lib/schema/restaurant-schema'
 import { GoogleReviewButton } from './GoogleReviewButton'
@@ -901,7 +900,6 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
     />
   )}
 	   <TranslationLoadingOverlay />   {/* ← add this line */}
-	   <RateUsSlideDown restaurantId={restaurant.id} enabled={tableSessionValid === true} />
 
   <OfflineBanner />
   <MenuTypeSelector />
