@@ -32,13 +32,12 @@ import type { WaiterCallItem } from '@/types'
 import { BottomTabBar } from './BottomTabBar'
 import { TranslationLoadingOverlay } from './TranslationLoadingOverlay'
 import { WelcomeSplash } from './WelcomeSplash'
-import { FloatingGameButton } from './games/FloatingGameButton'
-import { GamesModal } from './games/GamesModal'
 import { RewardWelcomePopup } from './RewardWelcomePopup'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 import { RateUsSlideDown } from './RateUsSlideDown'
 import { AboutTab } from './AboutTab'
 import type { ReviewRow } from '@/lib/schema/restaurant-schema'
+import { GoogleReviewButton } from './GoogleReviewButton'
 
 type OfferRow = {
   id: string; title: string
@@ -123,7 +122,6 @@ const heroItems = (items ?? [])
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeOffers, setActiveOffers] = useState<OfferRow[]>([])
 const [sessionExpired, setSessionExpired] = useState(false)
-const [gamesOpen, setGamesOpen] = useState(false)
 const { customer } = useCustomerAuth()
 const [showRewardPopup, setShowRewardPopup] = useState(false)
   const tableToken = searchParams.get('t')
@@ -986,18 +984,19 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
 
         {showRating && <RatingModal />}
         {showRatingsList && <RatingsListModal restaurant={restaurant} />}
-		
 		{(tableNumber !== null || tableToken) && !sessionExpired && (
   <>
-    <FloatingGameButton
-      onClick={() => {
-        setGamesOpen(true)
-        void track(restaurant.id, 'games_opened', {
-          metadata: { table_number: tableNumber },
-        })
-      }}
-      bottomOffset={180}
-    />
+    {restaurant.google_reviews_url && (
+      <GoogleReviewButton
+        url={restaurant.google_reviews_url}
+        onClick={() =>
+          void track(restaurant.id, 'google_rating_clicked', {
+            metadata: { table_number: tableNumber, source: 'menu_page' },
+          })
+        }
+        bottomOffset={180}
+      />
+    )}
     <CallWaiterBell
       slug={slug}
       tableNumber={tableNumber}
@@ -1006,7 +1005,6 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   </>
 )}
 
-<GamesModal open={gamesOpen} onClose={() => setGamesOpen(false)} restaurantId={restaurant.id} />
 
         {(tableNumber !== null || tableToken) && !sessionExpired && (
   <CallWaiterBell

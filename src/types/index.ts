@@ -291,6 +291,7 @@ export type EventType =
   | 'login_completed'
   | 'account_opened'
   | 'scroll_depth'
+    | 'google_rating_clicked'   // ← add this
 
 export interface AnalyticsEvent {
   restaurant_id: string
