@@ -13,6 +13,8 @@ const nextConfig = {
   },
 
   // Image optimization
+    serverExternalPackages: ['jose'],   // ← ye line add karo
+
  images: {
   unoptimized: true,
   formats: ['image/avif', 'image/webp'],

@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
-import { cert, getApps, initializeApp } from 'firebase-admin/app'
-import { getMessaging } from 'firebase-admin/messaging'
+import { sendFcmMessage, getServiceAccountFromEnv } from '@/lib/fcm-workers'
 import { cookies } from 'next/headers'
 import { getValidTableSession, sessionCookieName } from '@/lib/table-session'
 
@@ -16,9 +15,7 @@ const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
 const vapidEmail = process.env.VAPID_EMAIL ?? 'mailto:admin@menuai.app'
 
-const firebaseProjectId = process.env.FIREBASE_PROJECT_ID
-const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL
-const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+
 
 	
 if (vapidPublicKey && vapidPrivateKey) {
@@ -32,20 +29,65 @@ function makeOrderCode(tableNumber: number) {
   return `SM-${tableNumber}-${randomUUID().slice(0, 8).toUpperCase()}`
 }
 
-function getFirebaseApp() {
-  if (getApps().length > 0) return getApps()[0]!
-
-  if (!firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
-    throw new Error('Missing Firebase Admin env vars')
+async function sendAndroidPushWithTokens(
+  admin: SupabaseClient,
+  tokenList: string[],
+  payload: {
+    title: string
+    body: string
+    tableNumber: number
+    requestId: string
+    items: RequestItem[]
+    subtotal: number
+    requestType: ReqType
+  },
+) {
+  try {
+    const serviceAccount = getServiceAccountFromEnv()
+    const deadTokens: string[] = []
+ 
+    const results = await Promise.allSettled(
+      tokenList.map((token) =>
+        sendFcmMessage(serviceAccount, {
+          token,
+          data: {
+            title: payload.title,
+            body: payload.body,
+            tableNumber: String(payload.tableNumber),
+            requestId: payload.requestId,
+            itemsJson: JSON.stringify(payload.items),
+            subtotal: String(payload.subtotal),
+            requestType: payload.requestType,
+          },
+          android: { priority: 'high' },
+        }),
+      ),
+    )
+ 
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        const msg = String((r.reason as Error)?.message ?? r.reason)
+        console.error('[FCM ERROR]', tokenList[i], msg)
+        if (
+          msg.includes('UNREGISTERED') ||
+          msg.includes('INVALID_ARGUMENT') ||
+          msg.includes('NOT_FOUND')
+        ) {
+          deadTokens.push(tokenList[i])
+        }
+      }
+    })
+ 
+    if (deadTokens.length > 0) {
+      await admin.from('device_tokens').delete().in('fcm_token', deadTokens)
+      console.log('[FCM] Cleaned up dead tokens:', deadTokens.length)
+    }
+ 
+    const successCount = results.filter((r) => r.status === 'fulfilled').length
+    console.log('[FCM] Success:', successCount, 'Failed:', results.length - successCount)
+  } catch (err) {
+    console.error('[FCM] SEND ERROR:', err)
   }
-
-  return initializeApp({
-    credential: cert({
-      projectId: firebaseProjectId,
-      clientEmail: firebaseClientEmail,
-      privateKey: firebasePrivateKey,
-    }),
-  })
 }
 
 type RequestItem = {
@@ -188,69 +230,7 @@ async function sendWebPushToStaff(
   }
 }
 
-// FIX 1: requestType now accepts the full ReqType union
-async function sendAndroidPushWithTokens(
-  admin: SupabaseClient,
-  tokenList: string[],
-  payload: {
-    title: string
-    body: string
-    tableNumber: number
-    requestId: string
-    items: RequestItem[]
-    subtotal: number
-    requestType: ReqType  // was: 'order' | 'assistance'
-  },
-) {
-  try {
-    const app = getFirebaseApp()
-    const messaging = getMessaging(app)
 
-    const result = await messaging.sendEachForMulticast({
-      tokens: tokenList,
-      data: {
-        title: payload.title,
-        body: payload.body,
-        tableNumber: String(payload.tableNumber),
-        requestId: payload.requestId,
-        itemsJson: JSON.stringify(payload.items),
-        subtotal: String(payload.subtotal),
-        requestType: payload.requestType,
-      },
-      android: {
-        priority: 'high',
-        ttl: 10000,
-      },
-    })
-
-    const deadTokens: string[] = []
-    result.responses.forEach((r, i) => {
-      if (!r.success) {
-        const code = r.error?.code
-        if (
-          code === 'messaging/registration-token-not-registered' ||
-          code === 'messaging/invalid-registration-token'
-        ) {
-          deadTokens.push(tokenList[i])
-        }
-      }
-    })
-
-    if (deadTokens.length > 0) {
-      await admin.from('device_tokens').delete().in('fcm_token', deadTokens)
-      console.log('[FCM] Cleaned up dead tokens:', deadTokens.length)
-    }
-
-    console.log('[FCM] Success:', result.successCount, 'Failed:', result.failureCount)
-    result.responses.forEach((r, i) => {
-      if (!r.success) {
-        console.error('[FCM ERROR]', tokenList[i], r.error?.code, r.error?.message)
-      }
-    })
-  } catch (err) {
-    console.error('[FCM] SEND ERROR:', err)
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {

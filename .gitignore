@@ -3,3 +3,9 @@ node_modules
 .env.local
 .env
 .open-next/
+
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
+*.tsbuildinfo

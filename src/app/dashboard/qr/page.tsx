@@ -92,8 +92,43 @@ const PLAN_LABELS: Record<string, string> = {
 // hole regardless of chosen size.
 const BASE_QR_PX = 188
 
-// Minimal-mode card is 360×510. These bound how far the QR can be dragged/
-// nudged from center so it can't be pushed fully off the printable card.
+// The card's real, exact printed size is user-settable in inches or cm
+// (e.g. "8 x 6"). PREVIEW_DPI converts that to on-screen CSS px for the
+// live preview (96 = standard CSS reference pixel, so the default 3.75in ×
+// 5.3125in card renders at the original 360×510 px design size).
+// PT_PER_INCH converts it to PDF points (the actual physical print unit)
+// when generating the download — kept separate from PREVIEW_DPI since
+// screen px and print pt are different units.
+const PREVIEW_DPI = 96
+const PT_PER_INCH = 72
+const CM_PER_INCH = 2.54
+
+const DEFAULT_CARD_WIDTH_IN = 360 / PREVIEW_DPI // 3.75in
+const DEFAULT_CARD_HEIGHT_IN = 510 / PREVIEW_DPI // 5.3125in
+const CARD_DIM_MIN_IN = 1
+const CARD_DIM_MAX_IN = 14
+
+const BASE_CARD_W = 360
+const BASE_CARD_H = 510
+
+const CARD_SCALE_MIN = 0.5
+const CARD_SCALE_MAX = 2
+
+type SizeUnit = 'in' | 'cm'
+
+function inToUnit(valueIn: number, unit: SizeUnit): number {
+  return unit === 'in' ? valueIn : valueIn * CM_PER_INCH
+}
+function unitToIn(value: number, unit: SizeUnit): number {
+  return unit === 'in' ? value : value / CM_PER_INCH
+}
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+// Minimal-mode card is 360×510 at the default dimensions above. These
+// bound how far the QR can be dragged/nudged from center so it can't be
+// pushed fully off the printable card.
 const QR_OFFSET_X_LIMIT = 150
 const QR_OFFSET_Y_LIMIT = 220
 const NUDGE_STEP = 8
@@ -195,6 +230,9 @@ async function loadJsPDF(): Promise<typeof import('jspdf').jsPDF> {
 // `minimal` strips everything except the QR (with its logo hole intact) on
 // top of the background image — no name, no table badge, no feature chips,
 // no footer. `qrSize` controls how big that QR renders inside the card.
+// `cardScale` controls how big the card/background itself is (independent
+// of qrSize) — it's applied as a real width/height resize off BASE_CARD_W/H
+// so the layout reflows cleanly instead of overlapping neighboring cards.
 function FixedQrCard({
   tableNo,
   restaurantName,
@@ -205,7 +243,17 @@ function FixedQrCard({
   minimal = false,
   qrSize = BASE_QR_PX,
   qrOffset = { x: 0, y: 0 },
+  cardScale = 1,
+  forcedWidth,
+  forcedHeight,
   onDragStart,
+    showTableNumberOnQr = true,
+  tableNumOffset = { x: 0, y: 140 },
+  tableNumSize = 28,
+ showTPrefix = true,
+  tableNumColor = '#241533',
+  dinezyLogoUrl,
+  onTableNumDragStart,
 }: {
   tableNo: number
   restaurantName: string
@@ -216,16 +264,28 @@ function FixedQrCard({
   minimal?: boolean
   qrSize?: number
   qrOffset?: { x: number; y: number }
+  cardScale?: number
+  forcedWidth?: number
+  forcedHeight?: number
   onDragStart?: (e: React.PointerEvent<HTMLDivElement>) => void
+  showTableNumberOnQr?: boolean
+  tableNumOffset?: { x: number; y: number }
+  tableNumSize?: number
+ showTPrefix?: boolean
+  tableNumColor?: string
+  dinezyLogoUrl?: string | null
+  onTableNumDragStart?: (e: React.PointerEvent<HTMLDivElement>) => void
 }) {
   // ── Minimal mode: just the QR (+ table number) floating on the background ──
   if (minimal) {
     const scale = qrSize / BASE_QR_PX
+    const cardWidth = forcedWidth ?? Math.round(BASE_CARD_W * cardScale)
+    const cardHeight = forcedHeight ?? Math.round(BASE_CARD_H * cardScale)
     return (
       <div
         ref={cardRef}
-        className="relative w-[360px] h-[510px] overflow-hidden rounded-[30px] shadow-[0_10px_30px_rgba(139,92,246,0.14)]"
-        style={{ background: backgroundImageUrl ? '#ffffff' : '#ffffff' }}
+        className="relative overflow-hidden rounded-[30px] shadow-[0_10px_30px_rgba(139,92,246,0.14)]"
+        style={{ width: cardWidth, height: cardHeight, background: backgroundImageUrl ? '#ffffff' : '#ffffff' }}
       >
         {backgroundImageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -236,7 +296,7 @@ function FixedQrCard({
             this preview or nudged via the D-pad control), not dead center.
             touch-none stops the browser from scrolling the page while
             dragging on mobile. */}
-        <div
+               <div
           className="absolute cursor-move touch-none select-none"
           style={{
             left: `calc(50% + ${qrOffset.x}px)`,
@@ -268,16 +328,30 @@ function FixedQrCard({
                   className="h-[188px] w-[188px] pointer-events-none"
                   draggable={false}
                 />
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+ <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="rounded-[15px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[3px] shadow-[0_2px_10px_rgba(0,0,0,0.15)]">
                     <div className="flex h-[42px] w-[42px] items-center justify-center overflow-hidden rounded-xl bg-white">
-                      <span
-                        className={`font-black tracking-tight bg-gradient-to-br from-[#9333ea] to-[#ea580c] bg-clip-text text-transparent ${
-                          String(tableNo).length > 1 ? 'text-sm' : 'text-lg'
-                        }`}
-                      >
-                        T{tableNo}
-                      </span>
+                      {showTableNumberOnQr ? (
+                        <span
+                          className={`font-black tracking-tight bg-gradient-to-br from-[#9333ea] to-[#ea580c] bg-clip-text text-transparent ${
+                            String(tableNo).length > 1 ? 'text-sm' : 'text-lg'
+                          }`}
+                        >
+                          T{tableNo}
+                        </span>
+                      ) : dinezyLogoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={dinezyLogoUrl}
+                          alt="Dinezy"
+                          className="h-full w-full object-contain p-1.5"
+                          draggable={false}
+                        />
+                      ) : (
+                        <span className="text-lg font-black tracking-tight bg-gradient-to-br from-[#9333ea] to-[#ea580c] bg-clip-text text-transparent">
+                          D
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -285,6 +359,27 @@ function FixedQrCard({
             )}
           </div>
         </div>
+
+        {/* Independent table number — only shown when the badge on the QR
+            is turned off. Sibling of the QR wrapper (not nested inside it),
+            so its position is relative to the CARD, fully separate from
+            wherever the QR itself has been dragged/nudged to. */}
+        {!showTableNumberOnQr && (
+          <div
+            className="absolute cursor-move touch-none select-none whitespace-nowrap font-black tracking-tight"
+            style={{
+              left: `calc(50% + ${tableNumOffset.x}px)`,
+              top: `calc(50% + ${tableNumOffset.y}px)`,
+              transform: 'translate(-50%, -50%)',
+              fontSize: tableNumSize,
+              color: tableNumColor,
+              textShadow: '0 1px 3px rgba(255,255,255,0.85), 0 1px 2px rgba(255,255,255,0.65)',
+            }}
+            onPointerDown={onTableNumDragStart}
+          >
+            {showTPrefix ? 'T' : ''}{tableNo}
+          </div>
+        )}
       </div>
     )
   }
@@ -298,7 +393,8 @@ function FixedQrCard({
   return (
     <div
       ref={cardRef}
-      className="relative w-[360px] overflow-hidden rounded-[30px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[2px] shadow-[0_10px_30px_rgba(139,92,246,0.18)]"
+      className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-[#ff7a18] via-[#8b5cf6] to-[#ec4899] p-[2px] shadow-[0_10px_30px_rgba(139,92,246,0.18)]"
+      style={{ width: Math.round(BASE_CARD_W * cardScale) }}
     >
       {/* Light, ink-light body — the gradient border above stays as the one
           bold signature element; the print surface itself stays mostly
@@ -468,7 +564,7 @@ export default function QRPage() {
   const [tablePreviewMap, setTablePreviewMap] = useState<Record<number, string>>({})
 
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null)
-
+  const [dinezyLogoUrl, setDinezyLogoUrl] = useState<string | null>(null)
   // Minimal mode: strips all text/branding off the card, leaving just the
   // QR (with its logo hole) sitting on top of the background image. qrSize
   // is the on-screen/print size (px, at the card's 360px reference width)
@@ -476,17 +572,56 @@ export default function QRPage() {
   const [minimalMode, setMinimalMode] = useState(false)
   const [qrSize, setQrSize] = useState(BASE_QR_PX)
 
+  // Overall card/background size — independent of qrSize, which only
+  // resizes the QR block inside the card. Expressed as a scale factor off
+  // the 360×510 base design (e.g. 1.2 = 432×612).
+  const [cardScale, setCardScale] = useState(1)
+
+  // How many cards to lay out per A4 page in the exported PDF. 1 = one big
+  // card filling the page, 2 = stacked two-up, 4 = the classic 2×2 grid.
+  const [cardsPerPage, setCardsPerPage] = useState<1 | 2 | 4>(4)
+  
+  const [customSizeEnabled, setCustomSizeEnabled] = useState(false)
+  const [sizeUnit, setSizeUnit] = useState<SizeUnit>('in')
+  const [cardWidthIn, setCardWidthIn] = useState(DEFAULT_CARD_WIDTH_IN)
+  const [cardHeightIn, setCardHeightIn] = useState(DEFAULT_CARD_HEIGHT_IN)
+
   // Where the QR sits inside the minimal card, as a pixel offset from
   // center. Settable by dragging it directly on the preview, or via the
   // up/down/left/right nudge buttons.
-  const [qrOffset, setQrOffset] = useState({ x: 0, y: 0 })
+ const [qrOffset, setQrOffset] = useState({ x: 0, y: 0 })
   const [isDraggingQr, setIsDraggingQr] = useState(false)
   const dragLastPoint = useRef<{ x: number; y: number } | null>(null)
 
-  function handleQrDragStart(e: React.PointerEvent<HTMLDivElement>) {
+  // Table number: by default it renders as a badge centered on the QR's
+  // logo hole. Turning this off removes that badge entirely and exposes an
+  // independent table-number text that can be dragged/resized anywhere on
+  // the background image, unrelated to the QR's own position.
+  const [showTableNumberOnQr, setShowTableNumberOnQr] = useState(true)
+  const [tableNumOffset, setTableNumOffset] = useState({ x: 0, y: 140 })
+  const [tableNumSize, setTableNumSize] = useState(28)
+  const [showTPrefix, setShowTPrefix] = useState(true)
+  const [tableNumColor, setTableNumColor] = useState('#241533')
+  const [isDraggingTableNum, setIsDraggingTableNum] = useState(false)
+  const tableNumDragLastPoint = useRef<{ x: number; y: number } | null>(null)
+  
+const [showA4Preview, setShowA4Preview] = useState(false)
+  const [a4PreviewLoading, setA4PreviewLoading] = useState(false)
+  const [a4PreviewPage, setA4PreviewPage] = useState({ w: 595.28, h: 841.89 })
+ const [a4PreviewImages, setA4PreviewImages] = useState<
+    { x: number; y: number; w: number; h: number; src: string }[]
+  >([])
+
+ function handleQrDragStart(e: React.PointerEvent<HTMLDivElement>) {
     e.preventDefault()
     dragLastPoint.current = { x: e.clientX, y: e.clientY }
     setIsDraggingQr(true)
+  }
+
+  function handleTableNumDragStart(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault()
+    tableNumDragLastPoint.current = { x: e.clientX, y: e.clientY }
+    setIsDraggingTableNum(true)
   }
 
   useEffect(() => {
@@ -513,18 +648,63 @@ export default function QRPage() {
     }
   }, [isDraggingQr])
 
-  function nudgeQr(dx: number, dy: number) {
+   function nudgeQr(dx: number, dy: number) {
     setQrOffset((prev) => ({
       x: clamp(prev.x + dx, -QR_OFFSET_X_LIMIT, QR_OFFSET_X_LIMIT),
       y: clamp(prev.y + dy, -QR_OFFSET_Y_LIMIT, QR_OFFSET_Y_LIMIT),
     }))
   }
 
-  function handleBackgroundUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  useEffect(() => {
+    if (!isDraggingTableNum) return
+    function onMove(e: PointerEvent) {
+      if (!tableNumDragLastPoint.current) return
+      const dx = e.clientX - tableNumDragLastPoint.current.x
+      const dy = e.clientY - tableNumDragLastPoint.current.y
+      tableNumDragLastPoint.current = { x: e.clientX, y: e.clientY }
+      setTableNumOffset((prev) => ({
+        x: clamp(prev.x + dx, -QR_OFFSET_X_LIMIT, QR_OFFSET_X_LIMIT),
+        y: clamp(prev.y + dy, -QR_OFFSET_Y_LIMIT, QR_OFFSET_Y_LIMIT),
+      }))
+    }
+    function onUp() {
+      setIsDraggingTableNum(false)
+      tableNumDragLastPoint.current = null
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [isDraggingTableNum])
+
+  function nudgeTableNum(dx: number, dy: number) {
+    setTableNumOffset((prev) => ({
+      x: clamp(prev.x + dx, -QR_OFFSET_X_LIMIT, QR_OFFSET_X_LIMIT),
+      y: clamp(prev.y + dy, -QR_OFFSET_Y_LIMIT, QR_OFFSET_Y_LIMIT),
+    }))
+  }
+ function handleWidthChange(value: number) {
+    setCardWidthIn(clamp(unitToIn(value, sizeUnit), CARD_DIM_MIN_IN, CARD_DIM_MAX_IN))
+  }
+  function handleHeightChange(value: number) {
+    setCardHeightIn(clamp(unitToIn(value, sizeUnit), CARD_DIM_MIN_IN, CARD_DIM_MAX_IN))
+  }
+  
+ function handleBackgroundUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => setBackgroundImageUrl(String(reader.result))
+    reader.readAsDataURL(file)
+  }
+
+  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setDinezyLogoUrl(String(reader.result))
     reader.readAsDataURL(file)
   }
 
@@ -537,6 +717,9 @@ export default function QRPage() {
     if (!baseUrl || !restaurant?.slug) return ''
     return `${baseUrl}/r/${restaurant.slug}`
   }, [baseUrl, restaurant?.slug])
+
+  const forcedCardWidthPx = customSizeEnabled ? Math.round(cardWidthIn * PREVIEW_DPI) : undefined
+  const forcedCardHeightPx = customSizeEnabled ? Math.round(cardHeightIn * PREVIEW_DPI) : undefined
 
   const allowedQrLimit = useMemo(() => getPlanLimit(billing), [billing])
   const quotaLabel = useMemo(() => getPlanLabel(billing), [billing])
@@ -725,6 +908,73 @@ export default function QRPage() {
       await copyLink()
     }
   }
+  
+   function computePageLayout() {
+    // Page is always A4 — custom size only changes how big the single
+    // card renders on that page, never the page dimensions itself.
+    const pageWpt = 595.28
+    const pageHpt = 841.89
+    const useCustomSize = cardsPerPage === 1 && customSizeEnabled
+    const margin = useCustomSize ? 0 : 22
+    const gap = 12
+    const cols = cardsPerPage === 1 ? 1 : cardsPerPage === 2 ? 1 : 2
+    const rows = cardsPerPage === 1 ? 1 : cardsPerPage === 2 ? 2 : 2
+    const slotsPerPage = cols * rows
+    const cellW = useCustomSize
+      ? cardWidthIn * PT_PER_INCH
+      : (pageWpt - margin * 2 - gap * (cols - 1)) / cols
+    const cellH = useCustomSize
+      ? cardHeightIn * PT_PER_INCH
+      : (pageHpt - margin * 2 - gap * (rows - 1)) / rows
+    return { pageWpt, pageHpt, margin, gap, cols, rows, slotsPerPage, cellW, cellH }
+  }
+  
+   async function openA4Preview() {
+    if (printSlots.length === 0) { alert('Please choose at least one table.'); return }
+    setA4PreviewLoading(true)
+    setShowA4Preview(true)
+    try {
+      const layout = computePageLayout()
+      setA4PreviewPage({ w: layout.pageWpt, h: layout.pageHpt })
+      const firstPageSlots = printSlots.slice(0, layout.slotsPerPage)
+
+      const images = await Promise.all(
+        firstPageSlots.map(async (slot, i) => {
+          const node = cardRefs.current[slot.key]
+          if (!node) return null
+          const png = await toPng(node, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' })
+          const col = i % layout.cols
+          const row = Math.floor(i / layout.cols)
+          const cellX = layout.margin + col * (layout.cellW + layout.gap)
+          const cellY = layout.margin + row * (layout.cellH + layout.gap)
+
+const useCustomSizePreview = cardsPerPage === 1 && customSizeEnabled
+          let drawW: number, drawH: number, x: number, y: number
+          if (useCustomSizePreview) {
+            drawW = layout.cellW
+            drawH = layout.cellH
+            x = (layout.pageWpt - drawW) / 2
+            y = (layout.pageHpt - drawH) / 2
+          } else {
+            const nodeAspect = node.offsetWidth / node.offsetHeight
+            drawW = layout.cellW
+            drawH = drawW / nodeAspect
+            if (drawH > layout.cellH) { drawH = layout.cellH; drawW = drawH * nodeAspect }
+            x = cellX + (layout.cellW - drawW) / 2
+            y = cellY + (layout.cellH - drawH) / 2
+          }
+          return { x, y, w: drawW, h: drawH, src: png }
+        }),
+      )
+      setA4PreviewImages(images.filter(Boolean) as { x: number; y: number; w: number; h: number; src: string }[])
+    } catch (err) {
+      console.error('A4 preview error:', err)
+      alert('Could not generate preview.')
+      setShowA4Preview(false)
+    } finally {
+      setA4PreviewLoading(false)
+    }
+  }
 
  async function downloadTableSheet() {
   if (!restaurant) return
@@ -734,43 +984,55 @@ export default function QRPage() {
   setBusy(true)
   try {
     const JsPDF = await loadJsPDF()
-    const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
 
-    const pageW = doc.internal.pageSize.getWidth()
-    const pageH = doc.internal.pageSize.getHeight()
-    const margin = 22
-    const gap = 12
-    const cols = 2
-    const rows = 2
-    const cardsPerPage = cols * rows
+    // Page is always A4 — custom size only changes how big the card
+    // renders on that page, never the physical page/paper size.
+    const useCustomSize = cardsPerPage === 1 && customSizeEnabled
 
-    const cellW = (pageW - margin * 2 - gap * (cols - 1)) / cols
-    const cellH = (pageH - margin * 2 - gap * (rows - 1)) / rows
+     const doc = new JsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
+
+ const layout = computePageLayout()
+    const { pageWpt: pageW, pageHpt: pageH, margin, gap, cols, rows, slotsPerPage, cellW, cellH } = layout
 
     for (let i = 0; i < printSlots.length; i++) {
       const slot = printSlots[i]
       const node = cardRefs.current[slot.key]
       if (!node) throw new Error(`Card not ready for Table ${slot.tableNo}`)
-      if (i > 0 && i % cardsPerPage === 0) doc.addPage()
+      if (i > 0 && i % slotsPerPage === 0) {
+        doc.addPage()
+      }
 
-      const posInPage = i % cardsPerPage
+      const posInPage = i % slotsPerPage
       const col = posInPage % cols
       const row = Math.floor(posInPage / cols)
       const cellX = margin + col * (cellW + gap)
       const cellY = margin + row * (cellH + gap)
 
-      const png = await toPng(node, { cacheBust: true, pixelRatio: 3, backgroundColor: '#ffffff' })
+       const png = await toPng(node, { cacheBust: true, pixelRatio: 3, backgroundColor: '#ffffff' })
 
-      const nodeAspect = node.offsetWidth / node.offsetHeight
-      let drawW = cellW
-      let drawH = drawW / nodeAspect
-      if (drawH > cellH) {
+      let drawW: number
+      let drawH: number
+      let x: number
+      let y: number
+
+      if (useCustomSize) {
+        // Custom size = the card renders at this exact width×height, but
+        // it's centered on the fixed A4 page instead of resizing the page.
+        drawW = cellW
         drawH = cellH
-        drawW = drawH * nodeAspect
+        x = (pageW - drawW) / 2
+        y = (pageH - drawH) / 2
+      } else {
+        const nodeAspect = node.offsetWidth / node.offsetHeight
+        drawW = cellW
+        drawH = drawW / nodeAspect
+        if (drawH > cellH) {
+          drawH = cellH
+          drawW = drawH * nodeAspect
+        }
+        x = cellX + (cellW - drawW) / 2
+        y = cellY + (cellH - drawH) / 2
       }
-
-      const x = cellX + (cellW - drawW) / 2
-      const y = cellY + (cellH - drawH) / 2
 
       doc.addImage(png, 'PNG', x, y, drawW, drawH)
     }
@@ -889,7 +1151,7 @@ export default function QRPage() {
               <div>
                 <p className="text-sm font-bold text-white">Print Preview</p>
                 <p className="mt-0.5 text-[11px] text-zinc-600">
-                  {minimalMode ? 'Minimal QR card' : 'Premium neon card'} · A4 · 4 cards/page · Print-ready
+                  {minimalMode ? 'Minimal QR card' : 'Premium neon card'} · A4 · {cardsPerPage} card{cardsPerPage > 1 ? 's' : ''}/page · Print-ready
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -897,7 +1159,7 @@ export default function QRPage() {
                   Live Preview
                 </span>
                 <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-[10px] font-semibold text-zinc-400 ring-1 ring-zinc-700">
-                  A4 · 4 per page
+                  A4 · {cardsPerPage} per page
                 </span>
               </div>
             </div>
@@ -919,7 +1181,7 @@ export default function QRPage() {
                 </div>
               ) : (
                 printSlots.map((slot) => (
-                  <FixedQrCard
+                    <FixedQrCard
                     key={slot.key}
                     cardRef={(el) => { cardRefs.current[slot.key] = el }}
                     tableNo={slot.tableNo}
@@ -928,18 +1190,37 @@ export default function QRPage() {
 
                     qrDataUrl={tablePreviewMap[slot.tableNo]}
                     isLoading={tokensLoading || !tokenMap.has(slot.tableNo)}
-                    minimal={minimalMode}
+                   minimal={minimalMode}
                     qrSize={qrSize}
                     qrOffset={qrOffset}
+                    cardScale={cardScale}
+                    forcedWidth={forcedCardWidthPx}
+                    forcedHeight={forcedCardHeightPx}
                     onDragStart={handleQrDragStart}
+                    showTableNumberOnQr={showTableNumberOnQr}
+                    tableNumOffset={tableNumOffset}
+                    tableNumSize={tableNumSize}
+                    showTPrefix={showTPrefix}
+                    tableNumColor={tableNumColor}
+                    dinezyLogoUrl={dinezyLogoUrl}
+                    onTableNumDragStart={handleTableNumDragStart}
                   />
                 ))
               )}
             </div>
-          </div>
+         </div>
 
           <div className="border-t border-zinc-800/60 p-5">
-             <button
+            <button
+              onClick={openA4Preview}
+              disabled={printSlots.length === 0}
+              className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-zinc-700/60 bg-zinc-800/60 py-3.5 text-sm font-semibold text-zinc-200 transition hover:border-purple-500/50 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ScanLine size={15} />
+              Preview on A4 before downloading
+            </button>
+			
+			 <button
               onClick={downloadTableSheet}
               disabled={busy || isQuotaExhausted || printSlots.length === 0}
               className="group relative w-full overflow-hidden rounded-2xl py-4 text-sm font-bold text-white transition-all duration-300 hover:shadow-[0_0_30px_rgba(139,92,246,0.35)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -1070,6 +1351,89 @@ export default function QRPage() {
                 className="h-4 w-4 shrink-0 accent-purple-500"
               />
             </label>
+
+            <div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-2.5">
+              <p className="text-xs font-semibold text-zinc-200">Cards per A4 page</p>
+              <p className="mt-0.5 text-[10.5px] text-zinc-600">Controls how big each card prints</p>
+              <div className="mt-2.5 grid grid-cols-3 gap-2">
+                {([1, 2, 4] as const).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setCardsPerPage(n)}
+                    className={`rounded-lg py-2 text-xs font-bold transition ${
+                      cardsPerPage === n
+                        ? 'bg-purple-600 text-white'
+                        : 'border border-zinc-700/60 bg-zinc-900 text-zinc-400 hover:border-purple-500/50 hover:text-purple-300'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+			
+<div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-2.5">
+                <label className="flex cursor-pointer items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-zinc-200">Custom print size</p>
+                    <p className="mt-0.5 text-[10.5px] text-zinc-600">
+                      e.g. 8 × 6 in — prints 1 card at this exact size (switches Cards per page to 1)
+                    </p>
+                  </div>
+                   <input
+                    type="checkbox"
+                    checked={customSizeEnabled}
+                    onChange={(e) => {
+                      setCustomSizeEnabled(e.target.checked)
+                      if (e.target.checked) setCardsPerPage(1)
+                    }}
+                    className="h-4 w-4 shrink-0 accent-purple-500"
+                  />
+                </label>
+
+                {customSizeEnabled && (
+                  <div className="mt-3 flex items-end gap-2">
+                    <div className="flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Width</p>
+                      <input
+                        type="number"
+                        min={round2(inToUnit(CARD_DIM_MIN_IN, sizeUnit))}
+                        max={round2(inToUnit(CARD_DIM_MAX_IN, sizeUnit))}
+                        step={0.1}
+                        value={round2(inToUnit(cardWidthIn, sizeUnit))}
+                        onChange={(e) => handleWidthChange(Number(e.target.value || 0))}
+                        className="mt-1 w-full rounded-lg border border-zinc-700/60 bg-zinc-900 px-2.5 py-2 text-sm font-semibold text-white outline-none focus:border-purple-500/50"
+                      />
+                    </div>
+                    <span className="pb-2 text-zinc-600">×</span>
+                    <div className="flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Height</p>
+                      <input
+                        type="number"
+                        min={round2(inToUnit(CARD_DIM_MIN_IN, sizeUnit))}
+                        max={round2(inToUnit(CARD_DIM_MAX_IN, sizeUnit))}
+                        step={0.1}
+                        value={round2(inToUnit(cardHeightIn, sizeUnit))}
+                        onChange={(e) => handleHeightChange(Number(e.target.value || 0))}
+                        className="mt-1 w-full rounded-lg border border-zinc-700/60 bg-zinc-900 px-2.5 py-2 text-sm font-semibold text-white outline-none focus:border-purple-500/50"
+                      />
+                    </div>
+                    <div className="flex overflow-hidden rounded-lg border border-zinc-700/60">
+                      {(['in', 'cm'] as const).map((u) => (
+                        <button
+                          key={u}
+                          onClick={() => setSizeUnit(u)}
+                          className={`px-2.5 py-2 text-[11px] font-bold transition ${
+                            sizeUnit === u ? 'bg-purple-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-purple-300'
+                          }`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
           </div>
 
           {/* Minimal (image-only) card toggle + QR size control */}
@@ -1120,6 +1484,124 @@ export default function QRPage() {
                   : 'Only applies in Minimal mode — the standard card keeps a fixed layout.'}
               </p>
             </div>
+
+            <div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-zinc-200">Design Size</p>
+                <span className="font-mono text-[11px] font-bold text-purple-400">{Math.round(cardScale * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={CARD_SCALE_MIN * 100}
+                max={CARD_SCALE_MAX * 100}
+                step={5}
+                value={Math.round(cardScale * 100)}
+                onChange={(e) => setCardScale(Number(e.target.value) / 100)}
+                className="mt-2 w-full accent-purple-500"
+              />
+              <p className="mt-1.5 text-[10.5px] text-zinc-600">
+                Scales the whole card/background — separate from QR Size above.
+              </p>
+            </div>
+
+                       {minimalMode && (
+              <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-2.5">
+                <div>
+                  <p className="text-xs font-semibold text-zinc-200">Show table number on QR</p>
+                  <p className="mt-0.5 text-[10.5px] text-zinc-600">
+                    Turn off to place the table number anywhere on the background yourself
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={showTableNumberOnQr}
+                  onChange={(e) => setShowTableNumberOnQr(e.target.checked)}
+                  className="h-4 w-4 shrink-0 accent-purple-500"
+                />
+              </label>
+            )}
+
+            {minimalMode && !showTableNumberOnQr && (
+              <div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Move size={12} className="text-zinc-500" />
+                    <p className="text-xs font-semibold text-zinc-200">Table Number</p>
+                  </div>
+                  <span className="font-mono text-[10px] text-zinc-500">
+                    x {tableNumOffset.x >= 0 ? '+' : ''}{tableNumOffset.x}, y {tableNumOffset.y >= 0 ? '+' : ''}{tableNumOffset.y}
+                  </span>
+                </div>
+                <p className="mb-2.5 text-[10.5px] text-zinc-600">
+                  Drag it directly on the preview, or nudge/resize it here.
+                </p>
+                <div className="mx-auto grid w-fit grid-cols-3 gap-1">
+                  <span />
+                  <button onClick={() => nudgeTableNum(0, -NUDGE_STEP)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-400 transition hover:border-purple-500/50 hover:text-purple-300" aria-label="Move table number up"><ArrowUp size={14} /></button>
+                  <span />
+                  <button onClick={() => nudgeTableNum(-NUDGE_STEP, 0)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-400 transition hover:border-purple-500/50 hover:text-purple-300" aria-label="Move table number left"><ArrowLeft size={14} /></button>
+                  <button onClick={() => setTableNumOffset({ x: 0, y: 140 })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-500 transition hover:border-amber-500/50 hover:text-amber-300" aria-label="Reset table number position" title="Reset"><RotateCcw size={13} /></button>
+                  <button onClick={() => nudgeTableNum(NUDGE_STEP, 0)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-400 transition hover:border-purple-500/50 hover:text-purple-300" aria-label="Move table number right"><ArrowRight size={14} /></button>
+                  <span />
+                  <button onClick={() => nudgeTableNum(0, NUDGE_STEP)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-900 text-zinc-400 transition hover:border-purple-500/50 hover:text-purple-300" aria-label="Move table number down"><ArrowDown size={14} /></button>
+                  <span />
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-zinc-200">Size</p>
+                  <span className="font-mono text-[11px] font-bold text-purple-400">{tableNumSize}px</span>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={12}
+                    max={120}
+                    step={1}
+                    value={tableNumSize}
+                    onChange={(e) => setTableNumSize(clamp(Number(e.target.value), 8, 200))}
+                    className="flex-1 accent-purple-500"
+                  />
+                  <input
+                    type="number"
+                    min={8}
+                    max={200}
+                    value={tableNumSize}
+                    onChange={(e) => setTableNumSize(clamp(Number(e.target.value || 0), 8, 200))}
+                    className="w-16 rounded-lg border border-zinc-700/60 bg-zinc-900 px-2 py-1.5 text-xs font-semibold text-white outline-none focus:border-purple-500/50"
+                  />
+                </div>
+
+                <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border border-zinc-700/60 bg-zinc-900 px-3 py-2.5">
+                  <div>
+                    <p className="text-xs font-semibold text-zinc-200">Show &ldquo;T&rdquo; prefix</p>
+                    <p className="mt-0.5 text-[10.5px] text-zinc-600">Off shows just the number, e.g. &ldquo;7&rdquo; instead of &ldquo;T7&rdquo;</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showTPrefix}
+                    onChange={(e) => setShowTPrefix(e.target.checked)}
+                    className="h-4 w-4 shrink-0 accent-purple-500"
+                  />
+                </label>
+
+                <div className="mt-3 flex items-center justify-between rounded-xl border border-zinc-700/60 bg-zinc-900 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-zinc-200">Color</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={tableNumColor}
+                      onChange={(e) => setTableNumColor(e.target.value)}
+                      className="h-7 w-7 cursor-pointer rounded border border-zinc-700/60 bg-transparent p-0"
+                    />
+                    <input
+                      type="text"
+                      value={tableNumColor}
+                      onChange={(e) => setTableNumColor(e.target.value)}
+                      className="w-20 rounded-lg border border-zinc-700/60 bg-zinc-900 px-2 py-1.5 font-mono text-[11px] text-white outline-none focus:border-purple-500/50"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {minimalMode && (
               <div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950 px-3 py-3">
@@ -1241,6 +1723,32 @@ export default function QRPage() {
           </div>
 
           <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+            <div className="mb-2.5 flex items-center gap-2">
+              <ImageIcon size={12} className="text-zinc-500" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Dinezy Logo</p>
+            </div>
+            <p className="mb-2 text-[10.5px] text-zinc-600">
+              Shown in the QR&apos;s center hole when &ldquo;Show table number on QR&rdquo; is off.
+            </p>
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700/60 bg-zinc-950 py-3 text-xs font-semibold text-zinc-400 hover:border-purple-500/50">
+              <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+              Upload logo
+            </label>
+            {dinezyLogoUrl && (
+              <div className="mt-2 flex items-center justify-between rounded-xl bg-zinc-950 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={dinezyLogoUrl} alt="Logo preview" className="h-6 w-6 rounded object-contain" />
+                  <span className="text-[11px] text-zinc-400">Logo applied</span>
+                </div>
+                <button onClick={() => setDinezyLogoUrl(null)} className="text-[11px] font-semibold text-rose-400 hover:text-rose-300">
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Your Plan</p>
               <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-400 ring-1 ring-purple-500/20">
@@ -1303,10 +1811,10 @@ export default function QRPage() {
             </span>
           </p>
         </div>
-        <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
+                <div className="rounded-2xl border border-zinc-800/80 bg-[#0c0a14] p-4">
           <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Menu link</p>
           
-           <a href={menuUrl}
+          <a href={menuUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-2 flex items-center gap-1.5 break-all font-mono text-xs text-purple-400 hover:text-purple-300"
@@ -1316,6 +1824,66 @@ export default function QRPage() {
           </a>
         </div>
       </div>
+
+      {showA4Preview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          onClick={() => setShowA4Preview(false)}
+        >
+          <div
+            className="relative max-h-[92vh] overflow-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-6">
+              <div>
+                <p className="text-sm font-bold text-white">A4 Print Preview</p>
+                <p className="text-[11px] text-zinc-500">
+                  {round2(a4PreviewPage.w / PT_PER_INCH)}in × {round2(a4PreviewPage.h / PT_PER_INCH)}in page — exact
+                  size, spacing & QR placement as the downloaded PDF
+                </p>
+              </div>
+              <button
+                onClick={() => setShowA4Preview(false)}
+                className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-800"
+              >
+                Close
+              </button>
+            </div>
+
+            {a4PreviewLoading ? (
+              <div className="flex h-[480px] w-[340px] items-center justify-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-600 border-t-purple-500" />
+              </div>
+            ) : (
+              <div
+                className="relative mx-auto rounded-sm bg-white shadow-2xl"
+                style={{ width: 340, height: 340 * (a4PreviewPage.h / a4PreviewPage.w) }}
+              >
+                {a4PreviewImages.map((img, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={i}
+                    src={img.src}
+                    alt={`Card preview ${i + 1}`}
+                    className="absolute"
+                    style={{
+                      left: `${(img.x / a4PreviewPage.w) * 100}%`,
+                      top: `${(img.y / a4PreviewPage.h) * 100}%`,
+                      width: `${(img.w / a4PreviewPage.w) * 100}%`,
+                      height: `${(img.h / a4PreviewPage.h) * 100}%`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            <p className="mt-3 text-center text-[10.5px] text-zinc-600">
+              Page 1 of {Math.ceil(printSlots.length / computePageLayout().slotsPerPage)} — every page follows this
+              same layout.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
