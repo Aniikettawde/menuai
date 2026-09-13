@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Eye,
@@ -13,9 +13,12 @@ import {
   ArrowRight,
   ShieldCheck,
   ArrowLeft,
+  MessageCircle,
+  CheckCircle2,
 } from 'lucide-react'
 
 type Mode = 'login' | 'signup' | 'forgot'
+type WaStage = 'idle' | 'sent' | 'verified'
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim().toLowerCase())
@@ -43,11 +46,124 @@ export default function DashboardLoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [referralCode, setReferralCode] = useState('')
+
+  // --- WhatsApp number verification (signup only) ---
+  const [whatsappNumber, setWhatsappNumber] = useState('')
+  const [waOtp, setWaOtp] = useState('')
+  const [waStage, setWaStage] = useState<WaStage>('idle')
+  const [waSending, setWaSending] = useState(false)
+  const [waVerifying, setWaVerifying] = useState(false)
+  const [waError, setWaError] = useState('')
+  const [waResendTimer, setWaResendTimer] = useState(0)
+  const [waVerificationId, setWaVerificationId] = useState<string | null>(null)
+  const waTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (waTimerRef.current) clearInterval(waTimerRef.current)
+    }
+  }, [])
+
+  const startWaResendTimer = useCallback(() => {
+    if (waTimerRef.current) clearInterval(waTimerRef.current)
+    setWaResendTimer(30)
+    waTimerRef.current = setInterval(() => {
+      setWaResendTimer((t) => {
+        if (t <= 1) {
+          if (waTimerRef.current) clearInterval(waTimerRef.current)
+          waTimerRef.current = null
+          return 0
+        }
+        return t - 1
+      })
+    }, 1000)
+  }, [])
+
+  const resetWaState = () => {
+    setWhatsappNumber('')
+    setWaOtp('')
+    setWaStage('idle')
+    setWaError('')
+    setWaVerificationId(null)
+    if (waTimerRef.current) {
+      clearInterval(waTimerRef.current)
+      waTimerRef.current = null
+    }
+    setWaResendTimer(0)
+  }
+
+  async function handleSendWaOtp() {
+    const cleaned = whatsappNumber.replace(/\D/g, '')
+    if (cleaned.length !== 10) {
+      setWaError('Enter a valid 10-digit WhatsApp number.')
+      return
+    }
+    setWaError('')
+    setWaSending(true)
+    try {
+      const res = await fetch('/api/auth/whatsapp-otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleaned, purpose: 'partner_signup' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setWaError(json?.error || 'Failed to send code. Please try again.')
+        return
+      }
+      setWaStage('sent')
+      startWaResendTimer()
+    } catch {
+      setWaError('Failed to send code. Please try again.')
+    } finally {
+      setWaSending(false)
+    }
+  }
+
+  async function handleVerifyWaOtp() {
+    const cleanCode = waOtp.replace(/\D/g, '').slice(0, 6)
+    if (cleanCode.length !== 6) {
+      setWaError('Enter the 6-digit code.')
+      return
+    }
+    setWaError('')
+    setWaVerifying(true)
+    try {
+      const cleaned = whatsappNumber.replace(/\D/g, '')
+      const res = await fetch('/api/auth/whatsapp-otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleaned, code: cleanCode, purpose: 'partner_signup' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setWaError(json?.error || 'Incorrect code. Please try again.')
+        return
+      }
+      setWaVerificationId(json.verificationId ?? null)
+      setWaStage('verified')
+      if (waTimerRef.current) {
+        clearInterval(waTimerRef.current)
+        waTimerRef.current = null
+      }
+    } catch {
+      setWaError('Verification failed. Please try again.')
+    } finally {
+      setWaVerifying(false)
+    }
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
-    if (params.get('mode') === 'signup') setMode('signup')
+    if (params.get('mode') === 'signup') {
+      setMode('signup')
+    }
+    const ref = params.get('ref')
+    if (ref) {
+      setReferralCode(ref.trim().toUpperCase())
+    }
   }, [])
 
   const passwordInfo = useMemo(() => passwordStrength(password), [password])
@@ -80,6 +196,11 @@ export default function DashboardLoginPage() {
       return false
     }
 
+    if (mode === 'signup' && waStage !== 'verified') {
+      setError('Please verify your WhatsApp number before continuing.')
+      return false
+    }
+
     return true
   }
 
@@ -101,7 +222,14 @@ export default function DashboardLoginPage() {
         const res = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail, password, name: name.trim() }),
+          body: JSON.stringify({
+            email: cleanEmail,
+            password,
+            name: name.trim(),
+            referralCode,
+            whatsapp_number: `+91${whatsappNumber.replace(/\D/g, '')}`,
+            whatsapp_verification_id: waVerificationId,
+          }),
         })
         const json = await res.json().catch(() => ({}))
 
@@ -114,10 +242,10 @@ export default function DashboardLoginPage() {
           setMessage('Check your email to confirm your account, then sign in.')
           setMode('login')
           setPassword('')
+          resetWaState()
           return
         }
 
-        // Signed up and session established server-side — check staff context
         const ctxRes = await fetch('/api/dashboard/context', { cache: 'no-store' })
         const ctxJson = await ctxRes.json().catch(() => ({}))
 
@@ -218,6 +346,84 @@ export default function DashboardLoginPage() {
               </div>
             )}
 
+            {mode === 'signup' && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-zinc-300">
+                  WhatsApp number
+                </label>
+
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <MessageCircle
+                      size={15}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                    />
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={whatsappNumber}
+                      onChange={(e) => {
+                        setWhatsappNumber(e.target.value.replace(/\D/g, '').slice(0, 10))
+                        setWaError('')
+                      }}
+                      placeholder="98765 43210"
+                      disabled={waStage === 'verified'}
+                      maxLength={10}
+                      className="w-full rounded-2xl border border-white/10 bg-black/20 py-3 pl-10 pr-4 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 disabled:opacity-60"
+                    />
+                  </div>
+
+                  {waStage !== 'verified' && (
+                    <button
+                      type="button"
+                      onClick={() => void handleSendWaOtp()}
+                      disabled={waSending || whatsappNumber.length < 10 || waResendTimer > 0}
+                      className="shrink-0 whitespace-nowrap rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {waSending ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : waStage === 'sent' ? (
+                        waResendTimer > 0 ? `Resend ${waResendTimer}s` : 'Resend'
+                      ) : (
+                        'Send code'
+                      )}
+                    </button>
+                  )}
+
+                  {waStage === 'verified' && (
+                    <div className="flex shrink-0 items-center gap-1.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-300">
+                      <CheckCircle2 size={14} />
+                      Verified
+                    </div>
+                  )}
+                </div>
+
+                {waStage === 'sent' && (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={waOtp}
+                      onChange={(e) => setWaOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      maxLength={6}
+                      className="w-full rounded-2xl border border-white/10 bg-black/20 py-3 px-4 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleVerifyWaOtp()}
+                      disabled={waVerifying || waOtp.length < 6}
+                      className="shrink-0 whitespace-nowrap rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-4 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {waVerifying ? <Loader2 size={14} className="animate-spin" /> : 'Verify'}
+                    </button>
+                  </div>
+                )}
+
+                {waError && <p className="mt-1.5 text-xs text-rose-300">{waError}</p>}
+              </div>
+            )}
+
             <div>
               <label className="mb-1.5 block text-sm font-medium text-zinc-300">Email</label>
               <div className="relative">
@@ -311,7 +517,7 @@ export default function DashboardLoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (mode === 'signup' && waStage !== 'verified')}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? (
@@ -355,6 +561,7 @@ export default function DashboardLoginPage() {
                   onClick={() => {
                     setMode('login')
                     resetFields()
+                    resetWaState()
                   }}
                   className="inline-flex items-center gap-1.5 text-zinc-400 transition hover:text-orange-300"
                 >
@@ -369,6 +576,7 @@ export default function DashboardLoginPage() {
                   setMode(mode === 'login' ? 'signup' : 'login')
                   resetFields()
                   setPassword('')
+                  resetWaState()
                 }}
                 className="font-medium text-orange-300 transition hover:text-orange-200"
               >

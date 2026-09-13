@@ -7,6 +7,7 @@ import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
 import { useTranslation } from '@/lib/i18n/useTranslation'
 import { bumpPersonalOrder } from '@/lib/menu-rank'
+import { resolveMenuImageUrl } from '@/lib/resolve-image'
 
 interface Props {
   item: MenuItem
@@ -77,22 +78,17 @@ function VariantsList({ options }: { options: DishOption[] }) {
   )
 }
 
-function getImageUrl(imageUrl: string | null | undefined): string | null {
-  if (!imageUrl) return null
-  if (imageUrl.startsWith('http')) return imageUrl
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/render/image/public/restaurant-assets/${imageUrl}?width=400&quality=75`}
 
-function formatPrice(paise: number): string {
-  if (!paise || paise <= 0) return 'APS'
-  return `₹${Math.round(paise / 100)}`
-}
 
 
 
 function trimDescription(text: string): string {
   return text.replace(/[,;:\s]+$/, '')
+}
+
+function formatPrice(paise: number): string {
+  if (!paise || paise <= 0) return 'APS'
+  return `₹${Math.round(paise / 100)}`
 }
 
 // NOTE: uses <span> (not <div>) throughout. This is rendered inside a <p>
@@ -322,7 +318,7 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   const primaryEntry = cartEntries[0] ?? null
   const priceLabel = formatPrice(item.price)
   const hasOptions = (dishOptions[item.id]?.length ?? 0) > 0
-  const imageUrl = getImageUrl(item.image_url)
+  const imageUrl = resolveMenuImageUrl(item.image_url)
   const hasImage = !!imageUrl
   const cleanDescription = item.description ? trimDescription(item.description) : null
   const ordersEnabled = useAppStore((s) => (s.restaurant?.orders_enabled ?? true) && s.hasTableToken)

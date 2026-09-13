@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+
 import {
   canAccessPath,
   getLandingPath,
@@ -11,6 +12,8 @@ const PUBLIC_PATHS = [
   '/dashboard/login',
   '/dashboard/billing',
   '/dashboard/billing/success',
+  '/partner/login',
+  '/partner/signup',
   '/api/billing/webhook',
   '/api/billing/start-trial',
 ]
@@ -19,13 +22,24 @@ export async function middleware(request: NextRequest) {
   const host = request.headers.get('host') || ''
   const pathname = request.nextUrl.pathname
 
-  if (host === 'explore.dinezy.in' || host.startsWith('explore.dinezy.in:')) {
+  // ---------------------------------------------------------
+  // Explore subdomain
+  // ---------------------------------------------------------
+
+  if (
+    host === 'explore.dinezy.in' ||
+    host.startsWith('explore.dinezy.in:')
+  ) {
     if (pathname === '/') {
       const url = request.nextUrl.clone()
       url.pathname = '/discovery'
       return NextResponse.rewrite(url)
     }
   }
+
+  // ---------------------------------------------------------
+  // Supabase
+  // ---------------------------------------------------------
 
   let supabaseResponse = NextResponse.next({ request })
 
@@ -37,9 +51,14 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
+
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value),
+          )
+
           supabaseResponse = NextResponse.next({ request })
+
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           )
@@ -52,77 +71,148 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // ---------------------------------------------------------
+  // Public paths
+  // ---------------------------------------------------------
+
   const isPublic = PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(p + '/'),
   )
 
-  if (!user) {
-    if (
-      (pathname.startsWith('/dashboard') && !isPublic) ||
-      pathname.startsWith('/admin')
-    ) {
-      const redirectUrl = request.nextUrl.clone()
-      redirectUrl.pathname = '/dashboard/login'
-      return NextResponse.redirect(redirectUrl)
-    }
-    return supabaseResponse
+  // ---------------------------------------------------------
+  // Unauthenticated users
+  // ---------------------------------------------------------
+
+ if (!user) {
+  if (pathname.startsWith('/partner/dashboard')) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = '/partner/login'
+    return NextResponse.redirect(redirectUrl)
   }
 
+  if (
+    (pathname.startsWith('/dashboard') && !isPublic) ||
+    pathname.startsWith('/admin')
+  ) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = '/dashboard/login'
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  return supabaseResponse
+}
+
+  // ---------------------------------------------------------
+  // Partner Dashboard
+  // ---------------------------------------------------------
+
+  if (pathname.startsWith('/partner/dashboard')) {
+  return supabaseResponse
+}
+
+  // ---------------------------------------------------------
+  // Restaurant login redirect
+  // ---------------------------------------------------------
+
   if (pathname === '/dashboard/login') {
-    const context = await resolveDashboardContext(user.id, user.email ?? null)
+    const context = await resolveDashboardContext(
+      user.id,
+      user.email ?? null,
+    )
+
     if (!context) return supabaseResponse
 
     const sub = await getOwnerSubscriptionState(context.ownerId)
+
     if (!sub?.hasAccess) return supabaseResponse
 
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = getLandingPath(context.role)
+
     return NextResponse.redirect(redirectUrl)
   }
 
+  // ---------------------------------------------------------
+  // Restaurant onboarding
+  // ---------------------------------------------------------
+
   if (pathname === '/dashboard/onboarding') {
-    const context = await resolveDashboardContext(user.id, user.email ?? null)
+    const context = await resolveDashboardContext(
+      user.id,
+      user.email ?? null,
+    )
+
     const ownerId = context?.ownerId ?? user.id
+
     const sub = await getOwnerSubscriptionState(ownerId)
+
     if (sub?.hasAccess) {
       const redirectUrl = request.nextUrl.clone()
-      redirectUrl.pathname = context ? getLandingPath(context.role) : '/dashboard'
+
+      redirectUrl.pathname = context
+        ? getLandingPath(context.role)
+        : '/dashboard'
+
       return NextResponse.redirect(redirectUrl)
     }
+
     return supabaseResponse
   }
 
-  if (isPublic) return supabaseResponse
+  // ---------------------------------------------------------
+  // Public paths
+  // ---------------------------------------------------------
+
+  if (isPublic) {
+    return supabaseResponse
+  }
+
+  // ---------------------------------------------------------
+  // Restaurant Dashboard
+  // ---------------------------------------------------------
 
   if (pathname.startsWith('/dashboard')) {
-    const context = await resolveDashboardContext(user.id, user.email ?? null)
+    const context = await resolveDashboardContext(
+      user.id,
+      user.email ?? null,
+    )
 
     if (!context) {
       const sub = await getOwnerSubscriptionState(user.id)
+
       if (!sub?.hasAccess) {
         const redirectUrl = request.nextUrl.clone()
         redirectUrl.pathname = '/dashboard/onboarding'
+
         return NextResponse.redirect(redirectUrl)
       }
+
       return supabaseResponse
     }
 
     const sub = await getOwnerSubscriptionState(context.ownerId)
+
     if (!sub) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard/onboarding'
+
       return NextResponse.redirect(redirectUrl)
     }
 
-    if (!sub.hasAccess && !pathname.startsWith('/dashboard/billing')) {
+    if (
+      !sub.hasAccess &&
+      !pathname.startsWith('/dashboard/billing')
+    ) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard/billing'
+
       return NextResponse.redirect(redirectUrl)
     }
 
     if (!canAccessPath(context.role, pathname)) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = getLandingPath(context.role)
+
       return NextResponse.redirect(redirectUrl)
     }
   }
@@ -134,9 +224,19 @@ export const config = {
   matcher: [
     '/',
     '/discovery/:path*',
+
+    // Restaurant dashboard
     '/dashboard/:path*',
+
+    // Billing
     '/api/billing/:path*',
+
+    // Admin
     '/admin/:path*',
     '/api/admin/:path*',
+
+    // Partner
+    '/partner/:path*',
+    '/api/partner/:path*',
   ],
 }

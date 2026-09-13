@@ -24,6 +24,7 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 import { useTranslation } from '@/lib/i18n/useTranslation'
 import { useTranslatedMenu } from '@/lib/i18n/useTranslatedMenu'
 import { track } from '@/lib/analytics'
+import { resolveMenuImageUrl } from '@/lib/resolve-image'
 
 import type { WaiterCallItem } from '@/types'
 import { usePopularItems } from '@/hooks/usePopularItems'
@@ -167,11 +168,10 @@ function BestsellerSlider({
 const cleanDesc = item.description?.replace(/[,;:\s]+$/, '') ?? null
 const rawVariants = getPriceVariants(dishOptions[item.id])
 const variants = rawVariants.length > 1 ? rawVariants : []  // only show when there's an actual choice
-        const imageUrl = item.image_url
-            ? item.image_url.startsWith('http')
-              ? item.image_url
-             : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/restaurant-assets/${item.image_url}?width=700&quality=78`
-            : null
+
+const imageUrl = item.image_url
+  ? resolveMenuImageUrl(item.image_url, 700)
+  : null
 
            return (
             <button
@@ -469,11 +469,9 @@ function CategorySection({
 }) {
   const otherItems = items
 
-  const imageUrl = category.image_url
-    ? category.image_url.startsWith('http')
-      ? category.image_url
-      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/restaurant-assets/${category.image_url}?width=200&quality=70`
-    : null
+ const imageUrl = category.image_url
+  ? resolveMenuImageUrl(category.image_url, 200)
+  : null
 
   return (
     <section

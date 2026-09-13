@@ -119,18 +119,28 @@ export default function RootLayout({
       lang="en"
       className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${dmSans.variable} scroll-smooth`}
     >
+      <head>
+        <meta
+          name="facebook-domain-verification"
+          content="oi11g0wuoiq321yt8uo9rpqoaw45bu"
+        />
+      </head>
+
       <body className="bg-white text-[#111111] antialiased">
         {children}
+
         <Script
           id="organization-jsonld"
           type="application/ld+json"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
         />
+
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-LCD36NFH1B"
           strategy="afterInteractive"
         />
+
         <Script id="google-analytics" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];

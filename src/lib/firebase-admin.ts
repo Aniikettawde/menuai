@@ -7,12 +7,26 @@ export function getFirebaseAdmin() {
     return getApps()[0]!
   }
 
-  const projectId = process.env.FIREBASE_PROJECT_ID
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  const projectId = process.env.FIREBASE_PROJECT_ID?.trim()
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim()
+
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY
+    ?.trim()
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error('Missing Firebase Admin env vars')
+  }
+
+  if (
+    !privateKey.includes('-----BEGIN PRIVATE KEY-----') ||
+    !privateKey.includes('-----END PRIVATE KEY-----')
+  ) {
+    throw new Error(
+      'FIREBASE_PRIVATE_KEY is not a valid PEM private key'
+    )
   }
 
   return initializeApp({

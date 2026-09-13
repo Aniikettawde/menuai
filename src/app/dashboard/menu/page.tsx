@@ -131,14 +131,45 @@ function cleanStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((v) => String(v).trim()).filter(Boolean) : []
 }
 const MENU_ASSET_BUCKET = 'restaurant-assets'
+
 function resolveMenuImageUrl(raw: unknown, width = 400): string {
   if (typeof raw !== 'string') return ''
+
   const value = raw.trim()
+
   if (!value) return ''
-  if (/^(https?:\/\/|data:|blob:)/i.test(value)) return value
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '')
+
+  // Keep full URLs, data URLs and blob URLs unchanged.
+  if (/^(https?:\/\/|data:|blob:)/i.test(value)) {
+    return value
+  }
+
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '')
+
   if (!supabaseUrl) return value
-  return `${supabaseUrl}/storage/v1/render/image/public/${MENU_ASSET_BUCKET}/${value.replace(/^\/+/, '')}?width=${width}&quality=60`
+
+  // Stored value is the Supabase Storage path.
+  const storagePath = value.replace(/^\/+/, '')
+
+  // Original image stored in Supabase Storage.
+  const originalUrl =
+    `${supabaseUrl}/storage/v1/object/public/${MENU_ASSET_BUCKET}/${storagePath}`
+
+  // Local development: load directly from Supabase.
+  if (process.env.NODE_ENV !== 'production') {
+    return originalUrl
+  }
+
+  // Production: Cloudflare performs the image transformation.
+  const options = [
+    `width=${width}`,
+    'quality=60',
+    'format=auto',
+    'fit=scale-down',
+  ].join(',')
+
+  return `/cdn-cgi/image/${options}/${originalUrl}`
 }
 
 // ─── Auto-match dish photos from the existing image library ─────────────────
