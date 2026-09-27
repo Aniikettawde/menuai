@@ -8,7 +8,7 @@ import type { MenuPageData, DishOption } from '@/types'
 
 import { RestaurantShell } from '@/components/RestaurantShell'
 
-import { preload } from 'react-dom'
+
 
 import {
   DiscoveryRestaurantView,
@@ -361,17 +361,6 @@ export async function generateMetadata(
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 
-function getLcpImageUrl(items: MenuPageData['items']) {
-  const item =
-    items.find((i) => i.is_available && i.is_bestseller && i.image_url) ??
-    items.find((i) => i.is_available && i.is_special && i.image_url) ??
-    items.find((i) => i.is_available && i.image_url)
-
-  return item?.image_url
-    ? `${item.image_url}`
-    : null
-}
-
 export default async function RestaurantPage(
   props: PageProps,
 ) {
@@ -420,15 +409,6 @@ export default async function RestaurantPage(
           restaurant.id,
         ),
       ])
-	  
-	  const lcpImageUrl = getLcpImageUrl(menuData.items)
-
-if (lcpImageUrl) {
-  preload(lcpImageUrl, {
-    as: 'image',
-    fetchPriority: 'high',
-  })
-}
 
       const schema =
         buildRestaurantSchema(
