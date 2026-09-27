@@ -123,6 +123,19 @@ export function RestaurantShell({
   initialOffers,
   initialDishOptions,
 }: Props) {
+  // Seed the store synchronously — during render, not in a useEffect —
+  // so `restaurant`/`items` are already populated on the very first
+  // render pass (including SSR). Previously this only happened inside a
+  // useEffect, which never runs on the server and only runs AFTER the
+  // first client paint — meaning `restaurant` was `null` on first render,
+  // `return null` below wiped out the entire menu, and every image
+  // (LCP included) only appeared after JS finished hydrating.
+  const lastSeededSlug = useRef<string | null>(null)
+  if (lastSeededSlug.current !== initialData.restaurant.slug) {
+    lastSeededSlug.current = initialData.restaurant.slug
+    useAppStore.getState().setRestaurantData(initialData)
+  }
+
   const {
     restaurant,
     items,
@@ -264,26 +277,26 @@ export function RestaurantShell({
     setHasTableToken,
   ])
 
-  useEffect(() => {
-    setRestaurantData(initialData)
-    setCachedMenu(initialData.restaurant.slug, initialData)
+useEffect(() => {
+  // Re-seeding on the initial mount is now handled synchronously above.
+  // This effect only needs to catch the case where `initialData` changes
+  // identity later without the slug changing (e.g. a parent re-render
+  // passing a fresh object) — setRestaurantData is cheap and idempotent.
+  setRestaurantData(initialData)
+  setCachedMenu(initialData.restaurant.slug, initialData)
 
-    // If page.tsx already fetched offers server-side, there's nothing to
-    // do here — no client round trip at all. Only fall back to fetching
-    // client-side (deferred, so it doesn't compete with first paint) when
-    // the server didn't provide them.
-    if (!initialOffers) {
-      runWhenIdle(() => {
-        void supabase
-          .from('offers')
-          .select('id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at')
-          .eq('restaurant_id', initialData.restaurant.id)
-          .eq('is_active', true)
-          .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString())
-          .then(({ data }) => { if (data) setActiveOffers(data as OfferRow[]) })
-      })
-    }
-  }, [initialData, setRestaurantData, initialOffers])
+  if (!initialOffers) {
+    runWhenIdle(() => {
+      void supabase
+        .from('offers')
+        .select('id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at')
+        .eq('restaurant_id', initialData.restaurant.id)
+        .eq('is_active', true)
+        .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString())
+        .then(({ data }) => { if (data) setActiveOffers(data as OfferRow[]) })
+    })
+  }
+}, [initialData, setRestaurantData, initialOffers])
 
   const slug = initialData.restaurant.slug
   usePWA()
