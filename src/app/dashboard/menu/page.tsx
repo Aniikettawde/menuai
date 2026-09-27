@@ -1821,9 +1821,19 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
                       onDragEnd={() => { if (draggedCatId) void saveCategoryOrder() }}
                       className="group"
                     >
-                      <button
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open ${cat.name} category`}
                         onClick={() => { setActiveCat(cat.id); setMobileView('items') }}
-                        className="group flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition active:scale-[0.99]"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setActiveCat(cat.id)
+                            setMobileView('items')
+                          }
+                        }}
+                        className="group flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition active:scale-[0.99]"
                         style={{ ...cardStyle, ...(draggedCatId === cat.id ? { boxShadow: `0 0 0 2px ${BRAND.burgundy}40`, opacity: 0.85 } : {}) }}
                       >
                         <div className="flex items-center gap-2 shrink-0" style={{ color: BRAND.inkFaint }}><GripVertical size={15} /></div>
@@ -1874,7 +1884,7 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
                           <Pencil size={13} />
                         </button>
                         <ChevronRight size={16} className="shrink-0" style={{ color: BRAND.inkFaint }} />
-                      </button>
+                      </div>
                     </div>
                   )
                 })}

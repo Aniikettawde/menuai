@@ -15,7 +15,7 @@ export function GoogleReviewButton({
   url,
   onClick,
   bottomOffset = 100,
-  tooltipText = "Loved your meal? Leave us a review! 🌟",
+  tooltipText = "Leave us a review",
   tooltipDelayMs = 1500,
   tooltipDurationMs = 6000,
 }: Props) {

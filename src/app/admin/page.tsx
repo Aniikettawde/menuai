@@ -25,6 +25,7 @@ import {
   X,
   XCircle,
   Gift,
+  ShieldCheck,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -198,6 +199,169 @@ function MiniBar({ value, max }: { value: number; max: number }) {
   return (
     <div className="h-1 w-full rounded-full bg-zinc-800">
       <div className="h-1 rounded-full bg-purple-500" style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
+
+const KYC_STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  pending: {
+    label: 'Pending review',
+    className: 'border-amber-500/20 bg-amber-500/10 text-amber-400',
+  },
+  verified: {
+    label: 'Verified',
+    className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+  },
+  rejected: {
+    label: 'Rejected',
+    className: 'border-red-500/20 bg-red-500/10 text-red-400',
+  },
+}
+
+function KycReviewCard({ partner, onDone }: { partner: any; onDone: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const [rejecting, setRejecting] = useState(false)
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+
+  async function review(action: 'approve' | 'reject' | 'reset') {
+    if (action === 'reject' && !reason.trim()) {
+      setError('Enter a rejection reason')
+      return
+    }
+    if (
+      action === 'reset' &&
+      !window.confirm(
+        `This clears ${partner.full_name}'s submitted documents and lets them go through KYC again. Continue?`,
+      )
+    ) {
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/admin/kyc/${partner.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, reason }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const badge = KYC_STATUS_BADGE[partner.kyc_status] ?? {
+    label: partner.kyc_status,
+    className: 'border-zinc-700 bg-zinc-800/50 text-zinc-400',
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111111] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-white">{partner.full_name}</p>
+          <p className="text-xs text-zinc-600">
+            {partner.email} · {partner.whatsapp}
+          </p>
+        </div>
+        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${badge.className}`}>
+          {badge.label}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          { label: 'Aadhaar front', url: partner.aadhaar_signed_url },
+          { label: 'Aadhaar back', url: partner.aadhaar_back_signed_url },
+          { label: 'PAN', url: partner.pan_signed_url },
+          { label: 'Selfie', url: partner.selfie_signed_url },
+        ].map((doc) => (
+          <div key={doc.label}>
+            <p className="mb-1 text-[10px] text-zinc-600">{doc.label}</p>
+            {doc.url ? (
+              <a href={doc.url} target="_blank" rel="noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={doc.url}
+                  alt={doc.label}
+                  className="h-28 w-full rounded-xl border border-white/[0.06] object-cover"
+                />
+              </a>
+            ) : (
+              <div className="flex h-28 items-center justify-center rounded-xl border border-white/[0.06] text-[10px] text-zinc-700">
+                Missing
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {partner.kyc_status === 'rejected' && partner.kyc_rejection_reason && (
+        <p className="mt-2 text-xs text-red-400">
+          Rejection reason: {partner.kyc_rejection_reason}
+        </p>
+      )}
+
+      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+
+      {rejecting ? (
+        <div className="mt-3 space-y-2">
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Rejection reason (shown internally)"
+            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs text-white outline-none focus:border-red-500/40"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => void review('reject')}
+              disabled={loading}
+              className="rounded-xl bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+            >
+              Confirm reject
+            </button>
+            <button
+              onClick={() => setRejecting(false)}
+              className="rounded-xl border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {partner.kyc_status === 'pending' && (
+            <>
+              <button
+                onClick={() => void review('approve')}
+                disabled={loading}
+                className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+              >
+                {loading ? <Loader2 size={13} className="animate-spin" /> : 'Approve'}
+              </button>
+              <button
+                onClick={() => setRejecting(true)}
+                disabled={loading}
+                className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20"
+              >
+                Reject
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => void review('reset')}
+            disabled={loading}
+            className="rounded-xl border border-zinc-700 bg-white/[0.02] px-3 py-1.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/[0.05] disabled:opacity-50"
+          >
+            {loading ? <Loader2 size={13} className="animate-spin" /> : 'Redo KYC'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -575,7 +739,7 @@ function RestaurantRow({
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics' | 'quiz' | 'redemptions'>('overview')
+  const [tab, setTab] = useState<'overview' | 'restaurants' | 'payments' | 'analytics' | 'quiz' | 'redemptions' | 'kyc'>('overview')
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
@@ -598,23 +762,28 @@ export default function AdminPage() {
   const [redemptions, setRedemptions] = useState<Redemption[]>([])
   const [markingSent, setMarkingSent] = useState<Redemption | null>(null)
   const [quizData, setQuizData] = useState<QuizAnalytics | null>(null)
+const [kycSubmissions, setKycSubmissions] = useState<any[]>([])
+const pendingKycCount = kycSubmissions.filter((k) => k.kyc_status === 'pending').length
 
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [rRes, pRes, aRes, qRes, redRes] = await Promise.all([
-        fetch('/api/admin/restaurants'),
-        fetch('/api/admin/payments'),
-        fetch('/api/admin/analytics'),
-        fetch('/api/admin/quiz-analytics'),
-        fetch('/api/admin/redemptions'),
-      ])
+const [rRes, pRes, aRes, qRes, redRes, kycRes] = await Promise.all([
+  fetch('/api/admin/restaurants'),
+  fetch('/api/admin/payments'),
+  fetch('/api/admin/analytics'),
+  fetch('/api/admin/quiz-analytics'),
+  fetch('/api/admin/redemptions'),
+  fetch('/api/admin/kyc'),
+])
 
       const rData = await rRes.json()
       const pData = await pRes.json()
       const aData = await aRes.json()
       const qData = await qRes.json()
       const redData = await redRes.json()
+	  const kycData = await kycRes.json()
+setKycSubmissions(kycData.partners ?? [])
 
       setRestaurants(rData.restaurants ?? [])
       setPayments(pData.payments ?? [])
@@ -693,6 +862,7 @@ const toggleApp = (r: Restaurant) => toggleVisibility(r, 'show_in_app')
     { key: 'payments', label: 'Payments', icon: <CreditCard size={13} /> },
     { key: 'analytics', label: 'Analytics', icon: <Activity size={13} /> },
     { key: 'quiz', label: 'Quiz Tracking', icon: <Sparkles size={13} /> },
+	{ key: 'kyc', label: `KYC${pendingKycCount ? ` (${pendingKycCount})` : ''}`, icon: <ShieldCheck size={13} /> },
   ] as const
 
   return (
@@ -781,6 +951,25 @@ const toggleApp = (r: Restaurant) => toggleVisibility(r, 'show_in_app')
               ))}
             </div>
           )}
+		  
+		  
+		  {tab === 'kyc' && (
+  <div className="space-y-3">
+    {kycSubmissions.length === 0 && (
+      <div className="rounded-2xl border border-white/[0.06] bg-[#111111] py-12 text-center text-sm text-zinc-600">
+        No KYC submissions yet
+      </div>
+    )}
+    {[...kycSubmissions]
+      .sort((a, b) => {
+        const order: Record<string, number> = { pending: 0, rejected: 1, verified: 2 }
+        return (order[a.kyc_status] ?? 3) - (order[b.kyc_status] ?? 3)
+      })
+      .map((k) => (
+        <KycReviewCard key={k.id} partner={k} onDone={loadAll} />
+      ))}
+  </div>
+)}
 
           {tab === 'overview' && (
             <div className="space-y-5">

@@ -143,83 +143,127 @@ export async function POST(
       // PAYMENT METHOD AUTHENTICATED / TRIAL START
       // =========================================================
 
-      case 'subscription.authenticated':
-      case 'subscription.pending': {
-        const rzpSub =
-          event.payload
-            .subscription.entity
+   case 'subscription.authenticated':
+case 'subscription.pending': {
+  const rzpSub =
+    event.payload
+      .subscription.entity
 
-        const userId =
-          rzpSub.notes
-            ?.user_id as
-            | string
-            | undefined
+  const userId =
+    rzpSub.notes
+      ?.user_id as
+      | string
+      | undefined
 
-        if (!userId) break
+  if (!userId) break
 
-        const planId =
-          normalizePlanId(
-            rzpSub.notes?.plan_id,
-          )
+  const planId =
+    normalizePlanId(
+      rzpSub.notes?.plan_id,
+    )
 
-        const billingCycle =
-          (rzpSub.notes
-            ?.billing_cycle as BillingCycle) ||
-          'monthly'
+  const billingCycle =
+    (rzpSub.notes
+      ?.billing_cycle as BillingCycle) ||
+    'monthly'
 
-        const now =
-          new Date()
+  const now =
+    new Date()
 
-        const trialEnd =
-          new Date(now)
+  // Check whether this user already used their free trial
+  // (via /api/billing/start-trial or an earlier Razorpay
+  // authorization) before overwriting with a fresh trial window.
+  const { data: existingSub } = await sb
+    .from('subscriptions')
+    .select('trial_start')
+    .eq('user_id', userId)
+    .maybeSingle()
 
-        trialEnd.setDate(
-          trialEnd.getDate() +
-            TRIAL_DAYS,
-        )
+  const alreadyHadTrial = Boolean(
+    existingSub?.trial_start,
+  )
 
-        await sb
-          .from('subscriptions')
-          .upsert(
-            {
-              user_id:
-                userId,
-              plan: 'trial',
-              plan_id:
-                planId,
-              billing_cycle:
-                billingCycle,
-              amount_paise:
-                getPlanAmountPaise(
-                  planId,
-                  billingCycle,
-                ),
-              razorpay_subscription_id:
-                rzpSub.id,
-              trial_start:
-                now.toISOString(),
-              trial_end:
-                trialEnd.toISOString(),
-            },
-            {
-              onConflict:
-                'user_id',
-            },
-          )
-
-        try {
-          await publishRestaurantForOwner(
+  if (alreadyHadTrial) {
+    // Trial already used — don't stamp a fresh trial_end.
+    // Leave as 'pending' until subscription.activated/charged
+    // resolves it to 'active' (which should happen within
+    // minutes, since start_at was set to "now" in this case).
+    await sb
+      .from('subscriptions')
+      .upsert(
+        {
+          user_id:
             userId,
-          )
-        } catch (e) {
-          console.warn(
-            'publish on authenticated:',
-            e,
-          )
-        }
+          plan: 'pending',
+          plan_id:
+            planId,
+          billing_cycle:
+            billingCycle,
+          amount_paise:
+            getPlanAmountPaise(
+              planId,
+              billingCycle,
+            ),
+          razorpay_subscription_id:
+            rzpSub.id,
+        },
+        {
+          onConflict:
+            'user_id',
+        },
+      )
+  } else {
+    const trialEnd =
+      new Date(now)
 
-        break
-      }
+    trialEnd.setDate(
+      trialEnd.getDate() +
+        TRIAL_DAYS,
+    )
+
+    await sb
+      .from('subscriptions')
+      .upsert(
+        {
+          user_id:
+            userId,
+          plan: 'trial',
+          plan_id:
+            planId,
+          billing_cycle:
+            billingCycle,
+          amount_paise:
+            getPlanAmountPaise(
+              planId,
+              billingCycle,
+            ),
+          razorpay_subscription_id:
+            rzpSub.id,
+          trial_start:
+            now.toISOString(),
+          trial_end:
+            trialEnd.toISOString(),
+        },
+        {
+          onConflict:
+            'user_id',
+        },
+      )
+  }
+
+  try {
+    await publishRestaurantForOwner(
+      userId,
+    )
+  } catch (e) {
+    console.warn(
+      'publish on authenticated:',
+      e,
+    )
+  }
+
+  break
+}
 
       // =========================================================
       // SUBSCRIPTION ACTIVATED

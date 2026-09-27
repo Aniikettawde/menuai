@@ -108,7 +108,7 @@ export async function getOwnerSubscriptionState(
 
   const { data: sub, error } = await sb
     .from('subscriptions')
-    .select('plan, plan_id, billing_cycle, amount_paise, trial_end, current_period_end')
+    .select('plan, plan_id, billing_cycle, amount_paise, trial_start, trial_end, current_period_end')
     .eq('user_id', ownerId)
     .maybeSingle()
 
@@ -128,6 +128,16 @@ export async function getOwnerSubscriptionState(
     (plan === 'cancelled' || plan === 'canceled') &&
     ((!!trialEnd && trialEnd > now) || (!!paidEnd && paidEnd > now))
 
+  // A user converting straight from an already-used free trial sits
+  // briefly in plan: 'pending' (authorized, waiting for Razorpay's
+  // activation/charge webhook). They already proved they had a trial
+  // (trial_start is set), so access should continue uninterrupted
+  // through this window rather than bouncing them to /billing.
+  // A brand-new user who has never had a trial and is somehow
+  // 'pending' does NOT get access here — this only covers reconversion.
+  const isPendingWithPriorTrial =
+    plan === 'pending' && Boolean(sub.trial_start)
+
   let status: SubscriptionState['status'] = 'expired'
   if (plan === 'pending') status = 'pending'
   else if (isTrialActive) status = 'trial'
@@ -145,7 +155,11 @@ export async function getOwnerSubscriptionState(
     planId: sub.plan_id ?? null,
     billingCycle: sub.billing_cycle ?? null,
     amountPaise: sub.amount_paise ?? null,
-    hasAccess: status === 'trial' || status === 'active' || cancelledButStillValid,
+    hasAccess:
+      status === 'trial' ||
+      status === 'active' ||
+      cancelledButStillValid ||
+      isPendingWithPriorTrial,
     isTrialActive: isTrialActive || (cancelledButStillValid && !!trialEnd && trialEnd > now && !(paidEnd && paidEnd > now)),
     isPaidActive: isPaidActive || (cancelledButStillValid && !!paidEnd && paidEnd > now),
     trialDaysRemaining,

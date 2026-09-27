@@ -1,15 +1,23 @@
+
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowRight,
+  Check,
   CheckCircle2,
   Clock3,
   Copy,
+  LockKeyhole,
   LogOut,
   Menu,
+  MessageCircle,
+  Plus,
+  ShieldCheck,
+  Sparkles,
   Store,
+  TrendingUp,
   Users,
   Wallet,
   X,
@@ -49,11 +57,18 @@ type DashboardData = {
     whatsapp: string
     referral_code: string
     status: string
+    kyc_status:
+      | 'not_submitted'
+      | 'pending'
+      | 'verified'
+      | 'rejected'
+    kyc_rejection_reason?: string | null
   }
   stats: {
     totalRestaurants: number
     activeRestaurants: number
     inSetup: number
+    potentialEarning: number
     totalEarned: number
     pendingCommission: number
     settledCommission: number
@@ -65,7 +80,7 @@ type DashboardData = {
 const BRAND = {
   ivory: '#FBF6EC',
   cream: '#F5EBDD',
-  card: '#FFFFFF',
+  white: '#FFFFFF',
   ink: '#2B2118',
   muted: '#756A60',
   line: '#E7DDC9',
@@ -81,13 +96,15 @@ function money(value: number) {
 function statusLabel(status: string) {
   switch (status) {
     case 'account_created':
-      return 'Account created'
+      return 'Started'
     case 'setup_in_progress':
-      return 'Setup in progress'
+      return 'Setup'
+    case 'trial':
+      return 'Trial'
     case 'setup_complete':
       return 'Ready'
     case 'awaiting_payment':
-      return 'Awaiting payment'
+      return 'Payment'
     case 'active':
       return 'Live'
     default:
@@ -103,10 +120,7 @@ function statusStyles(status: string) {
     }
   }
 
-  if (
-    status === 'setup_complete' ||
-    status === 'awaiting_payment'
-  ) {
+  if (status === 'trial') {
     return {
       background: `${BRAND.gold}16`,
       color: '#8A651C',
@@ -142,16 +156,14 @@ export default function PartnerDashboardPage() {
     setError('')
 
     try {
-      const response =
-        await fetch(
-          '/api/partner/dashboard',
-          {
-            cache: 'no-store',
-          },
-        )
+      const response = await fetch(
+        '/api/partner/dashboard',
+        {
+          cache: 'no-store',
+        },
+      )
 
-      const json =
-        await response.json()
+      const json = await response.json()
 
       if (response.status === 401) {
         window.location.href =
@@ -187,10 +199,7 @@ export default function PartnerDashboardPage() {
       return ''
     }
 
-    if (
-      typeof window ===
-      'undefined'
-    ) {
+    if (typeof window === 'undefined') {
       return ''
     }
 
@@ -218,13 +227,35 @@ export default function PartnerDashboardPage() {
     }
   }
 
+  function shareWhatsApp() {
+    if (!referralLink) return
+
+    const message =
+      `Hi! I wanted to share Dinezy with you — a simple digital menu for restaurants. You can check it out here: ${referralLink}`
+
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(
+        message,
+      )}`,
+      '_blank',
+      'noopener,noreferrer',
+    )
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     window.location.href =
       '/partner/login'
   }
 
-  function addRestaurant() {
+  function openRestaurantSignup() {
+    if (
+      data?.partner.kyc_status !==
+      'verified'
+    ) {
+      return
+    }
+
     if (!referralLink) return
 
     window.location.href =
@@ -236,25 +267,18 @@ export default function PartnerDashboardPage() {
       <main
         className="min-h-screen"
         style={{
-          background:
-            BRAND.ivory,
-          color: BRAND.ink,
+          background: BRAND.ivory,
         }}
       >
-        <div className="mx-auto max-w-6xl px-5 py-8 sm:px-6">
+        <div className="mx-auto max-w-2xl px-4 py-5">
           <div className="animate-pulse">
-            <div className="h-8 w-40 rounded-lg bg-black/5" />
-            <div className="mt-8 h-40 rounded-3xl bg-black/5" />
-            <div className="mt-5 grid gap-4 sm:grid-cols-3">
-              {[1, 2, 3].map(
-                (item) => (
-                  <div
-                    key={item}
-                    className="h-28 rounded-3xl bg-black/5"
-                  />
-                ),
-              )}
-            </div>
+            <div className="h-6 w-20 rounded-lg bg-black/5" />
+
+            <div className="mt-6 h-24 rounded-[1.5rem] bg-black/5" />
+
+            <div className="mt-4 h-72 rounded-[1.5rem] bg-black/5" />
+
+            <div className="mt-4 h-24 rounded-[1.5rem] bg-black/5" />
           </div>
         </div>
       </main>
@@ -264,22 +288,20 @@ export default function PartnerDashboardPage() {
   if (error || !data) {
     return (
       <main
-        className="flex min-h-screen items-center justify-center px-5"
+        className="flex min-h-screen items-center justify-center px-4"
         style={{
-          background:
-            BRAND.ivory,
+          background: BRAND.ivory,
         }}
       >
-        <div className="w-full max-w-md rounded-3xl border bg-white p-7 text-center">
-          <h1 className="text-lg font-semibold">
+        <div className="w-full max-w-sm rounded-[1.5rem] border bg-white p-6 text-center">
+          <h1 className="text-base font-semibold">
             Unable to load dashboard
           </h1>
 
           <p
             className="mt-2 text-sm"
             style={{
-              color:
-                BRAND.muted,
+              color: BRAND.muted,
             }}
           >
             {error ||
@@ -291,7 +313,7 @@ export default function PartnerDashboardPage() {
             onClick={() =>
               void load()
             }
-            className="mt-6 rounded-full px-6 py-3 text-sm font-semibold text-white"
+            className="mt-5 rounded-full px-5 py-2.5 text-sm font-semibold text-white"
             style={{
               background:
                 BRAND.burgundy,
@@ -304,12 +326,26 @@ export default function PartnerDashboardPage() {
     )
   }
 
+  const kycStatus =
+    data.partner.kyc_status
+
+  const kycVerified =
+    kycStatus === 'verified'
+
+  const kycPending =
+    kycStatus === 'pending'
+
+  const kycRejected =
+    kycStatus === 'rejected'
+
+  const kycNotSubmitted =
+    kycStatus === 'not_submitted'
+
   return (
     <main
       className="min-h-screen"
       style={{
-        background:
-          BRAND.ivory,
+        background: BRAND.ivory,
         color: BRAND.ink,
       }}
     >
@@ -318,15 +354,14 @@ export default function PartnerDashboardPage() {
         className="sticky top-0 z-40 border-b backdrop-blur-xl"
         style={{
           background:
-            'rgba(251,246,236,.9)',
-          borderColor:
-            BRAND.line,
+            'rgba(251,246,236,.94)',
+          borderColor: BRAND.line,
         }}
       >
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
+        <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
           <Link
             href="/partner/dashboard"
-            className="text-xl tracking-tight"
+            className="text-lg tracking-tight"
             style={{
               fontFamily:
                 'var(--font-fraunces, Georgia, serif)',
@@ -335,637 +370,1426 @@ export default function PartnerDashboardPage() {
             Dinezy
           </Link>
 
-          <div className="hidden items-center gap-6 md:flex">
-            <span className="text-sm text-black/45">
-              Partner dashboard
-            </span>
-
-            <button
-              type="button"
-              onClick={signOut}
-              className="inline-flex items-center gap-2 text-sm text-black/55 hover:text-black"
-            >
-              <LogOut size={15} />
-              Sign out
-            </button>
-          </div>
-
           <button
             type="button"
-            className="rounded-xl p-2 md:hidden"
+            aria-label="Open menu"
             onClick={() =>
               setMenuOpen(
                 (value) => !value,
               )
             }
+            className="flex h-9 w-9 items-center justify-center rounded-xl"
+            style={{
+              background:
+                BRAND.cream,
+            }}
           >
             {menuOpen ? (
-              <X size={20} />
+              <X size={18} />
             ) : (
-              <Menu size={20} />
+              <Menu size={18} />
             )}
           </button>
         </div>
 
         {menuOpen && (
           <div
-            className="border-t px-5 py-4 md:hidden"
+            className="border-t px-4 py-3"
+            style={{
+              borderColor:
+                BRAND.line,
+              background:
+                BRAND.ivory,
+            }}
+          >
+            <div className="mx-auto flex max-w-2xl flex-col gap-1">
+              <Link
+                href="/partner/training"
+                onClick={() =>
+                  setMenuOpen(false)
+                }
+                className="rounded-xl px-3 py-2.5 text-sm"
+              >
+                Partner training
+              </Link>
+
+              <button
+                type="button"
+                onClick={signOut}
+                className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm"
+              >
+                <LogOut size={15} />
+                Sign out
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
+
+      <div className="mx-auto max-w-2xl px-4 py-5 pb-10 sm:py-7">
+        {/* GREETING */}
+        <section>
+          <p
+            className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+            style={{
+              color:
+                BRAND.burgundy,
+            }}
+          >
+            Partner dashboard
+          </p>
+
+          <h1
+            className="mt-2 text-[27px] leading-tight tracking-[-0.03em]"
+            style={{
+              fontFamily:
+                'var(--font-fraunces, Georgia, serif)',
+            }}
+          >
+            Welcome,{' '}
+            {data.partner.full_name
+              .split(' ')[0]}
+            .
+          </h1>
+
+          <p
+            className="mt-1.5 text-sm leading-5"
+            style={{
+              color:
+                BRAND.muted,
+            }}
+          >
+            Complete your setup, then
+            start bringing restaurants to
+            Dinezy.
+          </p>
+        </section>
+
+        {/* ACTIVATION JOURNEY */}
+        <section className="mt-5">
+          <div
+            className="rounded-[1.5rem] border bg-white p-4 sm:p-5"
             style={{
               borderColor:
                 BRAND.line,
             }}
           >
-            <button
-              type="button"
-              onClick={
-                signOut
-              }
-              className="flex items-center gap-2 text-sm"
-            >
-              <LogOut size={15} />
-              Sign out
-            </button>
-          </div>
-        )}
-      </header>
+            <div className="flex items-center justify-between">
+              <div>
+                <p
+                  className="text-[10px] font-semibold uppercase tracking-[0.15em]"
+                  style={{
+                    color:
+                      BRAND.burgundy,
+                  }}
+                >
+                  Your setup
+                </p>
 
-      <div className="mx-auto max-w-6xl px-5 py-7 sm:px-6 sm:py-10">
-        {/* GREETING */}
-        <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-          <div>
-            <p
-              className="text-xs font-semibold uppercase tracking-[0.18em]"
-              style={{
-                color:
-                  BRAND.burgundy,
-              }}
-            >
-              Partner workspace
-            </p>
+                <h2
+                  className="mt-1 text-base font-semibold"
+                  style={{
+                    fontFamily:
+                      'var(--font-fraunces, Georgia, serif)',
+                  }}
+                >
+                  3 steps to get started
+                </h2>
+              </div>
 
-            <h1
-              className="mt-3 text-3xl tracking-[-0.04em] sm:text-4xl"
-              style={{
-                fontFamily:
-                  'var(--font-fraunces, Georgia, serif)',
-              }}
-            >
-              Good to see you,{' '}
-              {data.partner.full_name.split(
-                ' ',
-              )[0]}
-              .
-            </h1>
-
-            <p
-              className="mt-2 text-sm"
-              style={{
-                color:
-                  BRAND.muted,
-              }}
-            >
-              Find restaurants,
-              get them live and
-              track what you've
-              earned.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={
-              addRestaurant
-            }
-            className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5"
-            style={{
-              background:
-                BRAND.burgundy,
-            }}
-          >
-            <Store size={17} />
-            Add restaurant
-            <ArrowRight size={16} />
-          </button>
-        </section>
-
-        {/* STATS */}
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            icon={
-              <Wallet size={17} />
-            }
-            label="Total earned"
-            value={money(
-              data.stats
-                .totalEarned,
-            )}
-          />
-
-          <StatCard
-            icon={
-              <Clock3 size={17} />
-            }
-            label="Pending"
-            value={money(
-              data.stats
-                .pendingCommission,
-            )}
-          />
-
-          <StatCard
-            icon={
-              <CheckCircle2
-                size={17}
-              />
-            }
-            label="Settled"
-            value={money(
-              data.stats
-                .settledCommission,
-            )}
-          />
-
-          <StatCard
-            icon={
-              <Users size={17} />
-            }
-            label="Restaurants"
-            value={String(
-              data.stats
-                .totalRestaurants,
-            )}
-            sub={`${data.stats.activeRestaurants} live`}
-          />
-        </section>
-
-        {/* REFERRAL */}
-        <section
-          className="mt-6 overflow-hidden rounded-[2rem] p-6 sm:p-8"
-          style={{
-            background:
-              BRAND.burgundy,
-            color:
-              BRAND.ivory,
-          }}
-        >
-          <div className="grid gap-7 lg:grid-cols-[1fr_auto] lg:items-center">
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                Your partner referral
-              </p>
-
-              <h2
-                className="mt-2 text-2xl tracking-tight sm:text-3xl"
-                style={{
-                  fontFamily:
-                    'var(--font-fraunces, Georgia, serif)',
-                }}
-              >
-                Add a restaurant
-                through your
-                partner link.
-              </h2>
-
-              <p className="mt-3 max-w-xl text-sm leading-6 text-white/65">
-                This link automatically
-                associates restaurant
-                signups with your
-                Dinezy Partner account.
-              </p>
+              {kycVerified && (
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-full"
+                  style={{
+                    background:
+                      `${BRAND.green}12`,
+                    color:
+                      BRAND.green,
+                  }}
+                >
+                  <Check
+                    size={16}
+                    strokeWidth={2.5}
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="w-full lg:w-[420px]">
-              <div className="rounded-2xl bg-white p-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={
-                      referralLink
-                    }
-                    className="min-w-0 flex-1 bg-transparent px-3 py-3 text-xs text-black/65 outline-none"
+            <div className="mt-5 space-y-2">
+              {/* STEP 1 */}
+              <div
+                className="flex items-center gap-3 rounded-xl p-3"
+                style={{
+                  background:
+                    `${BRAND.green}06`,
+                }}
+              >
+                <StepCircle
+                  state="completed"
+                  number="1"
+                />
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold">
+                    Partner signup
+                  </p>
+
+                  <p
+                    className="mt-0.5 text-[10px]"
+                    style={{
+                      color:
+                        BRAND.muted,
+                    }}
+                  >
+                    Your partner account is
+                    ready.
+                  </p>
+                </div>
+
+                <CheckCircle2
+                  size={17}
+                  style={{
+                    color:
+                      BRAND.green,
+                  }}
+                />
+              </div>
+
+              {/* STEP 2 */}
+              <div
+                className={`relative flex items-center gap-3 rounded-xl border p-3 transition ${
+                  kycVerified
+                    ? ''
+                    : 'animate-[pulse_3s_ease-in-out_infinite]'
+                }`}
+                style={{
+                  borderColor:
+                    kycRejected
+                      ? '#DC262633'
+                      : kycVerified
+                        ? `${BRAND.green}30`
+                        : `${BRAND.gold}40`,
+                  background:
+                    kycRejected
+                      ? '#DC262608'
+                      : kycVerified
+                        ? `${BRAND.green}06`
+                        : `${BRAND.gold}08`,
+                }}
+              >
+                <StepCircle
+                  state={
+                    kycVerified
+                      ? 'completed'
+                      : kycRejected
+                        ? 'error'
+                        : 'current'
+                  }
+                  number="2"
+                />
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold">
+                      Verify your identity
+                    </p>
+
+                    {kycPending && (
+                      <span className="rounded-full bg-black/5 px-2 py-0.5 text-[8px] font-semibold text-black/45">
+                        Under review
+                      </span>
+                    )}
+                  </div>
+
+                  <p
+                    className="mt-0.5 text-[10px] leading-4"
+                    style={{
+                      color:
+                        BRAND.muted,
+                    }}
+                  >
+                    {kycVerified
+                      ? 'KYC verified. You can now add restaurants.'
+                      : kycRejected
+                        ? data.partner
+                            .kyc_rejection_reason ||
+                          'Your KYC needs to be resubmitted.'
+                        : kycPending
+                          ? 'We are reviewing your documents. No action is needed.'
+                          : 'Complete KYC to unlock restaurant signup.'}
+                  </p>
+                </div>
+
+                {!kycVerified &&
+                  !kycPending && (
+                    <Link
+                      href="/partner/kyc"
+                      className="shrink-0 rounded-full px-3 py-2 text-[10px] font-semibold text-white"
+                      style={{
+                        background:
+                          BRAND.burgundy,
+                      }}
+                    >
+                      {kycRejected
+                        ? 'Fix'
+                        : 'Complete'}
+                    </Link>
+                  )}
+
+                {kycVerified && (
+                  <CheckCircle2
+                    size={17}
+                    style={{
+                      color:
+                        BRAND.green,
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* STEP 3 */}
+              <div
+                className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${
+                  kycVerified
+                    ? ''
+                    : 'opacity-65'
+                }`}
+                style={{
+                  borderColor:
+                    kycVerified
+                      ? `${BRAND.burgundy}25`
+                      : BRAND.line,
+                  background:
+                    kycVerified
+                      ? `${BRAND.burgundy}05`
+                      : '#FAFAF8',
+                }}
+              >
+                <StepCircle
+                  state={
+                    kycVerified
+                      ? 'current'
+                      : 'locked'
+                  }
+                  number="3"
+                />
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold">
+                    Add your first restaurant
+                  </p>
+
+                  <p
+                    className="mt-0.5 text-[10px] leading-4"
+                    style={{
+                      color:
+                        BRAND.muted,
+                    }}
+                  >
+                    {kycVerified
+                      ? 'You are ready to bring your first restaurant.'
+                      : 'Unlocks after KYC is verified.'}
+                  </p>
+                </div>
+
+                {!kycVerified ? (
+                  <LockKeyhole
+                    size={16}
+                    style={{
+                      color:
+                        BRAND.muted,
+                    }}
+                  />
+                ) : (
+                  <CheckCircle2
+                    size={17}
+                    className="opacity-20"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* PRIMARY ACTION */}
+            <div className="mt-4">
+              {kycVerified ? (
+                <button
+                  type="button"
+                  onClick={
+                    openRestaurantSignup
+                  }
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-xs font-semibold text-white shadow-[0_10px_25px_rgba(122,35,51,.14)] transition hover:-translate-y-0.5"
+                  style={{
+                    background:
+                      BRAND.burgundy,
+                  }}
+                >
+                  <Plus size={15} />
+                  Add restaurant
+                  <ArrowRight size={14} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border py-3.5 text-xs font-semibold"
+                  style={{
+                    borderColor:
+                      BRAND.line,
+                    background:
+                      '#F5F3EE',
+                    color:
+                      BRAND.muted,
+                  }}
+                >
+                  <LockKeyhole
+                    size={14}
+                  />
+                  Add restaurant
+                  <span className="text-[9px] font-normal opacity-70">
+                    Complete KYC first
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+		
+		
+{/* WHY DINEZY / HOW IT WORKS */}
+<section className="mt-5">
+  <div
+    className="overflow-hidden rounded-[1.5rem] border bg-white"
+    style={{
+      borderColor: BRAND.line,
+    }}
+  >
+    {/* Intro */}
+    <div className="p-5 pb-4">
+      <div className="flex items-center gap-2">
+        <div
+          className="flex h-8 w-8 items-center justify-center rounded-xl"
+          style={{
+            background: `${BRAND.burgundy}10`,
+            color: BRAND.burgundy,
+          }}
+        >
+          <Sparkles size={15} />
+        </div>
+
+        <div>
+          <p
+            className="text-[10px] font-semibold uppercase tracking-[0.15em]"
+            style={{
+              color: BRAND.burgundy,
+            }}
+          >
+            Before you get started
+          </p>
+
+          <h2
+            className="mt-1 text-lg tracking-[-0.02em]"
+            style={{
+              fontFamily:
+                'var(--font-fraunces, Georgia, serif)',
+            }}
+          >
+            Know how Dinezy works
+          </h2>
+        </div>
+      </div>
+
+      <p
+        className="mt-3 text-[11px] leading-5"
+        style={{
+          color: BRAND.muted,
+        }}
+      >
+        You are not just sharing a link. You are helping restaurants
+        get started with Dinezy and building a long-term partner
+        relationship.
+      </p>
+    </div>
+
+    {/* How it works */}
+    <div
+      className="border-t px-5 py-4"
+      style={{
+        borderColor: BRAND.line,
+      }}
+    >
+      <p className="text-xs font-semibold">
+        How you earn
+      </p>
+
+      <div className="mt-4 space-y-3">
+        <HowItWorksStep
+          number="1"
+          title="Find a good-fit restaurant"
+          description="Target restaurants where a digital menu can genuinely improve the guest experience."
+        />
+
+        <HowItWorksStep
+          number="2"
+          title="Introduce Dinezy"
+          description="Use your referral link and the partner training to explain the product clearly."
+        />
+
+        <HowItWorksStep
+          number="3"
+          title="Help them get started"
+          description="Guide the restaurant through signup, menu setup, QR creation and activation."
+        />
+
+        <HowItWorksStep
+          number="4"
+          title="Earn commission"
+          description="Eligible commission is tracked against your referred restaurants and shown in your dashboard."
+          last
+        />
+      </div>
+
+      {/* Training CTA */}
+      <Link
+        href="/partner/training"
+        className="mt-4 flex items-center justify-between rounded-xl border px-4 py-3 transition hover:-translate-y-0.5"
+        style={{
+          borderColor: `${BRAND.burgundy}25`,
+          background: `${BRAND.burgundy}05`,
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-lg"
+            style={{
+              background: BRAND.white,
+              color: BRAND.burgundy,
+            }}
+          >
+            <TrendingUp size={14} />
+          </div>
+
+          <div>
+            <p className="text-[11px] font-semibold">
+              Learn how to sell Dinezy
+            </p>
+
+            <p
+              className="mt-0.5 text-[9px]"
+              style={{
+                color: BRAND.muted,
+              }}
+            >
+              What to say, whom to approach & how to close
+            </p>
+          </div>
+        </div>
+
+        <ArrowRight
+          size={14}
+          style={{
+            color: BRAND.burgundy,
+          }}
+        />
+      </Link>
+    </div>
+
+    {/* Trust */}
+    <div
+      className="border-t px-5 py-4"
+      style={{
+        borderColor: BRAND.line,
+        background: BRAND.cream,
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+          style={{
+            background: BRAND.white,
+            color: BRAND.green,
+          }}
+        >
+          <ShieldCheck size={15} />
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold">
+            Built for transparent partnerships
+          </p>
+
+          <p
+            className="mt-1 text-[10px] leading-4"
+            style={{
+              color: BRAND.muted,
+            }}
+          >
+            Your referred restaurants, commission activity and payout
+            status are tracked inside your partner dashboard.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <TrustPoint
+          icon={<CheckCircle2 size={13} />}
+          text="Referral tracking"
+        />
+
+        <TrustPoint
+          icon={<Wallet size={13} />}
+          text="Commission tracking"
+        />
+
+        <TrustPoint
+          icon={<ShieldCheck size={13} />}
+          text="Partner KYC"
+        />
+
+        <TrustPoint
+          icon={<MessageCircle size={13} />}
+          text="Partner support"
+        />
+      </div>
+    </div>
+
+    {/* About Dinezy */}
+    <div className="px-5 py-4">
+      <p
+        className="text-[10px] font-semibold uppercase tracking-[0.15em]"
+        style={{
+          color: BRAND.burgundy,
+        }}
+      >
+        About Dinezy
+      </p>
+
+      <p className="mt-2 text-xs font-semibold">
+        A simpler digital menu experience for restaurants.
+      </p>
+
+      <p
+        className="mt-1.5 text-[10px] leading-4"
+        style={{
+          color: BRAND.muted,
+        }}
+      >
+        Dinezy helps restaurants create and manage digital menus,
+        connect them to table QR codes and give guests a faster way
+        to access the menu.
+      </p>
+    </div>
+  </div>
+</section>
+
+
+        {/* IF VERIFIED — EARNINGS */}
+        {kycVerified && (
+          <>
+            <section className="mt-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div
+                  className="rounded-[1.5rem] p-5 text-white"
+                  style={{
+                    background:
+                      BRAND.burgundy,
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <Sparkles
+                      size={16}
+                    />
+
+                    <span className="text-[9px] text-white/55">
+                      Potential
+                    </span>
+                  </div>
+
+                  <p className="mt-5 text-[10px] text-white/55">
+                    Potential earnings
+                  </p>
+
+                  <p
+                    className="mt-1 text-2xl"
+                    style={{
+                      fontFamily:
+                        'var(--font-fraunces, Georgia, serif)',
+                    }}
+                  >
+                    {money(
+                      data.stats
+                        .potentialEarning,
+                    )}
+                  </p>
+
+                  <p className="mt-1 text-[9px] text-white/50">
+                    From trial restaurants
+                  </p>
+                </div>
+
+                <div
+                  className="rounded-[1.5rem] border bg-white p-5"
+                  style={{
+                    borderColor:
+                      BRAND.line,
+                  }}
+                >
+                  <Wallet
+                    size={16}
+                    style={{
+                      color:
+                        BRAND.burgundy,
+                    }}
                   />
 
-                  <button
-                    type="button"
-                    onClick={
-                      copyReferral
-                    }
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-semibold"
+                  <p
+                    className="mt-5 text-[10px]"
                     style={{
-                      background:
-                        BRAND.cream,
+                      color:
+                        BRAND.muted,
+                    }}
+                  >
+                    Total earned
+                  </p>
+
+                  <p
+                    className="mt-1 text-2xl"
+                    style={{
+                      fontFamily:
+                        'var(--font-fraunces, Georgia, serif)',
+                    }}
+                  >
+                    {money(
+                      data.stats
+                        .totalEarned,
+                    )}
+                  </p>
+
+                  <p
+                    className="mt-1 text-[9px]"
+                    style={{
+                      color:
+                        BRAND.muted,
+                    }}
+                  >
+                    Commission
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <TinyStat
+                  icon={
+                    <Clock3 size={13} />
+                  }
+                  label="Pending"
+                  value={money(
+                    data.stats
+                      .pendingCommission,
+                  )}
+                />
+
+                <TinyStat
+                  icon={
+                    <CheckCircle2 size={13} />
+                  }
+                  label="Settled"
+                  value={money(
+                    data.stats
+                      .settledCommission,
+                  )}
+                />
+
+                <TinyStat
+                  icon={
+                    <Users size={13} />
+                  }
+                  label="Restaurants"
+                  value={String(
+                    data.stats
+                      .totalRestaurants,
+                  )}
+                />
+              </div>
+            </section>
+
+            {/* RESTAURANTS */}
+            <section
+              id="restaurants"
+              className="mt-7"
+            >
+              <div className="flex items-end justify-between">
+                <div>
+                  <p
+                    className="text-[10px] font-semibold uppercase tracking-[0.15em]"
+                    style={{
                       color:
                         BRAND.burgundy,
                     }}
                   >
-                    <Copy size={14} />
-                    {copied
-                      ? 'Copied'
-                      : 'Copy'}
-                  </button>
+                    Pipeline
+                  </p>
+
+                  <h2
+                    className="mt-1 text-xl"
+                    style={{
+                      fontFamily:
+                        'var(--font-fraunces, Georgia, serif)',
+                    }}
+                  >
+                    Restaurants
+                  </h2>
                 </div>
-              </div>
-            </div>
-          </div>
-        </section>
 
-        {/* RESTAURANTS */}
-        <section className="mt-10">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2
-                className="text-xl tracking-tight sm:text-2xl"
-                style={{
-                  fontFamily:
-                    'var(--font-fraunces, Georgia, serif)',
-                }}
-              >
-                Your restaurants
-              </h2>
-
-              <p
-                className="mt-1 text-xs"
-                style={{
-                  color:
-                    BRAND.muted,
-                }}
-              >
-                Follow every
-                restaurant from
-                signup to live.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={
-                addRestaurant
-              }
-              className="hidden items-center gap-1.5 text-sm font-semibold sm:flex"
-              style={{
-                color:
-                  BRAND.burgundy,
-              }}
-            >
-              Add restaurant
-              <ArrowRight
-                size={15}
-              />
-            </button>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {data.restaurants.length ===
-            0 ? (
-              <div className="rounded-3xl border bg-white p-8 text-center">
-                <div
-                  className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl"
+                <Link
+                  href="/partner/training"
+                  className="text-[10px] font-semibold"
                   style={{
-                    background:
-                      `${BRAND.burgundy}10`,
                     color:
                       BRAND.burgundy,
                   }}
                 >
-                  <Store size={22} />
-                </div>
+                  Sales training →
+                </Link>
+              </div>
 
-                <h3 className="mt-4 text-lg font-semibold">
-                  Your first
-                  restaurant is
-                  waiting.
-                </h3>
-
-                <p
-                  className="mx-auto mt-2 max-w-md text-sm leading-6"
+              {data.restaurants.length ===
+              0 ? (
+                <div
+                  className="mt-3 rounded-[1.5rem] border bg-white p-6 text-center"
                   style={{
-                    color:
-                      BRAND.muted,
+                    borderColor:
+                      BRAND.line,
                   }}
                 >
-                  Find a restaurant,
-                  create their Dinezy
-                  account and start
-                  setting everything
-                  up.
-                </p>
+                  <div
+                    className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl"
+                    style={{
+                      background:
+                        `${BRAND.burgundy}10`,
+                      color:
+                        BRAND.burgundy,
+                    }}
+                  >
+                    <Store
+                      size={18}
+                    />
+                  </div>
+
+                  <p className="mt-3 text-xs font-semibold">
+                    Ready for your first restaurant
+                  </p>
+
+                  <p
+                    className="mx-auto mt-1 max-w-xs text-[10px] leading-4"
+                    style={{
+                      color:
+                        BRAND.muted,
+                    }}
+                  >
+                    Find a good-fit restaurant,
+                    use the Dinezy playbook and
+                    add them through your referral.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={
+                      openRestaurantSignup
+                    }
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[10px] font-semibold text-white"
+                    style={{
+                      background:
+                        BRAND.burgundy,
+                    }}
+                  >
+                    <Plus size={13} />
+                    Add restaurant
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {data.restaurants.map(
+                    (restaurant) => {
+                      const styles =
+                        statusStyles(
+                          restaurant.status,
+                        )
+
+                      return (
+                        <div
+                          key={
+                            restaurant.id
+                          }
+                          className="rounded-[1.5rem] border bg-white p-4"
+                          style={{
+                            borderColor:
+                              BRAND.line,
+                          }}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div
+                              className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl"
+                              style={{
+                                background:
+                                  `${BRAND.burgundy}10`,
+                              }}
+                            >
+                              {restaurant.logoUrl ? (
+                                <img
+                                  src={
+                                    restaurant.logoUrl
+                                  }
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <Store
+                                  size={
+                                    17
+                                  }
+                                  style={{
+                                    color:
+                                      BRAND.burgundy,
+                                  }}
+                                />
+                              )}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold">
+                                    {
+                                      restaurant.name
+                                    }
+                                  </p>
+
+                                  <p
+                                    className="mt-0.5 text-[9px]"
+                                    style={{
+                                      color:
+                                        BRAND.muted,
+                                    }}
+                                  >
+                                    {restaurant.status ===
+                                    'trial'
+                                      ? 'Follow up for yearly conversion'
+                                      : restaurant.status ===
+                                          'active'
+                                        ? 'Restaurant is live'
+                                        : 'Continue setup'}
+                                  </p>
+                                </div>
+
+                                <span
+                                  className="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-semibold"
+                                  style={
+                                    styles
+                                  }
+                                >
+                                  {statusLabel(
+                                    restaurant.status,
+                                  )}
+                                </span>
+                              </div>
+
+                              <div className="mt-3">
+                                <div className="flex justify-between text-[9px]">
+                                  <span
+                                    style={{
+                                      color:
+                                        BRAND.muted,
+                                    }}
+                                  >
+                                    Setup
+                                  </span>
+
+                                  <span className="font-semibold">
+                                    {
+                                      restaurant.progress
+                                    }
+                                    %
+                                  </span>
+                                </div>
+
+                                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/5">
+                                  <div
+                                    className="h-full rounded-full transition-all duration-700"
+                                    style={{
+                                      width: `${Math.min(
+                                        100,
+                                        Math.max(
+                                          0,
+                                          restaurant.progress,
+                                        ),
+                                      )}%`,
+                                      background:
+                                        BRAND.burgundy,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="mt-3 flex items-center justify-between">
+                                <span
+                                  className="text-[9px]"
+                                  style={{
+                                    color:
+                                      BRAND.muted,
+                                  }}
+                                >
+                                  {restaurant.paymentPlan
+                                    ? `Plan: ${restaurant.paymentPlan}`
+                                    : 'Payment not started'}
+                                </span>
+
+                                {restaurant.restaurantId && (
+                                  <Link
+                                    href="/dashboard"
+                                    className="text-[9px] font-semibold"
+                                    style={{
+                                      color:
+                                        BRAND.burgundy,
+                                    }}
+                                  >
+                                    Open →
+                                  </Link>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    },
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* REFERRAL */}
+            <section className="mt-7">
+              <div
+                className="rounded-[1.5rem] p-5"
+                style={{
+                  background:
+                    BRAND.cream,
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                    style={{
+                      background:
+                        BRAND.white,
+                      color:
+                        BRAND.burgundy,
+                    }}
+                  >
+                    <TrendingUp
+                      size={17}
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold">
+                      Bring your next restaurant
+                    </p>
+
+                    <p
+                      className="mt-1 text-[10px] leading-4"
+                      style={{
+                        color:
+                          BRAND.muted,
+                      }}
+                    >
+                      Use your referral link every
+                      time so the restaurant is
+                      connected to your account.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl bg-white p-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={referralLink}
+                      className="min-w-0 flex-1 bg-transparent px-2 py-2 text-[9px] text-black/55 outline-none"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={
+                        copyReferral
+                      }
+                      className="flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-[9px] font-semibold"
+                      style={{
+                        background:
+                          BRAND.cream,
+                        color:
+                          BRAND.burgundy,
+                      }}
+                    >
+                      <Copy
+                        size={12}
+                      />
+                      {copied
+                        ? 'Copied'
+                        : 'Copy'}
+                    </button>
+                  </div>
+                </div>
 
                 <button
                   type="button"
                   onClick={
-                    addRestaurant
+                    shareWhatsApp
                   }
-                  className="mt-6 rounded-full px-6 py-3 text-sm font-semibold text-white"
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-[10px] font-semibold"
                   style={{
-                    background:
+                    color:
                       BRAND.burgundy,
                   }}
                 >
-                  Add your first
-                  restaurant
+                  <MessageCircle
+                    size={14}
+                  />
+                  Share referral on WhatsApp
                 </button>
               </div>
-            ) : (
-              data.restaurants.map(
-                (restaurant) => {
-                  const styles =
-                    statusStyles(
-                      restaurant.status,
-                    )
+            </section>
 
-                  return (
-                    <div
-                      key={
-                        restaurant.id
-                      }
-                      className="rounded-3xl border bg-white p-5 shadow-[0_1px_3px_rgba(43,33,24,.04)] sm:p-6"
+            {/* COMMISSION */}
+            {data.commissions.length > 0 && (
+              <section className="mt-7 pb-5">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p
+                      className="text-[10px] font-semibold uppercase tracking-[0.15em]"
                       style={{
-                        borderColor:
-                          BRAND.line,
+                        color:
+                          BRAND.burgundy,
                       }}
                     >
-                      <div className="flex items-start gap-4">
+                      Earnings
+                    </p>
+
+                    <h2
+                      className="mt-1 text-xl"
+                      style={{
+                        fontFamily:
+                          'var(--font-fraunces, Georgia, serif)',
+                      }}
+                    >
+                      Recent commission
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="mt-3 overflow-hidden rounded-[1.5rem] border bg-white">
+                  {data.commissions
+                    .slice(0, 5)
+                    .map(
+                      (commission) => (
                         <div
-                          className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl"
+                          key={
+                            commission.id
+                          }
+                          className="flex items-center justify-between gap-3 border-b p-4 last:border-b-0"
                           style={{
-                            background:
-                              `${BRAND.burgundy}10`,
+                            borderColor:
+                              BRAND.line,
                           }}
                         >
-                          {restaurant.logoUrl ? (
-                            <img
-                              src={
-                                restaurant.logoUrl
-                              }
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <Store
-                              size={20}
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                              style={{
+                                background:
+                                  `${BRAND.burgundy}10`,
+                                color:
+                                  BRAND.burgundy,
+                              }}
+                            >
+                              <Wallet
+                                size={
+                                  14
+                                }
+                              />
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold">
+                                Restaurant commission
+                              </p>
+
+                              <p
+                                className="mt-0.5 text-[9px]"
+                                style={{
+                                  color:
+                                    BRAND.muted,
+                                }}
+                              >
+                                {new Date(
+                                  commission.earned_at,
+                                ).toLocaleDateString(
+                                  'en-IN',
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <p
+                              className="text-sm font-semibold"
                               style={{
                                 color:
                                   BRAND.burgundy,
                               }}
-                            />
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <h3 className="truncate text-base font-semibold">
-                                {
-                                  restaurant.name
-                                }
-                              </h3>
-
-                              <p
-                                className="mt-0.5 text-xs"
-                                style={{
-                                  color:
-                                    BRAND.muted,
-                                }}
-                              >
-                                {restaurant.restaurantId
-                                  ? 'Restaurant workspace created'
-                                  : 'Restaurant account created'}
-                              </p>
-                            </div>
-
-                            <span
-                              className="w-fit rounded-full px-3 py-1 text-[11px] font-semibold"
-                              style={styles}
                             >
-                              {statusLabel(
-                                restaurant.status,
+                              {money(
+                                commission.amount,
                               )}
-                            </span>
-                          </div>
+                            </p>
 
-                          <div className="mt-4">
-                            <div className="flex items-center justify-between text-xs">
-                              <span
-                                style={{
-                                  color:
-                                    BRAND.muted,
-                                }}
-                              >
-                                Setup progress
-                              </span>
-
-                              <strong>
-                                {
-                                  restaurant.progress
-                                }
-                                %
-                              </strong>
-                            </div>
-
-                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/5">
-                              <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                  width: `${restaurant.progress}%`,
-                                  background:
-                                    BRAND.burgundy,
-                                }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                            <div
-                              className="text-xs"
+                            <p
+                              className="mt-0.5 text-[9px]"
                               style={{
                                 color:
-                                  BRAND.muted,
+                                  commission.status ===
+                                  'settled'
+                                    ? BRAND.green
+                                    : BRAND.muted,
                               }}
                             >
-                              {restaurant.paymentPlan
-                                ? `Plan: ${restaurant.paymentPlan}`
-                                : 'Payment not started'}
-                            </div>
-
-                            {restaurant.restaurantId && (
-                              <Link
-                                href="/dashboard"
-                                className="inline-flex items-center gap-1 text-xs font-semibold"
-                                style={{
-                                  color:
-                                    BRAND.burgundy,
-                                }}
-                              >
-                                Open workspace
-                                <ArrowRight
-                                  size={13}
-                                />
-                              </Link>
-                            )}
+                              {commission.status ===
+                              'settled'
+                                ? 'Settled'
+                                : commission.status ===
+                                    'pending'
+                                  ? `${commission.settleInDays}d left`
+                                  : 'Cancelled'}
+                            </p>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  )
-                },
-              )
+                      ),
+                    )}
+                </div>
+              </section>
             )}
-          </div>
-        </section>
+          </>
+        )}
+      </div>
 
-        {/* COMMISSIONS */}
-        <section className="mt-10 pb-16">
-          <div>
-            <h2
-              className="text-xl tracking-tight sm:text-2xl"
-              style={{
-                fontFamily:
-                  'var(--font-fraunces, Georgia, serif)',
-              }}
-            >
-              Commission
-            </h2>
-
-            <p
-              className="mt-1 text-xs"
-              style={{
-                color:
-                  BRAND.muted,
-              }}
-            >
-              Pending commissions
-              settle 30 days after
-              becoming eligible.
-            </p>
-          </div>
-
-          <div className="mt-5 overflow-hidden rounded-3xl border bg-white">
-            {data.commissions.length ===
-            0 ? (
-              <div className="p-8 text-center">
-                <p
-                  className="text-sm"
+      {/* MOBILE CTA */}
+      {!kycVerified && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-[#FBF6EC]/95 p-3 backdrop-blur-xl sm:hidden">
+          <div className="mx-auto max-w-2xl">
+            {kycPending ? (
+              <div
+                className="flex items-center justify-center gap-2 rounded-xl border bg-white py-3 text-xs font-semibold"
+                style={{
+                  borderColor:
+                    BRAND.line,
+                }}
+              >
+                <Clock3
+                  size={14}
                   style={{
                     color:
-                      BRAND.muted,
+                      BRAND.gold,
                   }}
-                >
-                  No commissions yet.
-                </p>
+                />
+                KYC is under review
               </div>
             ) : (
-              <div>
-                {data.commissions.map(
-                  (
-                    commission,
-                  ) => (
-                    <div
-                      key={
-                        commission.id
-                      }
-                      className="flex flex-col gap-3 border-b p-5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-                      style={{
-                        borderColor:
-                          BRAND.line,
-                      }}
-                    >
-                      <div>
-                        <p className="text-sm font-semibold">
-                          Restaurant
-                        </p>
-
-                        <p
-                          className="mt-1 text-xs"
-                          style={{
-                            color:
-                              BRAND.muted,
-                          }}
-                        >
-                          Earned{' '}
-                          {new Date(
-                            commission.earned_at,
-                          ).toLocaleDateString(
-                            'en-IN',
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="text-left sm:text-right">
-                        <p
-                          className="text-lg font-semibold"
-                          style={{
-                            fontFamily:
-                              'var(--font-fraunces, Georgia, serif)',
-                            color:
-                              BRAND.burgundy,
-                          }}
-                        >
-                          {money(
-                            commission.amount,
-                          )}
-                        </p>
-
-                        {commission.status ===
-                        'settled' ? (
-                          <p
-                            className="mt-0.5 text-xs font-semibold"
-                            style={{
-                              color:
-                                BRAND.green,
-                            }}
-                          >
-                            Settled
-                          </p>
-                        ) : (
-                          <p
-                            className="mt-0.5 text-xs"
-                            style={{
-                              color:
-                                BRAND.muted,
-                            }}
-                          >
-                            Pending · settles
-                            in{' '}
-                            {
-                              commission.settleInDays
-                            }{' '}
-                            days
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ),
-                )}
-              </div>
+              <Link
+                href="/partner/kyc"
+                className="flex items-center justify-center gap-2 rounded-xl py-3 text-xs font-semibold text-white shadow-lg"
+                style={{
+                  background:
+                    BRAND.burgundy,
+                }}
+              >
+                <ShieldCheck
+                  size={15}
+                />
+                {kycRejected
+                  ? 'Fix KYC'
+                  : 'Complete KYC'}
+                <ArrowRight size={14} />
+              </Link>
             )}
           </div>
-        </section>
-      </div>
+        </div>
+      )}
     </main>
   )
 }
 
-function StatCard({
+
+function HowItWorksStep({
+  number,
+  title,
+  description,
+  last = false,
+}: {
+  number: string
+  title: string
+  description: string
+  last?: boolean
+}) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <div
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+          style={{
+            background: BRAND.burgundy,
+          }}
+        >
+          {number}
+        </div>
+
+        {!last && (
+          <div
+            className="mt-1 w-px flex-1"
+            style={{
+              background: BRAND.line,
+            }}
+          />
+        )}
+      </div>
+
+      <div className={last ? '' : 'pb-3'}>
+        <p className="text-[11px] font-semibold">
+          {title}
+        </p>
+
+        <p
+          className="mt-0.5 text-[9px] leading-4"
+          style={{
+            color: BRAND.muted,
+          }}
+        >
+          {description}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function TrustPoint({
+  icon,
+  text,
+}: {
+  icon: ReactNode
+  text: string
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2">
+      <span
+        style={{
+          color: BRAND.green,
+        }}
+      >
+        {icon}
+      </span>
+
+      <span className="text-[9px] font-medium">
+        {text}
+      </span>
+    </div>
+  )
+}
+
+function StepCircle({
+  state,
+  number,
+}: {
+  state:
+    | 'completed'
+    | 'current'
+    | 'locked'
+    | 'error'
+  number: string
+}) {
+  if (state === 'completed') {
+    return (
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+        style={{
+          background:
+            `${BRAND.green}15`,
+          color: BRAND.green,
+        }}
+      >
+        <Check size={16} />
+      </div>
+    )
+  }
+
+  if (state === 'error') {
+    return (
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600">
+        <ShieldCheck
+          size={16}
+        />
+      </div>
+    )
+  }
+
+  if (state === 'locked') {
+    return (
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border"
+        style={{
+          borderColor:
+            BRAND.line,
+          color: BRAND.muted,
+          background:
+            '#F5F3EE',
+        }}
+      >
+        <LockKeyhole
+          size={15}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-[0_0_0_4px_rgba(201,138,62,.10)]"
+      style={{
+        background:
+          BRAND.burgundy,
+      }}
+    >
+      {number}
+    </div>
+  )
+}
+
+function TinyStat({
   icon,
   label,
   value,
-  sub,
 }: {
-  icon: React.ReactNode
+  icon: ReactNode
   label: string
   value: string
-  sub?: string
 }) {
   return (
     <div
-      className="rounded-3xl border bg-white p-5"
+      className="rounded-xl border bg-white p-3"
       style={{
         borderColor:
           BRAND.line,
       }}
     >
       <div
-        className="flex h-9 w-9 items-center justify-center rounded-xl"
+        className="flex h-6 w-6 items-center justify-center rounded-lg"
         style={{
           background:
             `${BRAND.burgundy}10`,
@@ -977,7 +1801,7 @@ function StatCard({
       </div>
 
       <p
-        className="mt-5 text-xs"
+        className="mt-2 text-[9px]"
         style={{
           color:
             BRAND.muted,
@@ -986,27 +1810,9 @@ function StatCard({
         {label}
       </p>
 
-      <p
-        className="mt-1 text-2xl tracking-tight"
-        style={{
-          fontFamily:
-            'var(--font-fraunces, Georgia, serif)',
-        }}
-      >
+      <p className="mt-0.5 text-xs font-semibold">
         {value}
       </p>
-
-      {sub && (
-        <p
-          className="mt-1 text-xs"
-          style={{
-            color:
-              BRAND.muted,
-          }}
-        >
-          {sub}
-        </p>
-      )}
     </div>
   )
 }

@@ -1,32 +1,94 @@
 'use client'
-import { useEffect } from 'react'
+
+import {
+  useEffect,
+} from 'react'
+
+interface Props {
+  restaurantId: string
+  enabled: boolean
+  onExpired: () => void
+}
+
+const HEARTBEAT_INTERVAL_MS =
+  5 * 60 * 1000
 
 export function TableSessionHeartbeat({
   restaurantId,
   enabled,
   onExpired,
-}: {
-  restaurantId: string
-  enabled: boolean
-  onExpired?: () => void
-}) {
+}: Props) {
   useEffect(() => {
-    if (!enabled) return
-    const ping = () => {
-      fetch('/api/table-session/heartbeat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restaurantId }),
-        credentials: 'same-origin',
-      })
-        .then((res) => res.json().catch(() => ({})))
-        .then((data) => { if (data?.expired) onExpired?.() })
-        .catch(() => {})
+    if (!enabled) {
+      return
     }
-    ping()
-    const interval = setInterval(ping, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [restaurantId, enabled, onExpired])
+
+    let cancelled =
+      false
+
+    async function heartbeat() {
+      try {
+        const response =
+          await fetch(
+            '/api/table-session/heartbeat',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              credentials:
+                'include',
+              cache:
+                'no-store',
+              body: JSON.stringify({
+                restaurantId,
+              }),
+            },
+          )
+
+        if (
+          cancelled
+        ) {
+          return
+        }
+
+        if (
+          response.status ===
+          401
+        ) {
+          onExpired()
+        }
+      } catch {
+        /*
+         * Do not immediately expire a user because
+         * a single heartbeat request failed.
+         *
+         * The next heartbeat or sensitive API request
+         * will perform the authoritative validation.
+         */
+      }
+    }
+
+    const intervalId =
+      window.setInterval(
+        () => {
+          void heartbeat()
+        },
+        HEARTBEAT_INTERVAL_MS,
+      )
+
+    return () => {
+      cancelled = true
+      window.clearInterval(
+        intervalId,
+      )
+    }
+  }, [
+    restaurantId,
+    enabled,
+    onExpired,
+  ])
 
   return null
 }

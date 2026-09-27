@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
   Sparkles,
@@ -57,6 +57,9 @@ function formatDate(iso: string | null | undefined): string {
   })
 }
 
+const PENDING_POLL_INTERVAL_MS = 2000
+const PENDING_POLL_MAX_ATTEMPTS = 30 // ~1 minute total
+
 export default function BillingPage() {
   const [status, setStatus] = useState<SubscriptionStatus | null>(null)
   const [history, setHistory] = useState<PaymentHistory[]>([])
@@ -65,6 +68,10 @@ export default function BillingPage() {
   const [successMsg, setSuccessMsg] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [pollTimedOut, setPollTimedOut] = useState(false)
+
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollAttemptsRef = useRef(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -75,9 +82,11 @@ export default function BillingPage() {
       const data = await res.json()
       setStatus(data.status ?? null)
       setHistory(data.history ?? [])
+      return data.status as SubscriptionStatus | null
     } catch (e) {
       console.error('Billing status load error:', e)
       setError('Unable to load billing info right now.')
+      return null
     } finally {
       setLoading(false)
     }
@@ -86,6 +95,44 @@ export default function BillingPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Poll silently while the subscription is 'pending' (i.e. payment
+  // authorized, waiting on Razorpay's activation/charge webhook to land).
+  // Stops as soon as the plan resolves to something else, or after
+  // PENDING_POLL_MAX_ATTEMPTS so it never polls forever if something
+  // is genuinely stuck.
+  useEffect(() => {
+    const clearPollTimer = () => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+
+    if (status?.plan !== 'pending') {
+      clearPollTimer()
+      pollAttemptsRef.current = 0
+      setPollTimedOut(false)
+      return
+    }
+
+    if (pollAttemptsRef.current >= PENDING_POLL_MAX_ATTEMPTS) {
+      setPollTimedOut(true)
+      return
+    }
+
+    pollTimerRef.current = setTimeout(async () => {
+      pollAttemptsRef.current += 1
+      const next = await load()
+      // If it's still pending after this fetch, the effect will re-run
+      // (status object reference changes) and schedule the next poll.
+      if (next?.plan === 'pending' && pollAttemptsRef.current >= PENDING_POLL_MAX_ATTEMPTS) {
+        setPollTimedOut(true)
+      }
+    }, PENDING_POLL_INTERVAL_MS)
+
+    return clearPollTimer
+  }, [status, load])
 
   async function handleCancel() {
     setCancelling(true)
@@ -107,7 +154,7 @@ export default function BillingPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !status) {
     return (
       <div className="mx-auto max-w-3xl animate-pulse px-4 py-6 sm:px-6 lg:px-8">
         <div className="h-10 w-32 rounded-lg bg-zinc-800" />
@@ -120,8 +167,9 @@ export default function BillingPage() {
 
   const isActive = Boolean(status?.is_paid_active || (status?.plan === 'active' && status.has_access))
   const isTrial = Boolean(status?.is_trial_active || (status?.plan === 'trial' && status.has_access))
+  const isPending = Boolean(status?.plan === 'pending' && !isActive && !isTrial)
   const isCancelled = Boolean(status?.is_cancelled || status?.cancel_scheduled)
-  const isExpired = Boolean(status && !status.has_access)
+  const isExpired = Boolean(status && !status.has_access && !isPending)
 
   const planLabel = isTrial
     ? `Trial · ${getPlanLabel(status?.billing_cycle)}`
@@ -129,9 +177,11 @@ export default function BillingPage() {
 
   const planColor = isCancelled
     ? 'from-zinc-500 to-zinc-700'
-    : isTrial
-      ? 'from-amber-500 to-orange-500'
-      : getPlanColor(status?.plan_id ?? null)
+    : isPending
+      ? 'from-blue-500 to-indigo-500'
+      : isTrial
+        ? 'from-amber-500 to-orange-500'
+        : getPlanColor(status?.plan_id ?? null)
 
   const amountLabel = isTrial
     ? `Free now · then ${formatAmount(status?.amount_paise ?? null, status?.billing_cycle ?? null)}`
@@ -166,6 +216,26 @@ export default function BillingPage() {
         <div className="mb-5 flex items-center gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-4 text-sm text-emerald-300">
           <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
           {successMsg}
+        </div>
+      )}
+
+      {isPending && (
+        <div className="mb-5 flex items-start gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/8 p-4">
+          {pollTimedOut ? (
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-blue-400" />
+          ) : (
+            <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin text-blue-400" />
+          )}
+          <div>
+            <p className="text-sm font-semibold text-blue-300">
+              {pollTimedOut ? 'Still activating' : 'Activating your subscription'}
+            </p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              {pollTimedOut
+                ? 'This is taking longer than expected. Tap refresh in a moment, or contact support if it doesn\u2019t update.'
+                : 'Your free trial has already been used, so this plan starts billing right away. This page updates automatically.'}
+            </p>
+          </div>
         </div>
       )}
 
@@ -227,12 +297,16 @@ export default function BillingPage() {
                     ? 'Active subscription'
                     : isTrial
                       ? 'Trial subscription'
-                      : 'No active plan'}
+                      : isPending
+                        ? 'Activating…'
+                        : 'No active plan'}
               </p>
               <p className="text-xs text-zinc-500">
                 {isActive || isTrial || (isCancelled && status?.has_access)
                   ? planLabel
-                  : 'Upgrade to get full access'}
+                  : isPending
+                    ? 'Payment processing'
+                    : 'Upgrade to get full access'}
               </p>
             </div>
           </div>
@@ -264,20 +338,22 @@ export default function BillingPage() {
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
             <p className="text-xs uppercase tracking-wider text-zinc-500">
-              {isExpired ? 'Next step' : isCancelled ? 'Status' : 'Manage'}
+              {isExpired ? 'Next step' : isCancelled ? 'Status' : isPending ? 'Status' : 'Manage'}
             </p>
             <p className="mt-1 text-sm text-zinc-300">
               {isExpired
                 ? 'Choose a plan to restore access.'
                 : isCancelled
                   ? 'Renewals are off. Resubscribe anytime from onboarding after access ends.'
-                  : isTrial
-                    ? 'Cancel before the trial ends to avoid the first charge. Your current trial access is not cut short.'
-                    : 'Cancel anytime — you keep access until the end of the current billing period.'}
+                  : isPending
+                    ? 'Your payment is processing. This page will update automatically once it completes.'
+                    : isTrial
+                      ? 'Cancel before the trial ends to avoid the first charge. Your current trial access is not cut short.'
+                      : 'Cancel anytime — you keep access until the end of the current billing period.'}
             </p>
 
             <div className="mt-4 flex flex-wrap gap-3">
-              {(isExpired || (!isActive && !isTrial && !isCancelled)) && (
+              {(isExpired || (!isActive && !isTrial && !isCancelled && !isPending)) && (
                 <Link
                   href="/dashboard/onboarding"
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"

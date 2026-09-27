@@ -1,18 +1,120 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getValidTableSession, touchTableSession, sessionCookieName } from '@/lib/table-session'
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server'
 
-export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as { restaurantId?: string } | null
-  if (!body?.restaurantId) return NextResponse.json({ ok: false }, { status: 400 })
+import {
+  getValidTableSession,
+  sessionCookieName,
+  touchTableSession,
+} from '@/lib/table-session'
 
-  const sessionId = req.cookies.get(sessionCookieName(body.restaurantId))?.value
-  if (!sessionId) return NextResponse.json({ ok: false, expired: true }, { status: 401 })
-
-  const session = await getValidTableSession(sessionId, body.restaurantId)
-  if (!session) return NextResponse.json({ ok: false, expired: true }, { status: 401 })
-
-  await touchTableSession(session.id)
-  return NextResponse.json({ ok: true, expiresAt: session.expires_at })
-}
-
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+export async function POST(
+  req: NextRequest,
+) {
+  try {
+    const body =
+      await req.json().catch(
+        () => null,
+      )
+
+    const restaurantId =
+      body?.restaurantId
+
+    if (
+      typeof restaurantId !==
+      'string' ||
+      restaurantId.length ===
+        0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Missing restaurantId',
+        },
+        {
+          status: 400,
+          headers: {
+            'Cache-Control':
+              'no-store',
+          },
+        },
+      )
+    }
+
+    const sessionId =
+      req.cookies.get(
+        sessionCookieName(
+          restaurantId,
+        ),
+      )?.value
+
+    if (!sessionId) {
+      return NextResponse.json(
+        {
+          valid: false,
+        },
+        {
+          status: 401,
+          headers: {
+            'Cache-Control':
+              'no-store',
+          },
+        },
+      )
+    }
+
+    const session =
+      await getValidTableSession(
+        sessionId,
+        restaurantId,
+      )
+
+    if (!session) {
+      return NextResponse.json(
+        {
+          valid: false,
+        },
+        {
+          status: 401,
+          headers: {
+            'Cache-Control':
+              'no-store',
+          },
+        },
+      )
+    }
+
+    await touchTableSession(
+      session.id,
+    )
+
+    return NextResponse.json({
+      valid: true,
+      tableNumber:
+        session.table_number,
+    })
+  } catch (error) {
+    console.error(
+      '[table-session/heartbeat]',
+      error,
+    )
+
+    return NextResponse.json(
+      {
+        error:
+          'Heartbeat failed',
+      },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control':
+            'no-store',
+        },
+      },
+    )
+  }
+}

@@ -1,33 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers';
+import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
+import { resolveDashboardContext } from '@/lib/dashboard-access'
 
-async function getSupabaseServer() {
+function getServiceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  )
+}
+
+async function getUserFromRequest(req: NextRequest) {
+  const authHeader = req.headers.get('authorization') ?? ''
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
+  const service = getServiceClient()
+
+  if (bearerToken) {
+    const { data: { user }, error } = await service.auth.getUser(bearerToken)
+    if (!error && user) return user
+  }
+
   const cookieStore = await cookies()
-  return createServerClient(
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name) {
-          return cookieStore.get(name)?.value
-        },
-        set(name, value, options) {
-          cookieStore.set({ name, value, ...options })
-        },
-        remove(name, options) {
-          cookieStore.set({ name, value: '', ...options, maxAge: 0 })
-        },
+        getAll() { return cookieStore.getAll() },
+        setAll() {},
       },
     },
   )
+  const { data: { user } } = await supabase.auth.getUser()
+  return user ?? null
 }
-
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
 
 export async function GET(req: NextRequest) {
   try {
@@ -38,33 +46,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing restaurant_id or since' }, { status: 400 })
     }
 
-    const supabase = await getSupabaseServer()
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Confirm this dashboard user actually owns the restaurant they're
-    // asking about — restaurant_customers holds phone numbers, so this
-    // check is the only thing standing between "my dashboard" and
-    // "anyone else's customer list".
-    const { data: restaurant, error: restaurantError } = await supabase
-      .from('restaurants')
-      .select('id')
-      .eq('id', restaurantId)
-      .eq('owner_id', user.id)
-      .maybeSingle()
-
-    if (restaurantError) {
-      return NextResponse.json({ error: restaurantError.message }, { status: 500 })
-    }
-    if (!restaurant) {
+    // IMPORTANT: owner_id alone is not sufficient because managers/captains do
+    // not have an owner_id on their auth user. Reuse the same central access
+    // resolver as the staff API so owner + manager get the same restaurant scope.
+    const ctx = await resolveDashboardContext(user.id, user.email ?? null)
+    if (!ctx || (ctx.role !== 'owner' && ctx.role !== 'manager')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    if (ctx.restaurantId !== restaurantId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const admin = getServiceClient()
 
     const [
       { count: qrScanCount, error: qrErr },
@@ -108,7 +104,6 @@ export async function GET(req: NextRequest) {
       table_link_sessions: 0,
       direct_sessions: 0,
     }
-    const table_scans = tableActivityRows ?? []
 
     const customers = (customerRowsRaw ?? []).map((row: any) => {
       const c = Array.isArray(row.customers) ? row.customers[0] : row.customers
@@ -122,10 +117,10 @@ export async function GET(req: NextRequest) {
       }
     })
 
-   return NextResponse.json({
+    return NextResponse.json({
       qr_scans: qrScanCount ?? 0,
       visitor_summary,
-      table_scans,
+      table_scans: tableActivityRows ?? [],
       customers,
     })
   } catch (err) {
@@ -134,4 +129,5 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

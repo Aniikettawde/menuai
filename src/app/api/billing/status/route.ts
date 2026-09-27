@@ -34,13 +34,13 @@ export async function GET() {
       { auth: { persistSession: false } },
     )
 
-    const { data: sub } = await sb
-      .from('subscriptions')
-      .select(
-        'plan, plan_id, billing_cycle, amount_paise, trial_end, trial_start, current_period_end, razorpay_subscription_id',
-      )
-      .eq('user_id', user.id)
-      .maybeSingle()
+const { data: sub } = await sb
+  .from('subscriptions')
+  .select(
+    'plan, plan_id, billing_cycle, amount_paise, trial_start, trial_end, current_period_end, razorpay_subscription_id',
+  )
+  .eq('user_id', user.id)
+  .maybeSingle()
 
     const { data: history } = await sb
       .from('payment_history')
@@ -53,23 +53,31 @@ export async function GET() {
       return NextResponse.json({ status: null, history: history ?? [] })
     }
 
-    const now = new Date()
-    const cycle = (sub.billing_cycle as BillingCycle | null) ?? null
-    const plan = String(sub.plan ?? '').toLowerCase()
-    const trialEnd = sub.trial_end ? new Date(sub.trial_end) : null
-    const paidEnd = sub.current_period_end ? new Date(sub.current_period_end) : null
+   const now = new Date()
+const cycle = (sub.billing_cycle as BillingCycle | null) ?? null
+const plan = String(sub.plan ?? '').toLowerCase()
+const trialEnd = sub.trial_end ? new Date(sub.trial_end) : null
+const paidEnd = sub.current_period_end ? new Date(sub.current_period_end) : null
 
-    const isPaidActive =
-      plan === 'active' && (paidEnd ? paidEnd > now : true)
+const isPaidActive =
+  plan === 'active' && (paidEnd ? paidEnd > now : true)
 
-    const isTrialActive = plan === 'trial' && !!trialEnd && trialEnd > now
+const isTrialActive = plan === 'trial' && !!trialEnd && trialEnd > now
 
-    const isCancelled = plan === 'cancelled' || plan === 'canceled'
-    const cancelledGrace =
-      isCancelled &&
-      ((!!trialEnd && trialEnd > now) || (!!paidEnd && paidEnd > now))
+const isCancelled = plan === 'cancelled' || plan === 'canceled'
+const cancelledGrace =
+  isCancelled &&
+  ((!!trialEnd && trialEnd > now) || (!!paidEnd && paidEnd > now))
 
-    const hasAccess = isPaidActive || isTrialActive || cancelledGrace
+// Same reconversion case as dashboard-access.ts: a user who already
+// used their free trial and is now re-subscribing sits briefly in
+// plan: 'pending' while Razorpay's webhook resolves. Keep access on
+// through that window since trial_start proves they're not a
+// brand-new never-had-access user.
+const isPendingWithPriorTrial =
+  plan === 'pending' && Boolean(sub.trial_start)
+
+const hasAccess = isPaidActive || isTrialActive || cancelledGrace || isPendingWithPriorTrial
 
     let trial_days_remaining: number | null = null
     if ((isTrialActive || (isCancelled && trialEnd && trialEnd > now)) && trialEnd) {

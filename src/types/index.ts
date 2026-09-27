@@ -29,36 +29,49 @@ export interface DashboardContext {
 export interface Restaurant {
   id: string
   name: string
-  slug: string          // used in QR URL: /r/{slug}
+  slug: string
   description: string
   cuisine_type: string
+  restaurant_type?: string | null   // ✅ ADD
+
   logo_url?: string
   cover_url?: string
   address: string
   phone?: string
+
   avg_rating: number
   total_ratings: number
   is_active: boolean
   opening_hours: OpeningHours
   created_at: string
   owner_id?: string | null
-    total_tables?: number | null   // ← add this
-instagram_url?: string | null
-  kot_mode: 'manual' | 'dinezy_print'  // ← NEW
+
+  total_tables?: number | null
+  instagram_url?: string | null
+
+  kot_mode: 'manual' | 'dinezy_print'
   orders_enabled: boolean
 
-google_review_count?: number | null
-google_rating?: number | null
-google_reviews_url?: string | null
+  google_review_count?: number | null
+  google_rating?: number | null
+  google_reviews_url?: string | null
 
-has_bar_menu?: boolean
-has_corporate_menu?: boolean
-avg_prep_time?: number
+  has_bar_menu?: boolean
+  has_corporate_menu?: boolean
+  dark_theme?: boolean
+  show_category_shortcut?: boolean
 
-about_story?: string | null
-total_branches?: number | null
-established_year?: number | null
+  avg_prep_time?: number
 
+  about_story?: string | null
+  total_branches?: number | null
+  established_year?: number | null
+
+  // ✅ AI Dish Explanation
+  ai_dish_explanations?: boolean | null
+
+  // ✅ Hide ₹ / currency symbol on customer menu
+  hide_currency_symbol?: boolean | null
 }
 
 export interface DishOptionChoice {

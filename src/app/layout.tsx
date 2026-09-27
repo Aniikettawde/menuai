@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
-import { Inter, Space_Grotesk, DM_Sans } from 'next/font/google'
+import {
+  Inter,
+  Space_Grotesk,
+  DM_Sans,
+  Fraunces,
+  Baloo_2,
+} from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
 
@@ -23,6 +29,19 @@ const spaceGrotesk = Space_Grotesk({
 const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-dm-sans',
+  display: 'swap',
+})
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  weight: ['500', '600'],
+  variable: '--font-fraunces',
+  display: 'swap',
+})
+
+const baloo2 = Baloo_2({
+  subsets: ['latin'],
+  weight: ['700', '800'],
+  variable: '--font-baloo-2',
   display: 'swap',
 })
 export const metadata: Metadata = {
@@ -117,7 +136,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${dmSans.variable} scroll-smooth`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${dmSans.variable} ${fraunces.variable} ${baloo2.variable} scroll-smooth`}
     >
       <head>
         <meta

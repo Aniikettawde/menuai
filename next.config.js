@@ -38,13 +38,19 @@ async headers() {
         { key: 'X-XSS-Protection', value: '1; mode=block' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
-        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
       ],
     },
-    {
+     {
       source: '/static/(.*)',
       headers: [
         { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+      ],
+    },
+    {
+      source: '/partner/kyc',
+      headers: [
+        { key: 'Permissions-Policy', value: 'camera=(self)' },
       ],
     },
   ]

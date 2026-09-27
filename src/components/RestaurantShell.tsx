@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useCallback, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { useAppStore } from '@/store/app-store'
 import type { MenuPageData, DishOption } from '@/types'
@@ -10,7 +9,6 @@ import {
   setupConnectivityListeners,
   track,
   setVisitContext,
-  resolveEntrySource,
   trackSessionStart,
   trackSessionEnd,
 } from '@/lib/analytics'
@@ -24,19 +22,28 @@ import { RatingsListModal } from './RatingsListModal'
 import { CallWaiterBell } from './CallWaiterBell'
 import { CustomerAuthProvider } from './CustomerAuthProvider'
 import { RewardOffersBar } from './RewardOffersBar'
-import { TableSessionHeartbeat } from './TableSessionHeartbeat'   // ← add
+import { TableSessionHeartbeat } from './TableSessionHeartbeat'
 import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
 import { MenuTypeSelector } from './MenuTypeSelector'
 import { DeliveryPreferenceModal } from './DeliveryPreferenceModal'
 import type { WaiterCallItem } from '@/types'
 import { BottomTabBar } from './BottomTabBar'
 import { TranslationLoadingOverlay } from './TranslationLoadingOverlay'
-import { WelcomeSplash } from './WelcomeSplash'
 import { RewardWelcomePopup } from './RewardWelcomePopup'
 import { useCustomerAuth } from '@/store/customer-auth-store'
 import { AboutTab } from './AboutTab'
 import type { ReviewRow } from '@/lib/schema/restaurant-schema'
 import { GoogleReviewButton } from './GoogleReviewButton'
+import { CategoryShortcutButton } from './CategoryShortcutButton'
+
+// NOTE: WelcomeSplash has been removed entirely for load-time reasons:
+//   1. It blocked the menu behind a full-screen overlay for ~1-1.5s.
+//   2. It fetched its own background image at fetchPriority="high",
+//      which competed with the actual menu/bestseller images for
+//      bandwidth on the most important part of the load — the first
+//      couple of seconds.
+// If you want a splash back later, keep it CSS-only (no image fetch)
+// and cap it at ~250ms so it can never be the slow part.
 
 type OfferRow = {
   id: string; title: string
@@ -45,13 +52,12 @@ type OfferRow = {
   coupon_code: string | null; min_order_amount_paise: number | null
   ends_at: string | null
 }
- 
+
 interface Props {
-  restaurantId?: string | null
-  tableNumber?:  number | null
   initialData: MenuPageData
-  tableSessionValid?: boolean
-    reviews?: ReviewRow[]   
+  reviews?: ReviewRow[]
+  initialOffers?: OfferRow[]
+  initialDishOptions?: Record<string, DishOption[]>
 }
 
 interface OrderToastData {
@@ -87,80 +93,89 @@ function writePersistedOrderIds(slug: string, tableNumber: number | null, ids: s
   } catch {}
 }
 
+/**
+ * Runs `cb` once the browser is idle (or after `timeout` ms, whichever
+ * comes first), instead of blocking the paint/hydration path.
+ * Used for work that the diner doesn't need in the first second:
+ * dish customisation options, offers, and the realtime subscription.
+ */
+function runWhenIdle(cb: () => void, timeout = 1500) {
+  if (typeof window === 'undefined') return
+  const w = window as typeof window & {
+    requestIdleCallback?: (cb: IdleRequestCallback, opts?: { timeout: number }) => number
+  }
+  if (typeof w.requestIdleCallback === 'function') {
+    w.requestIdleCallback(cb, { timeout })
+  } else {
+    window.setTimeout(cb, 200)
+  }
+}
 
-export function RestaurantShell({ initialData, tableSessionValid, reviews }: Props) {
-  const searchParams = useSearchParams()
+type TableSessionState =
+  | 'checking'
+  | 'none'
+  | 'valid'
+  | 'expired'
+
+export function RestaurantShell({
+  initialData,
+  reviews,
+  initialOffers,
+  initialDishOptions,
+}: Props) {
   const {
     restaurant,
-	items,                 // ← add this
+    items,
     setRestaurantData,
     setDishOptions,
     setIsOffline,
     setTableNumber,
-    setHasTableToken,   // ✅ destructured here
+    setHasTableToken,
     tableNumber,
-    sessionId,
     clearCart,
     showRating,
     showRatingsList,
-	openRatingsList,        // ← add this
-    activeMenuType,      // ← add this: drives the bar-vs-food theme
-	activeTab,
-setActiveTab,
+    activeMenuType,
+    activeTab,
+    setActiveTab,
   } = useAppStore()
 
   const menuTheme = activeMenuType ?? 'food'
 
-const heroItems = (items ?? [])
-  .filter((i) => i.is_available && (i.is_bestseller || i.is_special))
-  .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
-  
   const [waiterToasts, setWaiterToasts] = useState<OrderToastData[]>([])
   const [activeToastIndex, setActiveToastIndex] = useState(0)
   const [waiterLoading, setWaiterLoading] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [activeOffers, setActiveOffers] = useState<OfferRow[]>([])
-const [sessionExpired, setSessionExpired] = useState(false)
-const { customer } = useCustomerAuth()
-const [showRewardPopup, setShowRewardPopup] = useState(false)
-  const tableToken = searchParams.get('t')
-  const legacyTableParam = searchParams.get('table')
+  const [activeOffers, setActiveOffers] = useState<OfferRow[]>(initialOffers ?? [])
+  const [tableSessionState, setTableSessionState] = useState<TableSessionState>('checking')
+  const { customer } = useCustomerAuth()
+  const [showRewardPopup, setShowRewardPopup] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
 
-  const [showWelcome, setShowWelcome] = useState(() => {
-    if (typeof window === 'undefined') return false
-    const key = `dinezy_welcome_seen_${initialData.restaurant.id}`
-    return sessionStorage.getItem(key) !== '1'
-  })
-
-  const dismissWelcome = useCallback(() => {
-    setShowWelcome(false)
-    try {
-      sessionStorage.setItem(`dinezy_welcome_seen_${initialData.restaurant.id}`, '1')
-    } catch {}
-  }, [initialData.restaurant.id])
-  
   useEffect(() => {
-  // Only for logged-out users, only once per browser session, only on the menu tab.
-  if (customer) return
-  if (activeTab !== 'menu') return
- 
-  const key = `dinezy_reward_popup_seen_${initialData.restaurant.id}`
-  if (sessionStorage.getItem(key) === '1') return
- 
-  const timer = setTimeout(() => {
-    setShowRewardPopup(true)
-    sessionStorage.setItem(key, '1')
-  }, 30000) // 30s after mount of this effect (i.e. after landing on menu)
- 
-  return () => clearTimeout(timer)
-}, [customer, activeTab, initialData.restaurant.id])
+    // Only for logged-out users, only once per browser session, only on the menu tab.
+    if (customer) return
+    if (activeTab !== 'menu') return
 
-const autoVisitFiredRef = useRef(false)
+    const key = `dinezy_reward_popup_seen_${initialData.restaurant.id}`
+    if (sessionStorage.getItem(key) === '1') return
+
+    const timer = setTimeout(() => {
+      setShowRewardPopup(true)
+      sessionStorage.setItem(key, '1')
+    }, 30000)
+
+    return () => clearTimeout(timer)
+  }, [customer, activeTab, initialData.restaurant.id])
+
+  const autoVisitFiredRef = useRef(false)
+  const analyticsEntrySourceRef = useRef<'qr_scan' | 'direct_web'>('direct_web')
+  const analyticsStartedRef = useRef(false)
+
   useEffect(() => {
     if (!customer?.id || !restaurant?.id) return
-    if (tableSessionValid !== true) return
+    if (tableSessionState !== 'valid') return
     if (autoVisitFiredRef.current) return
     autoVisitFiredRef.current = true
 
@@ -170,57 +185,105 @@ const autoVisitFiredRef = useRef(false)
       body: JSON.stringify({ customer_id: customer.id, restaurant_id: restaurant.id }),
       credentials: 'same-origin',
     }).catch(() => {})
-  }, [customer?.id, restaurant?.id, tableSessionValid])
+  }, [customer?.id, restaurant?.id, tableSessionState])
+
+  // ── Table session bootstrap ───────────────────────────────────────────────
+  // The public menu does not depend on the table session. We resolve the
+  // HttpOnly cookie in the background after the menu can render.
+  useEffect(() => {
+    let cancelled = false
+
+    autoVisitFiredRef.current = false
+    analyticsStartedRef.current = false
+
+    setTableNumber(null)
+    setHasTableToken(false)
+    setTableSessionState('checking')
+
+    async function loadTableSession() {
+      try {
+        const response = await fetch(
+          `/api/table-session/status?restaurantId=${encodeURIComponent(initialData.restaurant.id)}`,
+          {
+            method: 'GET',
+            credentials: 'include',
+            cache: 'no-store',
+          },
+        )
+
+        if (cancelled) return
+
+        if (!response.ok) {
+          setTableSessionState('none')
+          setTableNumber(null)
+          setHasTableToken(false)
+          return
+        }
+
+        const data = (await response.json()) as {
+          hasSession: boolean
+          valid: boolean
+          tableNumber?: number | null
+        }
+
+        if (cancelled) return
+
+        if (data.valid && typeof data.tableNumber === 'number') {
+          setTableSessionState('valid')
+          setTableNumber(data.tableNumber)
+          setHasTableToken(true)
+          return
+        }
+
+        if (data.hasSession && !data.valid) {
+          setTableSessionState('expired')
+          setTableNumber(null)
+          setHasTableToken(false)
+          return
+        }
+
+        setTableSessionState('none')
+        setTableNumber(null)
+        setHasTableToken(false)
+      } catch {
+        if (cancelled) return
+        setTableSessionState('none')
+        setTableNumber(null)
+        setHasTableToken(false)
+      }
+    }
+
+    void loadTableSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    initialData.restaurant.id,
+    setTableNumber,
+    setHasTableToken,
+  ])
 
   useEffect(() => {
     setRestaurantData(initialData)
     setCachedMenu(initialData.restaurant.slug, initialData)
 
-    void supabase
-      .from('offers')
-      .select('id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at')
-      .eq('restaurant_id', initialData.restaurant.id)
-      .eq('is_active', true)
-      .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString())
-      .then(({ data }) => { if (data) setActiveOffers(data as OfferRow[]) })
-  }, [initialData, setRestaurantData])
-
-  // ── Table resolution + token gate ─────────────────────────────────────────
-  // Single source of truth for both tableNumber AND hasTableToken.
-  // The page_view tracking effect below is intentionally kept separate
-  // and does NOT call setHasTableToken — it only fires analytics.
-  useEffect(() => {
-    let mounted = true
-
-    async function resolveTable() {
-      if (!initialData.restaurant.id) return
-
-      if (tableToken) {
-        const { data, error } = await supabase
-          .from('qr_tokens')
-          .select('table_number')
+    // If page.tsx already fetched offers server-side, there's nothing to
+    // do here — no client round trip at all. Only fall back to fetching
+    // client-side (deferred, so it doesn't compete with first paint) when
+    // the server didn't provide them.
+    if (!initialOffers) {
+      runWhenIdle(() => {
+        void supabase
+          .from('offers')
+          .select('id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at')
           .eq('restaurant_id', initialData.restaurant.id)
-          .eq('token', tableToken)
-          .maybeSingle()
-        if (!mounted) return
-        if (error) {
-          setTableNumber(null)
-          setHasTableToken(false)  // ✅ token present but invalid/error
-          return
-        }
-        setTableNumber(data?.table_number ?? null)
-        return
-      }
-
-      // No ?t= token — legacy ?table= param or bare browse URL
-      const n = legacyTableParam ? Number(legacyTableParam) : null
-      const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
-      setTableNumber(resolved)
+          .eq('is_active', true)
+          .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString())
+          .then(({ data }) => { if (data) setActiveOffers(data as OfferRow[]) })
+      })
     }
-
-    void resolveTable()
-    return () => { mounted = false }
-  }, [tableToken, legacyTableParam, initialData.restaurant.id, setTableNumber, setHasTableToken])
+  }, [initialData, setRestaurantData, initialOffers])
 
   const slug = initialData.restaurant.slug
   usePWA()
@@ -300,12 +363,21 @@ const autoVisitFiredRef = useRef(false)
       setDishOptions(optionsByItem)
     } catch (err) { console.error('Failed to fetch dish options:', err) }
   }, [setDishOptions])
-  
-   useEffect(() => {
-    if (initialData.items.length > 0) {
-      void fetchDishOptions(initialData.items.map((i) => i.id))
+
+  useEffect(() => {
+    // Server already fetched and shaped this (see page.tsx) — hydrate the
+    // store directly, no network request needed on the client at all.
+    if (initialDishOptions) {
+      if (Object.keys(initialDishOptions).length > 0) setDishOptions(initialDishOptions)
+      return
     }
-  }, [initialData.items, fetchDishOptions])
+    if (initialData.items.length === 0) return
+    // Fallback path (e.g. discovery view without server-side dish options):
+    // deferred so it doesn't compete with first paint / first interaction.
+    runWhenIdle(() => {
+      void fetchDishOptions(initialData.items.map((i) => i.id))
+    })
+  }, [initialData.items, fetchDishOptions, initialDishOptions, setDishOptions])
 
   // ── Refresh menu ──────────────────────────────────────────────────────────
   const refreshMenu = useCallback(async () => {
@@ -323,22 +395,21 @@ const autoVisitFiredRef = useRef(false)
       if (items && items.length > 0) void fetchDishOptions(items.map((i: any) => i.id))
     } catch (err) { console.error('Failed to refresh menu:', err) }
   }, [initialData.restaurant.id, slug, setRestaurantData, fetchDishOptions])
-  
-  useEffect(() => {
-  const color = menuTheme === 'bar' ? '#F3ECDE' : '#F8F4EC'
-  let meta = document.querySelector('meta[name="theme-color"]')
-  if (!meta) {
-    meta = document.createElement('meta')
-    meta.setAttribute('name', 'theme-color')
-    document.head.appendChild(meta)
-  }
-  meta.setAttribute('content', color)
 
-  // Restore the app's default dark theme when leaving this page
-  return () => {
-    meta?.setAttribute('content', '#050816')
-  }
-}, [menuTheme])
+  useEffect(() => {
+    const color = menuTheme === 'bar' ? '#F3ECDE' : '#F8F4EC'
+    let meta = document.querySelector('meta[name="theme-color"]')
+    if (!meta) {
+      meta = document.createElement('meta')
+      meta.setAttribute('name', 'theme-color')
+      document.head.appendChild(meta)
+    }
+    meta.setAttribute('content', color)
+
+    return () => {
+      meta?.setAttribute('content', '#050816')
+    }
+  }, [menuTheme])
 
   // ── Connectivity ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -350,150 +421,214 @@ const autoVisitFiredRef = useRef(false)
     setIsOffline(!navigator.onLine)
     return () => { cleanup(); window.removeEventListener('offline', off); window.removeEventListener('online', on) }
   }, [setIsOffline])
-  
-    useEffect(() => {
-    setHasTableToken(tableSessionValid === true)
-  }, [tableSessionValid, setHasTableToken])
 
-  // ── Page view analytics only (does NOT touch hasTableToken) ───────────────
+  // ── Page-view analytics ───────────────────────────────────────────────────
+  // The raw QR token is never read or sent from the browser. Entry source
+  // is derived from the server-validated table session.
   useEffect(() => {
-    const token = searchParams.get('t')
-    const rawTable = searchParams.get('table')
-    // A verified table_sessions cookie (tableSessionValid) means this visit
-    // came from a real QR scan even though /api/table-session/activate
-    // already stripped the token from the URL before this page mounted.
-    // Without this override, every real QR scan lands on a bare ?table=N
-    // URL and gets misclassified as 'table_link'.
-    const entrySource = tableSessionValid === true
-      ? 'qr_scan'
-      : resolveEntrySource({ tableToken: token, tableParam: rawTable })
-    let mounted = true
+    if (tableSessionState === 'checking') return
+    if (analyticsStartedRef.current) return
 
-    async function trackPageView() {
-      if (!initialData.restaurant.id) return
+    analyticsStartedRef.current = true
 
-      if (token) {
-        const { data, error } = await supabase
-          .from('qr_tokens').select('table_number')
-          .eq('restaurant_id', initialData.restaurant.id).eq('token', token).maybeSingle()
-        if (!mounted) return
-        if (error) return
-        const tableNum = data?.table_number ?? null
-        setVisitContext({
+    const entrySource: 'qr_scan' | 'direct_web' =
+      tableSessionState === 'valid'
+        ? 'qr_scan'
+        : 'direct_web'
+
+    analyticsEntrySourceRef.current = entrySource
+
+    const currentTable =
+      tableSessionState === 'valid'
+        ? tableNumber
+        : null
+
+    setVisitContext({
+      entry_source: entrySource,
+      table_number: currentTable,
+      table_token: null,
+    })
+
+    trackSessionStart(
+      initialData.restaurant.id,
+    )
+
+    void track(
+      initialData.restaurant.id,
+      'page_view',
+      {
+        metadata: {
+          table_number: currentTable,
           entry_source: entrySource,
-          table_number: tableNum,
-          table_token: token,
-        })
-        trackSessionStart(initialData.restaurant.id)
-        void track(initialData.restaurant.id, 'page_view', {
-          metadata: {
-            table_number: tableNum,
-            table_token: token,
-            entry_source: entrySource,
-          },
-        })
-        return
-      }
+        },
+      },
+    )
+  }, [
+    tableSessionState,
+    tableNumber,
+    initialData.restaurant.id,
+  ])
 
-      const n = rawTable ? Number(rawTable) : null
-      const resolved = Number.isFinite(n as number) && (n as number) > 0 ? (n as number) : null
-      setVisitContext({
-        entry_source: entrySource,
-        table_number: resolved,
-        table_token: null,
-      })
-      trackSessionStart(initialData.restaurant.id)
-      void track(initialData.restaurant.id, 'page_view', {
-        metadata: { table_number: resolved, entry_source: entrySource },
-      })
+  useEffect(() => {
+    const restaurantId =
+      initialData.restaurant.id
+
+    const onPageHide = () => {
+      trackSessionEnd(restaurantId)
     }
 
-    void trackPageView()
+    window.addEventListener(
+      'pagehide',
+      onPageHide,
+    )
 
-    const onPageHide = () => trackSessionEnd(initialData.restaurant.id)
-    window.addEventListener('pagehide', onPageHide)
-
-    // Scroll depth milestones (25/50/75/100) — once each per session
     const seen = new Set<number>()
+
     const onScroll = () => {
       const doc = document.documentElement
-      const max = doc.scrollHeight - window.innerHeight
+      const max =
+        doc.scrollHeight -
+        window.innerHeight
+
       if (max <= 0) return
-      const pct = Math.round((window.scrollY / max) * 100)
+
+      const pct = Math.round(
+        (window.scrollY / max) * 100,
+      )
+
       for (const mark of [25, 50, 75, 100]) {
         if (pct >= mark && !seen.has(mark)) {
           seen.add(mark)
-          void track(initialData.restaurant.id, 'scroll_depth', {
-            metadata: { depth_pct: mark, entry_source: entrySource },
-          })
+
+          void track(
+            restaurantId,
+            'scroll_depth',
+            {
+              metadata: {
+                depth_pct: mark,
+                entry_source:
+                  analyticsEntrySourceRef.current,
+              },
+            },
+          )
         }
       }
     }
-    window.addEventListener('scroll', onScroll, { passive: true })
+
+    window.addEventListener(
+      'scroll',
+      onScroll,
+      { passive: true },
+    )
 
     return () => {
-      mounted = false
-      window.removeEventListener('pagehide', onPageHide)
-      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener(
+        'pagehide',
+        onPageHide,
+      )
+      window.removeEventListener(
+        'scroll',
+        onScroll,
+      )
     }
-   }, [searchParams, initialData.restaurant.id, tableSessionValid])
+  }, [initialData.restaurant.id])
 
   // ── Realtime subscriptions ────────────────────────────────────────────────
   const itemsRef = useRef(items)
   useEffect(() => { itemsRef.current = items }, [items])
 
-  // ── Realtime subscriptions ────────────────────────────────────────────────
   useEffect(() => {
     const restaurantId = initialData.restaurant.id
-    const channel = supabase
-      .channel(`restaurant-menu-${restaurantId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_categories', filter: `restaurant_id=eq.${restaurantId}` },
-        () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120) })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` },
-        () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120) })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` },
-        () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120) })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'dish_options' },
-        () => { if (itemsRef.current.length > 0) void fetchDishOptions(itemsRef.current.map((i) => i.id)) })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'dish_option_choices' },
-        () => { if (itemsRef.current.length > 0) void fetchDishOptions(itemsRef.current.map((i) => i.id)) })
-      .subscribe()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    // Deferred: opening the realtime websocket right at mount competes
+    // with the initial data/image fetches. Menu updates don't need to be
+    // live within the first second or two.
+    const cancelIdle = (() => {
+      let idleId: number | null = null
+      let timeoutId: number | null = null
+      const w = window as typeof window & {
+        requestIdleCallback?: (cb: IdleRequestCallback, opts?: { timeout: number }) => number
+        cancelIdleCallback?: (id: number) => void
+      }
+      if (typeof w.requestIdleCallback === 'function') {
+        idleId = w.requestIdleCallback(setup, { timeout: 2000 })
+      } else {
+        // Cast needed because this project's tsconfig resolves the
+        // ambient setTimeout/clearTimeout types to Node's (NodeJS.Timeout)
+        // even via `window.setTimeout`. This code only ever runs in the
+        // browser ('use client'), where it's always a number at runtime —
+        // the cast just tells TypeScript what we already know is true.
+        timeoutId = window.setTimeout(setup, 300) as unknown as number
+      }
+      return () => {
+        if (idleId !== null && typeof w.cancelIdleCallback === 'function') w.cancelIdleCallback(idleId)
+        if (timeoutId !== null) window.clearTimeout(timeoutId)
+      }
+    })()
+
+    function setup() {
+      channel = supabase
+        .channel(`restaurant-menu-${restaurantId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_categories', filter: `restaurant_id=eq.${restaurantId}` },
+          () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120) })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` },
+          () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120) })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurants', filter: `id=eq.${restaurantId}` },
+          () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); refreshTimerRef.current = setTimeout(() => void refreshMenu(), 120) })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'dish_options' },
+          () => { if (itemsRef.current.length > 0) void fetchDishOptions(itemsRef.current.map((i) => i.id)) })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'dish_option_choices' },
+          () => { if (itemsRef.current.length > 0) void fetchDishOptions(itemsRef.current.map((i) => i.id)) })
+        .subscribe()
+    }
 
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-      void supabase.removeChannel(channel)
+      cancelIdle()
+      if (channel) void supabase.removeChannel(channel)
     }
   }, [initialData.restaurant.id, refreshMenu, fetchDishOptions])
 
+  const markSessionExpired = useCallback(() => {
+    setTableSessionState('expired')
+    setTableNumber(null)
+    setHasTableToken(false)
+  }, [setTableNumber, setHasTableToken])
+
   // ── Waiter call ───────────────────────────────────────────────────────────
- const handleCallWaiter = useCallback(
-  async (payload: { items: WaiterCallItem[]; subtotal: number }) => {
+  const handleCallWaiter = useCallback(
+    async (payload: { items: WaiterCallItem[]; subtotal: number }) => {
       if (!restaurant) return
-      const token = searchParams.get('t')
-      if (!tableNumber && !token) { alert('Table number missing. Please scan the table QR again.'); return }
+      if (tableSessionState !== 'valid' || tableNumber === null) {
+        alert('Your table session has expired. Please scan the QR code again to continue.')
+        return
+      }
       setWaiterLoading(true)
       try {
         const res = await fetch('/api/table-request', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
-            restaurantSlug: restaurant.slug, tableNumber, tableToken: token,
-            sessionId, items: payload.items, subtotal: payload.subtotal,
+            restaurantSlug: restaurant.slug,
+            items: payload.items,
+            subtotal: payload.subtotal,
           }),
         })
         const data = (await res.json().catch(() => ({}))) as {
-  error?: string
-  orderId?: string
-  orderCode?: string
-  merged?: boolean
-    request?: { items?: OrderToastData['items']; subtotal?: number }
-}
-if (res.status === 401) {
-  setSessionExpired(true)
-  alert('Your table session has expired. Please scan the QR code again to continue.')
-  return
-}
-if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
+          error?: string
+          orderId?: string
+          orderCode?: string
+          merged?: boolean
+          request?: { items?: OrderToastData['items']; subtotal?: number }
+        }
+        if (res.status === 401) {
+          markSessionExpired()
+          alert('Your table session has expired. Please scan the QR code again to continue.')
+          return
+        }
+        if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
 
         void track(restaurant.id, 'waiter_called', {
           metadata: {
@@ -542,7 +677,7 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
         alert(err instanceof Error ? err.message : 'Something went wrong')
       } finally { setWaiterLoading(false) }
     },
-    [restaurant, tableNumber, sessionId, clearCart, slug, searchParams],
+    [restaurant, tableNumber, tableSessionState, clearCart, slug, markSessionExpired],
   )
 
   const handleRequestAssistance = useCallback(
@@ -551,9 +686,8 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
     ): Promise<{ ok: boolean; requestId?: string }> => {
       if (!restaurant) return { ok: false }
 
-      const token = searchParams.get('t')
-      if (!tableNumber && !token) {
-        alert('Table number missing. Please scan the table QR again.')
+      if (tableSessionState !== 'valid' || tableNumber === null) {
+        alert('Your table session has expired. Please scan the QR code again.')
         return { ok: false }
       }
 
@@ -561,25 +695,23 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
         const res = await fetch('/api/table-request', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             restaurantSlug: restaurant.slug,
-            tableNumber,
-            tableToken: token,
-            sessionId,
             requestType,
             items: [],
             subtotal: 0,
           }),
         })
 
-     const data = (await res.json().catch(() => ({}))) as {
-        error?: string
-        orderId?: string
-        request?: { id?: string }
-      }
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          orderId?: string
+          request?: { id?: string }
+        }
 
         if (res.status === 401) {
-          setSessionExpired(true)
+          markSessionExpired()
           alert('Your table session has expired. Please scan the QR code again to continue.')
           return { ok: false }
         }
@@ -602,7 +734,7 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
         return { ok: false }
       }
     },
-    [restaurant, tableNumber, sessionId, searchParams],
+    [restaurant, tableNumber, tableSessionState, markSessionExpired],
   )
 
   const handleCloseToast = useCallback((orderId: string, toastTableNumber: number) => {
@@ -621,34 +753,43 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
   return (
     <>
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Inter:wght@300;400;500;600;700&display=swap');
-:root {
-  --pr-black:        #F8F4EC;   /* was #121212 — page bg, now warm ivory */
-  --pr-black-soft:   #F0EADC;   /* was #1A1A1A — placeholder tile bg */
-  --pr-card:         #FFFFFF;   /* was #1E1E1C — card surface */
-  --pr-card-hover:   #F7F2E7;   /* was #262622 */
-  --pr-border:       rgba(33,30,27,0.08);   /* was rgba(245,245,243,0.08) */
-  --pr-border-hover: rgba(33,30,27,0.14);   /* was rgba(245,245,243,0.14) */
-  --pr-gold:         #8A6D1F;   /* was #D4AF37 — muted amber for badges/tags, not neon */
-  --pr-gold-dim:     #F3E6D2;   /* was rgba(212,175,55,0.12) — solid pale chip, reads better on white than translucent */
-  --pr-orange:       #7A1F2B;   /* was #D4AF37 — burgundy, drives Add button/price/active states */
-  --pr-orange-dim:   #F5E6E8;   /* was rgba(212,175,55,0.10) — pale wine tint for "in cart" card */
-  --pr-cta-text:     #F8F4EC;   /* was #121212 — text on solid burgundy buttons must be light now, not dark */
-  --pr-text:         #211E1B;   /* was #F5F5F3 */
-  --pr-text-muted:   #6B6560;   /* was #A0A0A0 */
-  --pr-text-faint:   #A39C90;   /* was rgba(245,245,243,0.32) */
-  --surface-bg:      #F8F4EC;   /* was #121212 */
-  --font-display:    'Fraunces', Georgia, serif;   /* was Playfair Display */
-  --font-body:        'Inter', system-ui, sans-serif;   /* unchanged */
-}
+        /*
+          Font loading note: this @import is a real load-time cost — it's a
+          fully serial round trip (fetch this CSS → parse it → discover the
+          @import → fetch fonts.googleapis.com → fetch the font files)
+          before Fraunces/Inter can render without a flash. Migrating this
+          to next/font/google in your root layout removes this entirely
+          (fonts get self-hosted and inlined at build time, no extra
+          requests at all). Share layout.tsx and I'll wire that up — for
+          now this keeps working exactly as before.
+        */
+        :root {
+          --pr-black:        #F8F4EC;
+          --pr-black-soft:   #F0EADC;
+          --pr-card:         #FFFFFF;
+          --pr-card-hover:   #F7F2E7;
+          --pr-border:       rgba(33,30,27,0.08);
+          --pr-border-hover: rgba(33,30,27,0.14);
+          --pr-gold:         #8A6D1F;
+          --pr-gold-dim:     #F3E6D2;
+          --pr-orange:       #7A1F2B;
+          --pr-orange-dim:   #F5E6E8;
+          --pr-cta-text:     #F8F4EC;
+          --pr-text:         #211E1B;
+          --pr-text-muted:   #6B6560;
+          --pr-text-faint:   #A39C90;
+          --surface-bg:      #F8F4EC;
+--font-display:    var(--font-fraunces), Georgia, serif;
+--font-body:        var(--font-fallback), system-ui, sans-serif;
+        }
 
-       html, body {
-  background: var(--surface-bg) !important;
-  overscroll-behavior-y: none;   /* add this line */
-  color: var(--pr-text);
-  font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
-}
+        html, body {
+          background: var(--surface-bg) !important;
+          overscroll-behavior-y: none;
+          color: var(--pr-text);
+          font-family: var(--font-body);
+          -webkit-font-smoothing: antialiased;
+        }
 
         .pr-shell {
           min-height: 100dvh;
@@ -660,27 +801,23 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
           transition: background 0.5s ease;
         }
 
-        /* ── Bar Menu theme ─────────────────────────────────────────────────
-           Same layout, warmer/moodier palette: charcoal-espresso instead of
-           flat black, brass/copper instead of gold-orange, plus a soft
-           lounge-lighting glow layer behind the content.                    */
-       .pr-shell[data-menu='bar'] {
-  --pr-black:        #F3ECDE;   /* slightly deeper cream to differentiate from food menu */
-  --pr-black-soft:   #ECE3D0;
-  --pr-card:         #FAFAFA;
-  --pr-card-hover:   #F7F0DF;
-  --pr-border:       rgba(120,74,26,0.14);
-  --pr-border-hover: rgba(120,74,26,0.22);
-  --pr-gold:         #9C5A2E;   /* copper */
-  --pr-gold-dim:     #F0DFC8;
-  --pr-orange:       #7A1F2B;
-  --pr-orange-dim:   #F5E6E8;
-  --pr-cta-text:     #F8F4EC;
-  --pr-text:         #221A12;
-  --pr-text-muted:   #7A6E5C;
-  --pr-text-faint:   #B0A48F;
-  --surface-bg:      #F3ECDE;
-}
+        .pr-shell[data-menu='bar'] {
+          --pr-black:        #F3ECDE;
+          --pr-black-soft:   #ECE3D0;
+          --pr-card:         #FAFAFA;
+          --pr-card-hover:   #F7F0DF;
+          --pr-border:       rgba(120,74,26,0.14);
+          --pr-border-hover: rgba(120,74,26,0.22);
+          --pr-gold:         #9C5A2E;
+          --pr-gold-dim:     #F0DFC8;
+          --pr-orange:       #7A1F2B;
+          --pr-orange-dim:   #F5E6E8;
+          --pr-cta-text:     #F8F4EC;
+          --pr-text:         #221A12;
+          --pr-text-muted:   #7A6E5C;
+          --pr-text-faint:   #B0A48F;
+          --surface-bg:      #F3ECDE;
+        }
         .pr-shell[data-menu='bar']::before {
           content: '';
           position: fixed;
@@ -692,10 +829,39 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
             radial-gradient(circle at 88% 18%, rgba(224,135,62,0.07), transparent 40%),
             radial-gradient(circle at 50% 95%, rgba(217,162,75,0.05), transparent 50%);
         }
-       .pr-shell[data-menu='bar'] > main {
-  position: relative;
-  z-index: 1;
-}
+        .pr-shell[data-menu='bar'] > main {
+          position: relative;
+          z-index: 1;
+        }
+
+        .pr-shell[data-theme='dark'] {
+          --pr-black:        #0F0D0A;
+          --pr-black-soft:   #1B1712;
+          --pr-card:         #17130F;
+          --pr-card-hover:   #201A14;
+          --pr-border:       rgba(255,255,255,0.08);
+          --pr-border-hover: rgba(255,255,255,0.14);
+          --pr-gold:         #E9C874;
+          --pr-gold-dim:     rgba(233,200,116,0.14);
+          --pr-orange:       #E08A3E;
+          --pr-orange-dim:   rgba(224,138,62,0.12);
+          --pr-cta-text:     #1A1712;
+          --pr-text:         #F5EFE2;
+          --pr-text-muted:   rgba(245,239,226,0.62);
+          --pr-text-faint:   rgba(245,239,226,0.36);
+          --surface-bg:      #0F0D0A;
+        }
+        .pr-shell[data-theme='dark']::after {
+          content: '';
+          position: fixed; inset: 0; z-index: 0; pointer-events: none;
+          background:
+            radial-gradient(circle at 15% 8%,  rgba(233,200,116,0.07), transparent 45%),
+            radial-gradient(circle at 85% 90%, rgba(224,138,62,0.06), transparent 45%);
+        }
+        .pr-shell[data-theme='dark'] > main {
+          position: relative;
+          z-index: 1;
+        }
 
         .pr-main {
           flex: 1;
@@ -878,138 +1044,138 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
         }
 
         .rating-modal-dark {
-  background: #FAFAFA !important;
-  border: 1px solid rgba(33,30,27,0.1) !important;
-  color: #211E1B !important;
-}
-.rating-modal-dark h2 { color: #211E1B !important; }
-.rating-modal-dark p { color: rgba(33,30,27,0.6) !important; }
-.rating-modal-dark textarea {
-  background: rgba(33,30,27,0.03) !important;
-  border-color: rgba(33,30,27,0.12) !important;
-  color: #211E1B !important;
-}
+          background: #FAFAFA !important;
+          border: 1px solid rgba(33,30,27,0.1) !important;
+          color: #211E1B !important;
+        }
+        .rating-modal-dark h2 { color: #211E1B !important; }
+        .rating-modal-dark p { color: rgba(33,30,27,0.6) !important; }
+        .rating-modal-dark textarea {
+          background: rgba(33,30,27,0.03) !important;
+          border-color: rgba(33,30,27,0.12) !important;
+          color: #211E1B !important;
+        }
       `}</style>
 
-     <div className="pr-shell" data-menu={menuTheme}>
-	  {showWelcome && (
-    <WelcomeSplash
-      restaurant={restaurant}
-      heroItems={heroItems}
-      onDone={dismissWelcome}
-    />
-  )}
-	   <TranslationLoadingOverlay />   {/* ← add this line */}
+      <div className="pr-shell" data-menu={menuTheme} data-theme={restaurant.dark_theme ? 'dark' : 'light'}>
+        <TranslationLoadingOverlay />
 
-  <OfflineBanner />
-  <MenuTypeSelector />
-  <DeliveryPreferenceModal />
+        <OfflineBanner />
+        <MenuTypeSelector />
+        <DeliveryPreferenceModal />
 
+        <CustomerAuthProvider
+          restaurantId={restaurant?.id ?? null}
+          tableNumber={tableNumber}
+          offerCount={activeOffers.length}
+          loginOpen={loginOpen}
+          onLoginOpenChange={(open) => {
+            setLoginOpen(open)
+            if (open && restaurant?.id) {
+              void track(restaurant.id, 'login_opened', {
+                metadata: { table_number: tableNumber, source: 'auth_provider' },
+              })
+            }
+          }}
+          accountOpen={accountOpen}
+          onAccountOpenChange={(open) => {
+            setAccountOpen(open)
+            if (open && restaurant?.id) {
+              void track(restaurant.id, 'account_opened', {
+                metadata: { table_number: tableNumber },
+              })
+            }
+            if (!open) setActiveTab('menu')
+          }}
+        />
 
-  {/*
-    CustomerAuthProvider only mounts the OTP modal + account drawer —
-    both overlays, so their position in the DOM doesn't affect layout.
-    Reward + offers now live in a single merged, collapsible bar inside
-    the menu feed below (see main), instead of two separate cards.
-  */}
-  <CustomerAuthProvider
-  restaurantId={restaurant?.id ?? null}
-  tableNumber={tableNumber}
-  offerCount={activeOffers.length}
-  loginOpen={loginOpen}
-  onLoginOpenChange={(open) => {
-    setLoginOpen(open)
-    if (open && restaurant?.id) {
-      void track(restaurant.id, 'login_opened', {
-        metadata: { table_number: tableNumber, source: 'auth_provider' },
-      })
-    }
-  }}
-  accountOpen={accountOpen}
-  onAccountOpenChange={(open) => {
-    setAccountOpen(open)
-    if (open && restaurant?.id) {
-      void track(restaurant.id, 'account_opened', {
-        metadata: { table_number: tableNumber },
-      })
-    }
-    if (!open) setActiveTab('menu')
-  }}
-/>
-		
-		<TableSessionHeartbeat
-  restaurantId={restaurant.id}
-  enabled={tableSessionValid === true}
-  onExpired={() => setSessionExpired(true)}
-/>
+        <TableSessionHeartbeat
+          restaurantId={restaurant.id}
+          enabled={tableSessionState === 'valid'}
+          onExpired={markSessionExpired}
+        />
 
-      {activeTab === 'about' ? (
-  <main className="pr-main">
-    <AboutTab restaurant={restaurant} reviews={reviews} />
-  </main>
-) : (
-  <main className="pr-main">
-   <MenuGrid
-  onCallWaiter={handleCallWaiter}
-  isWaiterLoading={waiterLoading}
-  todaysSpecial={
-    <TodaysSpecialCarousel
-      restaurantId={initialData.restaurant.id}
-      allItems={initialData.items}
-    />
-  }
-  upsellCard={
-    <RewardOffersBar
-      restaurantId={restaurant?.id ?? null}
-      restaurantName={initialData.restaurant.name}
-      offers={activeOffers}
-      onLoginClick={() => setLoginOpen(true)}
-      onExploreRewards={() => setAccountOpen(true)}
-    />
-  }
-/>
-<RewardWelcomePopup
-  isOpen={showRewardPopup}
-  onClose={() => setShowRewardPopup(false)}
-  onClaim={() => {
-    setShowRewardPopup(false)
-    setLoginOpen(true) // opens your existing OTPLoginModal via CustomerAuthProvider
-  }}
- 
-/>
-  </main>
-)}
+        {activeTab === 'about' ? (
+          <main className="pr-main">
+            <AboutTab restaurant={restaurant} reviews={reviews} />
+          </main>
+        ) : (
+          <main className="pr-main">
+            <MenuGrid
+              onCallWaiter={handleCallWaiter}
+              isWaiterLoading={waiterLoading}
+              todaysSpecial={
+                <TodaysSpecialCarousel
+                  restaurantId={initialData.restaurant.id}
+                  allItems={initialData.items}
+                />
+              }
+              upsellCard={
+                <RewardOffersBar
+                  restaurantId={restaurant?.id ?? null}
+                  restaurantName={initialData.restaurant.name}
+                  offers={activeOffers}
+                  onLoginClick={() => setLoginOpen(true)}
+                  onExploreRewards={() => setAccountOpen(true)}
+                />
+              }
+            />
+            <RewardWelcomePopup
+              isOpen={showRewardPopup}
+              onClose={() => setShowRewardPopup(false)}
+              onClaim={() => {
+                setShowRewardPopup(false)
+                setLoginOpen(true)
+              }}
+            />
+          </main>
+        )}
 
         {showRating && <RatingModal />}
         {showRatingsList && <RatingsListModal restaurant={restaurant} />}
-		{(tableNumber !== null || tableToken) && !sessionExpired && (
+{restaurant.show_category_shortcut && (
+  <CategoryShortcutButton
+    bottomOffset={
+      tableSessionState === 'valid' && tableNumber !== null
+        ? restaurant.google_reviews_url
+          ? 244
+          : 100
+        : 100
+    }
+    tooltipDelayMs={
+      tableSessionState === 'valid' &&
+      tableNumber !== null &&
+      restaurant.google_reviews_url
+        ? 8500
+        : 2500
+    }
+  />
+)}
+
+{/* Table-session-only actions */}
+{tableSessionState === 'valid' && tableNumber !== null && (
   <>
     {restaurant.google_reviews_url && (
       <GoogleReviewButton
         url={restaurant.google_reviews_url}
         onClick={() =>
           void track(restaurant.id, 'google_rating_clicked', {
-            metadata: { table_number: tableNumber, source: 'menu_page' },
+            metadata: {
+              table_number: tableNumber,
+              source: 'menu_page',
+            },
           })
         }
         bottomOffset={180}
       />
     )}
+
     <CallWaiterBell
       slug={slug}
       tableNumber={tableNumber}
       onCall={handleRequestAssistance}
     />
   </>
-)}
-
-
-        {(tableNumber !== null || tableToken) && !sessionExpired && (
-  <CallWaiterBell
-    slug={slug}
-    tableNumber={tableNumber}
-    onCall={handleRequestAssistance}
-  />
 )}
 
         {activeOrder && (
@@ -1028,7 +1194,7 @@ if (!res.ok) throw new Error(data.error ?? 'Failed to send waiter request')
             onClose={() => handleCloseToast(activeOrder.orderId, activeOrder.tableNumber)}
           />
         )}
-		<BottomTabBar onAccountClick={() => setAccountOpen(true)} />
+        <BottomTabBar onAccountClick={() => setAccountOpen(true)} />
       </div>
     </>
   )

@@ -19,12 +19,13 @@ import { useAppStore } from '@/store/app-store'
 import { MenuItemCard } from './MenuItemCard'
 import { FloatingCartBar } from './FloatingCartBar'
 import type { ReactNode } from 'react'
-import type { MenuItem, MenuCategory, DishOption } from '@/types'
+import type { MenuItem, MenuCategory } from '@/types'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { useTranslation } from '@/lib/i18n/useTranslation'
 import { useTranslatedMenu } from '@/lib/i18n/useTranslatedMenu'
 import { track } from '@/lib/analytics'
 import { resolveMenuImageUrl } from '@/lib/resolve-image'
+import { LazyMount } from './LazyMount'
 
 import type { WaiterCallItem } from '@/types'
 import { usePopularItems } from '@/hooks/usePopularItems'
@@ -117,22 +118,75 @@ function CategoryHeaderPlaceholder({ name }: { name: string }) {
   return <div className="mg-cat-thumb-placeholder">{letter}</div>
 }
 
+/* ---------------------------------------------------------------------------
+   DISH SCROLL REVEAL
+   Cards animate into focus as the diner scrolls. IntersectionObserver keeps
+   this cheap on mobile and also respects reduced-motion preferences.
+--------------------------------------------------------------------------- */
+function DishScrollReveal({
+  children,
+  index = 0,
+}: {
+  children: ReactNode
+  index?: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setVisible(true)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true)
+          observer.unobserve(el)
+        }
+      },
+      { rootMargin: '0px 0px -8% 0px', threshold: 0.08 },
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className={`mg-dish-reveal${visible ? ' mg-dish-reveal--visible' : ''}`}
+      style={{
+        '--dish-delay': `${Math.min(index % 5, 4) * 55}ms`,
+        '--dish-tilt': index % 2 === 0 ? '-1.1deg' : '1.1deg',
+      } as React.CSSProperties}
+    >
+      {children}
+    </div>
+  )
+}
+
 /* ────────────────────────────────────────────────────────────────────────
-   BESTSELLER HERO SLIDER
-   One dish per slide, full-width, snap-scroll — reads like a single
-   featured spotlight rather than a peek-preview row. Includes the dish
-   description so it earns its "hero" billing instead of just a photo.
-   Deliberately breaks from the ivory theme — the contrast is what makes
-   this section read as "featured" rather than "just another list".
+   BESTSELLER SPOTLIGHT CAROUSEL
+   Compact, theme-aware spotlight cards with a true intentional peek.
 ──────────────────────────────────────────────────────────────────────── */
 
-function getPriceVariants(options: DishOption[] | undefined) {
-  if (!options || options.length === 0) return []
-  const portionGroup = options.find((o) => o.price_mode === 'override')
-  if (!portionGroup) return []
-  return portionGroup.choices
-    .filter((c) => c.is_available)
-    .map((c) => ({ id: c.id, name: c.name, price: c.extra_price }))
+function formatBestsellerPrice(paise: number) {
+  if (!paise || paise <= 0) return ''
+  return `${Math.round(paise / 100)}`
+}
+
+function cleanBestsellerDescription(description?: string | null) {
+  return description?.replace(/[,;:\s]+$/, '').trim() ?? ''
+}
+
+function truncateBestsellerDescription(description: string, maxLength = 118) {
+  if (description.length <= maxLength) return description
+  return `${description.slice(0, maxLength).trimEnd()}…`
 }
 
 function BestsellerSlider({
@@ -146,15 +200,55 @@ function BestsellerSlider({
   sublabel: string
   onAsk?: (t: string) => void
 }) {
-  const dishOptions = useAppStore((s) => s.dishOptions)
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [activeIdx, setActiveIdx] = useState(0)
+  useEffect(() => {
+    const track = trackRef.current
+    if (!track || items.length === 0) return
+
+    let raf = 0
+
+    const onScroll = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        const rect = track.getBoundingClientRect()
+        const center = rect.left + rect.width / 2
+        let closest = 0
+        let closestDist = Infinity
+
+        Array.from(track.children).forEach((child, i) => {
+          const r = (child as HTMLElement).getBoundingClientRect()
+          const c = r.left + r.width / 2
+          const d = Math.abs(c - center)
+          if (d < closestDist) {
+            closestDist = d
+            closest = i
+          }
+        })
+
+        setActiveIdx(closest)
+      })
+    }
+
+    track.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+
+    return () => {
+      track.removeEventListener('scroll', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [items.length])
+
+
   if (items.length === 0) return null
 
   return (
-    <section className="mg-bs">
+    <section className="mg-bs" aria-label={label}>
       <div className="mg-bs-head">
         <div>
           <div className="mg-bs-title-row">
-            <Flame size={16} className="mg-bs-flame" />
+            <Flame size={15} className="mg-bs-flame" />
             <h2 className="mg-bs-title">{label}</h2>
           </div>
           <p className="mg-bs-sub">{sublabel}</p>
@@ -162,57 +256,58 @@ function BestsellerSlider({
         <span className="mg-bs-pill"><Sparkles size={9} /> Popular now</span>
       </div>
 
-      <div className="mg-bs-track">
+      <div
+        className="mg-bs-track"
+        ref={trackRef}
+      >
         {items.map((item, idx) => {
-         const price = formatPrice(item.price)
-const cleanDesc = item.description?.replace(/[,;:\s]+$/, '') ?? null
-const rawVariants = getPriceVariants(dishOptions[item.id])
-const variants = rawVariants.length > 1 ? rawVariants : []  // only show when there's an actual choice
+          const price = formatBestsellerPrice(item.price)
+          const description = truncateBestsellerDescription(cleanBestsellerDescription(item.description))
+          const imageUrl = item.image_url ? resolveMenuImageUrl(item.image_url, 720) : null
+          const isActive = idx === activeIdx
 
-const imageUrl = item.image_url
-  ? resolveMenuImageUrl(item.image_url, 700)
-  : null
-
-           return (
+          return (
             <button
               type="button"
               key={item.id}
-              className={`mg-bs-card${imageUrl ? '' : ' mg-bs-card--noimg'}`}
-              onClick={() => onAsk?.(`Tell me more about ${item.name} — why is it a best seller?`)}
+              className={`mg-bs-card${isActive ? ' mg-bs-card--active' : ''}`}
+              onClick={() => {
+                onAsk?.(`Tell me more about ${item.name} — why is it a best seller?`)
+              }}
+              aria-label={`${item.name}, bestseller, price ${price}`}
             >
-              {imageUrl && (
-                <div className="mg-bs-photo">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imageUrl} alt={item.name} loading="lazy" />
-                  <div className="mg-bs-fade" />
-                  {idx === 0 && <span className="mg-bs-rank"><Flame size={10} /> #1</span>}
-                  <span className="mg-bs-orders"><TrendingUp size={9} /> Most ordered</span>
-                </div>
-              )}
+              <div className="mg-bs-card-top">
+                <span className="mg-bs-card-badge"><Flame size={9} /> BESTSELLER</span>
+              </div>
 
-              <div className={`mg-bs-info${imageUrl ? '' : ' mg-bs-info--noimg'}`}>
-                {!imageUrl && (
-                  <div className="mg-bs-noimg-tags">
-                    {idx === 0 && <span className="mg-bs-rank mg-bs-rank--inline"><Flame size={10} /> #1</span>}
-                    <span className="mg-bs-orders mg-bs-orders--inline"><TrendingUp size={9} /> Most ordered</span>
+              <h3 className="mg-bs-card-title">{item.name}</h3>
+
+              <div className="mg-bs-media" aria-hidden="true">
+                <div className="mg-bs-media-glow" />
+                {imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                 <img
+  src={imageUrl}
+  alt=""
+  loading={idx === 0 ? 'eager' : 'lazy'}
+  fetchPriority={idx === 0 ? 'high' : 'auto'}
+  className="mg-bs-media-img"
+/>
+                ) : (
+                  <div className="mg-bs-media-fallback">
+                    {item.is_veg ? '🥗' : '🍖'}
                   </div>
                 )}
-                <p className="mg-bs-name">{item.name}</p>
-                {cleanDesc && <p className="mg-bs-desc">{cleanDesc}</p>}
-                <div className="mg-bs-price-row">
-  {variants.length > 0 ? (
-    <div className="mg-bs-variants">
-      {variants.map((v) => (
-        <span className="mg-bs-variant" key={v.id}>
-          <span className="mg-bs-variant-name">{v.name}</span>
-          <span className="mg-bs-variant-price">₹{Math.round(v.price / 100)}</span>
-        </span>
-      ))}
-    </div>
-  ) : (
-    price && <span className="mg-bs-price">{price}</span>
-  )}
-</div>
+              </div>
+
+              <div className="mg-bs-description">
+                <span className="mg-bs-description-label">WHY PEOPLE LOVE IT</span>
+                <p>{description || 'A customer favourite made fresh and served just the way you like it.'}</p>
+              </div>
+
+              <div className="mg-bs-price-block">
+                <span className="mg-bs-price-label">PRICE</span>
+                {price && <strong className="mg-bs-price">{price}</strong>}
               </div>
             </button>
           )
@@ -220,9 +315,9 @@ const imageUrl = item.image_url
       </div>
 
       {items.length > 1 && (
-        <div className="mg-bs-dots">
-          {items.map((item) => (
-            <span key={item.id} className="mg-bs-dot" />
+        <div className="mg-bs-dots" aria-hidden="true">
+          {items.map((item, i) => (
+            <span key={item.id} className={`mg-bs-dot${i === activeIdx ? ' mg-bs-dot--active' : ''}`} />
           ))}
         </div>
       )}
@@ -448,7 +543,13 @@ function SearchResultsPanel({
                 <span className="mg-count-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
               </div>
               <div className="mg-divided-list">
-                {items.map((item) => <MenuItemCard key={item.id} item={item} onAsk={onAsk} />)}
+                  {items.map((item, index) => (
+                  <DishScrollReveal key={item.id} index={index}>
+                    <LazyMount minHeight={340}>
+                      <MenuItemCard item={item} onAsk={onAsk} />
+                    </LazyMount>
+                  </DishScrollReveal>
+                ))}
               </div>
             </div>
           ))}
@@ -513,18 +614,22 @@ function CategorySection({
               <InfoCard card={category.info_card} />
             </div>
           )}
-          {otherItems.map((item) => {
+ {otherItems.map((item, index) => {
             const badge = getBadge(item, items)
             const isHot = !!popularIds?.has(item.id)
             return (
-              <div key={item.id} className="mg-item-row">
-                {badge.kind !== 'none' && (
-                  <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
-                )}
-                <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
-                  <MenuItemCard item={item} onAsk={onAsk} showMostOrdered={isHot && !item.is_bestseller} />
-                </div>
-              </div>
+              <DishScrollReveal key={item.id} index={index}>
+                <LazyMount minHeight={340}>
+                  <div className="mg-item-row">
+                    {badge.kind !== 'none' && (
+                      <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
+                    )}
+                    <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
+                      <MenuItemCard item={item} onAsk={onAsk} showMostOrdered={isHot && !item.is_bestseller} />
+                    </div>
+                  </div>
+                </LazyMount>
+              </DishScrollReveal>
             )
           })}
         </div>
@@ -1095,6 +1200,59 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   }
   :global(.mg-root) { touch-action: manipulation; overscroll-behavior-y: contain; }
 
+  /* ── Dish scroll reveal ─────────────────────────────────────────────── */
+  :global(.mg-dish-reveal) {
+    --dish-delay: 0ms;
+    --dish-tilt: 0deg;
+    width: 100%;
+    opacity: 0;
+    transform: translate3d(0, 34px, 0) scale(.965) rotateX(1.5deg) rotateZ(var(--dish-tilt));
+    transform-origin: 50% 100%;
+    filter: blur(2px);
+    transition:
+      opacity .58s cubic-bezier(.22, 1, .36, 1) var(--dish-delay),
+      transform .72s cubic-bezier(.16, 1, .3, 1) var(--dish-delay),
+      filter .58s ease var(--dish-delay);
+    will-change: opacity, transform, filter;
+    perspective: 900px;
+  }
+
+  :global(.mg-dish-reveal--visible) {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotateX(0) rotateZ(0);
+    filter: blur(0);
+  }
+
+  :global(.mg-dish-reveal--visible .pr-item-card),
+  :global(.mg-dish-reveal--visible .pr-dark-card) {
+    animation: mg-dish-settle .7s cubic-bezier(.16, 1, .3, 1) var(--dish-delay) both;
+  }
+
+  @keyframes mg-dish-settle {
+    0% { box-shadow: 0 3px 10px rgba(0,0,0,.03); }
+    55% { box-shadow: 0 18px 42px rgba(0,0,0,.10); }
+    100% { box-shadow: none; }
+  }
+
+  @media (hover: hover) {
+    :global(.mg-dish-reveal--visible:hover) {
+      transform: translate3d(0, -3px, 0) scale(1.006);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.mg-dish-reveal),
+    :global(.mg-dish-reveal--visible),
+    :global(.mg-dish-reveal--visible .pr-item-card),
+    :global(.mg-dish-reveal--visible .pr-dark-card) {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
   /* ── Search results panel ──────────────────────────────────────────── */
   :global(.mg-search-results) { display: flex; flex-direction: column; gap: 14px; }
   :global(.mg-search-matchpills) { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1185,117 +1343,323 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   }
   :global(.mg-cattab--active .mg-cattab-count) { background: rgba(255,255,255,0.22); }
 
-  /* ── Bestseller hero slider — ONE dish per slide, full width ─────── */
-  :global(.mg-bs) { padding: 2px 0 0; }
+  /* ── Bestseller spotlight carousel ────────────────────────────────── */
+  :global(.mg-bs) {
+    padding: 0;
+    overflow: hidden;
+  }
+
   :global(.mg-bs-head) {
-    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-    padding: 0 2px 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 2px 10px;
   }
-  :global(.mg-bs-title-row) { display: flex; align-items: center; gap: 8px; }
+
+  :global(.mg-bs-title-row) {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
   :global(.mg-bs-flame) { color: var(--pr-gold); }
+
   :global(.mg-bs-title) {
-    font-family: var(--font-display); font-size: 17px; font-weight: 600;
-    color: var(--pr-text); margin: 0; letter-spacing: -0.01em;
+    margin: 0;
+    color: var(--pr-text);
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
   }
-  :global(.mg-bs-sub) { margin: 3px 0 0; font-size: 11.5px; color: var(--pr-text-muted); }
+
+  :global(.mg-bs-sub) {
+    margin: 3px 0 0;
+    color: var(--pr-text-muted);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
   :global(.mg-bs-pill) {
-    display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
-    border-radius: 999px; border: 1px solid rgba(138,109,31,0.25);
-    background: var(--pr-gold-dim); color: var(--pr-gold);
-    padding: 6px 11px; font-size: 9.5px; font-weight: 700;
-    letter-spacing: 0.1em; text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    border: 1px solid var(--pr-border-hover);
+    border-radius: 999px;
+    background: var(--pr-card);
+    color: var(--pr-text-muted);
+    padding: 6px 9px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   :global(.mg-bs-track) {
-    display: flex; gap: 0; overflow-x: auto;
-    scroll-snap-type: x mandatory; scrollbar-width: none;
-    padding: 2px 0 6px; margin: 0;
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding: 4px 20% 10px;
+    scroll-padding-inline: 20%;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
   }
+
   :global(.mg-bs-track::-webkit-scrollbar) { display: none; }
 
   :global(.mg-bs-card) {
-    flex: 0 0 100%; width: 100%; scroll-snap-align: start; scroll-snap-stop: always;
-    border-radius: 22px; overflow: hidden;
-    background: linear-gradient(180deg, #1b1712 0%, #0c0a08 100%);
-    border: 1px solid rgba(255,255,255,0.07);
-    padding: 0; text-align: left; cursor: pointer;
-    box-shadow: 0 10px 28px rgba(0,0,0,0.28);
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
-  }
-  :global(.mg-bs-card:active) { transform: scale(0.98); }
-
-  :global(.mg-bs-photo) {
-    position: relative; width: 100%; height: 220px; background: #000;
-  }
-  :global(.mg-bs-photo img) {
-    width: 100%; height: 100%; object-fit: cover; display: block;
-    filter: contrast(1.06) saturate(1.08);
-  }
- 
- 
-  :global(.mg-bs-fade) {
-    position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(180deg, transparent 45%, rgba(12,10,8,0.9) 88%, #0c0a08 100%);
-  }
-  :global(.mg-bs-rank) {
-    position: absolute; top: 12px; left: 12px;
-    display: inline-flex; align-items: center; gap: 3px;
-    background: rgba(233,200,116,0.95); color: #1a1712;
-    border-radius: 999px; padding: 4px 10px;
-    font-size: 10.5px; font-weight: 800;
-  }
-  :global(.mg-bs-orders) {
-    position: absolute; top: 12px; right: 12px;
-    display: inline-flex; align-items: center; gap: 3px;
-    background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
-    border: 1px solid rgba(255,255,255,0.14);
-    color: #F0E6D2; border-radius: 999px; padding: 4px 10px;
-    font-size: 9.5px; font-weight: 700; letter-spacing: 0.02em;
+    flex: 0 0 58%;
+    width: 58%;
+    max-width: 252px;
+    min-width: 206px;
+    height: 362px;
+    box-sizing: border-box;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+    display: grid;
+    grid-template-rows: auto auto 144px auto auto;
+    align-content: start;
+    gap: 7px;
+    padding: 10px 11px 11px;
+    border: 1px solid color-mix(in srgb, var(--pr-gold) 28%, var(--pr-border));
+    border-radius: 23px;
+    background: var(--pr-card);
+    color: var(--pr-text);
+    box-shadow:
+      0 14px 30px rgba(0,0,0,0.10),
+      0 2px 6px rgba(0,0,0,0.05);
+    cursor: pointer;
+    overflow: hidden;
+    opacity: 0.58;
+    transform: scale(0.965);
+    transition:
+      transform 360ms cubic-bezier(.2,.8,.2,1),
+      opacity 280ms ease,
+      box-shadow 360ms ease,
+      border-color 280ms ease;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  :global(.mg-bs-info) {
-    padding: 4px 16px 18px; margin-top: -14px; position: relative; z-index: 2;
+  :global(.mg-bs-card--active) {
+    opacity: 1;
+    transform: scale(1);
+    border-color: color-mix(in srgb, var(--pr-gold) 58%, var(--pr-border));
+    box-shadow:
+      0 18px 38px rgba(0,0,0,0.15),
+      0 5px 14px rgba(0,0,0,0.06);
   }
-  :global(.mg-bs-info--noimg) {
-    margin-top: 0; padding: 20px 18px 22px;
+
+  :global(.mg-bs-card:active) { transform: scale(0.975); }
+
+  :global(.mg-bs-card-top) {
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
   }
-  :global(.mg-bs-noimg-tags) {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+
+  :global(.mg-bs-card-badge) {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    border: 1px solid color-mix(in srgb, var(--pr-gold) 32%, transparent);
+    border-radius: 999px;
+    background: var(--pr-gold-dim);
+    color: var(--pr-gold);
+    padding: 6px 10px;
+    font-family: var(--font-body);
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.09em;
+    white-space: nowrap;
+    text-transform: uppercase;
   }
-  :global(.mg-bs-rank.mg-bs-rank--inline),
-  :global(.mg-bs-orders.mg-bs-orders--inline) {
-    position: static; top: auto; left: auto; right: auto;
-    background: rgba(233,200,116,0.14); backdrop-filter: none;
-    border: 1px solid rgba(233,200,116,0.25); color: #E9C874;
+
+  :global(.mg-bs-card-title) {
+    width: 100%;
+    min-height: 38px;
+    max-height: 42px;
+    margin: 0;
+    padding: 0 4px;
+    overflow: hidden;
+    color: var(--pr-text);
+    font-family: var(--font-display), sans-serif;
+    font-size: clamp(18px, 4.8vw, 22px);
+    font-weight: 800;
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    text-align: center;
+    text-transform: uppercase;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
-  :global(.mg-bs-name) {
-    font-family: var(--font-display); font-size: 17px; font-weight: 600;
-    color: #F5EFE2; margin: 0 0 6px; line-height: 1.25;
+
+  :global(.mg-bs-media) {
+    position: relative;
+    width: 100%;
+    height: 144px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--pr-card-hover) 72%, var(--pr-card));
+    border: 1px solid var(--pr-border);
+    isolation: isolate;
   }
-  :global(.mg-bs-desc) {
-    font-size: 12.5px; line-height: 1.55; color: rgba(240,230,210,0.65);
-    margin: 0 0 10px; font-family: var(--font-body);
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+
+  :global(.mg-bs-media-glow) {
+    position: absolute;
+    inset: 12% 12% 6%;
+    z-index: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, var(--pr-gold-dim), transparent 68%);
+    filter: blur(10px);
+    opacity: 0.9;
+    pointer-events: none;
   }
-  :global(.mg-bs-price-row) { display: flex; align-items: center; gap: 8px; }
-  :global(.mg-bs-price) { color: #E9C874; font-weight: 700; font-size: 16px; font-family: var(--font-body); }
-  
-  :global(.mg-bs-variants) { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-:global(.mg-bs-variant) { display: inline-flex; align-items: baseline; gap: 5px; }
-:global(.mg-bs-variant-name) {
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  color: rgba(240,230,210,0.55); font-family: var(--font-body);
-}
-:global(.mg-bs-variant-price) {
-  font-size: 15px; font-weight: 800; color: #E9C874; font-family: var(--font-body);
-}
+
+  :global(.mg-bs-media-img) {
+    position: relative;
+    z-index: 1;
+    width: 94%;
+    height: 94%;
+    display: block;
+    object-fit: contain;
+    object-position: center;
+    border-radius: 16px;
+    transform: translateY(2px) scale(1.04);
+    filter: drop-shadow(0 12px 14px rgba(0,0,0,0.22));
+    transition: transform 500ms cubic-bezier(.2,.8,.2,1), filter 500ms ease;
+  }
+
+  :global(.mg-bs-card--active .mg-bs-media-img) {
+    transform: translateY(-2px) scale(1.08);
+    filter: drop-shadow(0 16px 18px rgba(0,0,0,0.25));
+  }
+
+  :global(.mg-bs-media-fallback) {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 82%;
+    height: 82%;
+    border-radius: 16px;
+    background: var(--pr-gold-dim);
+    font-size: 2.35rem;
+  }
+
+  :global(.mg-bs-description) {
+    min-height: 61px;
+    box-sizing: border-box;
+    padding: 9px 10px 8px;
+    border: 1px solid color-mix(in srgb, var(--pr-gold) 25%, var(--pr-border));
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--pr-gold-dim) 48%, var(--pr-card));
+    text-align: left;
+    overflow: hidden;
+  }
+
+  :global(.mg-bs-description-label) {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--pr-gold);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+    line-height: 1;
+  }
+
+  :global(.mg-bs-description p) {
+    margin: 0;
+    color: var(--pr-text-muted);
+    font-size: 10.5px;
+    line-height: 1.34;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  :global(.mg-bs-price-block) {
+    align-self: end;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 31px;
+    padding-top: 1px;
+  }
+
+  :global(.mg-bs-price-label) {
+    color: var(--pr-text-faint);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  :global(.mg-bs-price) {
+    margin-top: 2px;
+    color: var(--pr-gold);
+    font-family: var(--font-display), sans-serif;
+    font-size: 27px;
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+  }
 
   :global(.mg-bs-dots) {
-    display: flex; justify-content: center; gap: 6px; margin-top: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin-top: 1px;
   }
+
   :global(.mg-bs-dot) {
-    width: 6px; height: 6px; border-radius: 50%;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
     background: var(--pr-border-hover);
+    transition: width 240ms ease, background 240ms ease;
+  }
+
+  :global(.mg-bs-dot--active) {
+    width: 16px;
+    border-radius: 999px;
+    background: var(--pr-orange);
+  }
+
+  @media (max-width: 360px) {
+    :global(.mg-bs-track) { padding-inline: 18%; }
+    :global(.mg-bs-card) {
+      flex-basis: 62%;
+      width: 62%;
+      min-width: 198px;
+      height: 350px;
+      grid-template-rows: auto auto 136px auto auto;
+    }
+    :global(.mg-bs-media) { height: 136px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.mg-bs-card),
+    :global(.mg-bs-media-img),
+    :global(.mg-bs-dot) {
+      transition: none;
+    }
   }
 
   /* ── Category cards ──────────────────────────────────────────────── */

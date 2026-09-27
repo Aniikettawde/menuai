@@ -61,18 +61,25 @@ export function Navbar({ onBookDemo }: { onBookDemo: () => void }) {
           <span className="font-display text-[17px] font-semibold tracking-tight text-ink">Dinezy</span>
         </a>
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
-          {LINKS.map((l) => (
-            <button
-              key={l.label}
-              type="button"
-              onClick={() => go(l.href)}
-              className="cursor-pointer rounded-xl px-3.5 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:bg-canvas hover:text-ink"
-            >
-              {l.label}
-            </button>
-          ))}
-        </nav>
+<nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
+  {LINKS.map((l) => (
+    <button
+      key={l.label}
+      type="button"
+      onClick={() => go(l.href)}
+      className="cursor-pointer rounded-xl px-3.5 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:bg-canvas hover:text-ink"
+    >
+      {l.label}
+    </button>
+  ))}
+
+  <a
+    href="/partner"
+    className="ml-1 cursor-pointer rounded-xl px-3.5 py-2 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/5"
+  >
+    Partner Program
+  </a>
+</nav>
 
         <div className="hidden items-center gap-2 lg:flex">
           <a
@@ -125,6 +132,13 @@ export function Navbar({ onBookDemo }: { onBookDemo: () => void }) {
                   {l.label}
                 </button>
               ))}
+			  <a
+  href="/partner"
+  onClick={() => setOpen(false)}
+  className="rounded-xl bg-accent/5 px-3 py-3 text-[15px] font-semibold text-accent"
+>
+  Partner Program
+</a>
               <a
                 href="/dashboard/login"
                 className="rounded-xl px-3 py-3 text-[15px] font-medium text-ink-soft"

@@ -539,11 +539,15 @@ export default function DashboardPage() {
         weekStart.setDate(today.getDate() - 6)
         const weekStartKey = toDateKey(weekStart)
 
-        const { data: events } = await supabase
-          .from('analytics_events')
-          .select('event_type, item_name, session_id, timestamp')
-          .eq('restaurant_id', restaurant.id)
-          .gte('timestamp', `${weekStartKey}T00:00:00`)
+const { data: events, error: eventsError } = await supabase
+  .from('analytics_events')
+  .select('event_type, item_name, session_id, timestamp')
+  .eq('restaurant_id', restaurant.id)
+  .gte('timestamp', `${weekStartKey}T00:00:00`)
+
+if (eventsError) {
+  console.error('[DINEZY] analytics_events read error:', eventsError)
+}
 
         const safeEvents = (events ?? []) as RawEvent[]
 
@@ -664,16 +668,43 @@ export default function DashboardPage() {
             .in('request_type', ['assistance', 'water', 'bill']),
         ])
 
-        const vs = customerStatsJson?.visitor_summary ?? { qr_sessions: 0, table_link_sessions: 0, direct_sessions: 0 }
-        const accepted = (waiterRows ?? []).filter((r: { accepted_at: string | null }) => r.accepted_at).length
+const vs = customerStatsJson?.visitor_summary ?? {
+  visitors: 0,
+  item_views: 0,
+  qr_sessions: 0,
+  table_link_sessions: 0,
+  direct_sessions: 0,
+}
 
-        if (mounted) {
-          setTodayExtra({
-            traffic: { qr: vs.qr_sessions, tableLink: vs.table_link_sessions, direct: vs.direct_sessions },
-            tableScans: customerStatsJson?.table_scans ?? [],
-            waiter: { total: (waiterRows ?? []).length, accepted },
-          })
-        }
+const accepted = (waiterRows ?? []).filter(
+  (r: { accepted_at: string | null }) => r.accepted_at
+).length
+
+if (mounted) {
+  setTodayExtra({
+    traffic: {
+      qr: Number(vs.qr_sessions ?? 0),
+      tableLink: Number(vs.table_link_sessions ?? 0),
+      direct: Number(vs.direct_sessions ?? 0),
+    },
+    tableScans: customerStatsJson?.table_scans ?? [],
+    waiter: {
+      total: (waiterRows ?? []).length,
+      accepted,
+    },
+  })
+
+  // Server-side analytics is authoritative for today's KPI values.
+  setStats((prev) => {
+    if (!prev) return prev
+
+    return {
+      ...prev,
+      visitorsToday: Number(vs.visitors ?? 0),
+      itemViewsToday: Number(vs.item_views ?? 0),
+    }
+  })
+}
       } catch (err) {
         console.error('loadTodayExtra error:', err)
       }
