@@ -12,6 +12,8 @@ import {
   Flame,
   Gamepad2,
   Globe2,
+  Heart,
+  Share2,
   LayoutGrid,
   MessageSquareMore,
   QrCode,
@@ -74,6 +76,16 @@ interface TopItem {
   add_to_cart_count: number
   order_count: number
   suggestion_add_count: number
+}
+
+interface DishEngagementStat {
+  item_id: string
+  item_name: string
+  like_count: number
+  share_count: number
+  rating_count: number
+  rating_sum: number
+  rating_average: number
 }
 
 interface SearchTerm {
@@ -329,6 +341,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState(7)
 const [ratingRows, setRatingRows] = useState<RatingRow[]>([])
+  const [dishEngagement, setDishEngagement] = useState<DishEngagementStat[]>([])
   const [topItems, setTopItems] = useState<TopItem[]>([])
   const [hourly, setHourly] = useState<number[]>(Array(24).fill(0))
   const [dowCounts, setDowCounts] = useState<number[]>(Array(7).fill(0))
@@ -512,6 +525,13 @@ const [ratingRows, setRatingRows] = useState<RatingRow[]>([])
       const languageEvents = events.filter((e) => e.event_type === 'language_changed')
       const scrollEvents = events.filter((e) => e.event_type === 'scroll_depth')
 
+      // Dish engagement events emitted by DishEngagement:
+      // like / unlike / share / rating submission.
+      const dishLikedEvents = events.filter((e) => e.event_type === 'dish_liked')
+      const dishUnlikedEvents = events.filter((e) => e.event_type === 'dish_unliked')
+      const dishSharedEvents = events.filter((e) => e.event_type === 'dish_shared')
+      const dishRatedEvents = events.filter((e) => e.event_type === 'dish_rated')
+
        const vs = customerStatsJson?.visitor_summary ?? {
         visitors: 0, item_views: 0, qr_sessions: 0, table_link_sessions: 0, direct_sessions: 0,
       }
@@ -573,6 +593,76 @@ const [ratingRows, setRatingRows] = useState<RatingRow[]>([])
         Object.values(itemMap)
           .sort((a, b) => b.order_count - a.order_count || b.view_count - a.view_count)
           .slice(0, 25),
+      )
+
+      // Dish engagement — kept separate from Dish Performance because these
+      // are customer actions on the dish itself, not menu funnel events.
+      const engagementMap: Record<string, DishEngagementStat> = {}
+      const ensureEngagementItem = (e: AnalyticsEvent) => {
+        const id = e.item_id || e.item_name
+        const name = e.item_name
+        if (!id || !name) return null
+
+        if (!engagementMap[id]) {
+          engagementMap[id] = {
+            item_id: id,
+            item_name: name,
+            like_count: 0,
+            share_count: 0,
+            rating_count: 0,
+            rating_sum: 0,
+            rating_average: 0,
+          }
+        }
+
+        return engagementMap[id]
+      }
+
+      dishLikedEvents.forEach((e) => {
+        const row = ensureEngagementItem(e)
+        if (row) row.like_count += 1
+      })
+
+      // Unlikes are retained as events for auditability, but are not shown as
+      // negative likes because an unlike is a different customer action.
+      dishUnlikedEvents.forEach((e) => {
+        const row = ensureEngagementItem(e)
+        if (row) row.like_count = Math.max(0, row.like_count - 1)
+      })
+
+      dishSharedEvents.forEach((e) => {
+        const row = ensureEngagementItem(e)
+        if (row) row.share_count += 1
+      })
+
+      dishRatedEvents.forEach((e) => {
+        const row = ensureEngagementItem(e)
+        if (!row) return
+
+        const meta = metaOf(e)
+        const score = typeof meta.rating === 'number'
+          ? Math.max(1, Math.min(5, meta.rating))
+          : null
+
+        row.rating_count += 1
+        if (score !== null) row.rating_sum += score
+      })
+
+      setDishEngagement(
+        Object.values(engagementMap)
+          .map((row) => ({
+            ...row,
+            rating_average: row.rating_count > 0
+              ? row.rating_sum / row.rating_count
+              : 0,
+          }))
+          .sort(
+            (a, b) =>
+              b.like_count - a.like_count ||
+              b.share_count - a.share_count ||
+              b.rating_count - a.rating_count ||
+              a.item_name.localeCompare(b.item_name),
+          ),
       )
 
       // Hours + day of week
@@ -736,6 +826,45 @@ const [ratingRows, setRatingRows] = useState<RatingRow[]>([])
         .sort((a, b) => b.add_to_cart_count - a.add_to_cart_count)
         .slice(0, 8),
     [topItems],
+  )
+
+  const mostLikedDishes = useMemo(
+    () => [...dishEngagement]
+      .filter((i) => i.like_count > 0)
+      .sort((a, b) => b.like_count - a.like_count || b.rating_count - a.rating_count)
+      .slice(0, 8),
+    [dishEngagement],
+  )
+
+  const mostSharedDishes = useMemo(
+    () => [...dishEngagement]
+      .filter((i) => i.share_count > 0)
+      .sort((a, b) => b.share_count - a.share_count || b.like_count - a.like_count)
+      .slice(0, 8),
+    [dishEngagement],
+  )
+
+  const mostRatedDishes = useMemo(
+    () => [...dishEngagement]
+      .filter((i) => i.rating_count > 0)
+      .sort((a, b) => b.rating_count - a.rating_count || b.rating_average - a.rating_average)
+      .slice(0, 8),
+    [dishEngagement],
+  )
+
+  const totalDishLikes = useMemo(
+    () => dishEngagement.reduce((sum, item) => sum + item.like_count, 0),
+    [dishEngagement],
+  )
+
+  const totalDishShares = useMemo(
+    () => dishEngagement.reduce((sum, item) => sum + item.share_count, 0),
+    [dishEngagement],
+  )
+
+  const totalDishRatings = useMemo(
+    () => dishEngagement.reduce((sum, item) => sum + item.rating_count, 0),
+    [dishEngagement],
   )
 
   const trafficTotal = traffic.qr + traffic.tableLink + traffic.direct || 1
@@ -1157,6 +1286,130 @@ const [ratingRows, setRatingRows] = useState<RatingRow[]>([])
             rows={mostAddedItems.map((i) => ({ label: i.item_name, count: i.add_to_cart_count }))}
           />
         )}
+      </div>
+
+      {/* Dish engagement */}
+      <div className={`${cardBase} p-5`} style={cardStyle}>
+        <ReportHeader
+          title="Dish Engagement"
+          subtitle="Which dishes guests like, share and rate most"
+          icon={<Heart size={14} />}
+          iconColor={BRAND.rose}
+          onDownload={() =>
+            downloadCsv(
+              reportFilename('dish-engagement', range),
+              ['Dish', 'Likes (net)', 'Shares', 'Ratings', 'Avg Rating'],
+              [...dishEngagement]
+                .sort(
+                  (a, b) =>
+                    b.like_count - a.like_count ||
+                    b.share_count - a.share_count ||
+                    b.rating_count - a.rating_count,
+                )
+                .map((item) => [
+                  item.item_name,
+                  item.like_count,
+                  item.share_count,
+                  item.rating_count,
+                  item.rating_count > 0 ? item.rating_average.toFixed(1) : '',
+                ]),
+            )
+          }
+        />
+
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            { value: totalDishLikes, label: 'Dish likes', color: BRAND.rose, icon: <Heart size={15} /> },
+            { value: totalDishShares, label: 'Dish shares', color: BRAND.sky, icon: <Share2 size={15} /> },
+            { value: totalDishRatings, label: 'Dish ratings', color: BRAND.gold, icon: <Star size={15} /> },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="rounded-xl border p-3.5"
+              style={{ borderColor: `${stat.color}26`, background: `${stat.color}0D` }}
+            >
+              <p className="flex items-center gap-2 text-xl font-bold" style={{ color: stat.color }}>
+                {stat.icon}
+                {stat.value}
+              </p>
+              <p className="mt-0.5 text-[11px] font-medium" style={{ color: BRAND.inkSoft }}>
+                {stat.label} · last {range}d
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {dishEngagement.length === 0 ? (
+          <EmptyNote text="No dish likes, shares or ratings yet in this period" />
+        ) : (
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <Heart size={12} style={{ color: BRAND.rose }} />
+                <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
+                  Most liked
+                </p>
+              </div>
+              {mostLikedDishes.length === 0 ? (
+                <EmptyNote text="No likes yet" />
+              ) : (
+                <RankBars
+                  color={BRAND.rose}
+                  rows={mostLikedDishes.map((item) => ({
+                    label: item.item_name,
+                    count: item.like_count,
+                  }))}
+                />
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <Share2 size={12} style={{ color: BRAND.sky }} />
+                <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
+                  Most shared
+                </p>
+              </div>
+              {mostSharedDishes.length === 0 ? (
+                <EmptyNote text="No shares yet" />
+              ) : (
+                <RankBars
+                  color={BRAND.sky}
+                  rows={mostSharedDishes.map((item) => ({
+                    label: item.item_name,
+                    count: item.share_count,
+                  }))}
+                />
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <Star size={12} style={{ color: BRAND.gold }} />
+                <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: BRAND.inkFaint }}>
+                  Most rated
+                </p>
+              </div>
+              {mostRatedDishes.length === 0 ? (
+                <EmptyNote text="No dish ratings yet" />
+              ) : (
+                <RankBars
+                  color={BRAND.gold}
+                  rows={mostRatedDishes.map((item) => ({
+                    label: item.rating_average > 0
+                      ? `${item.item_name} · ${item.rating_average.toFixed(1)}★`
+                      : item.item_name,
+                    count: item.rating_count,
+                  }))}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        <p className="mt-4 text-[10px] leading-relaxed" style={{ color: BRAND.inkFaint }}>
+          Likes are net like taps within the selected period. Ratings use the score submitted through the dish rating action.
+        </p>
       </div>
 
       {/* Games */}

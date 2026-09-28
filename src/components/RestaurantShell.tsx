@@ -13,28 +13,34 @@ import {
   trackSessionEnd,
 } from '@/lib/analytics'
 import { usePWA } from '@/hooks/usePWA'
+import dynamic from 'next/dynamic'
 import { MenuGrid } from './MenuGrid'
-import { RatingModal } from './RatingModal'
 import { OfflineBanner } from './OfflineBanner'
-import { WaiterCalledToast } from './WaiterCalledToast'
 import { getPersistedOrder } from '@/lib/order-storage'
-import { RatingsListModal } from './RatingsListModal'
 import { CallWaiterBell } from './CallWaiterBell'
-import { CustomerAuthProvider } from './CustomerAuthProvider'
 import { RewardOffersBar } from './RewardOffersBar'
 import { TableSessionHeartbeat } from './TableSessionHeartbeat'
 import { TodaysSpecialCarousel } from './TodaysSpecialCarousel'
-import { MenuTypeSelector } from './MenuTypeSelector'
-import { DeliveryPreferenceModal } from './DeliveryPreferenceModal'
 import type { WaiterCallItem } from '@/types'
 import { BottomTabBar } from './BottomTabBar'
-import { TranslationLoadingOverlay } from './TranslationLoadingOverlay'
-import { RewardWelcomePopup } from './RewardWelcomePopup'
 import { useCustomerAuth } from '@/store/customer-auth-store'
-import { AboutTab } from './AboutTab'
 import type { ReviewRow } from '@/lib/schema/restaurant-schema'
 import { GoogleReviewButton } from './GoogleReviewButton'
-import { CategoryShortcutButton } from './CategoryShortcutButton'
+
+// Below-the-fold / conditionally-rendered UI — none of these are needed
+// for first paint, so they're split into their own chunk and only
+// downloaded once actually triggered (a modal opening, a tab switching,
+// etc). This is most of the "Reduce unused JavaScript" savings.
+const RatingModal = dynamic(() => import('./RatingModal').then(m => m.RatingModal), { ssr: false })
+const RatingsListModal = dynamic(() => import('./RatingsListModal').then(m => m.RatingsListModal), { ssr: false })
+const WaiterCalledToast = dynamic(() => import('./WaiterCalledToast').then(m => m.WaiterCalledToast), { ssr: false })
+const CustomerAuthProvider = dynamic(() => import('./CustomerAuthProvider').then(m => m.CustomerAuthProvider), { ssr: false })
+const MenuTypeSelector = dynamic(() => import('./MenuTypeSelector').then(m => m.MenuTypeSelector), { ssr: false })
+const DeliveryPreferenceModal = dynamic(() => import('./DeliveryPreferenceModal').then(m => m.DeliveryPreferenceModal), { ssr: false })
+const TranslationLoadingOverlay = dynamic(() => import('./TranslationLoadingOverlay').then(m => m.TranslationLoadingOverlay), { ssr: false })
+const RewardWelcomePopup = dynamic(() => import('./RewardWelcomePopup').then(m => m.RewardWelcomePopup), { ssr: false })
+const AboutTab = dynamic(() => import('./AboutTab').then(m => m.AboutTab), { ssr: false })
+const CategoryShortcutButton = dynamic(() => import('./CategoryShortcutButton').then(m => m.CategoryShortcutButton), { ssr: false })
 
 // NOTE: WelcomeSplash has been removed entirely for load-time reasons:
 //   1. It blocked the menu behind a full-screen overlay for ~1-1.5s.

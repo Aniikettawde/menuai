@@ -304,7 +304,12 @@ export type EventType =
   | 'login_completed'
   | 'account_opened'
   | 'scroll_depth'
-    | 'google_rating_clicked'   // ← add this
+  | 'google_rating_clicked'
+  // dish engagement
+  | 'dish_liked'
+  | 'dish_unliked'
+  | 'dish_shared'
+  | 'dish_rated'
 
 export interface AnalyticsEvent {
   restaurant_id: string

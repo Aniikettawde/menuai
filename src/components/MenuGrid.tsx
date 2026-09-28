@@ -263,7 +263,7 @@ function BestsellerSlider({
         {items.map((item, idx) => {
           const price = formatBestsellerPrice(item.price)
           const description = truncateBestsellerDescription(cleanBestsellerDescription(item.description))
-          const imageUrl = item.image_url ? resolveMenuImageUrl(item.image_url, 720) : null
+          const imageUrl = item.image_url ? resolveMenuImageUrl(item.image_url, 480) : null
           const isActive = idx === activeIdx
 
           return (
@@ -545,7 +545,7 @@ function SearchResultsPanel({
               <div className="mg-divided-list">
                   {items.map((item, index) => (
                   <DishScrollReveal key={item.id} index={index}>
-                    <LazyMount minHeight={340}>
+                    <LazyMount minHeight={430}>
                       <MenuItemCard item={item} onAsk={onAsk} />
                     </LazyMount>
                   </DishScrollReveal>
@@ -571,9 +571,8 @@ function CategorySection({
   const otherItems = items
 
  const imageUrl = category.image_url
-  ? resolveMenuImageUrl(category.image_url, 200)
+  ? resolveMenuImageUrl(category.image_url, 100)
   : null
-
   return (
     <section
       id={`cat-${category.id}`}
@@ -619,7 +618,7 @@ function CategorySection({
             const isHot = !!popularIds?.has(item.id)
             return (
               <DishScrollReveal key={item.id} index={index}>
-                <LazyMount minHeight={340}>
+                <LazyMount minHeight={430}>
                   <div className="mg-item-row">
                     {badge.kind !== 'none' && (
                       <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>

@@ -148,12 +148,13 @@ export default function RootLayout({
       <body className="bg-white text-[#111111] antialiased">
         {children}
 
-        <Script
-          id="organization-jsonld"
-          type="application/ld+json"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
-        />
+<script
+  id="organization-jsonld"
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{
+    __html: JSON.stringify(organizationJsonLd),
+  }}
+/>
 
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-LCD36NFH1B"

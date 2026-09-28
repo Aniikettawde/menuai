@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Star, Flame, Plus, Minus, Clock, Link2, Sparkles, X, AlertCircle } from 'lucide-react'
@@ -8,6 +10,8 @@ import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
 import { bumpPersonalOrder } from '@/lib/menu-rank'
 import { resolveMenuImageUrl } from '@/lib/resolve-image'
+import { buildDishPath } from '@/lib/dish-url'
+import { DishEngagement } from './DishEngagement'
 
 interface Props {
   item: MenuItem
@@ -588,8 +592,7 @@ function ItemPhoto({
         boxShadow: '0 6px 16px rgba(0,0,0,0.10)',
       }}>
         {showImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+                    <img
             src={src}
             alt={alt}
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
@@ -884,24 +887,13 @@ function ExplainButton({
 
 /* ────────────────────────────────────────────────────────────────────────
    DARK MENU CARD
-   Premium editorial layout: copy on the left, a large floating dish photo
-   on the right, gold micro-details.
-
-   Layout is now flow-based (no more absolutely positioned button/footer),
-   so long names, long descriptions and extra chips can never collide:
-
-     ┌ stage ──────────────────────────────┐
-     │ badges                    [ photo ] │
-     │ eyebrow / name / description        │
-     │ chips                               │
-     │ [ ✦ Explain this dish ]             │
-     ├ footer ─────────────────────────────┤
-     │ ₹900                       [ ADD ]  │
-     └─────────────────────────────────────┘
-──────────────────────────────────────────────────────────────────────── */
+   Visual treatment copied from the current Dinezy dark card UI.
+   Newer file-2 features are preserved: no-image fallback, Most Ordered,
+   dish page link, engagement row, compact option preview, and AI action.
+   ──────────────────────────────────────────────────────────────────────── */
 interface DarkCardProps {
   item: MenuItem
-  imageUrl: string
+  imageUrl: string | null
   cleanDescription: string | null
   priceLabel: string
   hideCurrency: boolean
@@ -920,39 +912,89 @@ interface DarkCardProps {
   visibleTags: string[]
   explainEnabled: boolean
   onExplain: () => void
+  dishHref: string
+  restaurantId?: string
+  showMostOrdered: boolean
 }
 
 function DarkMenuItemCard({
-  item, imageUrl, cleanDescription, priceLabel, hideCurrency, isExpanded, onToggle,
-  qtyInCart, adding, ordersEnabled, hasOptions, options,
-  onAdd, onInc, onDec, onAsk, onPairsWithTap, visibleTags,
-  explainEnabled, onExplain,
+  item,
+  imageUrl,
+  cleanDescription,
+  priceLabel,
+  hideCurrency,
+  isExpanded,
+  onToggle,
+  qtyInCart,
+  adding,
+  ordersEnabled,
+  hasOptions,
+  options,
+  onAdd,
+  onInc,
+  onDec,
+  onAsk,
+  onPairsWithTap,
+  visibleTags,
+  explainEnabled,
+  onExplain,
+  dishHref,
+  restaurantId,
+  showMostOrdered,
 }: DarkCardProps) {
   const [imgError, setImgError] = useState(false)
-  const showImage = !imgError
+
+  const showImage = Boolean(imageUrl) && !imgError
 
   const isSpicy = !!item.tags?.includes('spicy')
   const isNew = !!item.tags?.includes('new')
   const isSpecial = !!(item as any).is_special
-  const showBadges = !!item.is_bestseller || isSpecial || isNew
 
-  // The eyebrow is reserved for real editorial signals. No generic fallback
-  // copy, so cards without a signal stay clean instead of looking templated.
-  const eyebrow = isSpicy ? 'Bold & Spicy' : isNew ? 'Just arrived' : null
+  // Newer version's compact variant preview.
+  const visibleOptionGroups = options.filter((opt) =>
+    opt.choices.some((choice) => choice.is_available),
+  )
+  const firstOption = visibleOptionGroups[0]
+  const visibleChoices = firstOption
+    ? firstOption.choices.filter((choice) => choice.is_available).slice(0, 3)
+    : []
 
-  // Veg / non-veg is already communicated by the red/green dot — no chip.
+  const hasPairing = (item.best_with?.length ?? 0) > 0
+  const hasMeta = !!item.prep_time_minutes || !!item.calories
+
+  // Keep the original card's quiet chip treatment.
   const chipTags = visibleTags.slice(0, DARK_MAX_CHIPS)
   const extraTags = visibleTags.slice(DARK_MAX_CHIPS)
 
+  const visibleExtraTags = visibleTags.slice(0, 2)
   const isAps = priceLabel === 'APS'
   const amount = priceLabel.replace(/^₹/, '')
   const showCurrency = !isAps && !hideCurrency
 
   const allergens = item.allergens ?? []
-  const hasMeta = !!item.prep_time_minutes || !!item.calories
-  const hasPairing = (item.best_with?.length ?? 0) > 0
-  const showDetails =
-    isExpanded && (hasMeta || allergens.length > 0 || extraTags.length > 0 || hasPairing || hasOptions)
+
+  if (!showImage) {
+    return (
+      <NoImageDishCard
+        item={item}
+        cleanDescription={cleanDescription}
+        priceLabel={priceLabel}
+        hideCurrency={hideCurrency}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        qtyInCart={qtyInCart}
+        adding={adding}
+        ordersEnabled={ordersEnabled}
+        options={options}
+        onAdd={onAdd}
+        onInc={onInc}
+        onDec={onDec}
+        dark
+        dishHref={dishHref}
+        restaurantId={restaurantId}
+      />
+    )
+  }
 
   return (
     <article className={`pr-dark-card${qtyInCart > 0 ? ' pr-dark-card--cart' : ''}`}>
@@ -972,7 +1014,7 @@ function DarkMenuItemCard({
           {showImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={imageUrl}
+              src={imageUrl!}
               alt={item.name}
               loading="lazy"
               onError={() => setImgError(true)}
@@ -985,31 +1027,31 @@ function DarkMenuItemCard({
         </button>
 
         <div className="pr-dark-left">
-          {showBadges && (
+          {(item.is_bestseller || showMostOrdered || isSpecial || isNew) && (
             <div className="pr-dark-badges">
               {item.is_bestseller && (
                 <span className="pr-dark-badge">
                   <Star size={8} style={{ fill: 'currentColor' }} /> Bestseller
                 </span>
               )}
-              {!item.is_bestseller && isSpecial && (
+              {!item.is_bestseller && showMostOrdered && (
+                <span className="pr-dark-badge">↑ Most ordered</span>
+              )}
+              {!item.is_bestseller && !showMostOrdered && isSpecial && (
                 <span className="pr-dark-badge pr-dark-badge--rose">Special</span>
               )}
-              {!item.is_bestseller && isNew && (
+              {!item.is_bestseller && !showMostOrdered && !isSpecial && isNew && (
                 <span className="pr-dark-badge pr-dark-badge--violet">New</span>
               )}
             </div>
           )}
 
-          <button
-            type="button"
-            className="pr-dark-copy"
-            onClick={onToggle}
-            aria-expanded={isExpanded}
-          >
-            {eyebrow && <span className="pr-dark-eyebrow">{eyebrow}</span>}
+          <div className="pr-dark-copy-wrap">
+            {isSpicy && (
+              <span className="pr-dark-eyebrow">Bold &amp; Spicy</span>
+            )}
 
-            <span className="pr-dark-name-row">
+            <div className="pr-dark-name-row">
               <span className="pr-dark-dot"><VegDot isVeg={item.is_veg} /></span>
               <span className="pr-dark-name">
                 {item.name}
@@ -1021,35 +1063,117 @@ function DarkMenuItemCard({
                   />
                 )}
               </span>
-            </span>
+            </div>
 
             {cleanDescription && (
-              <span className={`pr-dark-desc${isExpanded ? ' pr-dark-desc--open' : ''}`}>
+              <button
+                type="button"
+                className={`pr-dark-desc${isExpanded ? ' pr-dark-desc--open' : ''}`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onToggle()
+                }}
+                aria-expanded={isExpanded}
+                aria-label={
+                  isExpanded
+                    ? `Collapse description for ${item.name}`
+                    : `Read more about ${item.name}`
+                }
+              >
                 {cleanDescription}
-              </span>
+              </button>
             )}
 
             {chipTags.length > 0 && (
-              <span className="pr-dark-chips">
+              <div className="pr-dark-chips" aria-label="Dish tags">
                 {chipTags.map((tag) => (
                   <span className="pr-dark-chip" key={tag}>{tag}</span>
                 ))}
-              </span>
+              </div>
             )}
-          </button>
 
-          {explainEnabled && (
-            <div className="pr-dark-explain-slot">
-              <ExplainButton name={item.name} onClick={onExplain} tone="dark" />
-            </div>
-          )}
+            {hasPairing && (
+              <div className="pr-dark-pair-wrap">
+                <PairsWith
+                  names={item.best_with ?? []}
+                  onTap={onAsk ? onPairsWithTap : undefined}
+                />
+              </div>
+            )}
+
+            {visibleOptionGroups.length > 0 && (
+              <div className="pr-dark-option-wrap">
+                <div className="pr-dark-option-pills">
+                  {visibleChoices.map((choice) => {
+                    const isOverride = firstOption?.price_mode === 'override'
+                    const symbol = hideCurrency
+                      ? isOverride ? '' : '+'
+                      : isOverride ? '₹' : '+₹'
+
+                    return (
+                      <span className="pr-dark-option-pill" key={choice.id}>
+                        {choice.name} <b>{symbol}{Math.round(choice.extra_price / 100)}</b>
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {(visibleExtraTags.length > 0 || explainEnabled) && (
+              <div className="pr-dark-bottom-row">
+                {visibleExtraTags.length > 0 && (
+                  <div className="pr-dark-meta">
+                    {visibleExtraTags.map((tag) => <span key={tag}>{tag}</span>)}
+                  </div>
+                )}
+
+                {explainEnabled && (
+                  <button
+                    type="button"
+                    className="pr-dark-ai-button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onExplain()
+                    }}
+                  >
+                    <Sparkles size={11} /> Explain this dish
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {showDetails && (
+      <div className="pr-dark-new-features">
+        <div className="pr-dark-link-row">
+          <a
+            href={dishHref}
+            className="pr-dark-link"
+            onClick={(e) => e.stopPropagation()}
+          >
+            View dish page <span aria-hidden="true">›</span>
+          </a>
+        </div>
+
+        <div className="pr-dark-engagement-row">
+          <DishEngagement
+            restaurantId={restaurantId ?? ''}
+            itemId={item.id}
+            itemName={item.name}
+            dishHref={dishHref}
+            compact
+          />
+        </div>
+      </div>
+
+      {isExpanded && (hasMeta || allergens.length > 0 || extraTags.length > 0 || hasPairing || hasOptions) && (
         <div className="pr-dark-details">
           {hasMeta && (
-            <div className="pr-dark-meta">
+            <div className="pr-dark-meta-large">
               {!!item.prep_time_minutes && <span><Clock size={11} /> ~{item.prep_time_minutes} min</span>}
               {!!item.calories && <span>{item.calories} cal</span>}
             </div>
@@ -1066,7 +1190,10 @@ function DarkMenuItemCard({
             </div>
           )}
           {hasPairing && (
-            <PairsWith names={item.best_with ?? []} onTap={onAsk ? onPairsWithTap : undefined} />
+            <PairsWith
+              names={item.best_with ?? []}
+              onTap={onAsk ? onPairsWithTap : undefined}
+            />
           )}
           {hasOptions && <VariantsList options={options} showCurrency={!hideCurrency} />}
         </div>
@@ -1137,7 +1264,7 @@ function DarkMenuItemCard({
           mask-image: linear-gradient(90deg, black, transparent 78%);
         }
 
-        /* ── Stage: copy on the left, photo on the right ─────────────── */
+        /* Original Dinezy UI geometry: copy left, large photo right. */
         .pr-dark-stage {
           position: relative;
           z-index: 1;
@@ -1173,7 +1300,11 @@ function DarkMenuItemCard({
           overflow: visible;
           -webkit-tap-highlight-color: transparent;
         }
-        .pr-dark-media:focus-visible { outline: 2px solid var(--gold); outline-offset: -4px; border-radius: 20px; }
+        .pr-dark-media:focus-visible {
+          outline: 2px solid var(--gold);
+          outline-offset: -4px;
+          border-radius: 20px;
+        }
         .pr-dark-media-aura {
           position: absolute;
           width: 82%;
@@ -1199,8 +1330,16 @@ function DarkMenuItemCard({
           mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.68) 17%, #000 34%, #000 100%);
           transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.35s ease;
         }
-        .pr-dark-card:hover .pr-dark-media img { transform: rotate(-1deg) scale(1.10) translateY(-4px); }
-        .pr-dark-media-fallback { position: absolute; inset: 0; display: grid; place-items: center; font-size: 4rem; }
+        .pr-dark-card:hover .pr-dark-media img {
+          transform: rotate(-1deg) scale(1.10) translateY(-4px);
+        }
+        .pr-dark-media-fallback {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          font-size: 4rem;
+        }
         .pr-dark-media-shadow {
           position: absolute;
           width: 70%;
@@ -1220,7 +1359,6 @@ function DarkMenuItemCard({
           mix-blend-mode: screen;
         }
 
-        /* ── Left column ─────────────────────────────────────────────── */
         .pr-dark-left {
           position: relative;
           z-index: 4;
@@ -1229,11 +1367,23 @@ function DarkMenuItemCard({
           flex-direction: column;
           align-items: flex-start;
           padding: 16px 0 16px var(--pad-x);
-          /* Let taps in empty space fall through to the photo underneath. */
           pointer-events: none;
         }
-        .pr-dark-badges, .pr-dark-copy, .pr-dark-explain-slot { pointer-events: auto; }
-        .pr-dark-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        .pr-dark-badges,
+        .pr-dark-copy-wrap,
+        .pr-dark-bottom-row,
+        .pr-dark-pair-wrap,
+        .pr-dark-option-wrap,
+        .pr-dark-ai-button,
+        .pr-dark-desc {
+          pointer-events: auto;
+        }
+        .pr-dark-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-bottom: 10px;
+        }
         .pr-dark-badge {
           display: inline-flex;
           align-items: center;
@@ -1247,26 +1397,31 @@ function DarkMenuItemCard({
           text-transform: uppercase;
           letter-spacing: 0.07em;
           box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+          white-space: nowrap;
         }
-        .pr-dark-badge--rose { background: rgba(244, 114, 182, 0.12); color: #f9a8d4; border: 1px solid rgba(244, 114, 182, 0.2); box-shadow: none; }
-        .pr-dark-badge--violet { background: rgba(167, 139, 250, 0.12); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.2); box-shadow: none; }
+        .pr-dark-badge--rose {
+          background: rgba(244, 114, 182, 0.12);
+          color: #f9a8d4;
+          border: 1px solid rgba(244, 114, 182, 0.2);
+          box-shadow: none;
+        }
+        .pr-dark-badge--violet {
+          background: rgba(167, 139, 250, 0.12);
+          color: #c4b5fd;
+          border: 1px solid rgba(167, 139, 250, 0.2);
+          box-shadow: none;
+        }
 
-        .pr-dark-copy {
+        .pr-dark-copy-wrap {
           display: flex;
           flex-direction: column;
           align-items: flex-start;
           width: 100%;
+          min-width: 0;
           margin: 0;
           padding: 0;
-          border: 0;
-          background: transparent;
-          color: inherit;
-          text-align: left;
-          cursor: pointer;
           font-family: var(--font-body);
-          -webkit-tap-highlight-color: transparent;
         }
-        .pr-dark-copy:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 6px; }
         .pr-dark-eyebrow {
           margin-bottom: 6px;
           font: 800 9.5px/1.2 var(--font-body);
@@ -1275,8 +1430,6 @@ function DarkMenuItemCard({
           color: var(--gold);
           opacity: 0.92;
         }
-        /* Row font sets the name size; the dot slot is exactly one line tall,
-           so the veg dot always centres on the FIRST line of the name. */
         .pr-dark-name-row {
           display: flex;
           align-items: flex-start;
@@ -1285,24 +1438,50 @@ function DarkMenuItemCard({
           min-width: 0;
           font: 600 21px/1.14 var(--font-display);
         }
-        .pr-dark-dot { display: inline-flex; align-items: center; height: 1.14em; flex-shrink: 0; }
+        .pr-dark-dot {
+          display: inline-flex;
+          align-items: center;
+          height: 1.14em;
+          flex-shrink: 0;
+        }
         .pr-dark-name {
           min-width: 0;
           color: var(--ink);
           letter-spacing: -0.02em;
           overflow-wrap: anywhere;
         }
+
         .pr-dark-desc {
-          margin-top: 8px;
+          appearance: none;
+          -webkit-appearance: none;
+          width: 100%;
+          min-width: 0;
+          margin: 8px 0 0;
+          padding: 0;
+          border: 0;
+          background: transparent;
           color: var(--muted);
+          text-align: left;
           font: 400 12px/1.5 var(--font-body);
           display: -webkit-box;
           -webkit-box-orient: vertical;
-          -webkit-line-clamp: 4;
+          -webkit-line-clamp: 3;
           overflow: hidden;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
         }
-        .pr-dark-desc--open { -webkit-line-clamp: unset; overflow: visible; }
-        .pr-dark-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; max-width: 100%; }
+        .pr-dark-desc--open {
+          -webkit-line-clamp: unset;
+          overflow: visible;
+        }
+
+        .pr-dark-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 10px;
+          max-width: 100%;
+        }
         .pr-dark-chip {
           display: inline-flex;
           align-items: center;
@@ -1319,9 +1498,137 @@ function DarkMenuItemCard({
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .pr-dark-explain-slot { margin-top: 14px; }
 
-        /* ── Expanded details ────────────────────────────────────────── */
+        .pr-dark-pair-wrap {
+          width: 100%;
+          margin-top: 8px;
+        }
+        .pr-dark-pair-wrap :global(> div),
+        .pr-dark-pair-wrap :global(> button) {
+          width: 100%;
+          margin-top: 0 !important;
+          padding-top: 6px !important;
+          border-top: 1px solid rgba(255,255,255,.075);
+        }
+
+        .pr-dark-option-wrap {
+          width: 100%;
+          margin-top: 8px;
+          min-width: 0;
+        }
+        .pr-dark-option-pills {
+          display: flex;
+          gap: 5px;
+          overflow: hidden;
+          max-width: 100%;
+        }
+        .pr-dark-option-pill {
+          flex: 0 0 auto;
+          max-width: 100%;
+          min-height: 25px;
+          padding: 0 8px;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          border-radius: 999px;
+          border: 1px solid rgba(233, 200, 116, .20);
+          background: rgba(233, 200, 116, .055);
+          color: rgba(245,239,226,.76);
+          font: 600 9.5px/1 var(--font-body);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .pr-dark-option-pill b {
+          color: #f0d98f;
+          font-weight: 800;
+        }
+
+        .pr-dark-bottom-row {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 7px;
+          margin-top: 10px;
+          min-width: 0;
+        }
+        .pr-dark-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          align-items: center;
+          min-width: 0;
+          overflow: hidden;
+        }
+        .pr-dark-meta span {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          min-height: 23px;
+          padding: 0 7px;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,.075);
+          background: rgba(255,255,255,.028);
+          color: rgba(245,239,226,.55);
+          font: 600 9px/1 var(--font-body);
+          white-space: nowrap;
+        }
+        .pr-dark-ai-button {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          height: 31px;
+          max-width: 100%;
+          padding: 0 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(233,200,116,.35);
+          background: linear-gradient(180deg, rgba(233,200,116,.11) 0%, rgba(233,200,116,.045) 100%);
+          color: #e9c874;
+          font: 800 9.5px/1 var(--font-body);
+          cursor: pointer;
+          white-space: nowrap;
+          -webkit-tap-highlight-color: transparent;
+          box-shadow: 0 0 12px rgba(233,200,116,.05);
+        }
+
+        .pr-dark-new-features {
+          position: relative;
+          z-index: 7;
+          margin: 0;
+        }
+        .pr-dark-link-row {
+          min-height: 34px;
+          display: flex;
+          align-items: center;
+          padding: 0 var(--pad-x);
+          border-top: 1px solid rgba(255,255,255,.07);
+        }
+        .pr-dark-link {
+          color: #e9c874;
+          font: 700 11.5px/1 var(--font-body);
+          letter-spacing: .005em;
+        }
+        .pr-dark-link:hover {
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .pr-dark-engagement-row {
+          overflow: hidden;
+          padding: 0 var(--pad-x);
+          background: rgba(0,0,0,.14);
+          border-top: 1px solid rgba(255,255,255,.045);
+        }
+        .pr-dark-engagement-row :global(> div:nth-child(2)),
+        .pr-dark-engagement-row :global(> div:nth-child(3)) {
+          display: none !important;
+        }
+        .pr-dark-engagement-row :global(.pr-eng-avg) { color: #f2ecdf; }
+        .pr-dark-engagement-row :global(.pr-eng-sub) { color: rgba(245,239,226,.46); }
+        .pr-dark-engagement-row :global(.pr-eng-action) { color: rgba(245,239,226,.80); }
+
         .pr-dark-details {
           position: relative;
           z-index: 7;
@@ -1332,15 +1639,25 @@ function DarkMenuItemCard({
           flex-direction: column;
           gap: 10px;
         }
-        .pr-dark-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-        .pr-dark-meta span {
+        .pr-dark-meta-large {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 12px;
+        }
+        .pr-dark-meta-large span {
           display: inline-flex;
           align-items: center;
           gap: 4px;
           color: var(--muted);
           font: 500 10.5px/1.3 var(--font-body);
         }
-        .pr-dark-tagrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        .pr-dark-tagrow {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px;
+        }
         .pr-dark-tag-label {
           margin-right: 2px;
           color: var(--faint);
@@ -1358,7 +1675,6 @@ function DarkMenuItemCard({
           font: 600 10px/1 var(--font-body);
         }
 
-        /* ── Footer: price + add ─────────────────────────────────────── */
         .pr-dark-footer {
           position: relative;
           z-index: 6;
@@ -1370,8 +1686,6 @@ function DarkMenuItemCard({
           border-top: 1px solid rgba(233, 200, 116, 0.12);
           background: linear-gradient(180deg, rgba(0, 0, 0, 0.10), rgba(0, 0, 0, 0.26));
         }
-        /* Price is set in the display serif (same family as the dish name):
-           lining tabular figures, small raised currency mark, no bold sans. */
         .pr-dark-price {
           display: inline-flex;
           align-items: flex-start;
@@ -1383,8 +1697,16 @@ function DarkMenuItemCard({
           font-variant-numeric: lining-nums tabular-nums;
           font-feature-settings: 'lnum' 1, 'tnum' 1;
         }
-        .pr-dark-currency { margin-top: 3px; font-size: 12px; font-weight: 500; opacity: 0.78; }
-        .pr-dark-amount { font-size: 24px; letter-spacing: -0.01em; }
+        .pr-dark-currency {
+          margin-top: 3px;
+          font-size: 12px;
+          font-weight: 500;
+          opacity: 0.78;
+        }
+        .pr-dark-amount {
+          font-size: 24px;
+          letter-spacing: -0.01em;
+        }
         .pr-dark-aps {
           font: 600 12px/1 var(--font-body);
           letter-spacing: 0.16em;
@@ -1396,19 +1718,615 @@ function DarkMenuItemCard({
           0%, 100% { opacity: 0.75; transform: scale(0.96); }
           50% { opacity: 1; transform: scale(1.04); }
         }
-        @media (max-width: 360px) {
-          .pr-dark-card { --pad-x: 15px; }
+
+        @media (max-width: 430px) {
+          .pr-dark-left { width: 57%; }
+          .pr-dark-name-row { font-size: 20px; }
+        }
+
+        @media (max-width: 390px) {
+          .pr-dark-card { --pad-x: 16px; }
           .pr-dark-stage { min-height: 196px; }
           .pr-dark-left { width: 58%; }
           .pr-dark-name-row { font-size: 19px; }
           .pr-dark-media { width: 55%; right: -11px; height: 190px; }
-          .pr-dark-amount { font-size: 22px; }
+          .pr-dark-meta span { font-size: 8.6px; padding-left: 6px; padding-right: 6px; }
+          .pr-dark-ai-button { height: 30px; padding-left: 9px; padding-right: 9px; font-size: 9px; }
         }
+
+        @media (max-width: 360px) {
+          .pr-dark-card { --pad-x: 15px; }
+          .pr-dark-stage { min-height: 188px; }
+          .pr-dark-left { width: 59%; }
+          .pr-dark-name-row { font-size: 18px; }
+          .pr-dark-media { width: 54%; right: -11px; height: 182px; }
+          .pr-dark-amount { font-size: 22px; }
+          .pr-dark-link { font-size: 11px; }
+          .pr-dark-ai-button { padding-left: 8px; padding-right: 8px; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
-          .pr-dark-card, .pr-dark-media img, .pr-dark-card-glow { animation: none !important; transition: none !important; }
+          .pr-dark-card,
+          .pr-dark-media img,
+          .pr-dark-card-glow {
+            animation: none !important;
+            transition: none !important;
+          }
         }
       `}</style>
     </article>
+  )
+}
+
+
+function NoImageDishCard({
+  item,
+  cleanDescription,
+  priceLabel,
+  hideCurrency,
+  isExpanded,
+  onToggle,
+  qtyInCart,
+  adding,
+  ordersEnabled,
+  options,
+  onAdd,
+  onInc,
+  onDec,
+  dark,
+  dishHref,
+  restaurantId,
+}: {
+  item: MenuItem
+  cleanDescription: string | null
+  priceLabel: string
+  hideCurrency: boolean
+  isExpanded: boolean
+  onToggle: () => void
+  qtyInCart: number
+  adding: boolean
+  ordersEnabled: boolean
+  options: DishOption[]
+  onAdd: (e: MouseEvent) => void
+  onInc: (e: MouseEvent) => void
+  onDec: (e: MouseEvent) => void
+  dark: boolean
+  dishHref: string
+  restaurantId?: string
+}) {
+  const optionGroups = options.filter((opt) => opt.choices.some((choice) => choice.is_available))
+  const firstOption = optionGroups[0]
+  const choices = firstOption
+    ? firstOption.choices.filter((choice) => choice.is_available).slice(0, 3)
+    : []
+
+  return (
+    <article className={`pr-no-image-card${dark ? ' pr-no-image-card--dark' : ''}${qtyInCart > 0 ? ' pr-no-image-card--in-cart' : ''}`}>
+      <div className="pr-no-image-main">
+        <div className="pr-no-image-title-row">
+          <h3 className="pr-no-image-title">
+            <VegDot isVeg={item.is_veg} />
+            <span>{item.name}</span>
+          </h3>
+          <span className="pr-no-image-price">{priceLabel}</span>
+        </div>
+
+        {cleanDescription && (
+          <button
+            type="button"
+            className={`pr-no-image-description${isExpanded ? ' is-expanded' : ''}`}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggle()
+            }}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? `Collapse description for ${item.name}` : `Read more about ${item.name}`}
+          >
+            {cleanDescription}
+          </button>
+        )}
+
+        {choices.length > 0 && (
+          <div className="pr-no-image-options">
+            <span className="pr-no-image-options-label">{firstOption?.name || 'VARIANT'}</span>
+            <div className="pr-no-image-option-pills">
+              {choices.map((choice) => {
+                const isOverride = firstOption?.price_mode === 'override'
+                const symbol = hideCurrency ? (isOverride ? '' : '+') : (isOverride ? '₹' : '+₹')
+                return (
+                  <span key={choice.id} className="pr-no-image-option-pill">
+                    {choice.name} <b>{symbol}{Math.round(choice.extra_price / 100)}</b>
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="pr-no-image-link-row">
+          <a
+            href={dishHref}
+            className="pr-no-image-link"
+            onClick={(e) => e.stopPropagation()}
+          >
+            View dish page <span aria-hidden="true">›</span>
+          </a>
+        </div>
+
+        <div className="pr-no-image-engagement-row">
+          <DishEngagement
+            restaurantId={restaurantId ?? ''}
+            itemId={item.id}
+            itemName={item.name}
+            dishHref={dishHref}
+            compact
+          />
+        </div>
+
+        {ordersEnabled && (
+          <div className="pr-no-image-order" onClick={(e) => e.stopPropagation()}>
+            <AddControl
+              variant="inline"
+              name={item.name}
+              qtyInCart={qtyInCart}
+              adding={adding}
+              onAdd={onAdd}
+              onInc={onInc}
+              onDec={onDec}
+            />
+          </div>
+        )}
+      </div>
+
+      <style jsx>{`
+        .pr-no-image-card {
+          width: 100%;
+          border-top: 1px solid #e9e3db;
+          background: #fffdf9;
+        }
+        .pr-no-image-card--dark {
+          border-top-color: rgba(255,255,255,.08);
+          background: #18171a;
+        }
+        .pr-no-image-card--in-cart {
+          background: linear-gradient(135deg, #fffaf3 0%, #fffdf9 100%);
+        }
+        .pr-no-image-card--dark.pr-no-image-card--in-cart {
+          background: linear-gradient(145deg,#211f1b 0%,#17171a 100%);
+        }
+        .pr-no-image-main {
+          padding: 12px 14px 11px;
+        }
+        .pr-no-image-title-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .pr-no-image-title {
+          min-width: 0;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          color: ${dark ? '#f2ecdf' : '#29241f'};
+          font: 700 16px/1.2 var(--font-display);
+        }
+        .pr-no-image-title span:last-child {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pr-no-image-price {
+          flex: 0 0 auto;
+          color: ${dark ? '#e9c874' : '#7a1f2b'};
+          font: 800 16px/1 var(--font-display);
+        }
+        .pr-no-image-description {
+          width: 100%;
+          margin: 7px 0 0;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: ${dark ? 'rgba(245,239,226,.68)' : '#6e665d'};
+          text-align: left;
+          font: 400 11.5px/1.45 var(--font-body);
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+          cursor: pointer;
+        }
+        .pr-no-image-description.is-expanded {
+          -webkit-line-clamp: unset;
+          overflow: visible;
+        }
+        .pr-no-image-options {
+          margin-top: 9px;
+        }
+        .pr-no-image-options-label {
+          display: block;
+          margin-bottom: 5px;
+          color: ${dark ? 'rgba(245,239,226,.42)' : '#a1978b'};
+          font: 800 8.5px/1 var(--font-body);
+          letter-spacing: .11em;
+          text-transform: uppercase;
+        }
+        .pr-no-image-option-pills {
+          display: flex;
+          gap: 6px;
+          overflow: hidden;
+        }
+        .pr-no-image-option-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          min-height: 27px;
+          padding: 0 9px;
+          border-radius: 9px;
+          border: 1px solid ${dark ? 'rgba(233,200,116,.28)' : '#d9cdbb'};
+          background: ${dark ? 'rgba(233,200,116,.04)' : '#fbf8f2'};
+          color: ${dark ? 'rgba(245,239,226,.76)' : '#5d554d'};
+          font: 600 10.5px/1 var(--font-body);
+          white-space: nowrap;
+        }
+        .pr-no-image-option-pill b {
+          color: ${dark ? '#f0d98f' : '#2f2923'};
+          font-weight: 800;
+        }
+        .pr-no-image-link-row {
+          margin-top: 11px;
+          padding-top: 10px;
+          border-top: 1px solid ${dark ? 'rgba(255,255,255,.08)' : '#e9e3db'};
+        }
+        .pr-no-image-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          color: ${dark ? '#e9c874' : '#7a1f2b'};
+          text-decoration: none;
+          font: 800 10.5px/1 var(--font-body);
+          letter-spacing: .02em;
+        }
+        .pr-no-image-link span {
+          font-size: 14px;
+          line-height: .8;
+          transform: translateY(-.5px);
+        }
+        .pr-no-image-engagement-row {
+          margin-top: 1px;
+        }
+        .pr-no-image-order {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 9px;
+        }
+        .pr-no-image-order :global(button) {
+          position: static !important;
+          transform: none !important;
+          width: 104px !important;
+        }
+      `}</style>
+    </article>
+  )
+}
+
+function LightMenuItemCard({
+  item,
+  imageUrl,
+  cleanDescription,
+  priceLabel,
+  hideCurrency,
+  isExpanded,
+  onToggle,
+  qtyInCart,
+  adding,
+  ordersEnabled,
+  hasOptions,
+  options,
+  onAdd,
+  onInc,
+  onDec,
+  onAsk,
+  onPairsWithTap,
+  explainEnabled,
+  onExplain,
+  dishHref,
+  restaurantId,
+  showMostOrdered,
+}: {
+  item: MenuItem
+  imageUrl: string | null
+  cleanDescription: string | null
+  priceLabel: string
+  hideCurrency: boolean
+  isExpanded: boolean
+  onToggle: () => void
+  qtyInCart: number
+  adding: boolean
+  ordersEnabled: boolean
+  hasOptions: boolean
+  options: DishOption[]
+  onAdd: (e: MouseEvent) => void
+  onInc: (e: MouseEvent) => void
+  onDec: (e: MouseEvent) => void
+  onAsk?: (text: string) => void
+  onPairsWithTap?: () => void
+  explainEnabled: boolean
+  onExplain: () => void
+  dishHref: string
+  restaurantId?: string
+  showMostOrdered: boolean
+}) {
+  const isAps = priceLabel === 'APS'
+  const hasImage = Boolean(imageUrl)
+  const visibleTags = item.tags?.filter((t) => t !== 'new' && t !== 'spicy') ?? []
+  const hasDetails =
+    (item.allergens?.length ?? 0) > 0 ||
+    visibleTags.length > 0 ||
+    !!item.prep_time_minutes ||
+    !!item.calories
+  const photoColBottomSpace = hasImage && ordersEnabled ? ADD_HEIGHT / 2 + 4 : 0
+  const isInCart = qtyInCart > 0
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        background: isInCart
+          ? 'linear-gradient(135deg, var(--pr-orange-dim) 0%, var(--pr-card) 65%)'
+          : 'var(--pr-card)',
+        borderRadius: CARD_RADIUS,
+        border: isInCart ? '1px solid rgba(122,31,43,0.18)' : '1px solid var(--pr-border)',
+        overflow: 'hidden',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+      }}
+      className="pr-item-card"
+    >
+      {item.is_bestseller && (
+        <div style={{
+          position: 'absolute', top: 0, left: 20, right: 20, height: 2, borderRadius: 2,
+          background: 'linear-gradient(90deg, transparent, var(--pr-gold), transparent)',
+          opacity: 0.7,
+        }} />
+      )}
+
+      <div
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && onToggle()}
+        aria-expanded={isExpanded}
+        style={{
+          display: 'flex', alignItems: 'flex-start',
+          gap: hasImage ? ROW_GAP : 0, padding: CARD_PAD,
+          paddingBottom: CARD_PAD + photoColBottomSpace,
+          cursor: 'pointer', userSelect: 'none',
+        }}
+      >
+        {/* Left: text content — this is the original light-theme layout from file 2. */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          {(item.is_bestseller || showMostOrdered || (item as any).is_special || item.tags?.includes('new')) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginBottom: 7 }}>
+              {item.is_bestseller && <Pill icon={<Star size={7} style={{ fill: 'var(--pr-gold)' }} />} label="Bestseller" tone="gold" />}
+              {showMostOrdered && <Pill label="↑ Most ordered" tone="gold" />}
+              {(item as any).is_special && <Pill label="Special" tone="rose" />}
+              {item.tags?.includes('new') && <Pill label="New" tone="violet" />}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <p style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: 15.5, fontWeight: 700, lineHeight: 1.3,
+              color: 'var(--pr-text)', fontFamily: 'var(--font-display)',
+              margin: 0,
+              minWidth: 0,
+            }}>
+              <VegDot isVeg={item.is_veg} />
+              <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                {item.name}
+                {item.tags?.includes('spicy') && (
+                  <Flame size={12} style={{ marginLeft: 4, display: 'inline', color: '#f87171', verticalAlign: 'middle' }} />
+                )}
+              </span>
+            </p>
+
+            {priceLabel && (
+              <p style={{
+                flexShrink: 0, fontSize: 15, fontWeight: 600, color: 'var(--pr-orange)',
+                fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', paddingTop: 1,
+                fontVariantNumeric: 'lining-nums tabular-nums',
+                margin: 0,
+              }}>{priceLabel}</p>
+            )}
+          </div>
+
+          {cleanDescription && (
+            <p style={{
+              margin: '5px 0 0', fontSize: 12, lineHeight: 1.55, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)',
+              display: '-webkit-box',
+              WebkitLineClamp: isExpanded ? undefined : 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: isExpanded ? 'visible' : 'hidden',
+            }}>
+              {cleanDescription}
+            </p>
+          )}
+
+          {explainEnabled && (
+            <div style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+              <ExplainButton
+                name={item.name}
+                onClick={onExplain}
+                tone="light"
+              />
+            </div>
+          )}
+
+          {(item.best_with?.length ?? 0) > 0 && (
+            <PairsWith names={item.best_with} onTap={onAsk ? onPairsWithTap : undefined} />
+          )}
+
+          {hasOptions && (
+            <VariantsList
+              options={options}
+              showCurrency={!hideCurrency}
+            />
+          )}
+
+          {/* New functionality kept from file 1: public dish page + engagement.
+              Styled as quiet light-theme rows so the card remains visually
+              consistent with the original file-2 light UI. */}
+          {dishHref && dishHref !== '#' && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                marginTop: 10,
+                paddingTop: 8,
+                borderTop: '1px solid var(--pr-border)',
+              }}
+            >
+              <a
+                href={dishHref}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  color: 'var(--pr-gold)',
+                  textDecoration: 'none',
+                  font: '700 11px/1 var(--font-body)',
+                  letterSpacing: '0.01em',
+                }}
+              >
+                View dish page <span aria-hidden="true">›</span>
+              </a>
+            </div>
+          )}
+
+          {dishHref && dishHref !== '#' && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                marginTop: 4,
+                overflow: 'hidden',
+              }}
+            >
+              <DishEngagement
+                restaurantId={restaurantId ?? ''}
+                itemId={item.id}
+                itemName={item.name}
+                dishHref={dishHref}
+                compact
+              />
+            </div>
+          )}
+
+          {isExpanded && hasDetails && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(!!item.prep_time_minutes || !!item.calories) && (
+                <div style={{ display: 'flex', gap: 12 }}>
+                  {item.prep_time_minutes && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
+                      <Clock size={10} /> ~{item.prep_time_minutes} min
+                    </span>
+                  )}
+                  {item.calories && (
+                    <span style={{ fontSize: 10.5, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
+                      {item.calories} cal
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {(item.allergens?.length ?? 0) > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>Contains:</span>
+                  {item.allergens.map((a) => (
+                    <span key={a} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--pr-border)', borderRadius: 100, padding: '2px 8px', fontSize: 10, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>{a}</span>
+                  ))}
+                </div>
+              )}
+
+              {visibleTags.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {visibleTags.map((tag) => (
+                    <span key={tag} style={{ background: 'var(--pr-orange-dim)', border: '1px solid rgba(122,31,43,0.15)', borderRadius: 100, padding: '2px 8px', fontSize: 10, color: 'var(--pr-orange)', fontFamily: 'var(--font-body)', opacity: 0.9 }}>{tag}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* No photo → put Add control inline at the bottom of the text
+              column instead of reserving a photo slot for nothing. */}
+          {!hasImage && ordersEnabled && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}
+            >
+              {hasOptions && (
+                <span style={{ fontSize: 9, fontWeight: 500, color: 'var(--pr-text-faint)', letterSpacing: '0.04em' }}>
+                  customisable
+                </span>
+              )}
+              <AddControl
+                variant="inline"
+                name={item.name}
+                qtyInCart={qtyInCart}
+                adding={adding}
+                onAdd={onAdd}
+                onInc={onInc}
+                onDec={onDec}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Right: photo with a true overlapping Add control — only rendered
+            when there's actually an image, so no-image dishes never reserve
+            an empty tile. */}
+        {hasImage && (
+          <div style={{ flexShrink: 0, width: PHOTO_COL_WIDTH }}>
+            <ItemPhoto src={imageUrl} alt={item.name} isVeg={item.is_veg} isBestseller={!!item.is_bestseller}>
+              {ordersEnabled && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <AddControl
+                    name={item.name}
+                    qtyInCart={qtyInCart}
+                    adding={adding}
+                    onAdd={onAdd}
+                    onInc={onInc}
+                    onDec={onDec}
+                  />
+                </div>
+              )}
+            </ItemPhoto>
+            {hasOptions && ordersEnabled && (
+              <p style={{
+                margin: `${ADD_HEIGHT / 2 + 8}px 0 0`, textAlign: 'center', fontSize: 9,
+                fontWeight: 500, color: 'var(--pr-text-faint)', letterSpacing: '0.04em',
+              }}>
+                customisable
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <style jsx>{`
+        .pr-item-card { transition: transform 0.2s, box-shadow 0.2s; }
+        .pr-item-card:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(0,0,0,0.08); }
+        .pr-item-card:active { transform: translateY(0); }
+        .pr-item-card:focus-within { outline: 2px solid var(--pr-orange); outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) {
+          .pr-item-card, .pr-item-card:hover { transition: none; transform: none; }
+        }
+      `}</style>
+    </div>
   )
 }
 
@@ -1525,6 +2443,11 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   }
 
   const openExplanation = () => setShowDishExplanation(true)
+  const persistedDishSlug =
+    (item as MenuItem & { slug?: string | null }).slug ?? undefined
+  const dishHref = restaurant?.slug
+    ? buildDishPath(restaurant.slug, item.name, item.id, persistedDishSlug)
+    : '#'
 
   const visibleTags = item.tags?.filter((t) => t !== 'new' && t !== 'spicy') ?? []
   const hasDetails =
@@ -1534,12 +2457,12 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
 
   const isInCart = qtyInCart > 0
 
-  if (isDarkTheme && hasImage) {
+  if (isDarkTheme) {
     return (
       <>
         <DarkMenuItemCard
           item={item}
-          imageUrl={imageUrl ?? ''}
+          imageUrl={imageUrl}
           cleanDescription={cleanDescription}
           priceLabel={priceLabel}
           hideCurrency={hideCurrencySymbol}
@@ -1558,6 +2481,9 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
           visibleTags={visibleTags}
           explainEnabled={aiDishExplanationsEnabled}
           onExplain={openExplanation}
+          dishHref={dishHref}
+          restaurantId={restaurant?.id}
+          showMostOrdered={Boolean(showMostOrdered)}
         />
         {showDishExplanation && (
           <DishExplanationModal item={item} context={explanationContext} onClose={() => setShowDishExplanation(false)} />
@@ -1566,217 +2492,40 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
     )
   }
 
-  // Extra bottom room so the photo's overlapping Add button (which extends
-  // below the photo by half its height) never collides with the next card.
-  const photoColBottomSpace = hasImage && ordersEnabled ? ADD_HEIGHT / 2 + 4 : 0
   return (
-    <div
-      style={{
-        position: 'relative',
-        background: isInCart
-          ? 'linear-gradient(135deg, var(--pr-orange-dim) 0%, var(--pr-card) 65%)'
-          : 'var(--pr-card)',
-        borderRadius: CARD_RADIUS,
-        border: isInCart ? '1px solid rgba(122,31,43,0.18)' : '1px solid var(--pr-border)',
-        overflow: 'hidden',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-      }}
-      className="pr-item-card"
-    >
-      {item.is_bestseller && (
-        <div style={{
-          position: 'absolute', top: 0, left: 20, right: 20, height: 2, borderRadius: 2,
-          background: 'linear-gradient(90deg, transparent, var(--pr-gold), transparent)',
-          opacity: 0.7,
-        }} />
-      )}
-
-      <div
-        onClick={toggle}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && toggle()}
-        aria-expanded={isExpanded}
-        style={{
-          display: 'flex', alignItems: 'flex-start',
-          gap: hasImage ? ROW_GAP : 0, padding: CARD_PAD,
-          paddingBottom: CARD_PAD + photoColBottomSpace,
-          cursor: 'pointer', userSelect: 'none',
-        }}
-      >
-        {/* Left: text content */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          {(item.is_bestseller || showMostOrdered || (item as any).is_special || item.tags?.includes('new')) && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginBottom: 7 }}>
-              {item.is_bestseller && <Pill icon={<Star size={7} style={{ fill: 'var(--pr-gold)' }} />} label="Bestseller" tone="gold" />}
-              {showMostOrdered && <Pill label="↑ Most ordered" tone="gold" />}
-              {(item as any).is_special && <Pill label="Special" tone="rose" />}
-              {item.tags?.includes('new') && <Pill label="New" tone="violet" />}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-            <p style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              fontSize: 15.5, fontWeight: 700, lineHeight: 1.3,
-              color: 'var(--pr-text)', fontFamily: 'var(--font-display)',
-            }}>
-              <VegDot isVeg={item.is_veg} />
-              <span>
-                {item.name}
-                {item.tags?.includes('spicy') && (
-                  <Flame size={12} style={{ marginLeft: 4, display: 'inline', color: '#f87171', verticalAlign: 'middle' }} />
-                )}
-              </span>
-            </p>
-
-            {priceLabel && (
-              <p style={{
-                flexShrink: 0, fontSize: 15, fontWeight: 600, color: 'var(--pr-orange)',
-                fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', paddingTop: 1,
-                fontVariantNumeric: 'lining-nums tabular-nums',
-              }}>{priceLabel}</p>
-            )}
-          </div>
-
-          {cleanDescription && (
-            <p style={{
-              marginTop: 5, fontSize: 12, lineHeight: 1.55, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)',
-              display: '-webkit-box',
-              WebkitLineClamp: isExpanded ? undefined : 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: isExpanded ? 'visible' : 'hidden',
-            }}>
-              {cleanDescription}
-            </p>
-          )}
-
-          {aiDishExplanationsEnabled && (
-            <div style={{ marginTop: 10, alignSelf: 'flex-start' }}>
-              <ExplainButton
-                name={item.name}
-                onClick={openExplanation}
-                tone={isDarkTheme ? 'dark' : 'light'}
-              />
-            </div>
-          )}
-
-          {(item.best_with?.length ?? 0) > 0 && (
-            <PairsWith names={item.best_with} onTap={onAsk ? handlePairsWithTap : undefined} />
-          )}
-
-          {hasOptions && (
-            <VariantsList
-              options={dishOptions[item.id] ?? []}
-              showCurrency={!hideCurrencySymbol}
-            />
-          )}
-
-          {isExpanded && hasDetails && (
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(!!item.prep_time_minutes || !!item.calories) && (
-                <div style={{ display: 'flex', gap: 12 }}>
-                  {item.prep_time_minutes && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
-                      <Clock size={10} /> ~{item.prep_time_minutes} min
-                    </span>
-                  )}
-                  {item.calories && (
-                    <span style={{ fontSize: 10.5, color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>
-                      {item.calories} cal
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {(item.allergens?.length ?? 0) > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--pr-text-faint)', fontFamily: 'var(--font-body)' }}>Contains:</span>
-                  {item.allergens.map((a) => (
-                    <span key={a} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--pr-border)', borderRadius: 100, padding: '2px 8px', fontSize: 10, color: 'var(--pr-text-muted)', fontFamily: 'var(--font-body)' }}>{a}</span>
-                  ))}
-                </div>
-              )}
-
-              {visibleTags.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {visibleTags.map((tag) => (
-                    <span key={tag} style={{ background: 'var(--pr-orange-dim)', border: '1px solid rgba(122,31,43,0.15)', borderRadius: 100, padding: '2px 8px', fontSize: 10, color: 'var(--pr-orange)', fontFamily: 'var(--font-body)', opacity: 0.9 }}>{tag}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* No photo → put Add control inline at the bottom of the text
-              column instead of reserving a photo slot for nothing. */}
-          {!hasImage && ordersEnabled && (
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}
-            >
-              {hasOptions && (
-                <span style={{ fontSize: 9, fontWeight: 500, color: 'var(--pr-text-faint)', letterSpacing: '0.04em' }}>
-                  customisable
-                </span>
-              )}
-              <AddControl
-                variant="inline"
-                name={item.name}
-                qtyInCart={qtyInCart}
-                adding={adding}
-                onAdd={handleAdd}
-                onInc={handleInc}
-                onDec={handleDec}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Right: photo with a true overlapping Add control — only rendered
-            when there's actually an image, so no-image dishes never reserve
-            an empty tile. */}
-        {hasImage && (
-          <div style={{ flexShrink: 0, width: PHOTO_COL_WIDTH }}>
-            <ItemPhoto src={imageUrl} alt={item.name} isVeg={item.is_veg} isBestseller={!!item.is_bestseller}>
-              {ordersEnabled && (
-                <div onClick={(e) => e.stopPropagation()}>
-                  <AddControl
-                    name={item.name}
-                    qtyInCart={qtyInCart}
-                    adding={adding}
-                    onAdd={handleAdd}
-                    onInc={handleInc}
-                    onDec={handleDec}
-                  />
-                </div>
-              )}
-            </ItemPhoto>
-            {hasOptions && ordersEnabled && (
-              <p style={{
-                marginTop: ADD_HEIGHT / 2 + 8, textAlign: 'center', fontSize: 9,
-                fontWeight: 500, color: 'var(--pr-text-faint)', letterSpacing: '0.04em',
-              }}>
-                customisable
-              </p>
-            )}
-          </div>
-        )}
-      </div>
+    <>
+      <LightMenuItemCard
+        item={item}
+        imageUrl={imageUrl}
+        cleanDescription={cleanDescription}
+        priceLabel={priceLabel}
+        hideCurrency={hideCurrencySymbol}
+        isExpanded={isExpanded}
+        onToggle={toggle}
+        qtyInCart={qtyInCart}
+        adding={adding}
+        ordersEnabled={ordersEnabled}
+        hasOptions={hasOptions}
+        options={dishOptions[item.id] ?? []}
+        onAdd={handleAdd}
+        onInc={handleInc}
+        onDec={handleDec}
+        onAsk={onAsk}
+        onPairsWithTap={handlePairsWithTap}
+        explainEnabled={aiDishExplanationsEnabled}
+        onExplain={openExplanation}
+        dishHref={dishHref}
+        restaurantId={restaurant?.id}
+        showMostOrdered={Boolean(showMostOrdered)}
+      />
 
       {showDishExplanation && (
-        <DishExplanationModal item={item} context={explanationContext} onClose={() => setShowDishExplanation(false)} />
+        <DishExplanationModal
+          item={item}
+          context={explanationContext}
+          onClose={() => setShowDishExplanation(false)}
+        />
       )}
-
-      <style jsx>{`
-        .pr-item-card { transition: transform 0.2s, box-shadow 0.2s; }
-        .pr-item-card:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(0,0,0,0.08); }
-        .pr-item-card:active { transform: translateY(0); }
-        .pr-item-card:focus-within { outline: 2px solid var(--pr-orange); outline-offset: 2px; }
-        @media (prefers-reduced-motion: reduce) {
-          .pr-item-card, .pr-item-card:hover { transition: none; transform: none; }
-        }
-      `}</style>
-    </div>
+    </>
   )
 }
