@@ -1,22 +1,57 @@
 'use client'
 
-// src/app/dashboard/restaurant/page.tsx
+import Link from 'next/link'
 import { useDashboardContext } from '@/hooks/useDashboardContext'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { getSupabaseDashboardBrowser } from '@/lib/supabase-dashboard'
 import type { Restaurant } from '@/types'
-import { Camera, ImagePlus, X, Sparkles } from 'lucide-react'
+import {
+  Camera,
+  CheckCircle2,
+  ExternalLink,
+  ImagePlus,
+  MapPin,
+  Sparkles,
+  X,
+} from 'lucide-react'
+import {
+  buildRestaurantSeoDescription,
+  buildRestaurantSeoTitle,
+  validateRestaurantSeo,
+} from '@/lib/seo/restaurant-seo'
 
 type DayKey =
-  | 'monday' | 'tuesday' | 'wednesday' | 'thursday'
-  | 'friday' | 'saturday' | 'sunday'
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday'
 
-type OpeningHour = { open: string; close: string; closed: boolean }
+type OpeningHour = {
+  open: string
+  close: string
+  closed: boolean
+}
+
 type OpeningHours = Record<DayKey, OpeningHour>
 
-type RestaurantWithAi = Restaurant & {
-  ai_dish_explanations?: boolean | null
-  hide_currency_symbol?: boolean | null
+type PriceRange = '₹' | '₹₹' | '₹₹₹' | '₹₹₹₹'
+
+type RestaurantWithSeo = Restaurant & {
+  area?: string | null
+  city?: string | null
+  state?: string | null
+  pincode?: string | null
+  country?: string | null
+  website_url?: string | null
+  price_range?: string | null
+  latitude?: number | string | null
+  longitude?: number | string | null
+  seo_title?: string | null
+  seo_description?: string | null
+  seo_indexable?: boolean | null
 }
 
 type RestaurantForm = {
@@ -26,6 +61,10 @@ type RestaurantForm = {
   cuisine_type: string
   restaurant_type: string
   address: string
+  area: string
+  city: string
+  state: string
+  pincode: string
   phone: string
   avg_prep_time: number
   total_tables: number
@@ -33,6 +72,10 @@ type RestaurantForm = {
   google_reviews_url: string
   google_rating: string
   google_review_count: string
+  website_url: string
+  price_range: PriceRange | ''
+  latitude: string
+  longitude: string
   opening_hours: OpeningHours
   kot_mode: 'manual' | 'dinezy_print'
   orders_enabled: boolean
@@ -48,31 +91,126 @@ type RestaurantForm = {
 }
 
 const DAYS: DayKey[] = [
-  'monday', 'tuesday', 'wednesday', 'thursday',
-  'friday', 'saturday', 'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
 ]
 
+const DAY_LABELS: Record<DayKey, string> = {
+  monday: 'Monday',
+  tuesday: 'Tuesday',
+  wednesday: 'Wednesday',
+  thursday: 'Thursday',
+  friday: 'Friday',
+  saturday: 'Saturday',
+  sunday: 'Sunday',
+}
+
 const CUISINES = [
-  'North Indian', 'South Indian', 'Chinese', 'Italian',
-  'Continental', 'Fast Food', 'Mughlai', 'Biryani',
-  'Street Food', 'Multi-cuisine', 'Other',
+  'North Indian',
+  'South Indian',
+  'Chinese',
+  'Italian',
+  'Continental',
+  'Fast Food',
+  'Mughlai',
+  'Biryani',
+  'Street Food',
+  'Multi-cuisine',
+  'Other',
 ]
 
 const RESTAURANT_TYPES = [
-  'Pure Veg', 'Veg + Non-Veg', 'Pure Non-Veg', 'Cafe',
-  'Bakery', 'Fast Food', 'Fine Dining', 'Cloud Kitchen',
-  'Dessert Shop', 'Other',
+  'Pure Veg',
+  'Veg + Non-Veg',
+  'Pure Non-Veg',
+  'Cafe',
+  'Bakery',
+  'Fast Food',
+  'Fine Dining',
+  'Cloud Kitchen',
+  'Dessert Shop',
+  'Other',
 ]
 
-function slugify(text: string) {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+const PRICE_RANGES: Array<{ value: PriceRange; label: string }> = [
+  { value: '₹', label: '₹ · Budget' },
+  { value: '₹₹', label: '₹₹ · Moderate' },
+  { value: '₹₹₹', label: '₹₹₹ · Premium' },
+  { value: '₹₹₹₹', label: '₹₹₹₹ · Luxury' },
+]
+
+function slugify(text: string): string {
+  return text
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 90)
+}
+
+function cleanText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
 }
 
 function createDefaultHours(): OpeningHours {
   return DAYS.reduce((acc, day) => {
-    acc[day] = { open: '11:00', close: '23:00', closed: false }
+    acc[day] = { open: '', close: '', closed: false }
     return acc
   }, {} as OpeningHours)
+}
+
+function normalizeWebsite(value: string): string {
+  const clean = value.trim()
+  if (!clean) return ''
+  if (/^https?:\/\//i.test(clean)) return clean
+  return `https://${clean}`
+}
+
+function getInstagramHandle(value: string): string {
+  return value
+    .replace(/^https?:\/\/(www\.)?instagram\.com\/?/i, '')
+    .replace(/^@/, '')
+    .replace(/\/$/, '')
+    .trim()
+}
+
+function getCompletionCount(form: RestaurantForm, coverUrl: string): number {
+  let score = 0
+  const requiredChecks = [
+    cleanText(form.name).length >= 2,
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(form.slug),
+    cleanText(form.description).length >= 80,
+    Boolean(form.cuisine_type),
+    Boolean(form.restaurant_type),
+    cleanText(form.address).length >= 8,
+    cleanText(form.area).length >= 2,
+    cleanText(form.city).length >= 2,
+    cleanText(form.state).length >= 2,
+    /^\d{6}$/.test(form.pincode),
+    cleanText(form.phone).length >= 10,
+    Boolean(form.price_range),
+    cleanText(form.about_story).length >= 120,
+    Boolean(coverUrl),
+    DAYS.every((day) => {
+      const row = form.opening_hours[day]
+      return Boolean(row) && (row.closed || (Boolean(row.open) && Boolean(row.close)))
+    }),
+  ]
+
+  score = requiredChecks.filter(Boolean).length
+  return Math.round((score / requiredChecks.length) * 100)
+}
+
+function validateImage(file: File, label: string): string | null {
+  if (!file.type.startsWith('image/')) return `${label} must be an image file.`
+  if (file.size > 5 * 1024 * 1024) return `${label} must be 5 MB or smaller.`
+  return null
 }
 
 export default function RestaurantPage() {
@@ -80,15 +218,19 @@ export default function RestaurantPage() {
   const { context, loading: contextLoading } = useDashboardContext()
   const restaurantId = context?.restaurantId ?? null
 
-  const [restaurant, setRestaurant] = useState<RestaurantWithAi | null>(null)
+  const [restaurant, setRestaurant] = useState<RestaurantWithSeo | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [validationMessages, setValidationMessages] = useState<string[]>([])
   const [slugTaken, setSlugTaken] = useState(false)
   const [checkingSlug, setCheckingSlug] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
+  const [pendingCoverFile, setPendingCoverFile] = useState<File | null>(null)
+  const [hoursConfirmed, setHoursConfirmed] = useState(false)
 
   const logoRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
@@ -98,8 +240,12 @@ export default function RestaurantPage() {
     slug: '',
     description: '',
     cuisine_type: '',
-    restaurant_type: 'Pure Veg',
+    restaurant_type: '',
     address: '',
+    area: '',
+    city: '',
+    state: '',
+    pincode: '',
     phone: '',
     avg_prep_time: 20,
     total_tables: 20,
@@ -107,6 +253,10 @@ export default function RestaurantPage() {
     google_reviews_url: '',
     google_rating: '',
     google_review_count: '',
+    website_url: '',
+    price_range: '',
+    latitude: '',
+    longitude: '',
     opening_hours: createDefaultHours(),
     kot_mode: 'manual',
     orders_enabled: true,
@@ -130,6 +280,52 @@ export default function RestaurantPage() {
     return 'your-restaurant'
   }, [form.slug, form.name])
 
+  const seoInput = useMemo(
+    () => ({
+      name: form.name,
+      slug: slugify(form.slug || form.name),
+      description: form.description,
+      cuisine_type: form.cuisine_type,
+      restaurant_type: form.restaurant_type,
+      address: form.address,
+      area: form.area,
+      city: form.city,
+      state: form.state,
+      pincode: form.pincode,
+      country: 'India',
+      phone: form.phone,
+      logo_url: logoUrl || null,
+      cover_url: coverUrl || null,
+      website_url: normalizeWebsite(form.website_url) || null,
+      instagram_url: form.instagram_url || null,
+      google_reviews_url: form.google_reviews_url.trim() || null,
+      price_range: form.price_range || null,
+      latitude: form.latitude || null,
+      longitude: form.longitude || null,
+      opening_hours: form.opening_hours,
+    }),
+    [
+      form,
+      logoUrl,
+      coverUrl,
+    ],
+  )
+
+  const seoTitlePreview = useMemo(
+    () => buildRestaurantSeoTitle(seoInput),
+    [seoInput],
+  )
+
+  const seoDescriptionPreview = useMemo(
+    () => buildRestaurantSeoDescription(seoInput),
+    [seoInput],
+  )
+
+  const seoCompletion = useMemo(
+    () => getCompletionCount(form, coverUrl),
+    [form, coverUrl],
+  )
+
   useEffect(() => {
     let mounted = true
 
@@ -150,24 +346,39 @@ export default function RestaurantPage() {
         if (!mounted) return
 
         if (data) {
-          const row = data as RestaurantWithAi
+          const row = data as RestaurantWithSeo
+
           setRestaurant(row)
           setForm({
             name: row.name ?? '',
             slug: row.slug ?? '',
             description: row.description ?? '',
             cuisine_type: row.cuisine_type ?? '',
-            restaurant_type: row.restaurant_type ?? 'Pure Veg',
+            restaurant_type: row.restaurant_type ?? '',
             address: row.address ?? '',
+            area: row.area ?? '',
+            city: row.city ?? '',
+            state: row.state ?? '',
+            pincode: row.pincode ?? '',
             phone: row.phone ?? '',
             avg_prep_time: row.avg_prep_time ?? 20,
             total_tables: row.total_tables ?? 20,
             instagram_url: row.instagram_url ?? '',
             google_reviews_url: row.google_reviews_url ?? '',
-            google_rating: row.google_rating != null ? String(row.google_rating) : '',
-            google_review_count: row.google_review_count != null ? String(row.google_review_count) : '',
-            opening_hours: (row.opening_hours as OpeningHours) ?? createDefaultHours(),
-            kot_mode: (row.kot_mode as 'manual' | 'dinezy_print') ?? 'manual',
+            google_rating:
+              row.google_rating != null ? String(row.google_rating) : '',
+            google_review_count:
+              row.google_review_count != null
+                ? String(row.google_review_count)
+                : '',
+            website_url: row.website_url ?? '',
+            price_range: (row.price_range as PriceRange | null) ?? '',
+            latitude: row.latitude != null ? String(row.latitude) : '',
+            longitude: row.longitude != null ? String(row.longitude) : '',
+            opening_hours:
+              (row.opening_hours as OpeningHours) ?? createDefaultHours(),
+            kot_mode:
+              (row.kot_mode as 'manual' | 'dinezy_print') ?? 'manual',
             orders_enabled: row.orders_enabled ?? true,
             has_bar_menu: row.has_bar_menu ?? false,
             has_corporate_menu: row.has_corporate_menu ?? false,
@@ -176,28 +387,36 @@ export default function RestaurantPage() {
             ai_dish_explanations: row.ai_dish_explanations ?? false,
             hide_currency_symbol: row.hide_currency_symbol ?? false,
             about_story: row.about_story ?? '',
-            total_branches: row.total_branches != null ? String(row.total_branches) : '',
-            established_year: row.established_year != null ? String(row.established_year) : '',
+            total_branches:
+              row.total_branches != null ? String(row.total_branches) : '',
+            established_year:
+              row.established_year != null
+                ? String(row.established_year)
+                : '',
           })
           setLogoUrl(row.logo_url ?? '')
           setCoverUrl(row.cover_url ?? '')
         }
       } catch (err) {
         console.error('Restaurant page load error:', err)
-        if (mounted) setError('Failed to load restaurant profile')
+        if (mounted) setError('Failed to load restaurant profile.')
       } finally {
         if (mounted) setLoading(false)
       }
     }
 
     void load()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [restaurantId, supabase])
 
   function handleNameChange(name: string) {
     setForm((current) => {
       const currentAutoSlug = current.name ? slugify(current.name) : ''
-      const shouldAutoUpdate = current.slug === '' || current.slug === currentAutoSlug
+      const shouldAutoUpdate =
+        current.slug === '' || current.slug === currentAutoSlug
+
       return {
         ...current,
         name,
@@ -211,6 +430,7 @@ export default function RestaurantPage() {
 
     const timer = setTimeout(async () => {
       const slug = form.slug.trim()
+
       if (!slug) {
         setSlugTaken(false)
         setCheckingSlug(false)
@@ -224,11 +444,12 @@ export default function RestaurantPage() {
       }
 
       setCheckingSlug(true)
+
       try {
         const { data, error: slugError } = await supabase
           .from('restaurants')
           .select('id')
-          .eq('slug', slug)
+          .ilike('slug', slug)
           .maybeSingle()
 
         if (!active) return
@@ -253,9 +474,13 @@ export default function RestaurantPage() {
       ...current,
       opening_hours: {
         ...current.opening_hours,
-        [day]: { ...current.opening_hours[day], [field]: value },
+        [day]: {
+          ...current.opening_hours[day],
+          [field]: value,
+        },
       },
     }))
+    setHoursConfirmed(false)
   }
 
   function toggleClosed(day: DayKey) {
@@ -263,18 +488,25 @@ export default function RestaurantPage() {
       ...current,
       opening_hours: {
         ...current.opening_hours,
-        [day]: { ...current.opening_hours[day], closed: !current.opening_hours[day].closed },
+        [day]: {
+          ...current.opening_hours[day],
+          closed: !current.opening_hours[day].closed,
+        },
       },
     }))
+    setHoursConfirmed(false)
   }
 
-  async function uploadImage(file: File, bucket: 'logos' | 'covers'): Promise<string> {
-    if (!restaurantId) throw new Error('Restaurant not found')
-
+  async function uploadImage(
+    file: File,
+    bucket: 'logos' | 'covers',
+    targetRestaurantId: string,
+  ): Promise<string> {
     const safeFileName = file.name
       .replace(/\s+/g, '-')
-      .replace(/[^a-zA-Z0-9._-]/g, '')
-    const path = `${restaurantId}/${bucket}/${Date.now()}-${safeFileName}`
+      .replace(/[^a-zA-Z0-9.\_-]/g, '')
+
+    const path = `${targetRestaurantId}/${bucket}/${Date.now()}-${safeFileName}`
 
     const { error: uploadError } = await supabase.storage
       .from('restaurant-assets')
@@ -292,12 +524,159 @@ export default function RestaurantPage() {
     return data.publicUrl
   }
 
+  async function handleLogoFile(file: File) {
+    const imageError = validateImage(file, 'Logo')
+    if (imageError) {
+      setError(imageError)
+      return
+    }
+
+    setError('')
+
+    if (!restaurantId) {
+      setPendingLogoFile(file)
+      setLogoUrl(URL.createObjectURL(file))
+      return
+    }
+
+    setUploadingLogo(true)
+    try {
+      setLogoUrl(await uploadImage(file, 'logos', restaurantId))
+      setPendingLogoFile(null)
+    } catch (err) {
+      console.error('Logo upload failed:', err)
+      setError(err instanceof Error ? err.message : 'Logo upload failed.')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  async function handleCoverFile(file: File) {
+    const imageError = validateImage(file, 'Cover photo')
+    if (imageError) {
+      setError(imageError)
+      return
+    }
+
+    setError('')
+
+    if (!restaurantId) {
+      setPendingCoverFile(file)
+      setCoverUrl(URL.createObjectURL(file))
+      return
+    }
+
+    setUploadingCover(true)
+    try {
+      setCoverUrl(await uploadImage(file, 'covers', restaurantId))
+      setPendingCoverFile(null)
+    } catch (err) {
+      console.error('Cover upload failed:', err)
+      setError(err instanceof Error ? err.message : 'Cover upload failed.')
+    } finally {
+      setUploadingCover(false)
+    }
+  }
+
+  function removeCover() {
+    setPendingCoverFile(null)
+    setCoverUrl('')
+  }
+
+  function removeLogo() {
+    setPendingLogoFile(null)
+    setLogoUrl('')
+  }
+
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    setValidationMessages([])
 
-    if (slugTaken) {
-      setError('This slug is already taken')
+    const slug = slugify(form.slug || form.name)
+    const cleanedPhone = cleanText(form.phone)
+    const cleanedDescription = cleanText(form.description)
+    const cleanedAbout = cleanText(form.about_story)
+    const normalizedWebsite = normalizeWebsite(form.website_url)
+
+    const basicErrors: string[] = []
+
+    if (slugTaken) basicErrors.push('The restaurant URL slug is already in use.')
+    if (!slug) basicErrors.push('Add a valid restaurant URL slug.')
+    if (cleanedDescription.length < 80) {
+      basicErrors.push('Restaurant description must be at least 80 characters.')
+    }
+    if (cleanedDescription.length > 600) {
+      basicErrors.push('Restaurant description must be 600 characters or fewer.')
+    }
+    if (cleanedAbout.length < 120) {
+      basicErrors.push('Restaurant story must be at least 120 characters.')
+    }
+    if (cleanedAbout.length > 1200) {
+      basicErrors.push('Restaurant story must be 1,200 characters or fewer.')
+    }
+    if (!/^\d{6}$/.test(form.pincode.trim())) {
+      basicErrors.push('PIN code must contain exactly 6 digits.')
+    }
+    if (!cleanedPhone || cleanedPhone.replace(/\D/g, '').length < 10) {
+      basicErrors.push('Enter a valid restaurant phone number.')
+    }
+    if (!form.price_range) basicErrors.push('Select the restaurant price range.')
+    if (!coverUrl) basicErrors.push('Upload a real restaurant cover photo before publishing.')
+    if (!hoursConfirmed) basicErrors.push('Confirm that the opening hours are current and accurate.')
+
+    if (Boolean(form.latitude) !== Boolean(form.longitude)) {
+      basicErrors.push('Enter both latitude and longitude, or leave both blank.')
+    }
+
+    if (form.latitude && !Number.isFinite(Number(form.latitude))) {
+      basicErrors.push('Latitude must be a valid number.')
+    }
+
+    if (form.longitude && !Number.isFinite(Number(form.longitude))) {
+      basicErrors.push('Longitude must be a valid number.')
+    }
+
+    if (form.latitude && (Number(form.latitude) < -90 || Number(form.latitude) > 90)) {
+      basicErrors.push('Latitude must be between -90 and 90.')
+    }
+
+    if (form.longitude && (Number(form.longitude) < -180 || Number(form.longitude) > 180)) {
+      basicErrors.push('Longitude must be between -180 and 180.')
+    }
+
+    if (normalizedWebsite) {
+      try {
+        const website = new URL(normalizedWebsite)
+        if (!['http:', 'https:'].includes(website.protocol)) {
+          basicErrors.push('Restaurant website must use http:// or https://.')
+        }
+      } catch {
+        basicErrors.push('Enter a valid restaurant website URL.')
+      }
+    }
+
+    const seoErrors = validateRestaurantSeo({
+      ...seoInput,
+      slug,
+      description: cleanedDescription,
+      phone: cleanedPhone,
+      cover_url: coverUrl,
+      website_url: normalizedWebsite || null,
+    })
+
+    const mergedErrors = Array.from(
+      new Set([...basicErrors, ...seoErrors]),
+    )
+
+    if (mergedErrors.length > 0) {
+      setValidationMessages(mergedErrors)
+      setError('Complete the required restaurant information before saving.')
+      window.setTimeout(() => {
+        document
+          .getElementById('seo-readiness')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 0)
       return
     }
 
@@ -308,65 +687,143 @@ export default function RestaurantPage() {
       const user = authData.user
       if (!user?.email) throw new Error('Not authenticated')
 
-      const payload = {
+      const restaurantsTable = supabase.from('restaurants') as any
+
+      const basePayload = {
         ...form,
-        slug: slugify(form.slug || form.name),
-        logo_url: logoUrl || null,
-        cover_url: coverUrl || null,
+        name: cleanText(form.name),
+        slug,
+        description: cleanedDescription,
+        cuisine_type: cleanText(form.cuisine_type),
+        restaurant_type: cleanText(form.restaurant_type),
+        address: cleanText(form.address),
+        area: cleanText(form.area),
+        city: cleanText(form.city),
+        state: cleanText(form.state),
+        pincode: form.pincode.trim(),
+        phone: cleanedPhone,
+        logo_url: restaurantId ? logoUrl || null : null,
+        cover_url: restaurantId ? coverUrl || null : null,
         google_rating: form.google_rating ? Number(form.google_rating) : null,
-        google_review_count: form.google_review_count ? Number(form.google_review_count) : null,
+        google_review_count: form.google_review_count
+          ? Number(form.google_review_count)
+          : null,
         google_reviews_url: form.google_reviews_url.trim() || null,
-        about_story: form.about_story.trim() || null,
+        about_story: cleanedAbout,
         total_branches: form.total_branches ? Number(form.total_branches) : null,
-        established_year: form.established_year ? Number(form.established_year) : null,
-        ai_dish_explanations: form.ai_dish_explanations,
-        hide_currency_symbol: form.hide_currency_symbol,
+        established_year: form.established_year
+          ? Number(form.established_year)
+          : null,
+        website_url: normalizedWebsite || null,
+        price_range: form.price_range,
+        latitude: form.latitude ? Number(form.latitude) : null,
+        longitude: form.longitude ? Number(form.longitude) : null,
+        seo_title: seoTitlePreview,
+        seo_description: seoDescriptionPreview,
+        seo_indexable: true,
       }
 
       let savedRestaurantId: string | null = null
 
-      // Cast only here so this page remains compatible with older generated
-      // Supabase types until the new column is regenerated in src/types.
-      const restaurantsTable = supabase.from('restaurants') as any
-
       if (restaurant) {
         const { data, error: updateError } = await restaurantsTable
-          .update(payload)
+          .update(basePayload)
           .eq('id', restaurant.id)
           .select('*')
           .single()
 
         if (updateError) throw updateError
-        if (data) {
-          setRestaurant(data as RestaurantWithAi)
-          savedRestaurantId = data.id
-        }
+        if (!data) throw new Error('Restaurant update failed')
+
+        setRestaurant(data as RestaurantWithSeo)
+        savedRestaurantId = data.id
       } else {
         const { data, error: insertError } = await restaurantsTable
-          .insert({ ...payload, owner_id: user.id })
+          .insert({
+            ...basePayload,
+            owner_id: user.id,
+          })
           .select('*')
           .single()
 
         if (insertError) throw insertError
-        if (!data) throw new Error('Restaurant insert failed')
+        if (!data) throw new Error('Restaurant creation failed')
 
-        setRestaurant(data as RestaurantWithAi)
-        savedRestaurantId = data.id
+        const newRestaurantId = data.id
+        savedRestaurantId = newRestaurantId
 
-        const { error: staffError } = await supabase.from('restaurant_staff').insert({
-          restaurant_id: data.id,
-          email: user.email,
-          role: 'owner',
-          active: true,
-          created_by: user.id,
-          user_id: user.id,
-        })
+        let finalLogoUrl: string | null = null
+        let finalCoverUrl: string | null = null
+
+        if (pendingLogoFile) {
+          finalLogoUrl = await uploadImage(
+            pendingLogoFile,
+            'logos',
+            newRestaurantId,
+          )
+        }
+
+        if (pendingCoverFile) {
+          finalCoverUrl = await uploadImage(
+            pendingCoverFile,
+            'covers',
+            newRestaurantId,
+          )
+        }
+
+        if (!finalCoverUrl && !coverUrl) {
+          throw new Error('Restaurant cover photo is required.')
+        }
+
+        const finalPayload = {
+          logo_url: finalLogoUrl,
+          cover_url: finalCoverUrl,
+          seo_title: buildRestaurantSeoTitle({
+            ...seoInput,
+            logo_url: finalLogoUrl,
+            cover_url: finalCoverUrl,
+          }),
+          seo_description: buildRestaurantSeoDescription({
+            ...seoInput,
+            logo_url: finalLogoUrl,
+            cover_url: finalCoverUrl,
+          }),
+          seo_indexable: true,
+        }
+
+        const { data: completed, error: imageUpdateError } = await restaurantsTable
+          .update(finalPayload)
+          .eq('id', savedRestaurantId)
+          .select('*')
+          .single()
+
+        if (imageUpdateError) throw imageUpdateError
+        if (!completed) throw new Error('Restaurant finalization failed')
+
+        setRestaurant(completed as RestaurantWithSeo)
+        setLogoUrl(finalLogoUrl || '')
+        setCoverUrl(finalCoverUrl || '')
+        setPendingLogoFile(null)
+        setPendingCoverFile(null)
+
+        const { error: staffError } = await supabase
+          .from('restaurant_staff')
+          .insert({
+            restaurant_id: savedRestaurantId,
+            email: user.email,
+            role: 'owner',
+            active: true,
+            created_by: user.id,
+            user_id: user.id,
+          })
 
         if (staffError) throw staffError
       }
 
       if (savedRestaurantId) {
-        const { data: { session } } = await supabase.auth.getSession()
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
         fetch('/api/discovery/sync', {
           method: 'POST',
@@ -379,7 +836,6 @@ export default function RestaurantPage() {
           body: JSON.stringify({ restaurantId: savedRestaurantId }),
         }).catch((err) => console.error('discovery sync failed:', err))
 
-        // Attach any pending restaurant signup to the partner referral.
         fetch('/api/partner/attach-restaurant', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -387,11 +843,18 @@ export default function RestaurantPage() {
         }).catch((err) => console.error('partner attach failed:', err))
       }
 
+      setForm((current) => ({
+        ...current,
+        slug,
+        description: cleanedDescription,
+        about_story: cleanedAbout,
+        website_url: normalizedWebsite,
+      }))
       setSaved(true)
       window.setTimeout(() => setSaved(false), 2500)
     } catch (err) {
       console.error('Restaurant save error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to save restaurant')
+      setError(err instanceof Error ? err.message : 'Failed to save restaurant.')
     } finally {
       setSaving(false)
     }
@@ -411,9 +874,9 @@ export default function RestaurantPage() {
         <div className="h-8 w-56 animate-pulse rounded-lg bg-zinc-800" />
         <div className="mt-2 h-4 w-72 animate-pulse rounded bg-zinc-800/60" />
         <div className="mt-8 space-y-4">
-          <div className="h-44 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900" />
-          <div className="h-72 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900" />
-          <div className="h-64 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900" />
+          <div className="h-44 rounded-2xl border border-zinc-800 bg-zinc-900" />
+          <div className="h-72 rounded-2xl border border-zinc-800 bg-zinc-900" />
+          <div className="h-64 rounded-2xl border border-zinc-800 bg-zinc-900" />
         </div>
       </div>
     )
@@ -422,10 +885,29 @@ export default function RestaurantPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-white sm:text-3xl">Restaurant Profile</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          This information appears on your customer-facing menu page.
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-orange-400">
+              Public restaurant profile
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
+              Restaurant Profile
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500">
+              These details power your public Dinezy restaurant page, search appearance,
+              local business information and the links Google can crawl.
+            </p>
+          </div>
+
+          <Link
+            href={`/r/${encodeURIComponent(restaurantSlugPreview)}`}
+            target="_blank"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+          >
+            Preview public page
+            <ExternalLink size={13} />
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -434,34 +916,94 @@ export default function RestaurantPage() {
         </div>
       )}
 
+      {validationMessages.length > 0 && (
+        <div
+          id="seo-readiness"
+          className="mb-6 rounded-2xl border border-orange-500/20 bg-orange-500/[0.06] p-4"
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-orange-400">
+              <Sparkles size={16} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">Complete the SEO-ready profile</p>
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-zinc-400">
+                {validationMessages.map((message) => (
+                  <li key={message} className="flex gap-2">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-orange-400" />
+                    <span>{message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
+              SEO readiness
+            </p>
+            <p className="mt-1 text-sm text-zinc-300">
+              Public page completion: {seoCompletion}%
+            </p>
+          </div>
+          <div className="h-2 w-28 overflow-hidden rounded-full bg-zinc-800 sm:w-48">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-[width] duration-300"
+              style={{ width: `${seoCompletion}%` }}
+            />
+          </div>
+        </div>
+        <p className="mt-3 text-[11px] leading-5 text-zinc-600">
+          Dinezy does not generate keyword lists. It uses the restaurant&apos;s real name, location,
+          cuisine, menu context, images and business details to create descriptive search metadata.
+        </p>
+      </div>
+
       <form onSubmit={handleSave} className="space-y-6">
         <Section title="Branding">
           <div className="space-y-5">
             <div>
-              <p className="mb-2 text-xs font-medium text-zinc-400">Cover photo</p>
-              <p className="mb-3 text-[11px] text-zinc-600">
-                Shown as a full-width banner on the menu page. Portrait or square works best (recommended: 1080 × 1080 px or taller).
-              </p>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-zinc-400">Cover photo <span className="text-orange-400">*</span></p>
+                  <p className="mt-1 text-[11px] leading-5 text-zinc-600">
+                    Required for the public restaurant page and social/search previews. Use a real photo of this restaurant.
+                  </p>
+                </div>
+                {coverUrl && !pendingCoverFile && (
+                  <span className="text-[10px] font-medium text-emerald-400">Saved</span>
+                )}
+              </div>
 
               <div
                 className={[
                   'group relative w-full cursor-pointer overflow-hidden rounded-2xl border-2 border-dashed transition',
                   coverUrl
                     ? 'border-zinc-700 hover:border-zinc-500'
-                    : 'border-zinc-700 hover:border-orange-500/60 bg-zinc-800/30',
+                    : 'border-orange-500/30 bg-orange-500/[0.03] hover:border-orange-500/60',
                   'aspect-square sm:aspect-[3/4] lg:aspect-auto lg:h-[400px]',
                 ].join(' ')}
                 onClick={() => coverRef.current?.click()}
                 role="button"
-                aria-label="Upload cover photo"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    coverRef.current?.click()
+                  }
+                }}
+                aria-label="Upload restaurant cover photo"
               >
                 {coverUrl ? (
                   <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={coverUrl}
                       className="h-full w-full object-cover transition group-hover:brightness-75"
-                      alt="Cover preview"
+                      alt="Restaurant cover preview"
                     />
                     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 transition group-hover:opacity-100">
                       <Camera size={28} className="text-white drop-shadow" />
@@ -469,11 +1011,11 @@ export default function RestaurantPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setCoverUrl('')
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        removeCover()
                       }}
-                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
+                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
                       aria-label="Remove cover photo"
                     >
                       <X size={13} />
@@ -502,25 +1044,10 @@ export default function RestaurantPage() {
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  if (file.size > 5 * 1024 * 1024) {
-                    setError('Cover photo must be 5 MB or smaller')
-                    e.target.value = ''
-                    return
-                  }
-                  setUploadingCover(true)
-                  setError('')
-                  try {
-                    setCoverUrl(await uploadImage(file, 'covers'))
-                  } catch (err) {
-                    console.error('Cover upload failed:', err)
-                    setError(err instanceof Error ? err.message : 'Cover upload failed')
-                  } finally {
-                    setUploadingCover(false)
-                    e.target.value = ''
-                  }
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) void handleCoverFile(file)
+                  event.target.value = ''
                 }}
               />
             </div>
@@ -532,24 +1059,30 @@ export default function RestaurantPage() {
                   className="group relative h-20 w-20 shrink-0 cursor-pointer overflow-hidden rounded-2xl border-2 border-dashed border-zinc-700 bg-zinc-800/30 transition hover:border-orange-500/60"
                   onClick={() => logoRef.current?.click()}
                   role="button"
-                  aria-label="Upload logo"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      logoRef.current?.click()
+                    }
+                  }}
+                  aria-label="Upload restaurant logo"
                 >
                   {logoUrl ? (
                     <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={logoUrl}
                         className="h-full w-full object-cover transition group-hover:brightness-75"
-                        alt="Logo preview"
+                        alt="Restaurant logo preview"
                       />
                       <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
                         <Camera size={18} className="text-white drop-shadow" />
                       </div>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setLogoUrl('')
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          removeLogo()
                         }}
                         className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
                         aria-label="Remove logo"
@@ -570,8 +1103,8 @@ export default function RestaurantPage() {
 
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-zinc-400">Restaurant logo</p>
-                  <p className="mt-1 text-xs text-zinc-600">
-                    Shown in the top-left corner of your banner and on receipts. Square image recommended.
+                  <p className="mt-1 text-xs leading-5 text-zinc-600">
+                    Recommended for brand recognition and rich business information. Square image works best.
                   </p>
                 </div>
 
@@ -580,25 +1113,10 @@ export default function RestaurantPage() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    if (file.size > 5 * 1024 * 1024) {
-                      setError('Logo must be 5 MB or smaller')
-                      e.target.value = ''
-                      return
-                    }
-                    setUploadingLogo(true)
-                    setError('')
-                    try {
-                      setLogoUrl(await uploadImage(file, 'logos'))
-                    } catch (err) {
-                      console.error('Logo upload failed:', err)
-                      setError(err instanceof Error ? err.message : 'Logo upload failed')
-                    } finally {
-                      setUploadingLogo(false)
-                      e.target.value = ''
-                    }
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) void handleLogoFile(file)
+                    event.target.value = ''
                   }}
                 />
               </div>
@@ -607,126 +1125,331 @@ export default function RestaurantPage() {
         </Section>
 
         <Section title="Basic Info">
-          <Field label="Restaurant name" required>
+          <Field label="Restaurant name" required hint="Use the real customer-facing business name.">
             <input
               value={form.name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="Spice Garden"
+              onChange={(event) => handleNameChange(event.target.value)}
               className={INPUT}
               required
             />
           </Field>
 
           <Field
-            label="URL slug — customers visit /r/{slug}"
+            label="Public URL slug"
             required
             hint={
               slugTaken
-                ? '⚠ This slug is already taken'
+                ? 'This slug is already used by another restaurant.'
                 : checkingSlug
                   ? 'Checking availability…'
-                  : `Preview: /r/${restaurantSlugPreview}`
+                  : `Public URL: /r/${restaurantSlugPreview}`
             }
             hintColor={slugTaken ? 'text-red-400' : 'text-zinc-500'}
           >
             <input
               value={form.slug}
-              onChange={(e) => setForm((current) => ({ ...current, slug: slugify(e.target.value) }))}
-              placeholder="spice-garden"
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  slug: slugify(event.target.value),
+                }))
+              }
               pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
               className={INPUT}
               required
             />
           </Field>
 
-          <Field label="Description">
+          <Field
+            label="Restaurant description"
+            required
+            hint={`${cleanText(form.description).length}/600 characters · write a real, unique description of this restaurant.`}
+          >
             <textarea
               value={form.description}
-              onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
-              placeholder="Authentic Indian cuisine with a modern twist…"
-              rows={4}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
+              }
+              rows={5}
+              maxLength={600}
               className={`${INPUT} resize-none`}
+              required
             />
           </Field>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Cuisine type">
+            <Field label="Cuisine type" required>
               <select
                 value={form.cuisine_type}
-                onChange={(e) => setForm((current) => ({ ...current, cuisine_type: e.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    cuisine_type: event.target.value,
+                  }))
+                }
                 className={INPUT}
+                required
               >
                 <option value="">Select…</option>
-                {CUISINES.map((cuisine) => <option key={cuisine}>{cuisine}</option>)}
+                {CUISINES.map((cuisine) => (
+                  <option key={cuisine}>{cuisine}</option>
+                ))}
               </select>
             </Field>
 
-            <Field label="Restaurant type">
+            <Field label="Restaurant type" required>
               <select
                 value={form.restaurant_type}
-                onChange={(e) => setForm((current) => ({ ...current, restaurant_type: e.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    restaurant_type: event.target.value,
+                  }))
+                }
                 className={INPUT}
+                required
               >
+                <option value="">Select…</option>
                 {RESTAURANT_TYPES.map((type) => (
                   <option key={type} value={type}>{type}</option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Phone">
+            <Field label="Phone" required hint="Use the main customer-facing number, preferably with +91.">
               <input
+                type="tel"
+                inputMode="tel"
                 value={form.phone}
-                onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}
-                placeholder="+91 98765 43210"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    phone: event.target.value,
+                  }))
+                }
+                className={INPUT}
+                required
+              />
+            </Field>
+
+            <Field label="Typical price range" required hint="Used in restaurant information and structured data.">
+              <select
+                value={form.price_range}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    price_range: event.target.value as PriceRange | '',
+                  }))
+                }
+                className={INPUT}
+                required
+              >
+                <option value="">Select…</option>
+                {PRICE_RANGES.map((price) => (
+                  <option key={price.value} value={price.value}>{price.label}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Street address" required>
+            <input
+              value={form.address}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  address: event.target.value,
+                }))
+              }
+              className={INPUT}
+              required
+            />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Area / locality" required hint="Examples: Balewadi, Baner, Koregaon Park">
+              <input
+                value={form.area}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    area: event.target.value,
+                  }))
+                }
+                className={INPUT}
+                required
+              />
+            </Field>
+
+            <Field label="City" required>
+              <input
+                value={form.city}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    city: event.target.value,
+                  }))
+                }
+                className={INPUT}
+                required
+              />
+            </Field>
+
+            <Field label="State" required>
+              <input
+                value={form.state}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    state: event.target.value,
+                  }))
+                }
+                className={INPUT}
+                required
+              />
+            </Field>
+
+            <Field label="PIN code" required>
+              <input
+                inputMode="numeric"
+                value={form.pincode}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    pincode: event.target.value.replace(/\D/g, '').slice(0, 6),
+                  }))
+                }
+                pattern="[0-9]{6}"
+                className={INPUT}
+                required
+              />
+            </Field>
+          </div>
+
+          <Field label="Restaurant website" hint="Optional. Enter the official restaurant website, not a directory page.">
+            <input
+              type="url"
+              value={form.website_url}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  website_url: event.target.value,
+                }))
+              }
+              className={INPUT}
+              placeholder="https://example.com"
+            />
+          </Field>
+        </Section>
+
+        <Section title="Local Business Details">
+          <div className="rounded-xl border border-orange-500/15 bg-orange-500/[0.03] p-3 text-[11px] leading-5 text-zinc-500">
+            <p className="font-semibold text-zinc-300">Why this matters</p>
+            <p className="mt-1">
+              Location, phone, cuisine, hours and real images give Dinezy enough factual information to build a stronger public restaurant page and LocalBusiness/Restaurant structured data. They do not guarantee a search position.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Latitude" hint="Recommended. Paste the latitude from your Google Maps pin.">
+              <input
+                inputMode="decimal"
+                value={form.latitude}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    latitude: event.target.value,
+                  }))
+                }
                 className={INPUT}
               />
             </Field>
 
-            <Field label="Avg. prep time (minutes)" hint="Shown to customers on the menu">
+            <Field label="Longitude" hint="Recommended. Paste the longitude from your Google Maps pin.">
               <input
-                type="number"
-                min={5}
-                max={120}
-                value={form.avg_prep_time}
-                onChange={(e) => setForm((current) => ({ ...current, avg_prep_time: Number(e.target.value) }))}
-                className={INPUT}
-              />
-            </Field>
-
-            <Field label="Total tables" hint="Used for table assignment">
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={form.total_tables}
-                onChange={(e) => setForm((current) => ({ ...current, total_tables: Number(e.target.value) }))}
+                inputMode="decimal"
+                value={form.longitude}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    longitude: event.target.value,
+                  }))
+                }
                 className={INPUT}
               />
             </Field>
           </div>
 
-          <Field label="Address">
+          <Field label="Google Maps listing link" hint="Optional but useful for local discovery. Use the restaurant's actual Google Maps/Business listing.">
             <input
-              value={form.address}
-              onChange={(e) => setForm((current) => ({ ...current, address: e.target.value }))}
-              placeholder="MG Road, Pune"
+              type="url"
+              value={form.google_reviews_url}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  google_reviews_url: event.target.value,
+                }))
+              }
               className={INPUT}
+              placeholder="https://maps.app.goo.gl/..."
             />
           </Field>
 
-          <Field label="Instagram" hint="Enter your Instagram handle — e.g. yourrestaurant">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Google rating" hint="Optional. Keep this current and factual.">
+              <input
+                type="number"
+                step="0.1"
+                min={0}
+                max={5}
+                value={form.google_rating}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    google_rating: event.target.value,
+                  }))
+                }
+                className={INPUT}
+              />
+            </Field>
+
+            <Field label="Google review count" hint="Optional. Keep this current and factual.">
+              <input
+                type="number"
+                min={0}
+                value={form.google_review_count}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    google_review_count: event.target.value,
+                  }))
+                }
+                className={INPUT}
+              />
+            </Field>
+          </div>
+
+          <Field label="Instagram" hint="Optional. Enter the restaurant's real Instagram handle.">
             <div className="flex items-center gap-2">
               <span className="shrink-0 text-sm text-zinc-500">instagram.com/</span>
               <input
-                value={form.instagram_url.replace(/^https?:\/\/(www\.)?instagram\.com\/?/i, '')}
-                onChange={(e) => {
-                  const handle = e.target.value.replace(/^@/, '').replace(/\s+/g, '').trim()
+                value={getInstagramHandle(form.instagram_url)}
+                onChange={(event) => {
+                  const handle = event.target.value
+                    .replace(/^@/, '')
+                    .replace(/\s+/g, '')
+                    .trim()
+
                   setForm((current) => ({
                     ...current,
-                    instagram_url: handle ? `https://instagram.com/${handle}` : '',
+                    instagram_url: handle
+                      ? `https://instagram.com/${handle}`
+                      : '',
                   }))
                 }}
-                placeholder="yourhandle"
                 className={INPUT}
               />
             </div>
@@ -737,12 +1460,16 @@ export default function RestaurantPage() {
           <div className="space-y-2">
             {DAYS.map((day) => {
               const closed = form.opening_hours[day]?.closed
+
               return (
                 <div
                   key={day}
                   className="flex flex-col gap-2 rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2.5 sm:flex-row sm:items-center"
                 >
-                  <span className="w-24 shrink-0 text-sm capitalize text-zinc-400">{day}</span>
+                  <span className="w-24 shrink-0 text-sm text-zinc-400">
+                    {DAY_LABELS[day]}
+                  </span>
+
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -752,19 +1479,20 @@ export default function RestaurantPage() {
                     />
                     <span className="text-xs text-zinc-500">Open</span>
                   </label>
+
                   {!closed ? (
                     <div className="flex flex-1 items-center gap-2">
                       <input
                         type="time"
-                        value={form.opening_hours[day]?.open}
-                        onChange={(e) => setHour(day, 'open', e.target.value)}
+                        value={form.opening_hours[day]?.open ?? ''}
+                        onChange={(event) => setHour(day, 'open', event.target.value)}
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-2 text-xs text-zinc-200 sm:w-auto"
                       />
                       <span className="text-xs text-zinc-600">to</span>
                       <input
                         type="time"
-                        value={form.opening_hours[day]?.close}
-                        onChange={(e) => setHour(day, 'close', e.target.value)}
+                        value={form.opening_hours[day]?.close ?? ''}
+                        onChange={(event) => setHour(day, 'close', event.target.value)}
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-2 text-xs text-zinc-200 sm:w-auto"
                       />
                     </div>
@@ -775,93 +1503,103 @@ export default function RestaurantPage() {
               )
             })}
           </div>
+
+          <label className="flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-3">
+            <input
+              type="checkbox"
+              checked={hoursConfirmed}
+              onChange={(event) => setHoursConfirmed(event.target.checked)}
+              className="mt-0.5 accent-orange-500"
+            />
+            <span className="text-xs leading-5 text-zinc-400">
+              I confirm that these opening hours are the restaurant&apos;s current, factual hours.
+            </span>
+          </label>
         </Section>
 
         <Section title="About Your Restaurant">
-          <p className="mb-3 text-[11px] leading-relaxed text-zinc-600">
-            Tell customers your story — shown on the About tab of your menu page, along with your branch count and founding year if you add them.
+          <p className="text-[11px] leading-5 text-zinc-600">
+            This is useful unique content for the public restaurant page. Write the restaurant&apos;s real history, concept, specialties or story. Do not paste a keyword list.
           </p>
 
-          <Field label="Your story" hint="A short paragraph about your restaurant's history, philosophy, or what makes it special">
+          <Field
+            label="Restaurant story"
+            required
+            hint={`${cleanText(form.about_story).length}/1200 characters · minimum 120 characters`}
+          >
             <textarea
               value={form.about_story}
-              onChange={(e) => setForm((current) => ({ ...current, about_story: e.target.value }))}
-              placeholder="Started in 2015 with a single tandoor and a family recipe passed down three generations…"
-              rows={5}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  about_story: event.target.value,
+                }))
+              }
+              maxLength={1200}
+              rows={6}
               className={`${INPUT} resize-none`}
+              required
             />
           </Field>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Established year" hint="e.g. 2015">
+            <Field label="Established year" hint="Optional factual business detail.">
               <input
                 type="number"
-                min={1900}
+                min={1800}
                 max={new Date().getFullYear()}
                 value={form.established_year}
-                onChange={(e) => setForm((current) => ({ ...current, established_year: e.target.value }))}
-                placeholder="2015"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    established_year: event.target.value,
+                  }))
+                }
                 className={INPUT}
               />
             </Field>
 
-            <Field label="Total branches / locations" hint="e.g. 3">
+            <Field label="Total branches / locations" hint="Optional factual business detail.">
               <input
                 type="number"
                 min={1}
-                max={999}
+                max={9999}
                 value={form.total_branches}
-                onChange={(e) => setForm((current) => ({ ...current, total_branches: e.target.value }))}
-                placeholder="1"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    total_branches: event.target.value,
+                  }))
+                }
                 className={INPUT}
               />
             </Field>
           </div>
         </Section>
 
-        <Section title="Google Reviews">
-          <p className="mb-3 text-[11px] leading-relaxed text-zinc-600">
-            Enter your current Google rating and review count manually. This is shown next to your Dinezy reviews with a link to your Google listing.
-          </p>
+        <Section title="Search Preview">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4">
+            <div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-600">
+              <MapPin size={12} />
+              Example Google result preview
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Google rating" hint="e.g. 4.3">
-              <input
-                type="number"
-                step="0.1"
-                min={0}
-                max={5}
-                value={form.google_rating}
-                onChange={(e) => setForm((current) => ({ ...current, google_rating: e.target.value }))}
-                placeholder="4.3"
-                className={INPUT}
-              />
-            </Field>
-
-            <Field label="Total Google reviews" hint="e.g. 1240">
-              <input
-                type="number"
-                min={0}
-                value={form.google_review_count}
-                onChange={(e) => setForm((current) => ({ ...current, google_review_count: e.target.value }))}
-                placeholder="1240"
-                className={INPUT}
-              />
-            </Field>
+            <p className="text-lg font-medium leading-6 text-blue-300">
+              {seoTitlePreview}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-zinc-500">
+              dinezy.in/r/{restaurantSlugPreview}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              {seoDescriptionPreview}
+            </p>
           </div>
 
-          <Field
-            label="Google Maps listing link"
-            hint="Google Maps → Share → Copy link"
-          >
-            <input
-              type="url"
-              value={form.google_reviews_url}
-              onChange={(e) => setForm((current) => ({ ...current, google_reviews_url: e.target.value }))}
-              placeholder="https://maps.app.goo.gl/xxxxxxx"
-              className={INPUT}
-            />
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SeoSignal title="Unique name" ok={cleanText(form.name).length >= 2} />
+            <SeoSignal title="Locality" ok={Boolean(form.area && form.city && form.state)} />
+            <SeoSignal title="Real image" ok={Boolean(coverUrl)} />
+          </div>
         </Section>
 
         <Section title="Ordering">
@@ -869,52 +1607,54 @@ export default function RestaurantPage() {
             title="Accept orders via menu"
             description="When off, customers can browse the menu and call a waiter, but cannot add items to cart or place orders."
             checked={form.orders_enabled}
-            onChange={(checked) => setForm((current) => ({ ...current, orders_enabled: checked }))}
+            onChange={(checked) =>
+              setForm((current) => ({ ...current, orders_enabled: checked }))
+            }
           />
-
-          {!form.orders_enabled && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
-              <span className="mt-px text-sm">⚠️</span>
-              <p className="text-xs leading-relaxed text-amber-300">
-                Ordering is currently <strong>off</strong>. Customers can browse the menu and call for assistance, but the Add button and cart will be hidden.
-              </p>
-            </div>
-          )}
         </Section>
 
         <Section title="Bar Menu">
           <SettingRow
             title="Enable a separate bar menu"
-            description={'When on, customers scanning your table QR are asked to choose “Food Menu” or “Bar Menu” first. Create bar categories from the Menu tab and mark them as “Bar” to populate it.'}
+            description="Customers can choose between the food and bar menu when the feature is enabled."
             checked={form.has_bar_menu}
-            onChange={(checked) => setForm((current) => ({ ...current, has_bar_menu: checked }))}
+            onChange={(checked) =>
+              setForm((current) => ({ ...current, has_bar_menu: checked }))
+            }
           />
         </Section>
 
         <Section title="Corporate Menu">
           <SettingRow
             title="Enable a separate corporate menu"
-            description="Use this for bulk/catering pricing, meeting packages, or B2B office orders. Create corporate categories from the Menu tab and mark them as Corporate to populate it."
+            description="Use this for bulk, catering or office ordering information."
             checked={form.has_corporate_menu}
-            onChange={(checked) => setForm((current) => ({ ...current, has_corporate_menu: checked }))}
+            onChange={(checked) =>
+              setForm((current) => ({ ...current, has_corporate_menu: checked }))
+            }
           />
         </Section>
 
-        <Section title="Category Shortcut">
+        <Section title="Menu Experience">
           <SettingRow
             title="Floating category jump button"
-            description="Adds a small floating button on the menu page. Customers can open all categories in a popover and jump straight to any section."
+            description="Adds a small floating shortcut so customers can jump between menu categories."
             checked={form.show_category_shortcut}
-            onChange={(checked) => setForm((current) => ({ ...current, show_category_shortcut: checked }))}
+            onChange={(checked) =>
+              setForm((current) => ({
+                ...current,
+                show_category_shortcut: checked,
+              }))
+            }
           />
-        </Section>
 
-        <Section title="Dark Theme">
           <SettingRow
             title="Immersive dark menu"
-            description="Switches the customer menu page to a dark, premium look with large food imagery. Best when most dishes have good quality photos."
+            description="Switches the customer menu page to the restaurant's dark premium style."
             checked={form.dark_theme}
-            onChange={(checked) => setForm((current) => ({ ...current, dark_theme: checked }))}
+            onChange={(checked) =>
+              setForm((current) => ({ ...current, dark_theme: checked }))
+            }
           />
         </Section>
 
@@ -927,10 +1667,7 @@ export default function RestaurantPage() {
               <div>
                 <p className="text-sm font-semibold text-white">Let diners ask “Explain this dish”</p>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                  When enabled, Dinezy adds a small AI action to every customer-facing dish card. Tapping it gives a concise explanation of what the dish is, what it typically contains, its taste and texture, plus one useful note when relevant.
-                </p>
-                <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">
-                  Dinezy uses Gemini reasoning behind the scenes, but never displays its private chain-of-thought to customers. The visible answer stays short and menu-friendly.
+                  Dinezy can explain dishes using the restaurant&apos;s real menu information plus general culinary knowledge. The visible answer stays concise and customer-friendly.
                 </p>
               </div>
             </div>
@@ -938,9 +1675,14 @@ export default function RestaurantPage() {
 
           <SettingRow
             title="Enable AI dish explanations"
-            description="Show “✨ Explain this dish” on customer dish cards."
+            description="Show the Explain this dish action on customer-facing dish cards."
             checked={form.ai_dish_explanations}
-            onChange={(checked) => setForm((current) => ({ ...current, ai_dish_explanations: checked }))}
+            onChange={(checked) =>
+              setForm((current) => ({
+                ...current,
+                ai_dish_explanations: checked,
+              }))
+            }
             accent="orange"
           />
         </Section>
@@ -948,20 +1690,33 @@ export default function RestaurantPage() {
         <Section title="Price Display">
           <SettingRow
             title="Hide currency symbol"
-            description="Hide the ₹ symbol from customer-facing menu prices. Customers will see 299 instead of ₹299."
+            description="Hide the ₹ symbol from customer-facing menu prices."
             checked={form.hide_currency_symbol}
-            onChange={(checked) => setForm((current) => ({ ...current, hide_currency_symbol: checked }))}
+            onChange={(checked) =>
+              setForm((current) => ({
+                ...current,
+                hide_currency_symbol: checked,
+              }))
+            }
             accent="orange"
           />
         </Section>
 
-        <button
-          type="submit"
-          disabled={saving || slugTaken || uploadingLogo || uploadingCover}
-          className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 py-3 font-semibold text-white transition hover:from-orange-400 hover:to-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : saved ? '✓ Saved!' : restaurant ? 'Save Changes' : 'Create Restaurant'}
-        </button>
+        <div className="sticky bottom-3 z-20 rounded-2xl border border-zinc-800 bg-zinc-950/90 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+          <button
+            type="submit"
+            disabled={saving || slugTaken || uploadingLogo || uploadingCover}
+            className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 py-3 font-semibold text-white transition hover:from-orange-400 hover:to-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving
+              ? 'Saving…'
+              : saved
+                ? '✓ Saved'
+                : restaurant
+                  ? 'Save Restaurant Profile'
+                  : 'Create Restaurant'}
+          </button>
+        </div>
       </form>
     </div>
   )
@@ -972,10 +1727,10 @@ const INPUT =
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-5">
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-5">
       <h2 className="mb-4 text-sm font-medium text-zinc-300">{title}</h2>
-      <div className="space-y-3">{children}</div>
-    </div>
+      <div className="space-y-4">{children}</div>
+    </section>
   )
 }
 
@@ -995,10 +1750,11 @@ function Field({
   return (
     <div>
       <label className="mb-1.5 block text-xs text-zinc-400">
-        {label}{required && <span className="ml-0.5 text-orange-400">*</span>}
+        {label}
+        {required && <span className="ml-0.5 text-orange-400">*</span>}
       </label>
       {children}
-      {hint && <p className={`mt-1 text-xs ${hintColor}`}>{hint}</p>}
+      {hint && <p className={`mt-1 text-xs leading-5 ${hintColor}`}>{hint}</p>}
     </div>
   )
 }
@@ -1018,7 +1774,7 @@ function SettingRow({
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
-      <div>
+      <div className="min-w-0">
         <p className="text-sm font-medium text-white">{title}</p>
         <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p>
       </div>
@@ -1028,7 +1784,9 @@ function SettingRow({
         className={[
           'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
           checked
-            ? accent === 'orange' ? 'bg-orange-500' : 'bg-orange-500'
+            ? accent === 'orange'
+              ? 'bg-orange-500'
+              : 'bg-orange-500'
             : 'bg-zinc-700',
         ].join(' ')}
         role="switch"
@@ -1041,6 +1799,20 @@ function SettingRow({
           ].join(' ')}
         />
       </button>
+    </div>
+  )
+}
+
+function SeoSignal({ title, ok }: { title: string; ok: boolean }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-2.5">
+      <CheckCircle2
+        size={15}
+        className={ok ? 'text-emerald-400' : 'text-zinc-700'}
+      />
+      <span className={ok ? 'text-xs text-zinc-300' : 'text-xs text-zinc-600'}>
+        {title}
+      </span>
     </div>
   )
 }

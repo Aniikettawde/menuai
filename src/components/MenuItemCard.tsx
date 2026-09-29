@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import Link from 'next/link'
 import { createPortal } from 'react-dom'
 import { Star, Flame, Plus, Minus, Clock, Link2, Sparkles, X, AlertCircle } from 'lucide-react'
 import type { MenuItem, DishOption } from '@/types'
@@ -10,7 +11,10 @@ import { useAppStore } from '@/store/app-store'
 import { track } from '@/lib/analytics'
 import { bumpPersonalOrder } from '@/lib/menu-rank'
 import { resolveMenuImageUrl } from '@/lib/resolve-image'
-import { buildDishPath } from '@/lib/dish-url'
+import {
+  buildDishPath,
+  slugifyDishName,
+} from '@/lib/dish-url'
 import { DishEngagement } from './DishEngagement'
 
 interface Props {
@@ -1053,16 +1057,22 @@ function DarkMenuItemCard({
 
             <div className="pr-dark-name-row">
               <span className="pr-dark-dot"><VegDot isVeg={item.is_veg} /></span>
-              <span className="pr-dark-name">
-                {item.name}
-                {isSpicy && (
-                  <Flame
-                    size={12}
-                    aria-hidden="true"
-                    style={{ display: 'inline', marginLeft: 6, color: '#f87171', verticalAlign: '-1px' }}
-                  />
-                )}
-              </span>
+              <DishNameLink
+                href={dishHref}
+                name={item.name}
+                className="pr-dark-name-link"
+              >
+                <span className="pr-dark-name">
+                  {item.name}
+                  {isSpicy && (
+                    <Flame
+                      size={12}
+                      aria-hidden="true"
+                      style={{ display: 'inline', marginLeft: 6, color: '#f87171', verticalAlign: '-1px' }}
+                    />
+                  )}
+                </span>
+              </DishNameLink>
             </div>
 
             {cleanDescription && (
@@ -1150,13 +1160,13 @@ function DarkMenuItemCard({
 
       <div className="pr-dark-new-features">
         <div className="pr-dark-link-row">
-          <a
+          <Link
             href={dishHref}
             className="pr-dark-link"
             onClick={(e) => e.stopPropagation()}
           >
             View dish page <span aria-hidden="true">›</span>
-          </a>
+          </Link>
         </div>
 
         <div className="pr-dark-engagement-row">
@@ -1806,7 +1816,13 @@ function NoImageDishCard({
         <div className="pr-no-image-title-row">
           <h3 className="pr-no-image-title">
             <VegDot isVeg={item.is_veg} />
-            <span>{item.name}</span>
+            <DishNameLink
+              href={dishHref}
+              name={item.name}
+              className="pr-no-image-title-link"
+            >
+              <span>{item.name}</span>
+            </DishNameLink>
           </h3>
           <span className="pr-no-image-price">{priceLabel}</span>
         </div>
@@ -1845,13 +1861,13 @@ function NoImageDishCard({
         )}
 
         <div className="pr-no-image-link-row">
-          <a
+          <Link
             href={dishHref}
             className="pr-no-image-link"
             onClick={(e) => e.stopPropagation()}
           >
             View dish page <span aria-hidden="true">›</span>
-          </a>
+          </Link>
         </div>
 
         <div className="pr-no-image-engagement-row">
@@ -2118,7 +2134,7 @@ function LightMenuItemCard({
           )}
 
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-            <p style={{
+            <h3 style={{
               display: 'flex', alignItems: 'center', gap: 6,
               fontSize: 15.5, fontWeight: 700, lineHeight: 1.3,
               color: 'var(--pr-text)', fontFamily: 'var(--font-display)',
@@ -2126,13 +2142,19 @@ function LightMenuItemCard({
               minWidth: 0,
             }}>
               <VegDot isVeg={item.is_veg} />
-              <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-                {item.name}
-                {item.tags?.includes('spicy') && (
-                  <Flame size={12} style={{ marginLeft: 4, display: 'inline', color: '#f87171', verticalAlign: 'middle' }} />
-                )}
-              </span>
-            </p>
+              <DishNameLink
+                href={dishHref}
+                name={item.name}
+                className="pr-light-title-link"
+              >
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                  {item.name}
+                  {item.tags?.includes('spicy') && (
+                    <Flame size={12} style={{ marginLeft: 4, display: 'inline', color: '#f87171', verticalAlign: 'middle' }} />
+                  )}
+                </span>
+              </DishNameLink>
+            </h3>
 
             {priceLabel && (
               <p style={{
@@ -2189,7 +2211,7 @@ function LightMenuItemCard({
                 borderTop: '1px solid var(--pr-border)',
               }}
             >
-              <a
+              <Link
                 href={dishHref}
                 onClick={(e) => e.stopPropagation()}
                 style={{
@@ -2203,7 +2225,7 @@ function LightMenuItemCard({
                 }}
               >
                 View dish page <span aria-hidden="true">›</span>
-              </a>
+              </Link>
             </div>
           )}
 
@@ -2318,6 +2340,15 @@ function LightMenuItemCard({
       </div>
 
       <style jsx>{`
+        .pr-light-title-link {
+          min-width: 0;
+          color: inherit;
+          text-decoration: none;
+        }
+        .pr-light-title-link:hover {
+          color: var(--pr-orange);
+        }
+
         .pr-item-card { transition: transform 0.2s, box-shadow 0.2s; }
         .pr-item-card:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(0,0,0,0.08); }
         .pr-item-card:active { transform: translateY(0); }
@@ -2327,6 +2358,72 @@ function LightMenuItemCard({
         }
       `}</style>
     </div>
+  )
+}
+
+function resolveInternalDishSlug(
+  item: MenuItem,
+  allMenuItems: MenuItem[],
+): string {
+  const persistedSlug =
+    (item as MenuItem & { slug?: string | null }).slug?.trim()
+
+  if (persistedSlug) {
+    return persistedSlug
+  }
+
+  const sameBaseItems = allMenuItems
+    .filter((candidate) =>
+      slugifyDishName(candidate.name) ===
+      slugifyDishName(item.name),
+    )
+    .sort((a, b) =>
+      a.id.localeCompare(b.id),
+    )
+
+  const occurrence =
+    sameBaseItems.findIndex(
+      (candidate) =>
+        candidate.id === item.id,
+    ) + 1
+
+  const base = slugifyDishName(item.name)
+
+  return occurrence > 1
+    ? `${base}-${occurrence}`
+    : base
+}
+
+/**
+ * Every real dish is a crawlable internal destination.
+ *
+ * Keep the visible dish name itself as the anchor text. The "View dish page"
+ * link remains below for users, but having the name as a link gives crawlers a
+ * stronger semantic relationship between the restaurant menu and the
+ * canonical dish page.
+ */
+function DishNameLink({
+  href,
+  name,
+  className,
+  children,
+}: {
+  href: string
+  name: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <Link
+      href={href}
+      className={className}
+      aria-label={`View ${name} menu details`}
+      onClick={(event) => {
+        event.stopPropagation()
+      }}
+    >
+      {children}
+    </Link>
   )
 }
 
@@ -2443,10 +2540,20 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   }
 
   const openExplanation = () => setShowDishExplanation(true)
-  const persistedDishSlug =
-    (item as MenuItem & { slug?: string | null }).slug ?? undefined
+
+  const canonicalDishSlug =
+    resolveInternalDishSlug(
+      item,
+      allMenuItems,
+    )
+
   const dishHref = restaurant?.slug
-    ? buildDishPath(restaurant.slug, item.name, item.id, persistedDishSlug)
+    ? buildDishPath(
+        restaurant.slug,
+        item.name,
+        item.id,
+        canonicalDishSlug,
+      )
     : '#'
 
   const visibleTags = item.tags?.filter((t) => t !== 'new' && t !== 'spicy') ?? []

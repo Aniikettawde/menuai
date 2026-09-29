@@ -57,7 +57,9 @@ function getBadge(item: MenuItem, catItems: MenuItem[]): Badge {
   if (item.is_bestseller || item.is_special) return { kind: 'none', label: '' }
   const prices = catItems.map((i) => i.price).sort((a, b) => a - b)
   const median = prices[Math.floor(prices.length / 2)] ?? 0
-  if (item.price > median * 1.3) return { kind: 'anchoring', label: "Chef's choice" }
+  // Price alone does not establish chef endorsement or a popularity claim.
+  // Keep the overlay empty unless a real, explicit signal is available.
+  if (item.price > median * 1.3) return { kind: 'none', label: '' }
   return { kind: 'none', label: '' }
 }
 
@@ -300,10 +302,12 @@ function BestsellerSlider({
                 )}
               </div>
 
-              <div className="mg-bs-description">
-                <span className="mg-bs-description-label">WHY PEOPLE LOVE IT</span>
-                <p>{description || 'A customer favourite made fresh and served just the way you like it.'}</p>
-              </div>
+              {description && (
+                <div className="mg-bs-description">
+                  <span className="mg-bs-description-label">ABOUT THIS DISH</span>
+                  <p>{description}</p>
+                </div>
+              )}
 
               <div className="mg-bs-price-block">
                 <span className="mg-bs-price-label">PRICE</span>
@@ -357,6 +361,8 @@ const SEARCH_GROUPS: SearchGroup[] = [
     key: 'most_ordered',
     label: 'Most Ordered',
     keywords: ['most ordered', 'most-ordered', 'trending', 'popular'],
+    // This UI currently has no separate per-item "most ordered" field.
+    // Use the existing bestseller signal rather than inventing another data source.
     filter: (i) => !!i.is_bestseller,
   },
   {
@@ -584,7 +590,13 @@ function CategorySection({
         <div className="mg-cat-thumb">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt={category.name} loading="lazy" />
+            <img
+              src={imageUrl}
+              alt={category.name}
+              width={100}
+              height={100}
+              loading="lazy"
+            />
           ) : (
             <CategoryHeaderPlaceholder name={category.name} />
           )}

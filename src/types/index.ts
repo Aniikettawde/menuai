@@ -72,6 +72,19 @@ export interface Restaurant {
 
   // ✅ Hide ₹ / currency symbol on customer menu
   hide_currency_symbol?: boolean | null
+  
+  area?: string | null
+city?: string | null
+state?: string | null
+pincode?: string | null
+country?: string | null
+website_url?: string | null
+price_range?: string | null
+latitude?: number | null
+longitude?: number | null
+seo_title?: string | null
+seo_description?: string | null
+seo_indexable?: boolean | null
 }
 
 export interface DishOptionChoice {

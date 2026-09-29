@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { TodaysSpecialPicker } from '@/components/TodaysSpecialPicker'
 import imageCompression from 'browser-image-compression'
+import { buildDishSlugMap, normalizePersistedDishSlug, slugifyDishName } from '@/lib/dish-url'
 
 const BOTTOM_NAV_H = 72
 
@@ -48,11 +49,12 @@ const INPUT_STYLE = { borderColor: BRAND.line, background: BRAND.ivory, color: B
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MenuItemForm = Partial<MenuItem> & { _open?: boolean; best_with?: string[] }
+type MenuItemForm = Partial<MenuItem> & { _open?: boolean; best_with?: string[]; slug?: string | null }
 const EMPTY_ITEM: MenuItemForm = {
   category_id: '', name: '', description: '', price: 0, currency: 'INR',
   image_url: '', is_available: true, is_bestseller: false, is_veg: true,
   is_special: false, tags: [], allergens: [], prep_time_minutes: undefined,
+  slug: null,
   calories: undefined, position: 0, best_with: [],
 }
 
@@ -108,7 +110,7 @@ function emptyChoiceDraft(position: number): DishOptionChoiceDraft {
 }
 
 type MenuCategoryRow = MenuCategory
-type MenuItemRow = MenuItem & { best_with?: string[] }
+type MenuItemRow = MenuItem & { best_with?: string[]; slug?: string | null }
 type ParsedVariant = { label: string; price: number }
 type ParsedItem = { name: string; description?: string; price?: number; is_veg?: boolean; tags?: string[]; best_with?: string[]; variants?: ParsedVariant[] }
 type ParsedCategory = { name: string; items: ParsedItem[]; info_card?: { title: string; entries: { name: string; description: string }[] } | null }
@@ -130,6 +132,49 @@ function cleanString(value: unknown): string {
 function cleanStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((v) => String(v).trim()).filter(Boolean) : []
 }
+
+/**
+ * Create a deterministic public dish slug that is unique within the
+ * restaurant's currently loaded menu. Existing persisted slugs are kept stable
+ * when possible so editing a dish does not unnecessarily change its public URL.
+ */
+function createUniqueDishSlug(
+  name: string,
+  existingItems: MenuItemRow[],
+  currentItemId?: string,
+  preferredSlug?: string | null,
+): string {
+  const used = new Set<string>()
+  const slugMap = buildDishSlugMap(existingItems)
+
+  for (const item of existingItems) {
+    if (item.id === currentItemId) continue
+    const mapped = slugMap.get(item.id)
+    if (mapped) used.add(mapped)
+  }
+
+  const preferred = normalizePersistedDishSlug(preferredSlug)
+  if (preferred && !used.has(preferred)) return preferred
+
+  const base = slugifyDishName(name)
+  if (!used.has(base)) return base
+
+  let suffix = 2
+  let candidate = `${base}-${suffix}`
+  while (used.has(candidate)) {
+    suffix += 1
+    candidate = `${base}-${suffix}`
+  }
+  return candidate
+}
+
+function getDescriptionSeoHint(description: string): 'missing' | 'short' | 'good' {
+  const length = description.trim().length
+  if (length === 0) return 'missing'
+  if (length < 40) return 'short'
+  return 'good'
+}
+
 const MENU_ASSET_BUCKET = 'restaurant-assets'
 
 function resolveMenuImageUrl(raw: unknown, width = 400): string {
@@ -1226,6 +1271,47 @@ export default function MenuPage() {
         if (!mounted) return
         const safeCats = (cats ?? []) as MenuCategoryRow[]
         const safeItems = (its ?? []) as MenuItemRow[]
+
+        // Existing restaurants may predate the slug column being populated.
+        // Backfill missing slugs in the background so every menu item gets a
+        // stable public URL without delaying the dashboard render.
+        if (safeItems.some((item) => !normalizePersistedDishSlug(item.slug))) {
+          const slugMap = buildDishSlugMap(safeItems)
+          const missingSlugItems = safeItems
+            .map((item) => ({
+              id: item.id,
+              slug: slugMap.get(item.id) ?? slugifyDishName(item.name),
+            }))
+            .filter((entry) => Boolean(entry.slug))
+
+          void Promise.all(
+            missingSlugItems.map((entry) =>
+              supabase
+                .from('menu_items')
+                .update({ slug: entry.slug })
+                .eq('id', entry.id)
+                .select()
+                .single(),
+            ),
+          ).then((results) => {
+            const updated = results
+              .filter((result) => !result.error && result.data)
+              .map((result) => result.data as MenuItemRow)
+
+            if (updated.length > 0) {
+              const updatedById = new Map(updated.map((item) => [item.id, item]))
+              setItems((prev) => prev.map((item) => updatedById.get(item.id) ?? item))
+            }
+
+            const failed = results.find((result) => result.error)?.error
+            if (failed) {
+              console.warn('[MenuPage] Some dish slugs could not be backfilled:', failed.message)
+            }
+          }).catch((err) => {
+            console.warn('[MenuPage] Dish slug backfill skipped:', err)
+          })
+        }
+
         setRestaurant(r as Restaurant); setCategories(safeCats); setItems(safeItems)
         setActiveCat(safeCats[0]?.id ?? null)
         if (safeItems.length > 0) {
@@ -1443,34 +1529,82 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
 
   async function saveItem() {
     if (!editingItem || !restaurant || !activeCat) return
-    const name = cleanString(editingItem.name)
-    if (!name) return
+
+    const name = cleanString(editingItem.name).replace(/\s+/g, ' ')
+    const description = cleanString(editingItem.description).replace(/\s+/g, ' ')
+    const categoryId = cleanString(editingItem.category_id || activeCat)
+
+    if (name.length < 2) {
+      setError(`${itemLabel()} name must be at least 2 characters.`)
+      return
+    }
+
+    if (name.length > 120) {
+      setError(`${itemLabel()} name must be 120 characters or fewer.`)
+      return
+    }
+
+    if (description.length > 1000) {
+      setError('Description must be 1000 characters or fewer.')
+      return
+    }
+
+    if (!categoryId) {
+      setError(`Select a category before saving this ${itemLabel(false)}.`)
+      return
+    }
+
+    const existingItem = editingItem.id
+      ? items.find((item) => item.id === editingItem.id)
+      : undefined
+
+    const slug = createUniqueDishSlug(
+      name,
+      items,
+      editingItem.id,
+      existingItem?.slug ?? editingItem.slug,
+    )
+
     setItemSaving(true); setError('')
     try {
       const payload = {
-        restaurant_id: restaurant.id, category_id: editingItem.category_id || activeCat,
-        name, description: cleanString(editingItem.description), price: toIntOrZero(editingItem.price),
+        restaurant_id: restaurant.id, category_id: categoryId,
+        name, description, slug, price: Math.max(0, toIntOrZero(editingItem.price)),
         currency: 'INR', image_url: cleanString(editingItem.image_url),
         is_available: Boolean(editingItem.is_available ?? true), is_bestseller: Boolean(editingItem.is_bestseller ?? false),
         is_veg: Boolean(editingItem.is_veg ?? true), is_special: Boolean(editingItem.is_special ?? false),
         tags: cleanStringArray(editingItem.tags), allergens: cleanStringArray(editingItem.allergens),
-        // ✅ best_with now sourced only from existing menu items via PairingSelector
+        // best_with is sourced only from existing menu items via PairingSelector.
         best_with: cleanStringArray(editingItem.best_with),
         prep_time_minutes: toIntOrNull(editingItem.prep_time_minutes), calories: toIntOrNull(editingItem.calories),
-        position: Number.isFinite(Number(editingItem.position)) ? Number(editingItem.position) : items.filter((x) => x.category_id === activeCat).length,
+        position: Number.isFinite(Number(editingItem.position)) ? Number(editingItem.position) : items.filter((x) => x.category_id === categoryId).length,
       }
+
       if (editingItem.id) {
         const { data, error } = await supabase.from('menu_items').update(payload).eq('id', editingItem.id).select().single()
         if (error) throw error
-        if (data) { setItems((prev) => prev.map((x) => (x.id === data.id ? (data as MenuItemRow) : x))); setActionSheetItem((prev) => (prev?.id === data.id ? (data as MenuItemRow) : prev)) }
+        if (data) {
+          setItems((prev) => prev.map((x) => (x.id === data.id ? (data as MenuItemRow) : x)))
+          setActionSheetItem((prev) => (prev?.id === data.id ? (data as MenuItemRow) : prev))
+        }
       } else {
         const { data, error } = await supabase.from('menu_items').insert(payload).select().single()
         if (error) throw error
         if (data) setItems((prev) => [...prev, data as MenuItemRow])
       }
+
       setEditingItem(null)
-    } catch (err) { console.error('Failed to save dish:', err); setError(err instanceof Error ? err.message : `Failed to save ${itemLabel(false)}`) }
-    finally { setItemSaving(false) }
+    } catch (err) {
+      console.error('Failed to save dish:', err)
+      const message = err instanceof Error ? err.message : `Failed to save ${itemLabel(false)}`
+      if (/duplicate|unique|23505/i.test(message)) {
+        setError(`This public URL is already used by another ${itemLabel(false)}. Please try saving again so Dinezy can generate the next available URL.`)
+      } else if (/slug.*column|column.*slug|schema cache/i.test(message)) {
+        setError('The menu_items.slug column is missing. Add the SEO slug database migration before saving dishes.')
+      } else {
+        setError(message)
+      }
+    } finally { setItemSaving(false) }
   }
 
   async function generateDescription() {
@@ -1580,6 +1714,8 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
     }
 
     let nextNewCatPosition = orderedCategories.length
+    const existingDishSlugMap = buildDishSlugMap(items)
+    const usedDishSlugs = new Set<string>(existingDishSlugMap.values())
 
      for (let i = 0; i < result.categories.length; i++) {
       const parsedCat = result.categories[i]
@@ -1625,9 +1761,27 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
         // Reuse an existing library photo if the dish name matches closely
         // enough; otherwise leave image_url empty (no AI generation).
         const matchedImageUrl = findBestImageMatch(item.name, matchLibrary) ?? ''
+        const dishName = cleanString(item.name).replace(/\s+/g, ' ')
+        const dishSlug = (() => {
+          const base = slugifyDishName(dishName)
+          if (!usedDishSlugs.has(base)) {
+            usedDishSlugs.add(base)
+            return base
+          }
+          let suffix = 2
+          let candidate = `${base}-${suffix}`
+          while (usedDishSlugs.has(candidate)) {
+            suffix += 1
+            candidate = `${base}-${suffix}`
+          }
+          usedDishSlugs.add(candidate)
+          return candidate
+        })()
+
         return {
-          restaurant_id: restaurant.id, category_id: resolvedCat.id, name: item.name.trim(),
-          description: item.description ?? '', price: basePriceRupees ? Math.round(basePriceRupees * 100) : 0,
+          restaurant_id: restaurant.id, category_id: resolvedCat.id, name: dishName,
+          description: cleanString(item.description).replace(/\s+/g, ' '), slug: dishSlug,
+          price: basePriceRupees ? Math.round(basePriceRupees * 100) : 0,
           currency: 'INR', image_url: matchedImageUrl, is_available: true,
           is_bestseller: (item.tags ?? []).some((t) => t.toLowerCase().includes('best')),
           is_veg: item.is_veg ?? true, is_special: false, tags: item.tags ?? [],
@@ -2174,6 +2328,36 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+            {(() => {
+              const descriptionText = cleanString(editingItem.description)
+              const descriptionHint = getDescriptionSeoHint(descriptionText)
+              const currentSlug = normalizePersistedDishSlug(editingItem.slug)
+              const previewSlug = currentSlug || (editingItem.name?.trim() ? slugifyDishName(editingItem.name) : '')
+              const publicPath = restaurant?.slug && previewSlug
+                ? `/r/${encodeURIComponent(restaurant.slug)}/menu/${encodeURIComponent(previewSlug)}`
+                : ''
+
+              return (
+                <div className="mb-4 rounded-2xl border px-4 py-3" style={{
+                  borderColor: descriptionHint === 'missing' ? `${BRAND.gold}44` : `${BRAND.emerald}33`,
+                  background: descriptionHint === 'missing' ? `${BRAND.gold}0D` : `${BRAND.emerald}0D`,
+                }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold" style={{ color: descriptionHint === 'missing' ? BRAND.goldDeep : BRAND.emerald }}>
+                      Public SEO URL
+                    </p>
+                    <span className="text-[10px] font-semibold" style={{ color: BRAND.inkFaint }}>Generated automatically</span>
+                  </div>
+                  <p className="mt-1 break-all text-[11px]" style={{ color: BRAND.inkSoft }}>
+                    {publicPath || 'Enter a dish name to generate the URL'}
+                  </p>
+                  <p className="mt-2 text-[10px] leading-relaxed" style={{ color: BRAND.inkFaint }}>
+                    Saved URLs stay stable when a dish is renamed, which helps existing links continue to work.
+                  </p>
+                </div>
+              )
+            })()}
+
             {!editingIsBar && (
               <div className="mb-4 flex gap-2">
                 <button onClick={() => setEditingItem((f) => (f ? { ...f, is_veg: true } : f))}
@@ -2198,7 +2382,19 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
               </Field>
               <Field label="Description">
                 <div className="space-y-2">
-                  <textarea value={editingItem.description ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, description: e.target.value } : f))} rows={3} placeholder={editingIsBar ? 'Smooth Tennessee whiskey, oak-aged…' : 'Rich, creamy tomato-based curry…'} className={`${INPUT} resize-none`} style={INPUT_STYLE} />
+                  <textarea value={editingItem.description ?? ''} onChange={(e) => setEditingItem((f) => (f ? { ...f, description: e.target.value } : f))} rows={3} maxLength={1000} placeholder={editingIsBar ? 'Smooth Tennessee whiskey, oak-aged…' : 'Rich, creamy tomato-based curry…'} className={`${INPUT} resize-none`} style={INPUT_STYLE} />
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px]" style={{ color: getDescriptionSeoHint(cleanString(editingItem.description)) === 'missing' ? BRAND.goldDeep : BRAND.inkFaint }}>
+                      {getDescriptionSeoHint(cleanString(editingItem.description)) === 'missing'
+                        ? 'Add a real dish description for a stronger public dish page.'
+                        : getDescriptionSeoHint(cleanString(editingItem.description)) === 'short'
+                          ? 'A little more detail can make the dish page more useful.'
+                          : 'Description length looks good.'}
+                    </p>
+                    <span className="shrink-0 text-[10px]" style={{ color: BRAND.inkFaint }}>
+                      {cleanString(editingItem.description).length}/1000
+                    </span>
+                  </div>
                   {editingItem.name?.trim() && (
                     <button type="button" onClick={() => void generateDescription()} disabled={descriptionGenerating}
                       className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
@@ -2223,7 +2419,7 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
                   {editingItem.image_url ? (
                     <div className="relative shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={resolveMenuImageUrl(editingItem.image_url)} className="h-16 w-16 rounded-2xl object-cover" style={{ boxShadow: `0 0 0 1px ${BRAND.line}` }} alt="" />
+                      <img src={resolveMenuImageUrl(editingItem.image_url)} className="h-16 w-16 rounded-2xl object-cover" style={{ boxShadow: `0 0 0 1px ${BRAND.line}` }} alt={editingItem.name?.trim() || 'Dish image'} />
                       <button onClick={() => setEditingItem((f) => (f ? { ...f, image_url: '' } : f))} className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full transition hover:opacity-90" style={{ background: BRAND.rose, color: '#fff' }}><X size={11} /></button>
                     </div>
                   ) : null}
