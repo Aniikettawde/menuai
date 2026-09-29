@@ -32,7 +32,6 @@ type DishSitemapRow = {
   restaurant_id: string
   name: string
   slug?: string | null
-  updated_at?: string | null
   image_url?: string | null
 }
 
@@ -126,9 +125,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       async (from, to) =>
         supabase
           .from('menu_items')
-          .select(
-            'id, restaurant_id, name, slug, updated_at, image_url',
-          )
+         .select(
+  'id, restaurant_id, name, slug, image_url',
+)
           .eq('is_available', true)
           .order('restaurant_id', { ascending: true })
           .order('id', { ascending: true })
@@ -221,26 +220,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       const dishUrl =
         `${baseUrl}${dishPath}`
 
-      urls.set(dishUrl, {
-        url: dishUrl,
-        ...(item.updated_at
-          ? {
-              lastModified: new Date(
-                item.updated_at,
-              ),
-            }
-          : {}),
-        ...(item.image_url
-          ? {
-              images: [
-                resolveMenuImageUrl(
-                  item.image_url,
-                  1600,
-                ),
-              ],
-            }
-          : {}),
-      })
+urls.set(dishUrl, {
+  url: dishUrl,
+  ...(item.image_url
+    ? {
+        images: [
+          resolveMenuImageUrl(
+            item.image_url,
+            1600,
+          ),
+        ],
+      }
+    : {}),
+})
     }
   }
 
