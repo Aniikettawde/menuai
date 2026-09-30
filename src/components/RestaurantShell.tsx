@@ -812,6 +812,10 @@ export function RestaurantShell({
   ])
 
   // ── Table session bootstrap ───────────────────────────────────────────────
+  // IMPORTANT: this effect never blocks the menu. The restaurant/menu HTML
+  // has already been rendered from initialData before this background work
+  // starts. We only decide later whether table-only controls (bell, Google
+  // review action, ordering/waiter actions) should be enabled.
   useEffect(() => {
     let cancelled = false
 
@@ -821,23 +825,56 @@ export function RestaurantShell({
     analyticsStartedRef.current =
       false
 
+    // Clear any previous restaurant/table session from the client store.
+    // This does NOT affect the menu render.
     setTableNumber(null)
     setHasTableToken(false)
     setTableSessionState(
       'checking',
     )
 
-    async function loadTableSession() {
+    const restaurantId =
+      initialData.restaurant.id
+
+    const restaurantSlug =
+      initialData.restaurant.slug
+
+    function setValidSession(
+      nextTableNumber: number,
+    ) {
+      if (cancelled) return
+
+      setTableSessionState(
+        'valid',
+      )
+      setTableNumber(
+        nextTableNumber,
+      )
+      setHasTableToken(true)
+    }
+
+    function setNoSession(
+      expired = false,
+    ) {
+      if (cancelled) return
+
+      setTableSessionState(
+        expired ? 'expired' : 'none',
+      )
+      setTableNumber(null)
+      setHasTableToken(false)
+    }
+
+    async function checkExistingSession() {
       try {
         const response =
           await fetch(
             `/api/table-session/status?restaurantId=${encodeURIComponent(
-              initialData.restaurant.id,
+              restaurantId,
             )}`,
             {
               method: 'GET',
-              credentials:
-                'include',
+              credentials: 'include',
               cache: 'no-store',
             },
           )
@@ -845,13 +882,7 @@ export function RestaurantShell({
         if (cancelled) return
 
         if (!response.ok) {
-          setTableSessionState(
-            'none',
-          )
-          setTableNumber(null)
-          setHasTableToken(
-            false,
-          )
+          setNoSession()
           return
         }
 
@@ -871,55 +902,144 @@ export function RestaurantShell({
           typeof data.tableNumber ===
             'number'
         ) {
-          setTableSessionState(
-            'valid',
-          )
-          setTableNumber(
+          setValidSession(
             data.tableNumber,
           )
-          setHasTableToken(
-            true,
-          )
           return
         }
 
-        if (
+        setNoSession(
           data.hasSession &&
-          !data.valid
-        ) {
-          setTableSessionState(
-            'expired',
-          )
-          setTableNumber(null)
-          setHasTableToken(
-            false,
-          )
-          return
-        }
-
-        setTableSessionState(
-          'none',
+            !data.valid,
         )
-        setTableNumber(null)
-        setHasTableToken(false)
       } catch {
         if (cancelled) return
-
-        setTableSessionState(
-          'none',
-        )
-        setTableNumber(null)
-        setHasTableToken(false)
+        setNoSession()
       }
     }
 
-    void loadTableSession()
+    async function validateQrSession(
+      tableNumberFromUrl: number,
+      token: string,
+    ) {
+      try {
+        const response =
+          await fetch(
+            '/api/table-session/qr',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              credentials: 'include',
+              cache: 'no-store',
+              body: JSON.stringify({
+                slug: restaurantSlug,
+                tableNumber:
+                  tableNumberFromUrl,
+                token,
+              }),
+            },
+          )
+
+        if (cancelled) return
+
+        const data =
+          (await response.json().catch(
+            () => ({}),
+          )) as {
+            valid?: boolean
+            tableNumber?: number | null
+          }
+
+        if (
+          response.ok &&
+          data.valid === true &&
+          typeof data.tableNumber ===
+            'number'
+        ) {
+          setValidSession(
+            data.tableNumber,
+          )
+          return
+        }
+
+        // The menu remains visible even when the QR token is invalid.
+        // Only table-specific actions stay disabled.
+        setNoSession(
+          response.status === 401,
+        )
+      } catch {
+        if (cancelled) return
+        setNoSession()
+      }
+    }
+
+    function startBackgroundSessionCheck() {
+      if (typeof window === 'undefined') {
+        return
+      }
+
+      const url = new URL(
+        window.location.href,
+      )
+
+      const tableParam =
+        url.searchParams.get('table')
+
+      const token =
+        url.searchParams.get('t')
+
+      const parsedTable =
+        tableParam
+          ? Number.parseInt(
+              tableParam,
+              10,
+            )
+          : NaN
+
+      // QR entry: /r/slug?table=5&t=SECRET
+      // The menu is already on screen. Validate the QR in the background.
+      if (
+        token &&
+        Number.isInteger(
+          parsedTable,
+        ) &&
+        parsedTable >= 1
+      ) {
+        // Remove the token from the visible URL immediately. The token is
+        // still available in memory for the background POST request.
+        const cleanUrl =
+          `${window.location.pathname}${window.location.hash}`
+
+        window.history.replaceState(
+          window.history.state,
+          '',
+          cleanUrl,
+        )
+
+        void validateQrSession(
+          parsedTable,
+          token,
+        )
+
+        return
+      }
+
+      // Normal direct website visit: silently restore an existing session.
+      void checkExistingSession()
+    }
+
+    // This runs after the initial render, so it cannot hold up the menu.
+    startBackgroundSessionCheck()
 
     return () => {
       cancelled = true
     }
   }, [
     initialData.restaurant.id,
+    initialData.restaurant.slug,
     setTableNumber,
     setHasTableToken,
   ])

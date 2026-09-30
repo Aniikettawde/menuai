@@ -1,7 +1,4 @@
-import {
-  NextRequest,
-  NextResponse,
-} from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 import {
   getValidTableSession,
@@ -11,33 +8,21 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-function json(
-  body: unknown,
-  status = 200,
-) {
-  return NextResponse.json(
-    body,
-    {
-      status,
-      headers: {
-        'Cache-Control':
-          'no-store, no-cache, must-revalidate',
-      },
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
     },
-  )
+  })
 }
 
-export async function GET(
-  req: NextRequest,
-) {
-  const restaurantId =
-    req.nextUrl.searchParams.get(
-      'restaurantId',
-    )
+export async function GET(req: NextRequest) {
+  const restaurantId = req.nextUrl.searchParams.get(
+    'restaurantId',
+  )
 
-  if (
-    !restaurantId
-  ) {
+  if (!restaurantId) {
     return json(
       {
         hasSession: false,
@@ -48,12 +33,9 @@ export async function GET(
     )
   }
 
-  const sessionId =
-    req.cookies.get(
-      sessionCookieName(
-        restaurantId,
-      ),
-    )?.value
+  const sessionId = req.cookies.get(
+    sessionCookieName(restaurantId),
+  )?.value
 
   if (!sessionId) {
     return json({
@@ -63,11 +45,10 @@ export async function GET(
     })
   }
 
-  const session =
-    await getValidTableSession(
-      sessionId,
-      restaurantId,
-    )
+  const session = await getValidTableSession(
+    sessionId,
+    restaurantId,
+  )
 
   if (!session) {
     return json({
@@ -80,7 +61,6 @@ export async function GET(
   return json({
     hasSession: true,
     valid: true,
-    tableNumber:
-      session.table_number,
+    tableNumber: session.table_number,
   })
 }
