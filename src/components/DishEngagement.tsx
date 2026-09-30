@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, Heart, MessageCircle, Send, Share2, Star, X } from 'lucide-react'
 import { track } from '@/lib/analytics'
@@ -261,7 +261,16 @@ export function DishEngagement({
   compact = false,
 }: Props) {
   const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [summaryLoaded, setSummaryLoaded] = useState(false)
+
+  // IMPORTANT: Do not fetch engagement data for every dish during menu render.
+  // The restaurant menu can contain hundreds of DishEngagement instances.
+  // We only load a dish's summary when its engagement row is near the viewport
+  // or when the guest explicitly interacts with it.
+  const engagementRef = useRef<HTMLDivElement | null>(null)
+  const summaryPromiseRef = useRef<Promise<boolean> | null>(null)
+  const summaryAbortRef = useRef<AbortController | null>(null)
   const [ratingOpen, setRatingOpen] = useState(false)
   const [savingRating, setSavingRating] = useState(false)
   const [liking, setLiking] = useState(false)
@@ -270,7 +279,9 @@ export function DishEngagement({
   const [shareFeedback, setShareFeedback] = useState<'shared' | 'copied' | null>(null)
   const [reviewsOpen, setReviewsOpen] = useState(false)
 
-  const loadSummary = useCallback(async (signal?: AbortSignal) => {
+  const loadSummary = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
+    setLoading(true)
+
     try {
       const response = await fetch(
         `/api/dish-engagement?restaurantId=${encodeURIComponent(restaurantId)}&itemId=${encodeURIComponent(itemId)}`,
@@ -282,7 +293,7 @@ export function DishEngagement({
         },
       )
 
-      if (!response.ok) return
+      if (!response.ok) return false
 
       const data = await response.json()
 
@@ -300,23 +311,77 @@ export function DishEngagement({
 
       setExistingRating(Number(data.myRating) || 0)
       setExistingReview(typeof data.myReview === 'string' ? data.myReview : '')
+      setSummaryLoaded(true)
+      return true
     } catch {
       // Engagement is intentionally non-blocking.
+      return false
     } finally {
       setLoading(false)
     }
   }, [restaurantId, itemId])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    void loadSummary(controller.signal)
-    return () => controller.abort()
-  }, [loadSummary])
+  const ensureSummary = useCallback(async (): Promise<boolean> => {
+    if (summaryLoaded) return true
+    if (summaryPromiseRef.current) return summaryPromiseRef.current
 
+    const controller = new AbortController()
+    summaryAbortRef.current = controller
+
+    const promise = loadSummary(controller.signal).finally(() => {
+      if (summaryAbortRef.current === controller) {
+        summaryAbortRef.current = null
+      }
+      if (summaryPromiseRef.current === promise) {
+        summaryPromiseRef.current = null
+      }
+    })
+
+    summaryPromiseRef.current = promise
+    return promise
+  }, [loadSummary, summaryLoaded])
+
+  // Lazy-load each dish's engagement summary only when the engagement row is
+  // near the viewport. This eliminates one GET request per dish on initial menu
+  // render while preserving the engagement UI as the guest scrolls.
+  useEffect(() => {
+    const el = engagementRef.current
+    if (!el) return
+
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+      void ensureSummary()
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry?.isIntersecting) return
+
+        observer.disconnect()
+        void ensureSummary()
+      },
+      {
+        root: null,
+        rootMargin: '350px 0px',
+        threshold: 0.01,
+      },
+    )
+
+    observer.observe(el)
+
+    return () => {
+      observer.disconnect()
+      summaryAbortRef.current?.abort()
+    }
+  }, [ensureSummary])
   const toggleLike = async (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
     e.stopPropagation()
     if (liking) return
+
+    const ready = await ensureSummary()
+    if (!ready) return
 
     const previousLiked = summary.likedByYou
     const previousLikeCount = summary.likeCount
@@ -480,15 +545,19 @@ export function DishEngagement({
 
   const ratingLabel = useMemo(() => {
     if (loading) return 'Loading'
+    if (!summaryLoaded) return 'Rate this dish'
     if (summary.ratingCount === 0) return 'No ratings yet'
     return `${summary.ratingAverage.toFixed(1)} · ${formatCount(summary.ratingCount)}`
-  }, [loading, summary.ratingAverage, summary.ratingCount])
+  }, [loading, summaryLoaded, summary.ratingAverage, summary.ratingCount])
 
   const hasReviews = summary.recentReviews.length > 0
 
   return (
     <>
-      <div className={`pr-eng-row${compact ? ' pr-eng-row--compact' : ''}`}>
+      <div
+        ref={engagementRef}
+        className={`pr-eng-row${compact ? ' pr-eng-row--compact' : ''}`}
+      >
         <div className="pr-eng-summary">
           <span className="pr-eng-summary-stars" aria-hidden="true">
             <Star
@@ -529,7 +598,10 @@ export function DishEngagement({
               e.preventDefault()
               e.stopPropagation()
               if (savingRating) return
-              setRatingOpen(true)
+              void (async () => {
+                const ready = await ensureSummary()
+                if (ready) setRatingOpen(true)
+              })()
             }}
             aria-label={`Rate ${itemName}`}
             title={existingRating ? 'Edit rating' : 'Rate'}

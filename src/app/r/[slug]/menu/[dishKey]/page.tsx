@@ -797,6 +797,7 @@ function RelatedDishCard({
 
   return (
     <Link
+              prefetch={false}
       href={href}
       className="dish-related-card"
       aria-label={`View ${item.name} at ${restaurant.name}`}
@@ -1077,6 +1078,7 @@ export default async function DishPage({ params }: PageProps) {
           <ol className="dish-breadcrumb-list">
             <li>
               <Link
+              prefetch={false}
                 href="/"
                 className="dish-breadcrumb-link"
               >
@@ -1088,6 +1090,7 @@ export default async function DishPage({ params }: PageProps) {
 
             <li>
               <Link
+              prefetch={false}
                 href={restaurantUrl}
                 className="dish-breadcrumb-link"
               >
@@ -1148,6 +1151,7 @@ export default async function DishPage({ params }: PageProps) {
 
             <div className="dish-hero-back">
               <Link
+              prefetch={false}
                 href={restaurantUrl}
                 className="dish-back-link"
               >
@@ -1199,6 +1203,7 @@ export default async function DishPage({ params }: PageProps) {
                   <span aria-hidden="true">·</span>
 
                   <Link
+              prefetch={false}
                     href={restaurantUrl}
                     className="dish-context-link"
                   >
@@ -1365,6 +1370,7 @@ export default async function DishPage({ params }: PageProps) {
                 </span>
 
                 <Link
+              prefetch={false}
                   href={restaurantUrl}
                   className="dish-source-name"
                 >
@@ -1396,6 +1402,7 @@ export default async function DishPage({ params }: PageProps) {
                 )}
 
                 <Link
+              prefetch={false}
                   href={restaurantUrl}
                   className="dish-source-action dish-source-action-primary"
                 >
@@ -1426,6 +1433,7 @@ export default async function DishPage({ params }: PageProps) {
               </div>
 
               <Link
+              prefetch={false}
                 href={restaurantUrl}
                 className="dish-related-menu-link"
               >
