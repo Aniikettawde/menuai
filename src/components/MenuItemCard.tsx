@@ -1162,6 +1162,7 @@ function DarkMenuItemCard({
         <div className="pr-dark-link-row">
           <Link
             href={dishHref}
+            prefetch={false}
             className="pr-dark-link"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1863,6 +1864,7 @@ function NoImageDishCard({
         <div className="pr-no-image-link-row">
           <Link
             href={dishHref}
+            prefetch={false}
             className="pr-no-image-link"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2213,6 +2215,7 @@ function LightMenuItemCard({
             >
               <Link
                 href={dishHref}
+            prefetch={false}
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   display: 'inline-flex',

@@ -50,6 +50,21 @@ const EMPTY_SUMMARY: Summary = {
   recentReviews: [],
 }
 
+type CachedSummary = {
+  summary: Summary
+  myRating: number
+  myReview: string
+  expiresAt: number
+}
+
+const summaryCache = new Map<string, CachedSummary>()
+const SUMMARY_CACHE_TTL_MS = 2 * 60 * 1000
+
+function summaryCacheKey(restaurantId: string, itemId: string): string {
+  return `${restaurantId}:${itemId}`
+}
+
+
 function Stars({ value, size = 12 }: { value: number; size?: number }) {
   return (
     <span
@@ -263,14 +278,6 @@ export function DishEngagement({
   const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(false)
   const [summaryLoaded, setSummaryLoaded] = useState(false)
-
-  // IMPORTANT: Do not fetch engagement data for every dish during menu render.
-  // The restaurant menu can contain hundreds of DishEngagement instances.
-  // We only load a dish's summary when its engagement row is near the viewport
-  // or when the guest explicitly interacts with it.
-  const engagementRef = useRef<HTMLDivElement | null>(null)
-  const summaryPromiseRef = useRef<Promise<boolean> | null>(null)
-  const summaryAbortRef = useRef<AbortController | null>(null)
   const [ratingOpen, setRatingOpen] = useState(false)
   const [savingRating, setSavingRating] = useState(false)
   const [liking, setLiking] = useState(false)
@@ -279,7 +286,26 @@ export function DishEngagement({
   const [shareFeedback, setShareFeedback] = useState<'shared' | 'copied' | null>(null)
   const [reviewsOpen, setReviewsOpen] = useState(false)
 
+  const engagementRef = useRef<HTMLDivElement | null>(null)
+  const summaryPromiseRef = useRef<Promise<boolean> | null>(null)
+  const summaryAbortRef = useRef<AbortController | null>(null)
+
   const loadSummary = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
+    if (!restaurantId || !itemId) return false
+
+    const key = summaryCacheKey(restaurantId, itemId)
+    const cached = summaryCache.get(key)
+
+    if (cached && cached.expiresAt > Date.now()) {
+      setSummary(cached.summary)
+      setExistingRating(cached.myRating)
+      setExistingReview(cached.myReview)
+      setSummaryLoaded(true)
+      setLoading(false)
+      return true
+    }
+
+    summaryCache.delete(key)
     setLoading(true)
 
     try {
@@ -297,7 +323,7 @@ export function DishEngagement({
 
       const data = await response.json()
 
-      setSummary({
+      const nextSummary: Summary = {
         likeCount: safeNonNegativeInt(data.likeCount),
         ratingCount: safeNonNegativeInt(data.ratingCount),
         ratingAverage: safeRatingAverage(data.ratingAverage),
@@ -307,14 +333,25 @@ export function DishEngagement({
               .filter((r: any) => typeof r?.rating === 'number' && typeof r?.createdAt === 'string')
               .slice(0, 3)
           : [],
+      }
+
+      const myRating = Number(data.myRating) || 0
+      const myReview = typeof data.myReview === 'string' ? data.myReview : ''
+
+      setSummary(nextSummary)
+      setExistingRating(myRating)
+      setExistingReview(myReview)
+      setSummaryLoaded(true)
+
+      summaryCache.set(key, {
+        summary: nextSummary,
+        myRating,
+        myReview,
+        expiresAt: Date.now() + SUMMARY_CACHE_TTL_MS,
       })
 
-      setExistingRating(Number(data.myRating) || 0)
-      setExistingReview(typeof data.myReview === 'string' ? data.myReview : '')
-      setSummaryLoaded(true)
       return true
     } catch {
-      // Engagement is intentionally non-blocking.
       return false
     } finally {
       setLoading(false)
@@ -322,8 +359,20 @@ export function DishEngagement({
   }, [restaurantId, itemId])
 
   const ensureSummary = useCallback(async (): Promise<boolean> => {
+    if (!restaurantId || !itemId) return false
     if (summaryLoaded) return true
     if (summaryPromiseRef.current) return summaryPromiseRef.current
+
+    const key = summaryCacheKey(restaurantId, itemId)
+    const cached = summaryCache.get(key)
+
+    if (cached && cached.expiresAt > Date.now()) {
+      setSummary(cached.summary)
+      setExistingRating(cached.myRating)
+      setExistingReview(cached.myReview)
+      setSummaryLoaded(true)
+      return true
+    }
 
     const controller = new AbortController()
     summaryAbortRef.current = controller
@@ -339,12 +388,17 @@ export function DishEngagement({
 
     summaryPromiseRef.current = promise
     return promise
-  }, [loadSummary, summaryLoaded])
+  }, [itemId, loadSummary, restaurantId, summaryLoaded])
 
-  // Lazy-load each dish's engagement summary only when the engagement row is
-  // near the viewport. This eliminates one GET request per dish on initial menu
-  // render while preserving the engagement UI as the guest scrolls.
+  // IMPORTANT:
+  // A restaurant can contain hundreds of dishes. Never fetch engagement
+  // data for every card on initial menu render.
+  //
+  // We only hydrate engagement for dishes close to what the guest can see.
+  // This keeps the menu fast and dramatically reduces Worker/API invocations.
   useEffect(() => {
+    if (summaryLoaded) return
+
     const el = engagementRef.current
     if (!el) return
 
@@ -363,7 +417,7 @@ export function DishEngagement({
       },
       {
         root: null,
-        rootMargin: '350px 0px',
+        rootMargin: '100px 0px',
         threshold: 0.01,
       },
     )
@@ -374,7 +428,8 @@ export function DishEngagement({
       observer.disconnect()
       summaryAbortRef.current?.abort()
     }
-  }, [ensureSummary])
+  }, [ensureSummary, summaryLoaded])
+
   const toggleLike = async (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
     e.stopPropagation()
@@ -410,11 +465,24 @@ export function DishEngagement({
 
       const data = await response.json()
 
-      setSummary((s) => ({
-        ...s,
-        likedByYou: Boolean(data.likedByYou),
-        likeCount: safeNonNegativeInt(data.likeCount),
-      }))
+      setSummary((s) => {
+        const next = {
+          ...s,
+          likedByYou: Boolean(data.likedByYou),
+          likeCount: safeNonNegativeInt(data.likeCount),
+        }
+
+        if (restaurantId && itemId) {
+          summaryCache.set(summaryCacheKey(restaurantId, itemId), {
+            summary: next,
+            myRating: existingRating,
+            myReview: existingReview,
+            expiresAt: Date.now() + SUMMARY_CACHE_TTL_MS,
+          })
+        }
+
+        return next
+      })
 
       void track(restaurantId, nextLiked ? 'dish_liked' : 'dish_unliked', {
         item_id: itemId,
@@ -531,6 +599,18 @@ export function DishEngagement({
       setExistingReview(review)
       setRatingOpen(false)
 
+      if (restaurantId && itemId) {
+        setSummary((current) => {
+          summaryCache.set(summaryCacheKey(restaurantId, itemId), {
+            summary: current,
+            myRating: rating,
+            myReview: review,
+            expiresAt: Date.now() + SUMMARY_CACHE_TTL_MS,
+          })
+          return current
+        })
+      }
+
       void track(restaurantId, 'dish_rated', {
         item_id: itemId,
         item_name: itemName,
@@ -554,10 +634,7 @@ export function DishEngagement({
 
   return (
     <>
-      <div
-        ref={engagementRef}
-        className={`pr-eng-row${compact ? ' pr-eng-row--compact' : ''}`}
-      >
+      <div className={`pr-eng-row${compact ? ' pr-eng-row--compact' : ''}`}>
         <div className="pr-eng-summary">
           <span className="pr-eng-summary-stars" aria-hidden="true">
             <Star

@@ -797,8 +797,9 @@ function RelatedDishCard({
 
   return (
     <Link
-              prefetch={false}
       href={href}
+
+      prefetch={false}
       className="dish-related-card"
       aria-label={`View ${item.name} at ${restaurant.name}`}
     >
@@ -1078,8 +1079,9 @@ export default async function DishPage({ params }: PageProps) {
           <ol className="dish-breadcrumb-list">
             <li>
               <Link
-              prefetch={false}
                 href="/"
+
+                prefetch={false}
                 className="dish-breadcrumb-link"
               >
                 Dinezy
@@ -1090,8 +1092,9 @@ export default async function DishPage({ params }: PageProps) {
 
             <li>
               <Link
-              prefetch={false}
                 href={restaurantUrl}
+
+                prefetch={false}
                 className="dish-breadcrumb-link"
               >
                 {restaurant.name}
@@ -1151,8 +1154,9 @@ export default async function DishPage({ params }: PageProps) {
 
             <div className="dish-hero-back">
               <Link
-              prefetch={false}
                 href={restaurantUrl}
+
+                prefetch={false}
                 className="dish-back-link"
               >
                 <ArrowLeft
@@ -1203,8 +1207,9 @@ export default async function DishPage({ params }: PageProps) {
                   <span aria-hidden="true">·</span>
 
                   <Link
-              prefetch={false}
                     href={restaurantUrl}
+
+                    prefetch={false}
                     className="dish-context-link"
                   >
                     {restaurant.name}
@@ -1370,8 +1375,9 @@ export default async function DishPage({ params }: PageProps) {
                 </span>
 
                 <Link
-              prefetch={false}
                   href={restaurantUrl}
+
+                  prefetch={false}
                   className="dish-source-name"
                 >
                   {restaurant.name}
@@ -1402,8 +1408,9 @@ export default async function DishPage({ params }: PageProps) {
                 )}
 
                 <Link
-              prefetch={false}
                   href={restaurantUrl}
+
+                  prefetch={false}
                   className="dish-source-action dish-source-action-primary"
                 >
                   Full menu
@@ -1433,8 +1440,9 @@ export default async function DishPage({ params }: PageProps) {
               </div>
 
               <Link
-              prefetch={false}
                 href={restaurantUrl}
+
+                prefetch={false}
                 className="dish-related-menu-link"
               >
                 Full menu →

@@ -27,6 +27,9 @@ import { track } from '@/lib/analytics'
 import { resolveMenuImageUrl } from '@/lib/resolve-image'
 import { LazyMount } from './LazyMount'
 
+// LOW-INVOCATION: MenuItemCard lazily loads dish engagement and disables
+// Next.js prefetching for individual dish pages. Keep card rendering/UI unchanged here.
+
 import type { WaiterCallItem } from '@/types'
 import { usePopularItems } from '@/hooks/usePopularItems'
 import {
