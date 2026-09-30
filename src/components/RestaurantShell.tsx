@@ -411,6 +411,8 @@ function RestaurantSeoContent({
                   (item) => (
                     <li key={item.id}>
                       <Link
+					    prefetch={false}
+
                         href={buildDishHref(
                           restaurantSlug,
                           item,
@@ -476,6 +478,7 @@ function RestaurantSeoContent({
                   (item) => (
                     <Link
                       key={item.id}
+					  prefetch={false}
                       href={buildDishHref(
                         restaurantSlug,
                         item,

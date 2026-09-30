@@ -59,9 +59,29 @@ function getSupabase() {
   })
 }
 
-const baseUrl = (
-  process.env.NEXT_PUBLIC_SITE_URL || 'https://dinezy.in'
-).replace(/\/$/, '')
+/**
+ * Dinezy's canonical public hostname.
+ */
+const baseUrl = 'https://dinezy.in'
+
+/**
+ * Convert any sitemap-relative path into an absolute URL.
+ *
+ * resolveMenuImageUrl() can return a relative /cdn-cgi/... URL,
+ * so sitemap image locations must pass through this helper.
+ */
+function absoluteUrl(path: string): string {
+  const value = path.trim()
+
+  if (/^https?:\/\//i.test(value)) {
+    return value
+  }
+
+  return new URL(
+    value.startsWith('/') ? value : `/${value}`,
+    `${baseUrl}/`,
+  ).toString()
+}
 
 async function fetchAll<T>(
   queryPage: (
@@ -125,9 +145,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       async (from, to) =>
         supabase
           .from('menu_items')
-         .select(
-  'id, restaurant_id, name, slug, image_url',
-)
+          .select(
+            'id, restaurant_id, name, slug, image_url',
+          )
           .eq('is_available', true)
           .order('restaurant_id', { ascending: true })
           .order('id', { ascending: true })
@@ -137,13 +157,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const activeRestaurantIds = new Set(
     restaurants.map((restaurant) => restaurant.id),
-  )
-
-  const restaurantSlugById = new Map(
-    restaurants.map((restaurant) => [
-      restaurant.id,
-      restaurant.slug,
-    ]),
   )
 
   const menuByRestaurant = new Map<
@@ -163,6 +176,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       menuByRestaurant.get(item.restaurant_id) ?? []
 
     list.push(item)
+
     menuByRestaurant.set(
       item.restaurant_id,
       list,
@@ -175,17 +189,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   >()
 
   for (const path of INDEXABLE_MARKETING_PATHS) {
-    urls.set(`${baseUrl}${path}`, {
-      url: `${baseUrl}${path}`,
+    const url = absoluteUrl(path)
+
+    urls.set(url, {
+      url,
     })
   }
 
   for (const restaurant of restaurants) {
-    const url =
-      `${baseUrl}/r/${encodeURIComponent(restaurant.slug)}`
+    const restaurantUrl = absoluteUrl(
+      `/r/${encodeURIComponent(restaurant.slug)}`,
+    )
 
-    urls.set(url, {
-      url,
+    urls.set(restaurantUrl, {
+      url: restaurantUrl,
       ...(restaurant.updated_at
         ? {
             lastModified: new Date(
@@ -218,30 +235,35 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         )
 
       const dishUrl =
-        `${baseUrl}${dishPath}`
+        absoluteUrl(dishPath)
 
-urls.set(dishUrl, {
-  url: dishUrl,
-  ...(item.image_url
-    ? {
-        images: [
-          resolveMenuImageUrl(
+      const imagePath = item.image_url
+        ? resolveMenuImageUrl(
             item.image_url,
             1600,
-          ),
-        ],
-      }
-    : {}),
-})
+          )
+        : ''
+
+      urls.set(dishUrl, {
+        url: dishUrl,
+        ...(imagePath
+          ? {
+              images: [
+                absoluteUrl(imagePath),
+              ],
+            }
+          : {}),
+      })
     }
   }
 
   for (const post of posts) {
-    const url =
-      `${baseUrl}/blog/${encodeURIComponent(post.slug)}`
+    const postUrl = absoluteUrl(
+      `/blog/${encodeURIComponent(post.slug)}`,
+    )
 
-    urls.set(url, {
-      url,
+    urls.set(postUrl, {
+      url: postUrl,
       ...(post.updated_at ||
       post.published_at
         ? {

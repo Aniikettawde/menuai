@@ -2416,6 +2416,8 @@ function DishNameLink({
   return (
     <Link
       href={href}
+	        prefetch={false}
+
       className={className}
       aria-label={`View ${name} menu details`}
       onClick={(event) => {
@@ -2442,7 +2444,7 @@ export function MenuItemCard({ item, showMostOrdered, onAsk }: Props) {
   const hideCurrencySymbol = getHideCurrencySymbolSetting(restaurant)
   const priceLabel = formatPrice(item.price, hideCurrencySymbol)
   const hasOptions = (dishOptions[item.id]?.length ?? 0) > 0
-  const imageUrl = resolveMenuImageUrl(item.image_url)
+  const imageUrl = resolveMenuImageUrl(item.image_url, 480)
   const hasImage = !!imageUrl
   const cleanDescription = item.description ? trimDescription(item.description) : null
   const ordersEnabled = useAppStore((s) => (s.restaurant?.orders_enabled ?? true) && s.hasTableToken)

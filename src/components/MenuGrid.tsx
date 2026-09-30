@@ -133,21 +133,26 @@ function DishScrollReveal({
   index?: number
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [visible, setVisible] = useState(false)
+  // Start VISIBLE so server HTML is never opacity:0.
+  // Only cards that are below the fold get hidden (after mount) and animated in.
+  const [hidden, setHidden] = useState(false)
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
 
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setVisible(true)
-      return
-    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    // Already on screen -> leave it visible, no flash
+    const rect = el.getBoundingClientRect()
+    if (rect.top < window.innerHeight * 1.2) return
+
+    setHidden(true)
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setVisible(true)
+          setHidden(false)
           observer.unobserve(el)
         }
       },
@@ -161,7 +166,7 @@ function DishScrollReveal({
   return (
     <div
       ref={ref}
-      className={`mg-dish-reveal${visible ? ' mg-dish-reveal--visible' : ''}`}
+      className={`mg-dish-reveal${hidden ? '' : ' mg-dish-reveal--visible'}`}
       style={{
         '--dish-delay': `${Math.min(index % 5, 4) * 55}ms`,
         '--dish-tilt': index % 2 === 0 ? '-1.1deg' : '1.1deg',
@@ -566,19 +571,20 @@ function SearchResultsPanel({
 }
 
 function CategorySection({
-  category, items, onAsk, sectionRef, popularIds,
+  category, items, onAsk, sectionRef, popularIds, priority = false,
 }: {
   category: MenuCategory
   items: MenuItem[]
   onAsk?: (t: string) => void
   sectionRef?: (el: HTMLElement | null) => void
   popularIds?: Set<string>
+  priority?: boolean
 }) {
   const otherItems = items
 
- const imageUrl = category.image_url
-  ? resolveMenuImageUrl(category.image_url, 100)
-  : null
+  const imageUrl = category.image_url
+    ? resolveMenuImageUrl(category.image_url, 100)
+    : null
   return (
     <section
       id={`cat-${category.id}`}
@@ -625,21 +631,23 @@ function CategorySection({
               <InfoCard card={category.info_card} />
             </div>
           )}
- {otherItems.map((item, index) => {
+          {otherItems.map((item, index) => {
             const badge = getBadge(item, items)
             const isHot = !!popularIds?.has(item.id)
+            const row = (
+              <div className="mg-item-row">
+                {badge.kind !== 'none' && (
+                  <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
+                )}
+                <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
+                  <MenuItemCard item={item} onAsk={onAsk} showMostOrdered={isHot && !item.is_bestseller} />
+                </div>
+              </div>
+            )
             return (
               <DishScrollReveal key={item.id} index={index}>
-                <LazyMount minHeight={430}>
-                  <div className="mg-item-row">
-                    {badge.kind !== 'none' && (
-                      <div className="mg-badge-overlay"><PsychBadge badge={badge} /></div>
-                    )}
-                    <div className={badge.kind !== 'none' ? 'mg-item-pad' : ''}>
-                      <MenuItemCard item={item} onAsk={onAsk} showMostOrdered={isHot && !item.is_bestseller} />
-                    </div>
-                  </div>
-                </LazyMount>
+                {/* First 4 dishes of first category render immediately (no LazyMount) */}
+                {priority && index < 4 ? row : <LazyMount minHeight={430}>{row}</LazyMount>}
               </DishScrollReveal>
             )
           })}
@@ -1870,18 +1878,22 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   />
 ) : (
   <>
-    {categoriesWithItems.map((cat) => {
-      const catItems = translatedItems.filter((i) => i.category_id === cat.id && i.is_available)
+    {categoriesWithItems.map((cat, catIdx) => {
+      const catItems = translatedItems.filter(
+        (i) => i.category_id === cat.id && i.is_available,
+      )
       if (catItems.length === 0) return null
+
       return (
-<CategorySection
-  key={cat.id}
-  category={cat}
-  items={sortItemsPsychologically(catItems, restaurantPop, personalPop)}
-  onAsk={onAsk}
-  sectionRef={registerSectionRef(cat.id)}
-  popularIds={popularIds}
-/>
+        <CategorySection
+          key={cat.id}
+          category={cat}
+          items={sortItemsPsychologically(catItems, restaurantPop, personalPop)}
+          onAsk={onAsk}
+          sectionRef={registerSectionRef(cat.id)}
+          popularIds={popularIds}
+          priority={catIdx === 0}
+        />
       )
     })}
   </>

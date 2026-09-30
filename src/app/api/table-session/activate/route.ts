@@ -16,7 +16,7 @@ import {
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
+export const preferredRegion = 'bom1'
 function redirectTo(
   req: NextRequest,
   path: string,
@@ -77,28 +77,31 @@ export async function GET(
     )
   }
 
-  const service =
-    getSupabaseService()
+    const service = getSupabaseService()
 
   /*
-   * Find the restaurant.
+   * Run both lookups in parallel (saves one full DB round trip).
+   * The token query can't filter by restaurant_id yet because we
+   * don't have it, so we filter by token and match restaurant in JS.
+   *
+   * The secret token never reaches RestaurantShell.
    */
-  const {
-    data: restaurant,
-  } = await service
-    .from('restaurants')
-    .select(
-      'id, is_active',
-    )
-    .eq(
-      'slug',
-      slug,
-    )
-    .eq(
-      'is_active',
-      true,
-    )
-    .single()
+  const [
+    { data: restaurant },
+    { data: tokenRows },
+  ] = await Promise.all([
+    service
+      .from('restaurants')
+      .select('id, is_active')
+      .eq('slug', slug)
+      .eq('is_active', true)
+      .maybeSingle(),
+
+    service
+      .from('qr_tokens')
+      .select('id, table_number, is_active, restaurant_id')
+      .eq('token', token),
+  ])
 
   if (!restaurant) {
     return redirectTo(
@@ -107,27 +110,10 @@ export async function GET(
     )
   }
 
-  /*
-   * Validate the QR token server-side.
-   *
-   * The secret token never reaches RestaurantShell.
-   */
-  const {
-    data: qrToken,
-  } = await service
-    .from('qr_tokens')
-    .select(
-      'id, table_number, is_active',
-    )
-    .eq(
-      'restaurant_id',
-      restaurant.id,
-    )
-    .eq(
-      'token',
-      token,
-    )
-    .maybeSingle()
+  const qrToken =
+    (tokenRows ?? []).find(
+      (row) => row.restaurant_id === restaurant.id,
+    ) ?? null
 
   /*
    * If somebody uses an invalid/deactivated/mismatched QR,

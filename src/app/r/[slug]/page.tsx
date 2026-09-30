@@ -1,10 +1,10 @@
 import { notFound, permanentRedirect } from 'next/navigation'
 import type { Metadata } from 'next'
-import { cache } from 'react'
+import { cache, type ComponentProps } from 'react'
 
 import { getSupabaseServer } from '@/lib/supabase'
 import { getDiscoveryServer } from '@/lib/discovery'
-import type { MenuPageData, Restaurant } from '@/types'
+import type { MenuPageData, Restaurant, DishOption } from '@/types'
 
 import { RestaurantShell } from '@/components/RestaurantShell'
 
@@ -833,6 +833,84 @@ async function getMenuItems(
   }
 }
 
+async function getActiveOffers(restaurantId: string) {
+  const supabase = getSupabaseServer()
+
+  const { data } = await supabase
+    .from('offers')
+    .select(
+      'id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at',
+    )
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+    .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`)
+
+  return data ?? []
+}
+
+async function getDishOptionsMap(
+  itemIds: string[],
+): Promise<Record<string, DishOption[]>> {
+  if (itemIds.length === 0) return {}
+
+  const supabase = getSupabaseServer()
+
+  const { data: optionRows } = await supabase
+    .from('dish_options')
+    .select('*')
+    .in('menu_item_id', itemIds)
+    .order('position')
+
+  if (!optionRows || optionRows.length === 0) return {}
+
+  const { data: choiceRows } = await supabase
+    .from('dish_option_choices')
+    .select('*')
+    .in(
+      'dish_option_id',
+      optionRows.map((o: any) => o.id),
+    )
+    .eq('is_available', true)
+    .order('position')
+
+  const choicesByOption = new Map<string, any[]>()
+  for (const c of choiceRows ?? []) {
+    const list = choicesByOption.get(c.dish_option_id) ?? []
+    list.push(c)
+    choicesByOption.set(c.dish_option_id, list)
+  }
+
+  const result: Record<string, DishOption[]> = {}
+
+  for (const opt of optionRows as any[]) {
+    const choices = (choicesByOption.get(opt.id) ?? []).map((c: any) => ({
+      id: c.id,
+      dish_option_id: c.dish_option_id,
+      name: c.name,
+      extra_price: c.extra_price ?? 0,
+      is_default: c.is_default ?? false,
+      is_available: c.is_available ?? true,
+      position: c.position ?? 0,
+    }))
+
+    const dishOption: DishOption = {
+      id: opt.id,
+      menu_item_id: opt.menu_item_id,
+      name: opt.name,
+      is_required: opt.is_required ?? false,
+      min_selections: opt.min_selections ?? 0,
+      max_selections: opt.max_selections ?? 1,
+      position: opt.position ?? 0,
+      price_mode: opt.price_mode ?? 'add',
+      choices,
+    }
+
+    ;(result[opt.menu_item_id] ??= []).push(dishOption)
+  }
+
+  return result
+}
+
 async function getPublicRatings(
   restaurantId: string,
 ): Promise<ReviewRow[]> {
@@ -1235,18 +1313,19 @@ export default async function RestaurantPage(
       hasPaidAccess(result.sub)
 
     if (subscriptionActive) {
-      const [
+ const [
         menuData,
         reviews,
+        offers,
       ] = await Promise.all([
-        getMenuItems(
-          restaurant.id,
-        ),
-
-        getPublicRatings(
-          restaurant.id,
-        ),
+        getMenuItems(restaurant.id),
+        getPublicRatings(restaurant.id),
+        getActiveOffers(restaurant.id),
       ])
+
+      const dishOptions = await getDishOptionsMap(
+        menuData.items.map((i) => i.id),
+      )
 
       const schema =
         buildPageJsonLd(
@@ -1270,9 +1349,11 @@ export default async function RestaurantPage(
               restaurant,
               ...menuData,
             }}
-            reviews={
-              reviews
+            reviews={reviews}
+            initialOffers={
+              offers as ComponentProps<typeof RestaurantShell>['initialOffers']
             }
+            initialDishOptions={dishOptions}
           />
         </>
       )
@@ -1347,6 +1428,23 @@ export default async function RestaurantPage(
  *
  * New /r/[slug] URLs can still be generated on demand.
  */
+export const preferredRegion = 'bom1' // see region note below
+
+export async function generateStaticParams() {
+  try {
+    const supabase = getSupabaseServer()
+    const { data } = await supabase
+      .from('restaurants')
+      .select('slug')
+      .eq('is_active', true)
+      .limit(500)
+
+    return (data ?? []).map((r) => ({ slug: r.slug as string }))
+  } catch {
+    return []
+  }
+}
+
 export const dynamic =
   'force-static'
 
