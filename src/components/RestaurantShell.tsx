@@ -3484,6 +3484,58 @@ export function RestaurantShell({
           border-color: rgba(138,109,31,0.11);
         }
 
+        /* Returning-customer card: explicit dark-theme treatment.
+           The base card intentionally keeps the light-theme styling above.
+           These selectors override it only when the restaurant uses dark mode. */
+        .pr-shell[data-theme='dark'] .pr-customer-personalization {
+          border-color: rgba(233,200,116,0.20);
+          background:
+            radial-gradient(circle at 100% 0%, rgba(233,200,116,0.12), transparent 42%),
+            linear-gradient(180deg, rgba(31,26,20,0.98), rgba(20,17,13,0.99));
+          box-shadow:
+            0 14px 34px rgba(0,0,0,0.28),
+            inset 0 1px 0 rgba(255,255,255,0.035);
+        }
+
+        .pr-shell[data-theme='dark'] .pr-customer-personalization-glow {
+          background: rgba(233,200,116,0.075);
+          opacity: 0.9;
+        }
+
+        .pr-shell[data-theme='dark'] .pr-customer-personalization-icon {
+          color: #E9C874;
+          background: rgba(233,200,116,0.10);
+          border-color: rgba(233,200,116,0.18);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+        }
+
+        .pr-shell[data-theme='dark'] .pr-customer-personalization-eyebrow {
+          color: #E9C874;
+        }
+
+        .pr-shell[data-theme='dark'] .pr-customer-personalization-title {
+          color: #F7F0E3;
+        }
+
+        .pr-shell[data-theme='dark'] .pr-customer-personalization-subtitle {
+          color: rgba(245,239,226,0.62);
+        }
+
+        .pr-shell[data-theme='dark'] .pr-customer-personalization-meta {
+          color: rgba(245,239,226,0.48);
+        }
+
+        .pr-shell[data-theme='dark'] .pr-customer-personalization-meta > span {
+          background: rgba(255,255,255,0.045);
+          border-color: rgba(255,255,255,0.075);
+        }
+
+        .pr-shell[data-theme='dark'] .pr-customer-personalization-meta .pr-customer-personalization-offer {
+          color: #E9C874;
+          background: rgba(233,200,116,0.09);
+          border-color: rgba(233,200,116,0.16);
+        }
+
         @keyframes pr-customer-personalization-in {
           from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
