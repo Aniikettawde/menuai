@@ -28,6 +28,7 @@ import { useCustomerAuth } from '@/store/customer-auth-store'
 import type { ReviewRow } from '@/lib/schema/restaurant-schema'
 import { GoogleReviewButton } from './GoogleReviewButton'
 import { buildDishPath, slugifyDishName } from '@/lib/dish-url'
+import { Sparkles } from 'lucide-react'
 
 // Below-the-fold / conditionally-rendered UI — none of these are needed
 // for first paint, so they're split into their own chunk and only
@@ -52,6 +53,71 @@ type OfferRow = {
   coupon_code: string | null
   min_order_amount_paise: number | null
   ends_at: string | null
+}
+
+
+type CustomerPersonalization = {
+  returning: boolean
+  visitCount: number
+  lastVisitAt: string | null
+}
+
+const CUSTOMER_RETURNING_WINDOW_MS = 6 * 60 * 60 * 1000
+
+function getCustomerReturnKey(customerId: string, restaurantId: string) {
+  return `dinezy_customer_seen_${customerId}_${restaurantId}`
+}
+
+function CustomerPersonalizationCard({
+  name,
+  restaurantName,
+  personalization,
+  offerCount,
+}: {
+  name: string
+  restaurantName: string
+  personalization: CustomerPersonalization
+  offerCount: number
+}) {
+  if (!personalization.returning) return null
+
+  return (
+    <section className="pr-customer-personalization" aria-label="Personalized welcome">
+      <div className="pr-customer-personalization-glow" aria-hidden="true" />
+
+      <div className="pr-customer-personalization-icon" aria-hidden="true">
+        <Sparkles size={16} />
+      </div>
+
+      <div className="pr-customer-personalization-body">
+        <p className="pr-customer-personalization-eyebrow">
+          Welcome back
+        </p>
+
+        <h2 className="pr-customer-personalization-title">
+          Good to see you, {name} 👋
+        </h2>
+
+        <p className="pr-customer-personalization-subtitle">
+          Nice to have you back at {restaurantName}.
+        </p>
+
+        <div className="pr-customer-personalization-meta">
+          <span>
+            {personalization.visitCount > 1
+              ? `${personalization.visitCount} visits here`
+              : 'You have visited here before'}
+          </span>
+
+          {offerCount > 0 && (
+            <span className="pr-customer-personalization-offer">
+              {offerCount} {offerCount === 1 ? 'offer' : 'offers'} available
+            </span>
+          )}
+        </div>
+      </div>
+    </section>
+  )
 }
 
 interface Props {
@@ -725,6 +791,10 @@ export function RestaurantShell({
   const [accountOpen, setAccountOpen] =
     useState(false)
 
+
+  const [customerPersonalization, setCustomerPersonalization] =
+    useState<CustomerPersonalization | null>(null)
+
   useEffect(() => {
     if (customer) return
     if (activeTab !== 'menu') return
@@ -813,6 +883,99 @@ export function RestaurantShell({
     restaurant?.id,
     tableSessionState,
   ])
+
+  // ── Returning customer personalization ───────────────────────────────────
+  // This never blocks the menu. It runs only after the customer identity is
+  // available and enriches the already-rendered restaurant menu in the background.
+  useEffect(() => {
+    if (!customer?.id || !restaurant?.id) {
+      setCustomerPersonalization(null)
+      return
+    }
+
+    let cancelled = false
+
+    const customerId = customer.id
+    const restaurantId = restaurant.id
+    const storageKey = getCustomerReturnKey(customerId, restaurantId)
+
+    let previousLocalSeenAt = 0
+    try {
+      previousLocalSeenAt = Number(localStorage.getItem(storageKey) ?? 0)
+    } catch {}
+
+    const localReturning =
+      Number.isFinite(previousLocalSeenAt) &&
+      previousLocalSeenAt > 0 &&
+      Date.now() - previousLocalSeenAt >= CUSTOMER_RETURNING_WINDOW_MS
+
+    async function loadPersonalization() {
+      try {
+        const response = await fetch(
+          `/api/customer/personalization?customer_id=${encodeURIComponent(
+            customerId,
+          )}&restaurant_id=${encodeURIComponent(restaurantId)}`,
+          {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store',
+          },
+        )
+
+        if (cancelled) return
+
+        if (!response.ok) {
+          if (localReturning) {
+            setCustomerPersonalization({
+              returning: true,
+              visitCount: 0,
+              lastVisitAt: null,
+            })
+          }
+          return
+        }
+
+        const data = (await response.json()) as Partial<CustomerPersonalization>
+
+        const visitCount =
+          typeof data.visitCount === 'number' && Number.isFinite(data.visitCount)
+            ? Math.max(0, Math.floor(data.visitCount))
+            : 0
+
+        const backendReturning =
+          data.returning === true || visitCount >= 2
+
+        setCustomerPersonalization({
+          returning: backendReturning || localReturning,
+          visitCount,
+          lastVisitAt:
+            typeof data.lastVisitAt === 'string' ? data.lastVisitAt : null,
+        })
+
+        // Set the browser marker after the response is processed so the first
+        // visit does not immediately become a returning visit.
+        try {
+          localStorage.setItem(storageKey, String(Date.now()))
+        } catch {}
+      } catch {
+        if (cancelled) return
+
+        if (localReturning) {
+          setCustomerPersonalization({
+            returning: true,
+            visitCount: 0,
+            lastVisitAt: null,
+          })
+        }
+      }
+    }
+
+    void loadPersonalization()
+
+    return () => {
+      cancelled = true
+    }
+  }, [customer?.id, restaurant?.id])
 
   // ── Table session bootstrap ───────────────────────────────────────────────
   // IMPORTANT: this effect never blocks the menu. The restaurant/menu HTML
@@ -3216,7 +3379,121 @@ export function RestaurantShell({
           font-weight: 700;
         }
 
+        .pr-customer-personalization {
+          position: relative;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          overflow: hidden;
+          margin: 0 0 1rem;
+          padding: 14px 15px;
+          border: 1px solid rgba(138,109,31,0.16);
+          border-radius: 20px;
+          background:
+            radial-gradient(circle at 100% 0%, rgba(138,109,31,0.10), transparent 44%),
+            linear-gradient(180deg, rgba(255,255,255,0.92), rgba(247,242,231,0.96));
+          box-shadow: 0 10px 28px rgba(33,30,27,0.05);
+          animation: pr-customer-personalization-in 360ms cubic-bezier(.2,.8,.2,1) both;
+        }
+
+        .pr-customer-personalization-glow {
+          position: absolute;
+          width: 120px;
+          height: 120px;
+          top: -62px;
+          right: -38px;
+          border-radius: 999px;
+          background: rgba(138,109,31,0.08);
+          filter: blur(14px);
+          pointer-events: none;
+        }
+
+        .pr-customer-personalization-icon {
+          position: relative;
+          z-index: 1;
+          flex: 0 0 auto;
+          width: 34px;
+          height: 34px;
+          display: grid;
+          place-items: center;
+          border-radius: 12px;
+          color: var(--pr-gold);
+          background: rgba(138,109,31,0.10);
+          border: 1px solid rgba(138,109,31,0.12);
+        }
+
+        .pr-customer-personalization-body {
+          position: relative;
+          z-index: 1;
+          min-width: 0;
+          flex: 1;
+        }
+
+        .pr-customer-personalization-eyebrow {
+          margin: 0 0 3px;
+          color: var(--pr-gold);
+          font-size: 9px;
+          line-height: 1.2;
+          font-weight: 800;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          font-family: var(--font-body);
+        }
+
+        .pr-customer-personalization-title {
+          margin: 0;
+          color: var(--pr-text);
+          font-size: clamp(17px, 4.6vw, 21px);
+          line-height: 1.15;
+          font-weight: 700;
+          font-family: var(--font-display);
+          letter-spacing: -0.015em;
+        }
+
+        .pr-customer-personalization-subtitle {
+          margin: 5px 0 0;
+          color: var(--pr-text-muted);
+          font-size: 11.5px;
+          line-height: 1.45;
+          font-family: var(--font-body);
+        }
+
+        .pr-customer-personalization-meta {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 7px;
+          margin-top: 9px;
+          color: var(--pr-text-faint);
+          font-size: 9.5px;
+          line-height: 1.35;
+          font-weight: 700;
+          font-family: var(--font-body);
+        }
+
+        .pr-customer-personalization-meta > span {
+          padding: 5px 8px;
+          border-radius: 999px;
+          background: rgba(33,30,27,0.035);
+          border: 1px solid rgba(33,30,27,0.06);
+        }
+
+        .pr-customer-personalization-meta .pr-customer-personalization-offer {
+          color: var(--pr-gold);
+          background: rgba(138,109,31,0.07);
+          border-color: rgba(138,109,31,0.11);
+        }
+
+        @keyframes pr-customer-personalization-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
         @media (prefers-reduced-motion: reduce) {
+          .pr-customer-personalization {
+            animation: none;
+          }
+
           .pr-items-grid > * {
             animation: none;
           }
@@ -3341,6 +3618,21 @@ export function RestaurantShell({
             />
           ) : (
             <>
+              {customer &&
+                customerPersonalization?.returning && (
+                  <CustomerPersonalizationCard
+                    name={
+                      typeof customer.display_name === 'string' &&
+                      customer.display_name.trim()
+                        ? customer.display_name.trim()
+                        : 'there'
+                    }
+                    restaurantName={initialData.restaurant.name}
+                    personalization={customerPersonalization}
+                    offerCount={activeOffers.length}
+                  />
+                )}
+
               <MenuGrid
                 onCallWaiter={
                   handleCallWaiter
