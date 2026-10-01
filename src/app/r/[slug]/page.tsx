@@ -1,10 +1,14 @@
-import { notFound, permanentRedirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { cache, type ComponentProps } from 'react'
 
 import { getSupabaseServer } from '@/lib/supabase'
 import { getDiscoveryServer } from '@/lib/discovery'
-import type { MenuPageData, Restaurant, DishOption } from '@/types'
+import type {
+  MenuPageData,
+  Restaurant,
+  DishOption,
+} from '@/types'
 
 import { RestaurantShell } from '@/components/RestaurantShell'
 
@@ -13,9 +17,7 @@ import {
   type DiscoveryPageData,
 } from './discovery-view'
 
-import {
-  type ReviewRow,
-} from '@/lib/schema/restaurant-schema'
+import type { ReviewRow } from '@/lib/schema/restaurant-schema'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -77,6 +79,12 @@ type SeoRestaurant = {
 
   seo_title?: string | null
   seo_description?: string | null
+
+  /**
+   * SEO switch:
+   * - true / null / undefined = indexable
+   * - false = noindex
+   */
   seo_indexable?: boolean | null
 
   is_active?: boolean | null
@@ -88,7 +96,9 @@ type RestaurantWithSeo = Restaurant & SeoRestaurant
 function hasPaidAccess(
   sub: SubscriptionRow | null | undefined,
 ): boolean {
-  if (!sub) return false
+  if (!sub) {
+    return false
+  }
 
   const now = new Date()
 
@@ -104,20 +114,15 @@ function hasPaidAccess(
     sub.plan === 'active' ||
     sub.plan === 'paid' ||
     sub.plan === 'subscription' ||
-    (
-      sub.plan === 'trial' &&
+    (sub.plan === 'trial' &&
       !!trialEnd &&
-      trialEnd > now
-    ) ||
-    (
-      !!periodEnd &&
-      periodEnd > now
-    )
+      trialEnd > now) ||
+    (!!periodEnd && periodEnd > now)
   )
 }
 
 /* -------------------------------------------------------------------------- */
-/* SEO helpers                                                                */
+/* SEO                                                                        */
 /* -------------------------------------------------------------------------- */
 
 const SITE_URL = (
@@ -136,7 +141,9 @@ function cleanText(
   value: unknown,
   maxLength = 1000,
 ): string {
-  if (typeof value !== 'string') return ''
+  if (typeof value !== 'string') {
+    return ''
+  }
 
   return value
     .replace(/\s+/g, ' ')
@@ -174,7 +181,28 @@ function getRestaurantPath(
 function getRestaurantUrl(
   restaurant: SeoRestaurant,
 ): string {
-  return absoluteUrl(getRestaurantPath(restaurant))
+  return absoluteUrl(
+    getRestaurantPath(restaurant),
+  )
+}
+
+/**
+ * IMPORTANT:
+ *
+ * A restaurant is indexable by default.
+ *
+ * The old implementation required every SEO field
+ * to be present before allowing indexing. That caused
+ * legitimate restaurants to receive noindex.
+ *
+ * Now the only explicit SEO opt-out is:
+ *
+ * seo_indexable = false
+ */
+function shouldIndexRestaurant(
+  restaurant: SeoRestaurant,
+): boolean {
+  return restaurant.seo_indexable !== false
 }
 
 function buildAddressParts(
@@ -217,29 +245,51 @@ function buildFullAddress(
     : null
 }
 
-/**
- * Google recommends using the most specific local-business subtype possible.
- * Dinezy restaurants are represented as Restaurant entities.
- */
+/* -------------------------------------------------------------------------- */
+/* Restaurant JSON-LD                                                         */
+/* -------------------------------------------------------------------------- */
+
 function buildRestaurantJsonLd(
   restaurant: SeoRestaurant,
 ): Record<string, unknown> {
-  const restaurantUrl = getRestaurantUrl(restaurant)
+  const restaurantUrl =
+    getRestaurantUrl(restaurant)
 
-  const address = buildAddressParts(restaurant)
+  const address =
+    buildAddressParts(restaurant)
 
-  const image = nonEmptyString(restaurant.cover_url)
-  const logo = nonEmptyString(restaurant.logo_url)
-  const phone = nonEmptyString(restaurant.phone)
+  const image =
+    nonEmptyString(
+      restaurant.cover_url,
+    )
+
+  const logo =
+    nonEmptyString(
+      restaurant.logo_url,
+    )
+
+  const phone =
+    nonEmptyString(
+      restaurant.phone,
+    )
+
   const description =
-    nonEmptyString(restaurant.description) ||
-    nonEmptyString(restaurant.about_story)
+    nonEmptyString(
+      restaurant.description,
+    ) ||
+    nonEmptyString(
+      restaurant.about_story,
+    )
 
   const cuisine =
-    nonEmptyString(restaurant.cuisine_type)
+    nonEmptyString(
+      restaurant.cuisine_type,
+    )
 
   const priceRange =
-    nonEmptyString(restaurant.price_range)
+    nonEmptyString(
+      restaurant.price_range,
+    )
 
   const openingHoursSpecification =
     buildOpeningHoursSpecification(
@@ -248,20 +298,22 @@ function buildRestaurantJsonLd(
 
   const schema: Record<string, unknown> = {
     '@type': 'Restaurant',
+
     '@id': `${restaurantUrl}#restaurant`,
 
     name: restaurant.name,
+
     url: restaurantUrl,
 
     ...(description
-      ? { description }
+      ? {
+          description,
+        }
       : {}),
 
     ...(image
       ? {
-          image: [
-            image,
-          ],
+          image: [image],
         }
       : {}),
 
@@ -345,10 +397,8 @@ function buildRestaurantJsonLd(
   ) {
     schema.geo = {
       '@type': 'GeoCoordinates',
-      latitude:
-        restaurant.latitude,
-      longitude:
-        restaurant.longitude,
+      latitude: restaurant.latitude,
+      longitude: restaurant.longitude,
     }
   }
 
@@ -385,9 +435,7 @@ function buildRestaurantJsonLd(
   }
 
   /*
-   * Only use Dinezy's own ratings here.
-   * Do not mix the manually entered Google rating/count
-   * into Dinezy Review structured data.
+   * Only use Dinezy's own ratings.
    */
   const rating = Number(
     restaurant.avg_rating ?? 0,
@@ -441,73 +489,50 @@ function buildOpeningHoursSpecification(
     sunday: 'Sunday',
   }
 
-  return Object.entries(openingHours)
-    .flatMap(([day, value]) => {
-      const normalizedDay =
-        day.toLowerCase().trim()
+  return Object.entries(
+    openingHours,
+  ).flatMap(([day, value]) => {
+    const normalizedDay =
+      day.toLowerCase().trim()
 
-      const schemaDay =
-        dayNames[normalizedDay]
+    const schemaDay =
+      dayNames[normalizedDay]
 
-      if (!schemaDay || !value) {
-        return []
-      }
+    if (!schemaDay || !value) {
+      return []
+    }
 
-      if (value.closed) {
-        return []
-      }
+    if (value.closed) {
+      return []
+    }
 
-      const open = cleanText(
-        value.open,
-        5,
-      )
+    const open = cleanText(
+      value.open,
+      5,
+    )
 
-      const close = cleanText(
-        value.close,
-        5,
-      )
+    const close = cleanText(
+      value.close,
+      5,
+    )
 
-      if (!open || !close) {
-        return []
-      }
+    if (!open || !close) {
+      return []
+    }
 
-      return [
-        {
-          '@type':
-            'OpeningHoursSpecification',
-          dayOfWeek: schemaDay,
-          opens: open,
-          closes: close,
-        },
-      ]
-    })
-}
+    return [
+      {
+        '@type':
+          'OpeningHoursSpecification',
 
-function isSeoReady(
-  restaurant: SeoRestaurant,
-): boolean {
-  if (
-    restaurant.seo_indexable === false
-  ) {
-    return false
-  }
+        dayOfWeek: schemaDay,
 
-  const requiredFields = [
-    restaurant.name,
-    restaurant.slug,
-    restaurant.description,
-    restaurant.cuisine_type,
-    restaurant.address,
-    restaurant.city,
-    restaurant.state,
-    restaurant.pincode,
-  ]
+        opens: open,
 
-  return requiredFields.every(
-    (value) =>
-      typeof value === 'string' &&
-      value.trim().length > 0,
-  )
+        closes: close,
+      },
+    ]
+  })
 }
 
 function buildSeoTitle(
@@ -523,7 +548,10 @@ function buildSeoTitle(
   }
 
   const name =
-    cleanText(restaurant.name, 50)
+    cleanText(
+      restaurant.name,
+      50,
+    )
 
   const cuisine =
     cleanText(
@@ -543,15 +571,25 @@ function buildSeoTitle(
       30,
     )
 
-  if (cuisine && area && city) {
+  if (
+    cuisine &&
+    area &&
+    city
+  ) {
     return `${name} | ${cuisine} Restaurant in ${area}, ${city} | Dinezy`
   }
 
-  if (cuisine && city) {
+  if (
+    cuisine &&
+    city
+  ) {
     return `${name} | ${cuisine} Restaurant in ${city} | Dinezy`
   }
 
-  if (area && city) {
+  if (
+    area &&
+    city
+  ) {
     return `${name} | Restaurant in ${area}, ${city} | Dinezy`
   }
 
@@ -633,6 +671,10 @@ function buildSeoDescription(
   )
 }
 
+/* -------------------------------------------------------------------------- */
+/* Breadcrumb JSON-LD                                                         */
+/* -------------------------------------------------------------------------- */
+
 function buildBreadcrumbJsonLd(
   restaurant: SeoRestaurant,
 ) {
@@ -660,6 +702,10 @@ function buildBreadcrumbJsonLd(
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* WebPage JSON-LD                                                            */
+/* -------------------------------------------------------------------------- */
+
 function buildWebPageJsonLd(
   restaurant: SeoRestaurant,
 ) {
@@ -675,7 +721,9 @@ function buildWebPageJsonLd(
     url: restaurantUrl,
 
     name:
-      buildSeoTitle(restaurant),
+      buildSeoTitle(
+        restaurant,
+      ),
 
     description:
       buildSeoDescription(
@@ -684,8 +732,12 @@ function buildWebPageJsonLd(
 
     isPartOf: {
       '@type': 'WebSite',
-      '@id': `${SITE_URL}/#website`,
+
+      '@id':
+        `${SITE_URL}/#website`,
+
       url: SITE_URL,
+
       name: 'Dinezy',
     },
 
@@ -706,9 +758,16 @@ function buildWebPageJsonLd(
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Complete page JSON-LD                                                      */
+/* -------------------------------------------------------------------------- */
+
 function buildPageJsonLd(
   restaurant: SeoRestaurant,
 ) {
+  const restaurantUrl =
+    getRestaurantUrl(restaurant)
+
   return {
     '@context':
       'https://schema.org',
@@ -721,9 +780,7 @@ function buildPageJsonLd(
 
         mainEntityOfPage: {
           '@id':
-            `${getRestaurantUrl(
-              restaurant,
-            )}#webpage`,
+            `${restaurantUrl}#webpage`,
         },
       },
 
@@ -737,24 +794,64 @@ function buildPageJsonLd(
         ),
 
         '@id':
-          `${getRestaurantUrl(
-            restaurant,
-          )}#breadcrumb`,
+          `${restaurantUrl}#breadcrumb`,
       },
     ],
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* Database                                                                    */
+/* Robots metadata                                                            */
+/* -------------------------------------------------------------------------- */
+
+function buildRobotsMetadata(
+  indexable: boolean,
+): Metadata['robots'] {
+  if (!indexable) {
+    return {
+      index: false,
+      follow: false,
+
+      googleBot: {
+        index: false,
+        follow: false,
+      },
+    }
+  }
+
+  return {
+    index: true,
+    follow: true,
+
+    googleBot: {
+      index: true,
+      follow: true,
+
+      'max-image-preview':
+        'large',
+
+      'max-snippet':
+        -1,
+
+      'max-video-preview':
+        -1,
+    },
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Database                                                                   */
 /* -------------------------------------------------------------------------- */
 
 /**
  * Cached per request.
- * generateMetadata() and the page use the same result.
+ *
+ * generateMetadata() and the page share this result.
  */
 const getRestaurantWithSub = cache(
-  async (slug: string) => {
+  async (
+    slug: string,
+  ) => {
     const supabase =
       getSupabaseServer()
 
@@ -768,7 +865,10 @@ const getRestaurantWithSub = cache(
       .eq('is_active', true)
       .single()
 
-    if (error || !restaurant) {
+    if (
+      error ||
+      !restaurant
+    ) {
       return null
     }
 
@@ -785,14 +885,19 @@ const getRestaurantWithSub = cache(
       )
       .maybeSingle()
 
-   return {
-  restaurant:
-    restaurant as RestaurantWithSeo,
-  sub:
-    sub as SubscriptionRow | null,
-}
+    return {
+      restaurant:
+        restaurant as RestaurantWithSeo,
+
+      sub:
+        sub as SubscriptionRow | null,
+    }
   },
 )
+
+/* -------------------------------------------------------------------------- */
+/* Menu                                                                       */
+/* -------------------------------------------------------------------------- */
 
 async function getMenuItems(
   restaurantId: string,
@@ -813,7 +918,10 @@ async function getMenuItems(
         'restaurant_id',
         restaurantId,
       )
-      .eq('is_active', true)
+      .eq(
+        'is_active',
+        true,
+      )
       .order('position'),
 
     supabase
@@ -823,93 +931,223 @@ async function getMenuItems(
         'restaurant_id',
         restaurantId,
       )
-      .eq('is_available', true)
+      .eq(
+        'is_available',
+        true,
+      )
       .order('position'),
   ])
 
   return {
-    categories: categories ?? [],
-    items: items ?? [],
+    categories:
+      categories ?? [],
+
+    items:
+      items ?? [],
   }
 }
 
-async function getActiveOffers(restaurantId: string) {
-  const supabase = getSupabaseServer()
+/* -------------------------------------------------------------------------- */
+/* Offers                                                                     */
+/* -------------------------------------------------------------------------- */
 
-  const { data } = await supabase
-    .from('offers')
-    .select(
-      'id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at',
-    )
-    .eq('restaurant_id', restaurantId)
-    .eq('is_active', true)
-    .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`)
+async function getActiveOffers(
+  restaurantId: string,
+) {
+  const supabase =
+    getSupabaseServer()
+
+  const { data } =
+    await supabase
+      .from('offers')
+      .select(
+        `
+          id,
+          title,
+          offer_type,
+          discount_percent,
+          discount_amount_paise,
+          coupon_code,
+          min_order_amount_paise,
+          ends_at
+        `,
+      )
+      .eq(
+        'restaurant_id',
+        restaurantId,
+      )
+      .eq(
+        'is_active',
+        true,
+      )
+      .or(
+        `ends_at.is.null,ends_at.gt.${new Date().toISOString()}`,
+      )
 
   return data ?? []
 }
 
+/* -------------------------------------------------------------------------- */
+/* Dish options                                                               */
+/* -------------------------------------------------------------------------- */
+
 async function getDishOptionsMap(
   itemIds: string[],
-): Promise<Record<string, DishOption[]>> {
-  if (itemIds.length === 0) return {}
-
-  const supabase = getSupabaseServer()
-
-  const { data: optionRows } = await supabase
-    .from('dish_options')
-    .select('*')
-    .in('menu_item_id', itemIds)
-    .order('position')
-
-  if (!optionRows || optionRows.length === 0) return {}
-
-  const { data: choiceRows } = await supabase
-    .from('dish_option_choices')
-    .select('*')
-    .in(
-      'dish_option_id',
-      optionRows.map((o: any) => o.id),
-    )
-    .eq('is_available', true)
-    .order('position')
-
-  const choicesByOption = new Map<string, any[]>()
-  for (const c of choiceRows ?? []) {
-    const list = choicesByOption.get(c.dish_option_id) ?? []
-    list.push(c)
-    choicesByOption.set(c.dish_option_id, list)
+): Promise<
+  Record<string, DishOption[]>
+> {
+  if (
+    itemIds.length === 0
+  ) {
+    return {}
   }
 
-  const result: Record<string, DishOption[]> = {}
+  const supabase =
+    getSupabaseServer()
 
-  for (const opt of optionRows as any[]) {
-    const choices = (choicesByOption.get(opt.id) ?? []).map((c: any) => ({
-      id: c.id,
-      dish_option_id: c.dish_option_id,
-      name: c.name,
-      extra_price: c.extra_price ?? 0,
-      is_default: c.is_default ?? false,
-      is_available: c.is_available ?? true,
-      position: c.position ?? 0,
-    }))
+  const {
+    data: optionRows,
+  } =
+    await supabase
+      .from('dish_options')
+      .select('*')
+      .in(
+        'menu_item_id',
+        itemIds,
+      )
+      .order('position')
 
-    const dishOption: DishOption = {
-      id: opt.id,
-      menu_item_id: opt.menu_item_id,
-      name: opt.name,
-      is_required: opt.is_required ?? false,
-      min_selections: opt.min_selections ?? 0,
-      max_selections: opt.max_selections ?? 1,
-      position: opt.position ?? 0,
-      price_mode: opt.price_mode ?? 'add',
-      choices,
-    }
+  if (
+    !optionRows ||
+    optionRows.length === 0
+  ) {
+    return {}
+  }
 
-    ;(result[opt.menu_item_id] ??= []).push(dishOption)
+  const {
+    data: choiceRows,
+  } =
+    await supabase
+      .from(
+        'dish_option_choices',
+      )
+      .select('*')
+      .in(
+        'dish_option_id',
+        optionRows.map(
+          (o: any) => o.id,
+        ),
+      )
+      .eq(
+        'is_available',
+        true,
+      )
+      .order('position')
+
+  const choicesByOption =
+    new Map<string, any[]>()
+
+  for (
+    const c of
+      choiceRows ?? []
+  ) {
+    const list =
+      choicesByOption.get(
+        c.dish_option_id,
+      ) ?? []
+
+    list.push(c)
+
+    choicesByOption.set(
+      c.dish_option_id,
+      list,
+    )
+  }
+
+  const result:
+    Record<
+      string,
+      DishOption[]
+    > = {}
+
+  for (
+    const opt of
+      optionRows as any[]
+  ) {
+    const choices =
+      (
+        choicesByOption.get(
+          opt.id,
+        ) ?? []
+      ).map(
+        (c: any) => ({
+          id: c.id,
+
+          dish_option_id:
+            c.dish_option_id,
+
+          name: c.name,
+
+          extra_price:
+            c.extra_price ?? 0,
+
+          is_default:
+            c.is_default ??
+            false,
+
+          is_available:
+            c.is_available ??
+            true,
+
+          position:
+            c.position ?? 0,
+        }),
+      )
+
+    const dishOption:
+      DishOption = {
+        id: opt.id,
+
+        menu_item_id:
+          opt.menu_item_id,
+
+        name: opt.name,
+
+        is_required:
+          opt.is_required ??
+          false,
+
+        min_selections:
+          opt.min_selections ??
+          0,
+
+        max_selections:
+          opt.max_selections ??
+          1,
+
+        position:
+          opt.position ?? 0,
+
+        price_mode:
+          opt.price_mode ??
+          'add',
+
+        choices,
+      }
+
+    ;(
+      result[
+        opt.menu_item_id
+      ] ??= []
+    ).push(dishOption)
   }
 
   return result
 }
+
+/* -------------------------------------------------------------------------- */
+/* Ratings                                                                    */
+/* -------------------------------------------------------------------------- */
 
 async function getPublicRatings(
   restaurantId: string,
@@ -927,7 +1165,10 @@ async function getPublicRatings(
         'restaurant_id',
         restaurantId,
       )
-      .eq('is_public', true)
+      .eq(
+        'is_public',
+        true,
+      )
       .not(
         'comment',
         'is',
@@ -941,17 +1182,27 @@ async function getPublicRatings(
       )
       .limit(20)
 
-  return (data ?? []).map(
+  return (
+    data ?? []
+  ).map(
     (row) => ({
       id: row.id,
+
       rating: row.score,
+
       comment: row.comment,
+
       created_at:
         row.created_at,
+
       author_name: null,
     }),
   )
 }
+
+/* -------------------------------------------------------------------------- */
+/* Discovery                                                                  */
+/* -------------------------------------------------------------------------- */
 
 const getDiscoveryData = cache(
   async (
@@ -968,7 +1219,10 @@ const getDiscoveryData = cache(
     } = await sb
       .from('restaurants')
       .select('*')
-      .eq('slug', slug)
+      .eq(
+        'slug',
+        slug,
+      )
       .eq(
         'is_published',
         true,
@@ -987,75 +1241,78 @@ const getDiscoveryData = cache(
       { data: items },
       { data: offers },
       { data: reviews },
-    ] =
-      await Promise.all([
-        sb
-          .from('menu_categories')
-          .select('*')
-          .eq(
-            'restaurant_id',
-            restaurant.id,
-          )
-          .eq(
-            'is_active',
-            true,
-          )
-          .order('position'),
+    ] = await Promise.all([
+      sb
+        .from('menu_categories')
+        .select('*')
+        .eq(
+          'restaurant_id',
+          restaurant.id,
+        )
+        .eq(
+          'is_active',
+          true,
+        )
+        .order('position'),
 
-        sb
-          .from('menu_items')
-          .select('*')
-          .eq(
-            'restaurant_id',
-            restaurant.id,
-          )
-          .eq(
-            'is_available',
-            true,
-          )
-          .order('position'),
+      sb
+        .from('menu_items')
+        .select('*')
+        .eq(
+          'restaurant_id',
+          restaurant.id,
+        )
+        .eq(
+          'is_available',
+          true,
+        )
+        .order('position'),
 
-        sb
-          .from('offers')
-          .select('*')
-          .eq(
-            'restaurant_id',
-            restaurant.id,
-          )
-          .eq(
-            'is_active',
-            true,
-          )
-          .order('position'),
+      sb
+        .from('offers')
+        .select('*')
+        .eq(
+          'restaurant_id',
+          restaurant.id,
+        )
+        .eq(
+          'is_active',
+          true,
+        )
+        .order('position'),
 
-        sb
-          .from('reviews')
-          .select('*')
-          .eq(
-            'restaurant_id',
-            restaurant.id,
-          )
-          .eq(
-            'is_public',
-            true,
-          )
-          .order(
-            'created_at',
-            {
-              ascending: false,
-            },
-          )
-          .limit(20),
-      ])
+      sb
+        .from('reviews')
+        .select('*')
+        .eq(
+          'restaurant_id',
+          restaurant.id,
+        )
+        .eq(
+          'is_public',
+          true,
+        )
+        .order(
+          'created_at',
+          {
+            ascending: false,
+          },
+        )
+        .limit(20),
+    ])
 
     return {
       restaurant,
+
       categories:
         categories ?? [],
+
       items:
         items ?? [],
+
       offers:
         offers ?? [],
+
       reviews:
         reviews ?? [],
     }
@@ -1063,14 +1320,19 @@ const getDiscoveryData = cache(
 )
 
 /* -------------------------------------------------------------------------- */
-/* Metadata                                                                    */
+/* Metadata                                                                   */
 /* -------------------------------------------------------------------------- */
 
 export async function generateMetadata(
   props: PageProps,
 ): Promise<Metadata> {
-  const { slug } =
-    await props.params
+  const {
+    slug,
+  } = await props.params
+
+  /* ------------------------------------------------------------------------ */
+  /* Paid / active restaurant                                                 */
+  /* ------------------------------------------------------------------------ */
 
   const result =
     await getRestaurantWithSub(
@@ -1079,7 +1341,9 @@ export async function generateMetadata(
 
   if (
     result &&
-    hasPaidAccess(result.sub)
+    hasPaidAccess(
+      result.sub,
+    )
   ) {
     const restaurant =
       result.restaurant
@@ -1099,8 +1363,10 @@ export async function generateMetadata(
         restaurant,
       )
 
-    const seoReady =
-      isSeoReady(restaurant)
+    const indexable =
+      shouldIndexRestaurant(
+        restaurant,
+      )
 
     const image =
       nonEmptyString(
@@ -1116,41 +1382,37 @@ export async function generateMetadata(
         canonical,
       },
 
-      robots: seoReady
-        ? {
-            index: true,
-            follow: true,
-
-            googleBot: {
-              index: true,
-              follow: true,
-              'max-image-preview':
-                'large',
-              'max-snippet': -1,
-              'max-video-preview':
-                -1,
-            },
-          }
-        : {
-            index: false,
-            follow: true,
-          },
+      robots:
+        buildRobotsMetadata(
+          indexable,
+        ),
 
       openGraph: {
         title,
+
         description,
+
         url: canonical,
-        siteName: 'Dinezy',
-        locale: 'en_IN',
-        type: 'website',
+
+        siteName:
+          'Dinezy',
+
+        locale:
+          'en_IN',
+
+        type:
+          'website',
 
         ...(image
           ? {
               images: [
                 {
                   url: image,
+
                   width: 1200,
+
                   height: 630,
+
                   alt:
                     `${restaurant.name} restaurant`,
                 },
@@ -1170,19 +1432,27 @@ export async function generateMetadata(
 
         ...(image
           ? {
-              images: [image],
+              images: [
+                image,
+              ],
             }
           : {}),
       },
     }
   }
 
+  /* ------------------------------------------------------------------------ */
+  /* Discovery / free restaurant                                              */
+  /* ------------------------------------------------------------------------ */
+
   const discoveryData =
     await getDiscoveryData(
       slug,
     )
 
-  if (discoveryData) {
+  if (
+    discoveryData
+  ) {
     const restaurant =
       discoveryData.restaurant as SeoRestaurant
 
@@ -1201,8 +1471,10 @@ export async function generateMetadata(
         restaurant,
       )
 
-    const seoReady =
-      isSeoReady(restaurant)
+    const indexable =
+      shouldIndexRestaurant(
+        restaurant,
+      )
 
     const image =
       nonEmptyString(
@@ -1218,41 +1490,37 @@ export async function generateMetadata(
         canonical,
       },
 
-      robots: seoReady
-        ? {
-            index: true,
-            follow: true,
-
-            googleBot: {
-              index: true,
-              follow: true,
-              'max-image-preview':
-                'large',
-              'max-snippet': -1,
-              'max-video-preview':
-                -1,
-            },
-          }
-        : {
-            index: false,
-            follow: true,
-          },
+      robots:
+        buildRobotsMetadata(
+          indexable,
+        ),
 
       openGraph: {
         title,
+
         description,
+
         url: canonical,
-        siteName: 'Dinezy',
-        locale: 'en_IN',
-        type: 'website',
+
+        siteName:
+          'Dinezy',
+
+        locale:
+          'en_IN',
+
+        type:
+          'website',
 
         ...(image
           ? {
               images: [
                 {
                   url: image,
+
                   width: 1200,
+
                   height: 630,
+
                   alt:
                     `${restaurant.name} restaurant`,
                 },
@@ -1272,12 +1540,18 @@ export async function generateMetadata(
 
         ...(image
           ? {
-              images: [image],
+              images: [
+                image,
+              ],
             }
           : {}),
       },
     }
   }
+
+  /* ------------------------------------------------------------------------ */
+  /* Restaurant doesn't exist                                                 */
+  /* ------------------------------------------------------------------------ */
 
   return {
     title:
@@ -1286,19 +1560,29 @@ export async function generateMetadata(
     robots: {
       index: false,
       follow: false,
+
+      googleBot: {
+        index: false,
+        follow: false,
+      },
     },
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* Page                                                                        */
+/* Page                                                                       */
 /* -------------------------------------------------------------------------- */
 
 export default async function RestaurantPage(
   props: PageProps,
 ) {
-  const { slug } =
-    await props.params
+  const {
+    slug,
+  } = await props.params
+
+  /* ------------------------------------------------------------------------ */
+  /* Paid / active restaurant                                                 */
+  /* ------------------------------------------------------------------------ */
 
   const result =
     await getRestaurantWithSub(
@@ -1310,22 +1594,37 @@ export default async function RestaurantPage(
       result.restaurant
 
     const subscriptionActive =
-      hasPaidAccess(result.sub)
+      hasPaidAccess(
+        result.sub,
+      )
 
-    if (subscriptionActive) {
- const [
+    if (
+      subscriptionActive
+    ) {
+      const [
         menuData,
         reviews,
         offers,
       ] = await Promise.all([
-        getMenuItems(restaurant.id),
-        getPublicRatings(restaurant.id),
-        getActiveOffers(restaurant.id),
+        getMenuItems(
+          restaurant.id,
+        ),
+
+        getPublicRatings(
+          restaurant.id,
+        ),
+
+        getActiveOffers(
+          restaurant.id,
+        ),
       ])
 
-      const dishOptions = await getDishOptionsMap(
-        menuData.items.map((i) => i.id),
-      )
+      const dishOptions =
+        await getDishOptionsMap(
+          menuData.items.map(
+            (item) => item.id,
+          ),
+        )
 
       const schema =
         buildPageJsonLd(
@@ -1349,27 +1648,35 @@ export default async function RestaurantPage(
               restaurant,
               ...menuData,
             }}
-            reviews={reviews}
-            initialOffers={
-              offers as ComponentProps<typeof RestaurantShell>['initialOffers']
+            reviews={
+              reviews
             }
-            initialDishOptions={dishOptions}
+            initialOffers={
+              offers as ComponentProps<
+                typeof RestaurantShell
+              >['initialOffers']
+            }
+            initialDishOptions={
+              dishOptions
+            }
           />
         </>
       )
     }
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* Discovery / free restaurant                                            */
-  /* ---------------------------------------------------------------------- */
+  /* ------------------------------------------------------------------------ */
+  /* Discovery / free restaurant                                              */
+  /* ------------------------------------------------------------------------ */
 
   const discoveryData =
     await getDiscoveryData(
       slug,
     )
 
-  if (discoveryData) {
+  if (
+    discoveryData
+  ) {
     const restaurant =
       discoveryData.restaurant as SeoRestaurant
 
@@ -1381,13 +1688,17 @@ export default async function RestaurantPage(
       ).map(
         (row: any) => ({
           id: row.id,
+
           rating:
             row.rating ??
             row.score,
+
           comment:
             row.comment,
+
           created_at:
             row.created_at,
+
           author_name:
             row.author_name ??
             null,
@@ -1423,23 +1734,37 @@ export default async function RestaurantPage(
   notFound()
 }
 
-/**
- * Keep restaurant pages statically optimised with ISR.
- *
- * New /r/[slug] URLs can still be generated on demand.
- */
-export const preferredRegion = 'bom1' // see region note below
+/* -------------------------------------------------------------------------- */
+/* Rendering / caching                                                        */
+/* -------------------------------------------------------------------------- */
+
+export const preferredRegion =
+  'bom1'
 
 export async function generateStaticParams() {
   try {
-    const supabase = getSupabaseServer()
-    const { data } = await supabase
+    const supabase =
+      getSupabaseServer()
+
+    const {
+      data,
+    } = await supabase
       .from('restaurants')
       .select('slug')
-      .eq('is_active', true)
+      .eq(
+        'is_active',
+        true,
+      )
       .limit(500)
 
-    return (data ?? []).map((r) => ({ slug: r.slug as string }))
+    return (
+      data ?? []
+    ).map(
+      (restaurant) => ({
+        slug:
+          restaurant.slug as string,
+      }),
+    )
   } catch {
     return []
   }
