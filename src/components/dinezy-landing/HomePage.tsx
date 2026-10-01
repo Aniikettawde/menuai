@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -15,6 +18,7 @@ import { AnimatedGrowthLoop } from './AnimatedGrowthLoop'
 import { MarketingFooter } from './MarketingFooter'
 import { MarketingHeader } from './MarketingHeader'
 import { PhoneMenuShowcase } from './PhoneMenuShowcase'
+import { BookDemoModal } from './BookDemoModal'
 
 const FEATURE_LINKS = [
   {
@@ -75,6 +79,8 @@ const FAQS = [
 ]
 
 export function HomePage() {
+  const [demoOpen, setDemoOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-[#fcfaf7] text-[#171313]">
       <MarketingHeader />
@@ -299,9 +305,13 @@ export function HomePage() {
               <Link href="/dashboard/login?mode=signup" className="inline-flex items-center justify-center gap-2 rounded-full bg-[#e5bd66] px-6 py-3.5 text-sm font-semibold text-[#1f180f]">
                 Start with Dinezy <ArrowRight size={16} />
               </Link>
-              <a href="mailto:hello@dinezy.in?subject=Book%20a%20Dinezy%20demo" className="inline-flex items-center justify-center rounded-full border border-white/12 px-6 py-3.5 text-sm font-semibold text-white">
-                Book a demo
-              </a>
+              <button
+  type="button"
+  onClick={() => setDemoOpen(true)}
+  className="inline-flex items-center justify-center rounded-full border border-white/12 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-white/[0.05]"
+>
+  Book a demo
+</button>
             </div>
           </div>
         </section>
@@ -326,7 +336,10 @@ export function HomePage() {
           </div>
         </section>
       </main>
-
+<BookDemoModal
+  open={demoOpen}
+  onClose={() => setDemoOpen(false)}
+/>
       <MarketingFooter />
     </div>
   )
