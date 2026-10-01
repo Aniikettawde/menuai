@@ -151,6 +151,7 @@ type SeoRestaurant = Restaurant & {
   seo_title?: string | null
   seo_description?: string | null
   seo_indexable?: boolean | null
+  show_call_waiter?: boolean | null
 }
 
 type SeoMenuItem = MenuItem & {
@@ -2617,6 +2618,13 @@ export function RestaurantShell({
 
   if (!restaurant) return null
 
+  // Restaurants created before show_call_waiter existed are treated as enabled.
+  // Only an explicit false value hides the Call Waiter bell.
+  const showCallWaiter =
+    (restaurant as Restaurant & {
+      show_call_waiter?: boolean | null
+    }).show_call_waiter !== false
+
   const activeOrder =
     waiterToasts[
       activeToastIndex
@@ -3840,15 +3848,17 @@ export function RestaurantShell({
                 />
               )}
 
-              <CallWaiterBell
-                slug={slug}
-                tableNumber={
-                  tableNumber
-                }
-                onCall={
-                  handleRequestAssistance
-                }
-              />
+              {showCallWaiter && (
+                <CallWaiterBell
+                  slug={slug}
+                  tableNumber={
+                    tableNumber
+                  }
+                  onCall={
+                    handleRequestAssistance
+                  }
+                />
+              )}
             </>
           )}
 

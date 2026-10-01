@@ -52,6 +52,7 @@ type RestaurantWithSeo = Restaurant & {
   seo_title?: string | null
   seo_description?: string | null
   seo_indexable?: boolean | null
+  show_call_waiter?: boolean | null
 }
 
 type RestaurantForm = {
@@ -85,6 +86,7 @@ type RestaurantForm = {
   show_category_shortcut: boolean
   ai_dish_explanations: boolean
   hide_currency_symbol: boolean
+  show_call_waiter: boolean
   about_story: string
   total_branches: string
   established_year: string
@@ -266,6 +268,9 @@ export default function RestaurantPage() {
     show_category_shortcut: false,
     ai_dish_explanations: false,
     hide_currency_symbol: false,
+    // Enabled by default so existing/new restaurants keep the current
+    // Call Waiter experience unless the owner explicitly disables it.
+    show_call_waiter: true,
     about_story: '',
     total_branches: '',
     established_year: '',
@@ -386,6 +391,9 @@ export default function RestaurantPage() {
             show_category_shortcut: row.show_category_shortcut ?? false,
             ai_dish_explanations: row.ai_dish_explanations ?? false,
             hide_currency_symbol: row.hide_currency_symbol ?? false,
+            // Default to true for older rows created before this setting
+            // existed, so the bell does not unexpectedly disappear.
+            show_call_waiter: row.show_call_waiter ?? true,
             about_story: row.about_story ?? '',
             total_branches:
               row.total_branches != null ? String(row.total_branches) : '',
@@ -1602,13 +1610,25 @@ export default function RestaurantPage() {
           </div>
         </Section>
 
-        <Section title="Ordering">
+        <Section title="Ordering & Waiter">
           <SettingRow
             title="Accept orders via menu"
             description="When off, customers can browse the menu and call a waiter, but cannot add items to cart or place orders."
             checked={form.orders_enabled}
             onChange={(checked) =>
               setForm((current) => ({ ...current, orders_enabled: checked }))
+            }
+          />
+
+          <SettingRow
+            title="Show Call Waiter button"
+            description="When off, the Call Waiter bell and its waiter request options are hidden from the customer-facing restaurant menu."
+            checked={form.show_call_waiter}
+            onChange={(checked) =>
+              setForm((current) => ({
+                ...current,
+                show_call_waiter: checked,
+              }))
             }
           />
         </Section>
