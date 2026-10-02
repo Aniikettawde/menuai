@@ -63,9 +63,10 @@ export function TrialBanner() {
             You&apos;ll be charged {amount} automatically unless you cancel.
           </p>
           <Link
-            href="/dashboard/billing"
-            className="shrink-0 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-400"
-          >
+  href="/dashboard/billing"
+  prefetch={false}
+  className="shrink-0 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-400"
+>
             Manage billing
           </Link>
           <button
@@ -89,9 +90,10 @@ export function TrialBanner() {
           {amount} auto-renews
         </p>
         <Link
-          href="/dashboard/billing"
-          className="shrink-0 text-xs font-medium text-orange-400 transition hover:text-orange-300"
-        >
+  href="/dashboard/billing"
+  prefetch={false}
+  className="shrink-0 text-xs font-medium text-orange-400 transition hover:text-orange-300"
+>
           Billing →
         </Link>
         <button

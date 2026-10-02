@@ -304,10 +304,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = isActive(href)
             return (
-              <Link
-                key={href}
-                href={href}
-                className="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150"
+             <Link
+  key={href}
+  href={href}
+  prefetch={false}
+  className="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150"
                 style={{
                   background: active ? `${BRAND.burgundy}12` : 'transparent',
                   color: active ? BRAND.ink : BRAND.inkSoft,
@@ -337,8 +338,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 Admin
               </p>
               <Link
-                href="/admin"
-                className="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150"
+  href="/admin"
+  prefetch={false}
+  className="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150"
                 style={{
                   background: pathname.startsWith('/admin') ? `${BRAND.plum}14` : 'transparent',
                   color: pathname.startsWith('/admin') ? BRAND.ink : BRAND.inkSoft,
@@ -555,7 +557,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {mobileNavItems.map(({ href, shortLabel, icon: Icon }) => {
               const active = isActive(href)
               return (
-                <Link key={href} href={href} className="flex flex-col items-center justify-center gap-1 py-2 px-1">
+                <Link
+  key={href}
+  href={href}
+  prefetch={false}
+  className="flex flex-col items-center justify-center gap-1 py-2 px-1"
+>
                   <div
                     className="flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200"
                     style={{ background: active ? `${BRAND.burgundy}14` : 'transparent', color: active ? BRAND.burgundy : BRAND.inkFaint }}

@@ -6,7 +6,7 @@ import { VerifyCodeCard } from '@/components/dashboard/VerifyCodeCard'
 import { useRouter } from 'next/navigation'
 import { useDashboardContext } from '@/hooks/useDashboardContext'
 import AccessDenied from '@/components/dashboard/AccessDenied'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
   Activity,
@@ -154,79 +154,72 @@ function OrdersSection({ restaurantId }: { restaurantId: string }) {
   const [orders, setOrders] = useState<TableRequestRow[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchOrders = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('table_requests')
-        .select('id, table_number, items, subtotal, status, created_at')
-        .eq('restaurant_id', restaurantId)
-        .in('status', ['pending', 'accepted'])
-        .order('created_at', { ascending: false })
-        .limit(6)
+const fetchOrders = useCallback(async () => {
+  try {
+    const { data, error } = await supabase
+      .from('table_requests')
+      .select('id, table_number, items, subtotal, status, created_at')
+      .eq('restaurant_id', restaurantId)
+      .in('status', ['pending', 'accepted'])
+      .order('created_at', { ascending: false })
+      .limit(6)
 
-      if (error) {
-        console.error(error)
-        setOrders([])
-        return
-      }
-
-      setOrders((data ?? []) as TableRequestRow[])
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
+    if (error) {
+      console.error(error)
+      setOrders([])
+      return
     }
+
+    setOrders((data ?? []) as TableRequestRow[])
+  } catch (err) {
+    console.error(err)
+  } finally {
+    setLoading(false)
   }
+}, [restaurantId, supabase])
 
-  useEffect(() => {
-    let mounted = true
+useEffect(() => {
+  if (!restaurantId) return
 
-    async function init() {
-      if (!mounted) return
-      await fetchOrders()
-    }
+  void fetchOrders()
+}, [restaurantId, fetchOrders])
 
-    void init()
+ useEffect(() => {
+  if (!restaurantId) return
 
-    return () => {
-      mounted = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurantId])
+  const channel = supabase
+    .channel(`dashboard-orders-${restaurantId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'table_requests',
+        filter: `restaurant_id=eq.${restaurantId}`,
+      },
+      () => {
+        void fetchOrders()
 
-  useEffect(() => {
-    const channel = supabase
-      .channel(`dashboard-orders-${restaurantId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'table_requests',
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
-        () => {
-          void fetchOrders()
-          const audio = new Audio('/notification.mp3')
-          void audio.play().catch(() => {})
-        }
-      )
-      .subscribe()
+        const audio = new Audio('/notification.mp3')
+        void audio.play().catch(() => {})
+      }
+    )
+    .subscribe()
 
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurantId])
+  return () => {
+    void supabase.removeChannel(channel)
+  }
+}, [restaurantId, fetchOrders, supabase])
 
   const pendingCount = orders.filter((o) => o.status === 'pending').length
   const acceptedCount = orders.filter((o) => o.status === 'accepted').length
   const hasPending = pendingCount > 0
 
   return (
-    <Link
-      href="/dashboard/orders"
-      className={`group block ${cardBase} p-5 sm:p-6 transition hover:shadow-[0_4px_16px_rgba(43,33,31,0.08)] active:scale-[0.995]`}
+   <Link
+  href="/dashboard/orders"
+  prefetch={false}
+  className={`group block ${cardBase} p-5 sm:p-6 transition hover:shadow-[0_4px_16px_rgba(43,33,31,0.08)] active:scale-[0.995]`}
       style={cardStyle}
     >
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -384,8 +377,9 @@ function QuickLink({
 }) {
   return (
     <Link
-      href={href}
-      className="group flex flex-col gap-1.5 rounded-xl border p-3.5 transition hover:shadow-[0_2px_10px_rgba(122,35,51,0.08)] active:scale-[0.98]"
+  href={href}
+  prefetch={false}
+  className="group flex flex-col gap-1.5 rounded-xl border p-3.5 transition hover:shadow-[0_2px_10px_rgba(122,35,51,0.08)] active:scale-[0.98]"
       style={{ borderColor: BRAND.line, background: BRAND.ivory }}
     >
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: `${BRAND.burgundy}D9` }}>
@@ -408,8 +402,9 @@ function NextStep({
 }) {
   return (
     <Link
-      href={href}
-      className="group flex flex-col gap-0.5 rounded-xl border p-3 transition hover:bg-black/[0.02] active:scale-[0.98]"
+  href={href}
+  prefetch={false}
+  className="group flex flex-col gap-0.5 rounded-xl border p-3 transition hover:bg-black/[0.02] active:scale-[0.98]"
       style={{ borderColor: BRAND.line, background: BRAND.ivory }}
     >
       <p className="text-xs font-semibold transition" style={{ color: BRAND.ink }}>
@@ -436,10 +431,11 @@ function EmptyState() {
           { label: 'Menu', href: '/dashboard/menu', primary: false },
           { label: 'QR Code', href: '/dashboard/qr', primary: false },
         ].map((b) => (
-          <Link
-            key={b.href}
-            href={b.href}
-            className="rounded-xl py-2.5 text-xs font-semibold transition active:scale-95"
+         <Link
+  key={b.href}
+  href={b.href}
+  prefetch={false}
+  className="rounded-xl py-2.5 text-xs font-semibold transition active:scale-95"
             style={
               b.primary
                 ? { background: BRAND.burgundy, color: '#fff', boxShadow: `0 8px 20px ${BRAND.burgundy}26` }
@@ -501,29 +497,31 @@ export default function DashboardPage() {
     waiter: { total: number; accepted: number }
   } | null>(null)
   const supabase = getSupabaseDashboardBrowser()
-  const { context, loading: contextLoading } = useDashboardContext()
-  const router = useRouter()
+const { context, loading: contextLoading } = useDashboardContext()
+const router = useRouter()
 
-  useEffect(() => {
-    if (context?.role === 'waiter') {
-      router.replace('/dashboard/orders')
-    }
-  }, [context, router])
+const restaurantId = context?.restaurantId ?? null
+
+ useEffect(() => {
+  if (context?.role === 'waiter') {
+    router.replace('/dashboard/orders')
+  }
+}, [context?.role, router])
 
   useEffect(() => {
     let mounted = true
 
     async function load() {
       try {
-        if (!context?.restaurantId) {
-          setLoading(false)
-          return
-        }
+       if (!restaurantId) {
+  setLoading(false)
+  return
+}
 
         const { data: restaurant } = await supabase
           .from('restaurants')
           .select('id, name, slug, avg_rating, total_ratings')
-          .eq('id', context.restaurantId)
+          .eq('id', restaurantId)
           .single()
 
         if (!restaurant) {
@@ -649,21 +647,22 @@ if (eventsError) {
       }
     }
 
- async function loadTodayExtra() {
-      if (!context?.restaurantId) return
-      const startOfToday = new Date()
+async function loadTodayExtra() {
+  if (!restaurantId) return
+
+  const startOfToday = new Date()
       startOfToday.setHours(0, 0, 0, 0)
       const sinceISO = startOfToday.toISOString()
 
       try {
         const [customerStatsJson, { data: waiterRows }] = await Promise.all([
           fetch(
-            `/api/dashboard/analytics/customer-stats?restaurant_id=${context.restaurantId}&since=${encodeURIComponent(sinceISO)}`,
+            `/api/dashboard/analytics/customer-stats?restaurant_id=${restaurantId}&since=${encodeURIComponent(sinceISO)}`,
           ).then((r) => r.json()),
           supabase
             .from('table_requests')
             .select('id, status, created_at, accepted_at')
-            .eq('restaurant_id', context.restaurantId)
+            .eq('restaurant_id', restaurantId)
             .gte('created_at', sinceISO)
             .in('request_type', ['assistance', 'water', 'bill']),
         ])
@@ -715,7 +714,7 @@ if (mounted) {
     return () => {
       mounted = false
     }
-  }, [supabase, context])
+ }, [supabase, restaurantId])
 
   const statCards = useMemo(() => {
     if (!stats) return []
@@ -828,9 +827,10 @@ if (mounted) {
 
             <div className="hidden shrink-0 flex-col gap-2 sm:flex">
               <Link
-                href={`/r/${stats.slug}`}
-                target="_blank"
-                rel="noreferrer"
+  href={`/r/${stats.slug}`}
+  target="_blank"
+  rel="noreferrer"
+  prefetch={false}
                 className="inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-medium transition hover:shadow-[0_2px_10px_rgba(122,35,51,0.1)]"
                 style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
               >
@@ -861,32 +861,36 @@ if (mounted) {
 
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
-              href="/dashboard/menu"
-              className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition active:scale-95"
+  href="/dashboard/menu"
+  prefetch={false}
+  className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition active:scale-95"
               style={{ background: BRAND.burgundy, boxShadow: `0 8px 20px ${BRAND.burgundy}26` }}
             >
               Manage Menu
               <ArrowUpRight size={12} />
             </Link>
-            <Link
-              href="/dashboard/analytics"
-              className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition active:scale-95"
+          <Link
+  href="/restaurant-analytics"
+  prefetch={false}
+  className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition active:scale-95"
               style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
             >
               Analytics
             </Link>
             <Link
-              href="/dashboard/orders"
-              className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition active:scale-95"
+  href="/dashboard/orders"
+  prefetch={false}
+  className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition active:scale-95"
               style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
             >
               <ClipboardList size={11} />
               Orders
             </Link>
-            <Link
-              href={`/r/${stats.slug}`}
-              target="_blank"
-              rel="noreferrer"
+           <Link
+  href={`/r/${stats.slug}`}
+  target="_blank"
+  rel="noreferrer"
+  prefetch={false}
               className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition active:scale-95 sm:hidden"
               style={{ borderColor: BRAND.line, background: BRAND.ivorySoft, color: BRAND.inkSoft }}
             >
@@ -1044,8 +1048,8 @@ if (mounted) {
               title="Menu quality"
               desc="Add photos and rewrite descriptions."
             />
-            <QuickLink
-              href="/dashboard/analytics"
+           <QuickLink
+  href="/restaurant-analytics"
               icon={<BarChart2 size={12} />}
               title="Deep analytics"
               desc="Find high-view, low-conversion dishes."
@@ -1120,9 +1124,10 @@ if (mounted) {
       </div>
 
       {stats.topItemToday && (
-        <Link
-          href="/dashboard/menu"
-          className="group flex items-center gap-3.5 rounded-2xl border px-5 py-4 transition hover:shadow-[0_2px_12px_rgba(122,35,51,0.1)] active:scale-[0.99]"
+       <Link
+  href="/dashboard/menu"
+  prefetch={false}
+  className="group flex items-center gap-3.5 rounded-2xl border px-5 py-4 transition hover:shadow-[0_2px_12px_rgba(122,35,51,0.1)] active:scale-[0.99]"
           style={{ borderColor: `${BRAND.burgundy}26`, background: `linear-gradient(90deg, ${BRAND.burgundy}14, transparent)` }}
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ background: `${BRAND.burgundy}26` }}>

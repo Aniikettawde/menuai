@@ -1877,7 +1877,12 @@ const [libraryImages, setLibraryImages] = useState<{ url: string; label: string 
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: `${BRAND.burgundy}14`, color: BRAND.burgundy }}><UtensilsCrossed size={22} /></div>
       <h1 className="mt-4 text-xl font-bold" style={{ color: BRAND.ink }}>Set up your restaurant first</h1>
       <p className="mt-2 text-sm" style={{ color: BRAND.inkFaint }}>Create your restaurant profile before adding menu items.</p>
-      <Link href="/dashboard/restaurant" className="mt-6 inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition active:scale-95" style={{ background: BRAND.burgundy }}>Go to Restaurant</Link>
+      <Link
+  href="/dashboard/restaurant"
+  prefetch={false}
+  className="mt-6 inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition active:scale-95"
+  style={{ background: BRAND.burgundy }}
+>Go to Restaurant</Link>
     </div>
   )
 
