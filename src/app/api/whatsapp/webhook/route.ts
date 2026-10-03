@@ -230,6 +230,161 @@ async function handlePlatformInboundMessage(message: any, contactName: string | 
   });
 }
 
+
+
+// ── Dinezy menu → WhatsApp offers flow ─────────────────────────────────────
+// Customer-facing menu buttons open Dinezy's WhatsApp number with a prefilled
+// message such as: "Hi Dinezy 👋\nShow me offers of ABC Restaurant restaurant".
+// This handler responds only to that exact intent. Other WhatsApp messages
+// continue through the normal inbox/rating/campaign handling below.
+function normalizeOfferRequestText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function extractOfferRestaurantName(value: string): string | null {
+  const normalized = normalizeOfferRequestText(value)
+
+  const match = normalized.match(
+    /show me (?:the )?offers (?:of|at|for)\s+(.+?)(?:\s+restaurant)?[.!]?$/i,
+  )
+
+  if (!match?.[1]) return null
+  return normalizeOfferRequestText(match[1])
+}
+
+function formatWhatsAppOffer(offer: {
+  title: string
+  offer_type: 'percent' | 'fixed' | 'free_item'
+  discount_percent: number | null
+  discount_amount_paise: number | null
+  coupon_code: string | null
+  min_order_amount_paise: number | null
+  ends_at: string | null
+}): string {
+  let value = 'Offer'
+
+  if (offer.offer_type === 'percent') {
+    value = `${offer.discount_percent ?? 0}% off`
+  } else if (offer.offer_type === 'fixed') {
+    value = `₹${Math.round((offer.discount_amount_paise ?? 0) / 100)} off`
+  } else if (offer.offer_type === 'free_item') {
+    value = 'Free item'
+  }
+
+  const lines = [`• ${offer.title} — ${value}`]
+
+  if (
+    offer.min_order_amount_paise != null &&
+    offer.min_order_amount_paise > 0
+  ) {
+    lines.push(
+      `  Min order: ₹${Math.round(offer.min_order_amount_paise / 100)}`,
+    )
+  }
+
+  if (offer.coupon_code) {
+    lines.push(`  Code: ${offer.coupon_code}`)
+  }
+
+  if (offer.ends_at) {
+    const ends = new Date(offer.ends_at)
+    if (!Number.isNaN(ends.getTime())) {
+      lines.push(
+        `  Ends: ${ends.toLocaleString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        })}`,
+      )
+    }
+  }
+
+  return lines.join('\n')
+}
+
+async function handleDinezyOffersRequest(
+  waId: string,
+  incomingText: string,
+): Promise<boolean> {
+  const requestedName = extractOfferRestaurantName(incomingText)
+  if (!requestedName) return false
+
+  const { data: restaurants, error: restaurantError } =
+    await supabaseAdmin
+      .from('restaurants')
+      .select('id, name')
+      .ilike('name', requestedName)
+      .limit(2)
+
+  if (restaurantError) {
+    console.error('[Dinezy offers] restaurant lookup failed:', restaurantError)
+    await sendWhatsAppText(
+      waId,
+      'Sorry, I could not check the offers right now. Please try again.',
+    )
+    return true
+  }
+
+  if (!restaurants?.length) {
+    await sendWhatsAppText(
+      waId,
+      `I couldn't find “${requestedName}”. Please send the restaurant name again.`,
+    )
+    return true
+  }
+
+  if (restaurants.length > 1) {
+    await sendWhatsAppText(
+      waId,
+      `I found more than one restaurant named “${requestedName}”. Please send the restaurant's exact name.`,
+    )
+    return true
+  }
+
+  const restaurant = restaurants[0]
+  const now = new Date().toISOString()
+
+  const { data: offers, error: offersError } = await supabaseAdmin
+    .from('offers')
+    .select(
+      'id, title, offer_type, discount_percent, discount_amount_paise, coupon_code, min_order_amount_paise, ends_at',
+    )
+    .eq('restaurant_id', restaurant.id)
+    .eq('is_active', true)
+    .or(`ends_at.is.null,ends_at.gt.${now}`)
+    .order('ends_at', { ascending: true, nullsFirst: true })
+    .limit(20)
+
+  if (offersError) {
+    console.error('[Dinezy offers] offer lookup failed:', offersError)
+    await sendWhatsAppText(
+      waId,
+      `Sorry, I could not load the offers for ${restaurant.name} right now.`,
+    )
+    return true
+  }
+
+  if (!offers?.length) {
+    await sendWhatsAppText(
+      waId,
+      `There are no active offers at ${restaurant.name} right now.\n\nCheck again later — Dinezy will show you the latest offers here.`,
+    )
+    return true
+  }
+
+  const reply = [
+    `🎁 Offers at ${restaurant.name}`,
+    '',
+    ...offers.map(formatWhatsAppOffer),
+    '',
+    'These are the currently active offers for this restaurant.',
+  ].join('\n')
+
+  await sendWhatsAppText(waId, reply)
+  return true
+}
+
 async function handleInboundMessage(
   restaurantId: string | null,
   message: any,
@@ -416,6 +571,20 @@ export async function POST(req: Request) {
 
       const name = value?.contacts?.[0]?.profile?.name ?? null;
       await handleInboundMessage(restaurantId, message, name);
+
+      // Only Dinezy's own WhatsApp number handles the customer-facing
+      // restaurant-offers request. Connected restaurant numbers continue to
+      // behave exactly as before.
+      if (restaurantId === null && message.type === 'text') {
+        try {
+          await handleDinezyOffersRequest(
+            String(message.from ?? ''),
+            messageText(message),
+          );
+        } catch (err) {
+          console.error('[Dinezy offers] request handling failed:', err);
+        }
+      }
 
       if (wasRatingReply) {
         console.log('Handled rating button reply from', message.from as string);

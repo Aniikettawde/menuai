@@ -40,7 +40,6 @@ const CustomerAuthProvider = dynamic(() => import('./CustomerAuthProvider').then
 const MenuTypeSelector = dynamic(() => import('./MenuTypeSelector').then(m => m.MenuTypeSelector), { ssr: false })
 const DeliveryPreferenceModal = dynamic(() => import('./DeliveryPreferenceModal').then(m => m.DeliveryPreferenceModal), { ssr: false })
 const TranslationLoadingOverlay = dynamic(() => import('./TranslationLoadingOverlay').then(m => m.TranslationLoadingOverlay), { ssr: false })
-const RewardWelcomePopup = dynamic(() => import('./RewardWelcomePopup').then(m => m.RewardWelcomePopup), { ssr: false })
 const AboutTab = dynamic(() => import('./AboutTab').then(m => m.AboutTab), { ssr: false })
 const CategoryShortcutButton = dynamic(() => import('./CategoryShortcutButton').then(m => m.CategoryShortcutButton), { ssr: false })
 
@@ -152,6 +151,10 @@ type SeoRestaurant = Restaurant & {
   seo_description?: string | null
   seo_indexable?: boolean | null
   show_call_waiter?: boolean | null
+  pause_enabled?: boolean | null
+  pause_until?: string | null
+  pause_reason?: string | null
+  pause_message?: string | null
 }
 
 type SeoMenuItem = MenuItem & {
@@ -243,6 +246,26 @@ function formatTime(value?: string | null): string {
   const displayHour = hour % 12 || 12
 
   return `${displayHour}:${minute} ${suffix}`
+}
+
+function isRestaurantCurrentlyPaused(
+  restaurant: Restaurant | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!restaurant) return false
+
+  const candidate = restaurant as Restaurant & {
+    pause_enabled?: boolean | null
+    pause_until?: string | null
+  }
+
+  if (candidate.pause_enabled !== true || !candidate.pause_until) {
+    return false
+  }
+
+  const pauseUntil = new Date(candidate.pause_until).getTime()
+
+  return Number.isFinite(pauseUntil) && pauseUntil > now
 }
 
 /**
@@ -758,6 +781,11 @@ export function RestaurantShell({
   const [activeToastIndex, setActiveToastIndex] =
     useState(0)
 
+  // Re-check the temporary pause timestamp so an open tab automatically
+  // becomes live again after the pause expires.
+  const [pauseClock, setPauseClock] =
+    useState(() => Date.now())
+
   const [waiterLoading, setWaiterLoading] =
     useState(false)
 
@@ -781,50 +809,30 @@ export function RestaurantShell({
   const { customer } =
     useCustomerAuth()
 
-  const [
-    showRewardPopup,
-    setShowRewardPopup,
-  ] = useState(false)
-
   const [loginOpen, setLoginOpen] =
     useState(false)
 
   const [accountOpen, setAccountOpen] =
     useState(false)
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setPauseClock(Date.now())
+    }, 30_000)
+
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const isRestaurantPaused =
+    isRestaurantCurrentlyPaused(restaurant, pauseClock)
+
+  useEffect(() => {
+    if (!isRestaurantPaused) return
+    clearCart()
+  }, [isRestaurantPaused, clearCart])
 
   const [customerPersonalization, setCustomerPersonalization] =
     useState<CustomerPersonalization | null>(null)
-
-  useEffect(() => {
-    if (customer) return
-    if (activeTab !== 'menu') return
-
-    const key =
-      `dinezy_reward_popup_seen_${initialData.restaurant.id}`
-
-    if (
-      sessionStorage.getItem(key) ===
-      '1'
-    ) {
-      return
-    }
-
-    const timer = setTimeout(() => {
-      setShowRewardPopup(true)
-      sessionStorage.setItem(
-        key,
-        '1',
-      )
-    }, 30000)
-
-    return () =>
-      clearTimeout(timer)
-  }, [
-    customer,
-    activeTab,
-    initialData.restaurant.id,
-  ])
 
   const autoVisitFiredRef =
     useRef(false)
@@ -2149,6 +2157,14 @@ export function RestaurantShell({
       }) => {
         if (!restaurant) return
 
+        if (isRestaurantCurrentlyPaused(restaurant)) {
+          alert(
+            restaurant.pause_message ||
+              "We're currently unavailable. Please ask our staff for the menu. They'll be happy to assist you.",
+          )
+          return
+        }
+
         if (
           tableSessionState !==
             'valid' ||
@@ -2446,6 +2462,17 @@ export function RestaurantShell({
           }
         }
 
+        if (isRestaurantCurrentlyPaused(restaurant)) {
+          alert(
+            restaurant.pause_message ||
+              "We're currently unavailable. Please ask our staff for the menu. They'll be happy to assist you.",
+          )
+
+          return {
+            ok: false,
+          }
+        }
+
         if (
           tableSessionState !==
             'valid' ||
@@ -2619,8 +2646,9 @@ export function RestaurantShell({
   if (!restaurant) return null
 
   // Restaurants created before show_call_waiter existed are treated as enabled.
-  // Only an explicit false value hides the Call Waiter bell.
+  // A temporary pause always overrides the normal Call Waiter setting.
   const showCallWaiter =
+    !isRestaurantPaused &&
     (restaurant as Restaurant & {
       show_call_waiter?: boolean | null
     }).show_call_waiter !== false
@@ -3573,11 +3601,14 @@ export function RestaurantShell({
             : 'light'
         }
       >
-        <TranslationLoadingOverlay />
-
-        <OfflineBanner />
-        <MenuTypeSelector />
-        <DeliveryPreferenceModal />
+        {!isRestaurantPaused && (
+          <>
+            <TranslationLoadingOverlay />
+            <OfflineBanner />
+            <MenuTypeSelector />
+            <DeliveryPreferenceModal />
+          </>
+        )}
 
         <CustomerAuthProvider
           restaurantId={
@@ -3657,6 +3688,7 @@ export function RestaurantShell({
             restaurant.id
           }
           enabled={
+            !isRestaurantPaused &&
             tableSessionState ===
             'valid'
           }
@@ -3666,15 +3698,29 @@ export function RestaurantShell({
         />
 
         <main className="pr-main">
-          {activeTab ===
-          'about' ? (
+          {isRestaurantPaused ? (
+            <section className="flex min-h-[70vh] items-center justify-center px-5 py-16" aria-live="polite">
+              <div className="w-full max-w-md text-center">
+                <div
+                  className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-amber-500/20 bg-amber-500/10 text-2xl"
+                  aria-hidden="true"
+                >
+                  🍽️
+                </div>
+
+                <h1 className="mt-6 text-xl font-semibold text-[var(--pr-text)]">
+                  We&apos;re currently unavailable
+                </h1>
+
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[var(--pr-text-muted)]">
+                  Please ask our staff for the menu. They&apos;ll be happy to assist you.
+                </p>
+              </div>
+            </section>
+          ) : activeTab === 'about' ? (
             <AboutTab
-              restaurant={
-                restaurant
-              }
-              reviews={
-                reviews
-              }
+              restaurant={restaurant}
+              reviews={reviews}
             />
           ) : (
             <>
@@ -3694,100 +3740,37 @@ export function RestaurantShell({
                 )}
 
               <MenuGrid
-                onCallWaiter={
-                  handleCallWaiter
-                }
-                isWaiterLoading={
-                  waiterLoading
-                }
+                onCallWaiter={handleCallWaiter}
+                isWaiterLoading={waiterLoading}
                 todaysSpecial={
                   <TodaysSpecialCarousel
-                    restaurantId={
-                      initialData
-                        .restaurant
-                        .id
-                    }
-                    allItems={
-                      initialData
-                        .items
-                    }
+                    restaurantId={initialData.restaurant.id}
+                    allItems={initialData.items}
                   />
                 }
                 upsellCard={
                   <RewardOffersBar
-                    restaurantId={
-                      restaurant?.id ??
-                      null
-                    }
-                    restaurantName={
-                      initialData
-                        .restaurant
-                        .name
-                    }
-                    offers={
-                      activeOffers
-                    }
-                    onLoginClick={() =>
-                      setLoginOpen(
-                        true,
-                      )
-                    }
-                    onExploreRewards={() =>
-                      setAccountOpen(
-                        true,
-                      )
-                    }
+                    restaurantId={restaurant?.id ?? null}
+                    restaurantName={initialData.restaurant.name}
+                    offers={activeOffers}
                   />
                 }
               />
 
-              <RewardWelcomePopup
-                isOpen={
-                  showRewardPopup
-                }
-                onClose={() =>
-                  setShowRewardPopup(
-                    false,
-                  )
-                }
-                onClaim={() => {
-                  setShowRewardPopup(
-                    false,
-                  )
-                  setLoginOpen(
-                    true,
-                  )
-                }}
+              <RestaurantSeoContent
+                restaurant={seoRestaurant}
+                items={seoItems}
+                categories={initialData.categories}
               />
             </>
           )}
-
-          {/*
-           * Real, visitor-facing restaurant content.
-           *
-           * This is intentionally rendered in the initial page output rather
-           * than fetched later with useEffect. It gives search engines and
-           * users a clear text representation of the same business/menu data
-           * used by the interactive menu above.
-           */}
-          <RestaurantSeoContent
-            restaurant={
-              seoRestaurant
-            }
-            items={
-              seoItems
-            }
-            categories={
-              initialData.categories
-            }
-          />
         </main>
 
-        {showRating && (
+        {!isRestaurantPaused && showRating && (
           <RatingModal />
         )}
 
-        {showRatingsList && (
+        {!isRestaurantPaused && showRatingsList && (
           <RatingsListModal
             restaurant={
               restaurant
@@ -3795,7 +3778,7 @@ export function RestaurantShell({
           />
         )}
 
-        {restaurant.show_category_shortcut && (
+        {!isRestaurantPaused && restaurant.show_category_shortcut && (
           <CategoryShortcutButton
             bottomOffset={
               tableSessionState ===
@@ -3819,8 +3802,9 @@ export function RestaurantShell({
           />
         )}
 
-        {tableSessionState ===
-          'valid' &&
+        {!isRestaurantPaused &&
+          tableSessionState ===
+            'valid' &&
           tableNumber !== null && (
             <>
               {restaurant.google_reviews_url && (
@@ -3862,7 +3846,7 @@ export function RestaurantShell({
             </>
           )}
 
-        {activeOrder && (
+        {!isRestaurantPaused && activeOrder && (
           <WaiterCalledToast
             key={
               activeOrder.orderId
@@ -3906,13 +3890,15 @@ export function RestaurantShell({
           />
         )}
 
-        <BottomTabBar
-          onAccountClick={() =>
-            setAccountOpen(
-              true,
-            )
-          }
-        />
+        {!isRestaurantPaused && (
+            <BottomTabBar
+            onAccountClick={() =>
+              setAccountOpen(
+                true,
+              )
+            }
+          />
+        )}
       </div>
     </>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 // src/components/MenuGrid.tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   ChevronRight,
   ChefHat,
@@ -462,6 +462,7 @@ function SearchSuggestions({
           key={`recent-${q}`}
           type="button"
           className="mg-search-suggest-chip mg-search-suggest-chip--recent"
+          onPointerDown={(e) => e.preventDefault()}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => onPick(q)}
         >
@@ -473,6 +474,7 @@ function SearchSuggestions({
           key={c.q}
           type="button"
           className="mg-search-suggest-chip"
+          onPointerDown={(e) => e.preventDefault()}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             if (restaurantId) {
@@ -743,6 +745,8 @@ function SearchBar({
           ref={inputRef}
           type="search"
           inputMode="search"
+          enterKeyHint="search"
+          autoComplete="off"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onFocus={onFocus}
@@ -801,6 +805,12 @@ export function MenuGrid({
   const [query, setQuery] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [activeCatId, setActiveCatId] = useState<string | null>(null)
+
+  // Search is sticky, and the category rail sits directly underneath it.
+  // ResizeObserver keeps the offset correct when search suggestions open,
+  // text wraps, the language switcher changes size, or the viewport resizes.
+  const searchStickyRef = useRef<HTMLDivElement | null>(null)
+  const [searchStickyHeight, setSearchStickyHeight] = useState(68)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const searchTrackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTrackedSearch = useRef('')
@@ -809,6 +819,29 @@ export function MenuGrid({
     if (!restaurantId) return
     setRecentSearches(readRecentSearches(restaurantId))
   }, [restaurantId])
+
+  // Keep the sticky stack measured so the category rail never overlaps
+  // the search bar, including when the suggestion chips expand it.
+  useEffect(() => {
+    const el = searchStickyRef.current
+    if (!el) return
+
+    const updateHeight = () => {
+      const next = Math.max(56, Math.ceil(el.getBoundingClientRect().height))
+      setSearchStickyHeight((current) => (current === next ? current : next))
+    }
+
+    updateHeight()
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateHeight)
+      observer.observe(el)
+      return () => observer.disconnect()
+    }
+
+    window.addEventListener('resize', updateHeight)
+    return () => window.removeEventListener('resize', updateHeight)
+  }, [isSearchFocused, query, menuType])
 
 const sectionRefs = useRef<Map<string, HTMLElement>>(new Map())
 const cattabsWrapRef = useRef<HTMLDivElement | null>(null)
@@ -978,6 +1011,7 @@ const bestSellerItems = useMemo(() => {
     if (ids.length === 0) return
 
     const railHeight = cattabsWrapRef.current?.getBoundingClientRect().height ?? 52
+    const totalStickyHeight = searchStickyHeight + railHeight
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -990,7 +1024,7 @@ const bestSellerItems = useMemo(() => {
           if (id) setActiveCatId(id)
         }
       },
-      { rootMargin: `-${Math.round(railHeight) + 12}px 0px -65% 0px`, threshold: [0, 1] },
+      { rootMargin: `-${Math.round(totalStickyHeight) + 12}px 0px -65% 0px`, threshold: [0, 1] },
     )
 
     ids.forEach((id) => {
@@ -999,7 +1033,7 @@ const bestSellerItems = useMemo(() => {
     })
 
     return () => observer.disconnect()
-  }, [categoriesWithItems, isSearching])
+  }, [categoriesWithItems, isSearching, isSearchFocused, searchStickyHeight])
 
   const registerSectionRef = useCallback((id: string) => (el: HTMLElement | null) => {
     if (el) sectionRefs.current.set(id, el)
@@ -1025,7 +1059,8 @@ const bestSellerItems = useMemo(() => {
     isProgrammaticScroll.current = true
     if (programmaticScrollTimeout.current) clearTimeout(programmaticScrollTimeout.current)
 
-    const offset = (cattabsWrapRef.current?.getBoundingClientRect().height ?? 52) + 12
+    const categoryRailHeight = cattabsWrapRef.current?.getBoundingClientRect().height ?? 52
+    const offset = searchStickyHeight + categoryRailHeight + 12
     const top = el.getBoundingClientRect().top + window.scrollY - offset
     window.scrollTo({ top, behavior: 'smooth' })
 
@@ -1033,7 +1068,7 @@ const bestSellerItems = useMemo(() => {
     programmaticScrollTimeout.current = setTimeout(() => {
       isProgrammaticScroll.current = false
     }, 600)
-  }, [categories, menuType, restaurantId])
+  }, [categories, menuType, restaurantId, searchStickyHeight])
 
   // Jumping from a search-result "category chip" clears the query first
   // (so the category sections render again), then scrolls once the DOM
@@ -1094,13 +1129,34 @@ const bestSellersSub = t(isBarView ? 'most_ordered_drinks' : 'most_ordered_dishe
 const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
 
   return (
-    <div className="mg-root">
+    <div
+      className="mg-root"
+      style={{
+        '--mg-search-sticky-height': `${searchStickyHeight}px`,
+      } as CSSProperties}
+    >
       <style jsx>{`
   .mg-root { position: relative; width: 100%; padding-bottom: 11rem; padding-top: 0.25rem; }
 
-  .mg-search-sticky { margin-bottom: 8px; position: relative; top: auto; z-index: 50; }
+  /* Sticky search header. The measured height is shared with the
+     category rail through --mg-search-sticky-height. */
+  .mg-search-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    margin: -0.25rem -0.25rem 6px;
+    padding: 6px 0.25rem 7px;
+    background: color-mix(in srgb, var(--surface-bg) 96%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    isolation: isolate;
+  }
 
-  .mg-search-sticky-inner { border-radius: 16px; background: color-mix(in srgb, var(--surface-bg) 92%, transparent); backdrop-filter: blur(10px); padding: 6px 0; }
+  .mg-search-sticky-inner {
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--surface-bg) 90%, transparent);
+    padding: 4px 0;
+  }
 
 
 :global(.mg-pills-row) { position: relative; margin: -2px 0 2px; }
@@ -1186,15 +1242,49 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
     :global(.mg-search-icon--active) { animation: none; }
   }
   :global(.mg-search-input) {
-    flex: 1; background: transparent; border: none; outline: none;
-    font-size: 14px; font-family: var(--font-body); color: var(--pr-text);
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    font-family: var(--font-body);
+    color: var(--pr-text);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  :global(.mg-search-input::-webkit-search-decoration),
+  :global(.mg-search-input::-webkit-search-cancel-button),
+  :global(.mg-search-input::-webkit-search-results-button),
+  :global(.mg-search-input::-webkit-search-results-decoration) {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
   }
   :global(.mg-search-input::placeholder) { color: var(--pr-text-faint); }
   :global(.mg-search-clear) {
-    background: none; border: none; cursor: pointer; padding: 2px;
-    color: var(--pr-text-faint); display: flex; transition: color 0.15s;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    display: grid;
+    place-items: center;
+    background: none;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    padding: 0;
+    color: var(--pr-text-faint);
+    transition: color 0.15s, background 0.15s;
+    -webkit-tap-highlight-color: transparent;
   }
-  :global(.mg-search-clear:hover) { color: var(--pr-text); }
+  :global(.mg-search-clear:hover) {
+    color: var(--pr-text);
+    background: rgba(255,255,255,0.05);
+  }
+  :global(.mg-search-clear:focus-visible) {
+    outline: 2px solid var(--pr-gold);
+    outline-offset: 2px;
+  }
 
   /* ── Quick suggestion chips shown on focus with an empty query ────── */
   :global(.mg-search-suggest) {
@@ -1214,12 +1304,8 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
   :global(.mg-search-suggest-chip--recent) {
     border-style: solid; background: var(--pr-black-soft); color: var(--pr-text-muted);
   }
-  :global(.mg-search-sticky) {
-    position: sticky; top: 0; z-index: 45;
-    margin: 0 -0.25rem 6px; padding: 4px 0.25rem 6px;
-    background: color-mix(in srgb, var(--surface-bg) 92%, transparent);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  }
+  /* The component-level .mg-search-sticky rule above is the single
+     source of truth for sticky positioning. */
   :global(.mg-root) { touch-action: manipulation; overscroll-behavior-y: contain; }
 
   /* ── Dish scroll reveal ─────────────────────────────────────────────── */
@@ -1324,11 +1410,15 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
 
   .mg-stack { display: flex; flex-direction: column; gap: 18px; }
 
+  :global(.mg-cat-section) {
+    scroll-margin-top: calc(var(--mg-search-sticky-height, 68px) + 64px);
+  }
+
   /* ── Floating category tab rail — Swiggy/Zomato style ────────────── */
   :global(.mg-cattabs-sticky) {
     position: sticky;
-    top: 0;
-    z-index: 40;
+    top: var(--mg-search-sticky-height, 68px);
+    z-index: 50;
     margin: 0 -1rem 10px;
     padding: 8px 1rem 10px;
     background: color-mix(in srgb, var(--surface-bg) 94%, transparent);
@@ -1823,7 +1913,7 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
         </div>
       )}
 
-      <div className="mg-search-sticky mg-search-sticky-fast">
+      <div className="mg-search-sticky mg-search-sticky-fast" ref={searchStickyRef}>
   <div className="mg-search-sticky-inner" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1833,7 +1923,11 @@ const pickLabel = t(isBarView ? 'bartenders_pick' : 'chefs_pick')
           onClear={handleClearSearch}
           placeholder={searchPlaceholder}
           onFocus={() => setIsSearchFocused(true)}
-          onBlur={() => setIsSearchFocused(false)}
+          onBlur={() => {
+            // Give suggestion-chip pointer/click handlers a chance to run
+            // before the sticky suggestions close on mobile Safari/Chrome.
+            window.setTimeout(() => setIsSearchFocused(false), 120)
+          }}
         />
       </div>
       <LanguageSwitcher />

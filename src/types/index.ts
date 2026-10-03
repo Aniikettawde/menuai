@@ -15,6 +15,7 @@ export interface RestaurantStaff {
   updated_at: string
   total_tables?: number | null
   has_bar_menu: boolean
+ 
 
 }
 
@@ -45,6 +46,11 @@ export interface Restaurant {
   opening_hours: OpeningHours
   created_at: string
   owner_id?: string | null
+  
+     pause_enabled?: boolean | null
+  pause_until?: string | null
+  pause_reason?: string | null
+  pause_message?: string | null
 
   total_tables?: number | null
   instagram_url?: string | null
@@ -323,6 +329,7 @@ export type EventType =
   | 'dish_unliked'
   | 'dish_shared'
   | 'dish_rated'
+  | 'whatsapp_offers_clicked'
 
 export interface AnalyticsEvent {
   restaurant_id: string

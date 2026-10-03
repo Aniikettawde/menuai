@@ -53,6 +53,12 @@ type RestaurantWithSeo = Restaurant & {
   seo_description?: string | null
   seo_indexable?: boolean | null
   show_call_waiter?: boolean | null
+
+  // Temporary operational pause
+  pause_enabled?: boolean | null
+  pause_until?: string | null
+  pause_reason?: string | null
+  pause_message?: string | null
 }
 
 type RestaurantForm = {
@@ -233,6 +239,10 @@ export default function RestaurantPage() {
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
   const [pendingCoverFile, setPendingCoverFile] = useState<File | null>(null)
   const [hoursConfirmed, setHoursConfirmed] = useState(false)
+  
+  const [pauseLoading, setPauseLoading] = useState(false)
+const [pauseError, setPauseError] = useState('')
+const [pauseSuccess, setPauseSuccess] = useState('')
 
   const logoRef = useRef<HTMLInputElement>(null)
   const coverRef = useRef<HTMLInputElement>(null)
@@ -595,6 +605,117 @@ export default function RestaurantPage() {
     setPendingLogoFile(null)
     setLogoUrl('')
   }
+  
+  async function pauseRestaurantForToday() {
+  if (!restaurant?.id) return
+
+  setPauseLoading(true)
+  setPauseError('')
+  setPauseSuccess('')
+
+  try {
+    const response = await fetch(
+      `/api/restaurants/${restaurant.id}/pause`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'pause_today',
+          reason: 'Closed today',
+          message:
+            "We're temporarily unavailable today. Please visit us again tomorrow.",
+        }),
+      },
+    )
+
+    const data = await response.json()
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.error ||
+          'Failed to pause restaurant.',
+      )
+    }
+
+    setRestaurant(
+      data.restaurant as RestaurantWithSeo,
+    )
+
+    setPauseSuccess(
+      'Restaurant paused for today. It will automatically resume tomorrow.',
+    )
+  } catch (err) {
+    console.error(
+      'Pause restaurant error:',
+      err,
+    )
+
+    setPauseError(
+      err instanceof Error
+        ? err.message
+        : 'Failed to pause restaurant.',
+    )
+  } finally {
+    setPauseLoading(false)
+  }
+}
+
+async function resumeRestaurant() {
+  if (!restaurant?.id) return
+
+  setPauseLoading(true)
+  setPauseError('')
+  setPauseSuccess('')
+
+  try {
+    const response = await fetch(
+      `/api/restaurants/${restaurant.id}/pause`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'resume',
+        }),
+      },
+    )
+
+    const data = await response.json()
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.error ||
+          'Failed to resume restaurant.',
+      )
+    }
+
+    setRestaurant(
+      data.restaurant as RestaurantWithSeo,
+    )
+
+    setPauseSuccess(
+      'Restaurant is live again.',
+    )
+  } catch (err) {
+    console.error(
+      'Resume restaurant error:',
+      err,
+    )
+
+    setPauseError(
+      err instanceof Error
+        ? err.message
+        : 'Failed to resume restaurant.',
+    )
+  } finally {
+    setPauseLoading(false)
+  }
+}
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -1609,6 +1730,93 @@ export default function RestaurantPage() {
             <SeoSignal title="Real image" ok={Boolean(coverUrl)} />
           </div>
         </Section>
+		
+		<Section title="Restaurant Status">
+  {(() => {
+    const isPaused =
+      restaurant?.pause_enabled === true &&
+      !!restaurant.pause_until &&
+      new Date(restaurant.pause_until).getTime() > Date.now()
+
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span
+                className={[
+                  'h-2.5 w-2.5 rounded-full',
+                  isPaused
+                    ? 'bg-amber-400'
+                    : 'bg-emerald-400',
+                ].join(' ')}
+              />
+
+              <p className="text-sm font-semibold text-white">
+                {isPaused
+                  ? 'Paused for today'
+                  : 'Restaurant is live'}
+              </p>
+            </div>
+
+            <p className="mt-1 text-xs leading-5 text-zinc-500">
+              {isPaused
+                ? 'Your restaurant page remains available, but customer actions are temporarily disabled.'
+                : 'Customers can use your Dinezy restaurant normally.'}
+            </p>
+          </div>
+
+          {restaurant && !isPaused && (
+            <button
+              type="button"
+              onClick={pauseRestaurantForToday}
+              disabled={pauseLoading}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pauseLoading
+                ? 'Pausing...'
+                : 'Pause for Today'}
+            </button>
+          )}
+
+          {restaurant && isPaused && (
+            <button
+              type="button"
+              onClick={resumeRestaurant}
+              disabled={pauseLoading}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-orange-500 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pauseLoading
+                ? 'Resuming...'
+                : 'Resume Now'}
+            </button>
+          )}
+        </div>
+
+        {pauseError && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">
+            {pauseError}
+          </div>
+        )}
+
+        {pauseSuccess && (
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-xs text-emerald-300">
+            {pauseSuccess}
+          </div>
+        )}
+
+        {isPaused && restaurant?.pause_reason && (
+          <div className="text-xs text-zinc-500">
+            Reason:{' '}
+            <span className="text-zinc-300">
+              {restaurant.pause_reason}
+            </span>
+          </div>
+        )}
+      </div>
+    )
+  })()}
+</Section>
 
         <Section title="Ordering & Waiter">
           <SettingRow
