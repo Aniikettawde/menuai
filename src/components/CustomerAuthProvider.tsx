@@ -1,42 +1,80 @@
 'use client'
 
-/**
- * CustomerAuthProvider
- *
- * Global customer-auth overlays.
- *
- * The existing props are intentionally preserved for compatibility with
- * RestaurantShell and other callers.
- *
- * WhatsAppOfferAuth has been removed because restaurant offers now use:
- *
- * QR scan → Menu → WhatsApp Offers → WhatsApp → customer presses Send
- * → Dinezy webhook → active offers are returned.
- */
-
+import { useState } from 'react'
+import { RewardsBanner } from './RewardsBanner'
+import { OTPLoginModal } from './OTPLoginModal'
 import { CustomerAccountDrawer } from './CustomerAccountDrawer'
 
 interface Props {
   restaurantId?: string | null
-  restaurantName?: string | null
   tableNumber?: number | null
-  offerCount?: number
+
   loginOpen?: boolean
   onLoginOpenChange?: (open: boolean) => void
+
+  offerCount?: number
+
   accountOpen?: boolean
   onAccountOpenChange?: (open: boolean) => void
 }
 
 export function CustomerAuthProvider({
   restaurantId,
-  accountOpen = false,
+  tableNumber,
+  loginOpen: loginOpenProp,
+  onLoginOpenChange,
+  offerCount = 0,
+  accountOpen: accountOpenProp,
   onAccountOpenChange,
 }: Props) {
+  const [loginOpenInternal, setLoginOpenInternal] =
+    useState(false)
+
+  const [accountOpenInternal, setAccountOpenInternal] =
+    useState(false)
+
+  const loginOpen =
+    loginOpenProp ?? loginOpenInternal
+
+  const accountOpen =
+    accountOpenProp ?? accountOpenInternal
+
+  const setLoginOpen =
+    onLoginOpenChange ?? setLoginOpenInternal
+
+  const setAccountOpen =
+    onAccountOpenChange ?? setAccountOpenInternal
+
   return (
-    <CustomerAccountDrawer
-      isOpen={accountOpen}
-      onClose={() => onAccountOpenChange?.(false)}
-      restaurantId={restaurantId}
-    />
+    <>
+      <RewardsBanner
+        onLoginClick={() => {
+          setAccountOpen(false)
+          setLoginOpen(true)
+        }}
+        onAccountClick={() => {
+          setLoginOpen(false)
+          setAccountOpen(true)
+        }}
+      />
+
+      <OTPLoginModal
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        restaurantId={restaurantId}
+        tableNumber={tableNumber}
+        offerCount={offerCount}
+        onViewRewards={() => {
+          setLoginOpen(false)
+          setAccountOpen(true)
+        }}
+      />
+
+      <CustomerAccountDrawer
+        isOpen={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        restaurantId={restaurantId}
+      />
+    </>
   )
 }

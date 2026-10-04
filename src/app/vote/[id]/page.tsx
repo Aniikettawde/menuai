@@ -1,12 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 import { Check, Copy, Share2 } from 'lucide-react'
 
 type PollOption = { label: string }
 type Poll = { id: string; options: PollOption[]; expires_at: string }
 
-export default function VotePage({ params }: { params: { id: string } }) {
+export default function VotePage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
   const [poll, setPoll] = useState<Poll | null>(null)
   const [counts, setCounts] = useState<number[]>([])
   const [selected, setSelected] = useState<number | null>(null)
@@ -15,7 +19,7 @@ export default function VotePage({ params }: { params: { id: string } }) {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
 
-  const id = params.id
+  const { id } = use(params)
 
   const [voterId, setVoterId] = useState('')
 

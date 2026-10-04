@@ -7,6 +7,7 @@ import {
   useCallback,
   type ChangeEvent,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { type ConfirmationResult } from 'firebase/auth'
 import { sendOTP, verifyOTP, signInWithWhatsAppToken, clearRecaptcha, prepareRecaptcha } from '@/lib/firebase'
 import { useCustomerAuth } from '@/store/customer-auth-store'
@@ -92,8 +93,21 @@ function SingleOTPInput({
   )
 }
 
-export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, offerCount = 0, onViewRewards }: Props) {
+export function OTPLoginModal({
+  isOpen,
+  onClose,
+  restaurantId,
+  tableNumber,
+  offerCount = 0,
+  onViewRewards,
+}: Props) {
   const { setCustomer } = useCustomerAuth()
+
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const [screen, setScreen] = useState<Screen>('phone')
    const [channel, setChannel] = useState<Channel>('whatsapp')
@@ -322,10 +336,10 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, offe
     }
   }, [displayName, restaurantId, tableNumber, setCustomer])
 
-  if (!isOpen) return null
+if (!isOpen || !mounted) return null
 
-  return (
-    <>
+return createPortal(
+  <>
       <div
         id="recaptcha-container"
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
@@ -336,7 +350,7 @@ export function OTPLoginModal({ isOpen, onClose, restaurantId, tableNumber, offe
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 1000,
+          zIndex: 99999,
           background: 'rgba(33,30,27,0.55)',
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
@@ -1123,7 +1137,7 @@ style={{
         </div>
       </div>
 
-      <style jsx global>{`
+       <style jsx global>{`
         @keyframes spin {
           from {
             transform: rotate(0deg);
@@ -1133,6 +1147,7 @@ style={{
           }
         }
       `}</style>
-    </>
+    </>,
+    document.body,
   )
 }
